@@ -14,12 +14,21 @@ class DLC_analysis:
         exp_conditions=False,
         arena="circular",
     ):
-        self.videos = sorted([vid for vid in path if vid.endswith(video_format)])
-        self.tables = sorted([tab for tab in path if tab.endswith(table_format)])
+        self.path = path
+        self.video_path = self.path + "Videos/"
+        self.table_path = self.path + "Tables/"
+        self.videos = sorted(
+            [vid for vid in os.listdir(self.video_path) if vid.endswith(video_format)]
+        )
+        self.tables = sorted(
+            [tab for tab in os.listdir(self.table_path) if tab.endswith(table_format)]
+        )
         self.exp_conditions = exp_conditions
+        self.table_format = table_format
+        self.video_format = video_format
         self.arena = arena
 
-        assert [re.findall("(.*)\.", vid)[0] for vid in self.videos] == [
+        assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
             re.findall("(.*)\.", tab)[0] for tab in self.tables
         ], "Video files should match table files"
 
@@ -37,14 +46,14 @@ class DLC_analysis:
         if self.table_format == ".h5":
             table_dict = {
                 re.findall("(.*?)_", tab)[0]: pd.read_hdf(
-                    "./Tagged_data/" + tab, dtype=float
+                    self.table_path + tab, dtype=float
                 )
                 for tab in self.tables
             }
         elif self.table_format == ".csv":
             table_dict = {
                 re.findall("(.*?)_", tab)[0]: pd.read_csv(
-                    "./Tagged_data/" + tab, dtype=float
+                    self.table_path + tab, dtype=float
                 )
                 for tab in self.tables
             }
