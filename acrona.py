@@ -1,7 +1,7 @@
 import os, re
 import numpy as np
 import pandas as pd
-from multiprocessing import tools
+from pandarallel import pandarallel
 from tqdm import tqdm
 from DLC_analysis_additional_functions import *
 
@@ -43,8 +43,10 @@ class DLC_analysis:
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
 
-    def load_tables(self, smooth_alpha=0.25):
+    def load_tables(self, smooth_alpha=0.25, p=1):
         """Loads videos and tables into dictionaries"""
+
+        pandarallel.initialize(nb_workers=p, verbose=0)
 
         if self.table_format == ".h5":
             table_dict = {
@@ -63,7 +65,7 @@ class DLC_analysis:
 
         if smooth_alpha:
             for dframe in tqdm(table_dict.keys()):
-                table_dict[dframe] = table_dict[dframe].apply(
+                table_dict[dframe] = table_dict[dframe].parallel_apply(
                     smooth_mult_trajectory, axis=0
                 )
 
