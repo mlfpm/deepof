@@ -1,28 +1,52 @@
-import os
+import os, re
+import pandas as pd
 from DLC_analysis_additional_functions import *
 
 
-class DLC_analysis(
-    self,
-    video_format=".mp4",
-    table_format=".h5",
-    path=".",
-    exp_conditions=None,
-    arena="circular",
-):
+class DLC_analysis:
     """ Main class for loading and analysing DLC data of individual and social mice. """
 
-    def __init__(self):
-        self.videos = [vid for vid in path if vid.endswith(video_format)]
-        self.tables = [tab for tab in path if tab.endswith(table_format)]
+    def __init__(
+        self,
+        video_format=".mp4",
+        table_format=".h5",
+        path=".",
+        exp_conditions=False,
+        arena="circular",
+    ):
+        self.videos = sorted([vid for vid in path if vid.endswith(video_format)])
+        self.tables = sorted([tab for tab in path if tab.endswith(table_format)])
         self.exp_conditions = exp_conditions
         self.arena = arena
 
-    def __print__(self, verbose=False):
-        if verbose == False:
+        assert [re.findall("(.*)\.", vid)[0] for vid in self.videos] == [
+            re.findall("(.*)\.", tab)[0] for tab in self.tables
+        ], "Video files should match table files"
+
+    def __str__(self):
+        if self.exp_conditions:
             return "DLC analysis of {} videos across {} conditions".format(
                 len(self.videos), self.exp_conditions.shape[1]
             )
-
         else:
-            return False
+            return "DLC analysis of {} videos".format(len(self.videos))
+
+    def load_tables(self):
+        """Loads videos and tables into dictionaries"""
+
+        if self.table_format == ".h5":
+            table_dict = {
+                re.findall("(.*?)_", tab)[0]: pd.read_hdf(
+                    "./Tagged_data/" + tab, dtype=float
+                )
+                for tab in self.tables
+            }
+        elif self.table_format == ".csv":
+            table_dict = {
+                re.findall("(.*?)_", tab)[0]: pd.read_csv(
+                    "./Tagged_data/" + tab, dtype=float
+                )
+                for tab in self.tables
+            }
+
+        return table_dict
