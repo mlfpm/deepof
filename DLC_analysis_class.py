@@ -1,5 +1,8 @@
 import os, re
+import numpy as np
 import pandas as pd
+from multiprocessing import tools
+from tqdm import tqdm
 from DLC_analysis_additional_functions import *
 
 
@@ -40,7 +43,7 @@ class DLC_analysis:
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
 
-    def load_tables(self):
+    def load_tables(self, smooth_alpha=0.25):
         """Loads videos and tables into dictionaries"""
 
         if self.table_format == ".h5":
@@ -57,5 +60,14 @@ class DLC_analysis:
                 )
                 for tab in self.tables
             }
+
+        if smooth_alpha:
+            for dframe in tqdm(table_dict.keys()):
+                table_dict[dframe] = table_dict[dframe].apply(
+                    smooth_mult_trajectory, axis=0
+                )
+
+        for key, tab in table_dict.items():
+            table_dict[key] = tab[tab.columns.levels[0][0]]
 
         return table_dict
