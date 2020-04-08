@@ -1,13 +1,14 @@
 import os, re
 import numpy as np
 import pandas as pd
+from collections import defaultdict
 from pandarallel import pandarallel
 from tqdm import tqdm
 from DLC_analysis_additional_functions import *
 
 
-class DLC_analysis:
-    """ Main class for loading and analysing DLC data of individual and social mice. """
+class get_coordinates:
+    """ Class for loading and preprocessing DLC data of individual and social mice. """
 
     def __init__(
         self,
@@ -16,6 +17,10 @@ class DLC_analysis:
         path=".",
         exp_conditions=False,
         arena="circular",
+        smooth_alpha=0.1,
+        p=1,
+        verbose=True,
+        distance_nodes=True,
     ):
         self.path = path
         self.video_path = self.path + "Videos/"
@@ -30,6 +35,10 @@ class DLC_analysis:
         self.table_format = table_format
         self.video_format = video_format
         self.arena = arena
+        self.smooth_alpha = smooth_alpha
+        self.p = p
+        self.verbose = verbose
+        self.distance_nodes = distance_nodes
 
         assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
             re.findall("(.*)\.", tab)[0] for tab in self.tables
@@ -43,10 +52,11 @@ class DLC_analysis:
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
 
-    def load_tables(self, smooth_alpha=0.25, p=1):
+    def load_tables(self):
         """Loads videos and tables into dictionaries"""
 
-        pandarallel.initialize(nb_workers=p, verbose=0)
+        if self.verbose:
+            print("Loading and smoothing trajectories...")
 
         if self.table_format == ".h5":
             table_dict = {
@@ -63,13 +73,44 @@ class DLC_analysis:
                 for tab in self.tables
             }
 
-        if smooth_alpha:
+        if self.smooth_alpha:
+
+            pandarallel.initialize(nb_workers=self.p, verbose=1)
+
             for dframe in tqdm(table_dict.keys()):
                 table_dict[dframe] = table_dict[dframe].parallel_apply(
-                    smooth_mult_trajectory, axis=0
+                    lambda x: smooth_mult_trajectory(x, alpha=self.smooth_alpha), axis=0
                 )
 
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]
 
         return table_dict
+
+    def get_distances(self, ego=False):
+        """Computes the distances between all selected bodyparts over time.
+           If ego is provided, it only returns distances to a specified bodypart"""
+
+        table_dict = self.load_tables()
+
+        if self.verbose:
+            print("Computing distance based coordinates...")
+
+        distance_dict = defaultdict()
+        pandarallel.initialize(nb_workers=self.p, verbose=1)
+
+        nodes = self.distance_nodes
+        if self.distance_nodes == True:
+            nodes = table_dict[list(table_dict.keys())[0]].columns.levels[0]
+
+        assert [
+            i in list(table_dict.values())[0].columns.levels[0] for i in nodes
+        ], "Nodes should correspond to existent bodyparts"
+
+        for key in tqdm(table_dict.keys()):
+
+            distance_dict[key] = table_dict[key].parallel_apply(
+                lambda x: bpart_distance(x, nodes, 1, 1), axis=1,
+            )
+
+        return distance_dict
