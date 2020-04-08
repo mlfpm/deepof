@@ -20,7 +20,7 @@ class get_coordinates:
         smooth_alpha=0.1,
         p=1,
         verbose=True,
-        distance_nodes=True,
+        distances=False,
     ):
         self.path = path
         self.video_path = self.path + "Videos/"
@@ -38,7 +38,7 @@ class get_coordinates:
         self.smooth_alpha = smooth_alpha
         self.p = p
         self.verbose = verbose
-        self.distance_nodes = distance_nodes
+        self.distances = distances
 
         assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
             re.findall("(.*)\.", tab)[0] for tab in self.tables
@@ -75,10 +75,8 @@ class get_coordinates:
 
         if self.smooth_alpha:
 
-            pandarallel.initialize(nb_workers=self.p, verbose=1)
-
             for dframe in tqdm(table_dict.keys()):
-                table_dict[dframe] = table_dict[dframe].parallel_apply(
+                table_dict[dframe] = table_dict[dframe].apply(
                     lambda x: smooth_mult_trajectory(x, alpha=self.smooth_alpha), axis=0
                 )
 
@@ -87,7 +85,7 @@ class get_coordinates:
 
         return table_dict
 
-    def get_distances(self, ego=False):
+    def get_distances(self):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
 
@@ -99,8 +97,8 @@ class get_coordinates:
         distance_dict = defaultdict()
         pandarallel.initialize(nb_workers=self.p, verbose=1)
 
-        nodes = self.distance_nodes
-        if self.distance_nodes == True:
+        nodes = self.distances
+        if nodes == "All":
             nodes = table_dict[list(table_dict.keys())[0]].columns.levels[0]
 
         assert [
@@ -109,8 +107,19 @@ class get_coordinates:
 
         for key in tqdm(table_dict.keys()):
 
-            distance_dict[key] = table_dict[key].parallel_apply(
+            distance_dict[key] = table_dict[key][nodes].parallel_apply(
                 lambda x: bpart_distance(x, nodes, 1, 1), axis=1,
             )
 
         return distance_dict
+
+    def run(self):
+        """Generates a dataset using all the options specified during initialization"""
+
+        if self.distances == False:
+            self.load_tables()
+        else:
+            self.get_distances()
+
+        if self.verbose == 1:
+            print("Done!")
