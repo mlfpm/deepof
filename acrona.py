@@ -17,6 +17,7 @@ class get_coordinates:
         path=".",
         exp_conditions=False,
         arena="circular",
+        arena_dims=[1],
         smooth_alpha=0.1,
         p=1,
         verbose=True,
@@ -35,6 +36,7 @@ class get_coordinates:
         self.table_format = table_format
         self.video_format = video_format
         self.arena = arena
+        self.arena_dims = arena_dims
         self.smooth_alpha = smooth_alpha
         self.p = p
         self.verbose = verbose
@@ -85,6 +87,31 @@ class get_coordinates:
 
         return table_dict
 
+    def get_scale(self):
+        """Returns the arena as recognised from the videos"""
+
+        if self.arena in ["circular"]:
+
+            scales = [
+                (
+                    recognize_arena(
+                        self.tables,
+                        self.videos,
+                        vid_index,
+                        path=self.video_path,
+                        arena_type=self.arena,
+                    )[2]
+                    * 2,
+                    self.arena_dims[0],
+                )
+                for vid_index, _ in enumerate(self.videos)
+            ]
+
+        else:
+            raise NotImplementedError
+
+        return scales
+
     def get_distances(self):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
@@ -105,21 +132,43 @@ class get_coordinates:
             i in list(table_dict.values())[0].columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
-        for key in tqdm(table_dict.keys()):
+        scales = self.get_scale()
+
+        for ind, key in tqdm(
+            enumerate(table_dict.keys()), total=len(table_dict.keys())
+        ):
 
             distance_dict[key] = table_dict[key][nodes].parallel_apply(
-                lambda x: bpart_distance(x, nodes, 1, 1), axis=1,
+                lambda x: bpart_distance(x, nodes, scales[ind][1], scales[ind][0]),
+                axis=1,
             )
 
         return distance_dict
+
+    def get_conditions(self):
+        """Generates a dictionary with experimental conditions per animal"""
+        conditions = pd.read_csv(self.exp_conditions)
+        condition_dict = defaultdict()
+
+
+
+
+        return condition_dict
+
+    def get_quality(self):
+        """stores qc information coming from DLC"""
+        pass
 
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
         if self.distances == False:
-            self.load_tables()
+            tables = self.load_tables()
         else:
-            self.get_distances()
+            tables = self.get_distances()
 
         if self.verbose == 1:
             print("Done!")
+
+        if self.exp_conditions:
+            exp_conditions = self.get_conditions()
