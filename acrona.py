@@ -164,15 +164,16 @@ class get_coordinates:
                     :, [dist for dist in val.columns if self.ego in dist]
                 ]
 
-        return distance_dict, lik_dict
+        return distance_dict, table_dict, lik_dict
 
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
         if self.distances == False:
             tables, quality = self.load_tables()
+            distances = None
         else:
-            tables, quality = self.get_distances()
+            distances, tables, quality = self.get_distances()
 
         if self.verbose == 1:
             print("Done!")
@@ -185,14 +186,24 @@ class get_coordinates:
             self.get_scale(),
             quality,
             self.exp_conditions,
+            distances,
         )
 
 
 class coordinates:
     def __init__(
-        self, tables, videos, arena, arena_dims, scales, quality, exp_conditions=None
+        self,
+        tables,
+        videos,
+        arena,
+        arena_dims,
+        scales,
+        quality,
+        exp_conditions=None,
+        distances=None,
     ):
         self._tables = tables
+        self.distances = distances
         self._videos = videos
         self._exp_conditions = exp_conditions
         self._arena = arena
@@ -208,11 +219,17 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_tables(self):
+    def get_coords(self):
         return self._tables
 
-    def get_videos(self, play=False):
+    def get_distances(self):
+        if self.distances != None:
+            return self.distances
+        raise ValueError(
+            "Distances not computed. Read the documentation for more details"
+        )
 
+    def get_videos(self, play=False):
         if play:
             raise NotImplementedError
 
@@ -235,7 +252,12 @@ class coordinates:
         return self._arena, self._arena_dims, self._scales
 
     def preprocess(
-        self, window_size=1, scale=True, test_proportion=0, random_state=None
+        self,
+        window_size=1,
+        scale=True,
+        test_proportion=0,
+        random_state=None,
+        verbose=False,
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
@@ -245,17 +267,17 @@ class coordinates:
         X_train = np.concatenate(
             [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self._tables.values()]
         )
-        X_train = rolling_window(X_train, window_size)
 
         if test_proportion:
-            print("Splitting train and test...")
+            if verbose:
+                print("Splitting train and test...")
             X_train, X_test = train_test_split(
                 X_train, test_size=test_proportion, random_state=random_state
             )
 
         if scale:
-
-            print("Scaling data...")
+            if verbose:
+                print("Scaling data...")
 
             scaler = StandardScaler()
             X_train = scaler.fit_transform(
@@ -270,9 +292,13 @@ class coordinates:
                     X_test.shape
                 )
 
-            print("Done!")
+            if verbose:
+                print("Done!")
+
+        X_train = rolling_window(X_train, window_size)
 
         if test_proportion:
+            X_test = rolling_window(X_test, window_size)
             return X_train, X_test
 
         return X_train
