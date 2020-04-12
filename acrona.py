@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 from pandarallel import pandarallel
+from pandas_profiling import ProfileReport
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from DLC_analysis_additional_functions import *
 
@@ -22,6 +25,7 @@ class get_coordinates:
         p=1,
         verbose=True,
         distances=False,
+        ego=False,
     ):
         self.path = path
         self.video_path = self.path + "Videos/"
@@ -41,6 +45,7 @@ class get_coordinates:
         self.p = p
         self.verbose = verbose
         self.distances = distances
+        self.ego = ego
 
         assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
             re.findall("(.*)\.", tab)[0] for tab in self.tables
@@ -49,7 +54,7 @@ class get_coordinates:
     def __str__(self):
         if self.exp_conditions:
             return "DLC analysis of {} videos across {} conditions".format(
-                len(self.videos), self.exp_conditions.shape[1]
+                len(self.videos), len(self.exp_conditions)
             )
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
@@ -75,6 +80,16 @@ class get_coordinates:
                 for tab in self.tables
             }
 
+        lik_dict = defaultdict()
+
+        for key, value in table_dict.items():
+            x = value.xs("x", level="coords", axis=1, drop_level=False)
+            y = value.xs("y", level="coords", axis=1, drop_level=False)
+            l = value.xs("likelihood", level="coords", axis=1, drop_level=True)
+
+            table_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
+            lik_dict[key] = l
+
         if self.smooth_alpha:
 
             for dframe in tqdm(table_dict.keys()):
@@ -85,7 +100,7 @@ class get_coordinates:
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]
 
-        return table_dict
+        return table_dict, lik_dict
 
     def get_scale(self):
         """Returns the arena as recognised from the videos"""
@@ -116,7 +131,7 @@ class get_coordinates:
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
 
-        table_dict = self.load_tables()
+        table_dict, lik_dict = self.load_tables()
 
         if self.verbose:
             print("Computing distance based coordinates...")
@@ -143,32 +158,130 @@ class get_coordinates:
                 axis=1,
             )
 
-        return distance_dict
+        if self.ego:
+            for key, val in distance_dict.items():
+                distance_dict[key] = val.loc[
+                    :, [dist for dist in val.columns if self.ego in dist]
+                ]
 
-    def get_conditions(self):
-        """Generates a dictionary with experimental conditions per animal"""
-        conditions = pd.read_csv(self.exp_conditions)
-        condition_dict = defaultdict()
-
-
-
-
-        return condition_dict
-
-    def get_quality(self):
-        """stores qc information coming from DLC"""
-        pass
+        return distance_dict, lik_dict
 
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
         if self.distances == False:
-            tables = self.load_tables()
+            tables, quality = self.load_tables()
         else:
-            tables = self.get_distances()
+            tables, quality = self.get_distances()
 
         if self.verbose == 1:
             print("Done!")
 
-        if self.exp_conditions:
-            exp_conditions = self.get_conditions()
+        return coordinates(
+            tables,
+            self.videos,
+            self.arena,
+            self.arena_dims,
+            self.get_scale(),
+            quality,
+            self.exp_conditions,
+        )
+
+
+class coordinates:
+    def __init__(
+        self, tables, videos, arena, arena_dims, scales, quality, exp_conditions=None
+    ):
+        self._tables = tables
+        self._videos = videos
+        self._exp_conditions = exp_conditions
+        self._arena = arena
+        self._arena_dims = arena_dims
+        self._scales = scales
+        self._quality = quality
+
+    def __str__(self):
+        if self._exp_conditions:
+            return "Coordinates of {} videos across {} conditions".format(
+                len(self._videos), len(self._exp_conditions)
+            )
+        else:
+            return "DLC analysis of {} videos".format(len(self._videos))
+
+    def get_tables(self):
+        return self._tables
+
+    def get_videos(self, play=False):
+
+        if play:
+            raise NotImplementedError
+
+        return self._videos
+
+    def get_exp_conditions(self):
+        return self._exp_conditions
+
+    def get_quality(self, report=False):
+        if report:
+            profile = ProfileReport(
+                self._quality[report],
+                title="Quality Report, {}".format(report),
+                html={"style": {"full_width": True}},
+            )
+            return profile
+        return self._quality
+
+    def get_arenas(self):
+        return self._arena, self._arena_dims, self._scales
+
+    def preprocess(
+        self, window_size=1, scale=True, test_proportion=0, random_state=None
+    ):
+        """Builds a sliding window. If desired, splits train and test and
+           Z-scores the data using sklearn's standard scaler"""
+
+        rmax = max([i.shape[0] for i in self._tables.values()])
+
+        X_train = np.concatenate(
+            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self._tables.values()]
+        )
+        X_train = rolling_window(X_train, window_size)
+
+        if test_proportion:
+            print("Splitting train and test...")
+            X_train, X_test = train_test_split(
+                X_train, test_size=test_proportion, random_state=random_state
+            )
+
+        if scale:
+
+            print("Scaling data...")
+
+            scaler = StandardScaler()
+            X_train = scaler.fit_transform(
+                X_train.reshape(-1, X_train.shape[-1])
+            ).reshape(X_train.shape)
+
+            assert np.allclose(np.mean(X_train), 0)
+            assert np.allclose(np.std(X_train), 1)
+
+            if test_proportion:
+                X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
+                    X_test.shape
+                )
+
+            print("Done!")
+
+        if test_proportion:
+            return X_train, X_test
+
+        return X_train
+
+    def plot_heatmaps(self, bodyparts, save=False, i=0):
+        plot_heatmap(
+            self._tables[i],
+            bodyparts,
+            xlim=self._arena_dims[0],
+            ylim=self._arena_dims[0],
+            save=save,
+        )
