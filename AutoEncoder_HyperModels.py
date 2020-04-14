@@ -1,12 +1,9 @@
 import tensorflow as tf
-import kerastuner
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import LSTM, Bidirectional
 from tensorflow.keras.layers import Dense, Layer
 from tensorflow.keras.layers import RepeatVector, Dropout
 from tensorflow.keras.layers import TimeDistributed
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 from tensorflow.keras.constraints import UnitNorm, Constraint
 from tensorflow.keras import Sequential
 from keras import backend as K
@@ -89,7 +86,7 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return self.weightage * self.uncorrelated_feature(x)
 
 
-class LSTM_AE(HyperModel):
+class SEQ_2_SEQ_AE(HyperModel):
     def __init__(self, input_shape):
         self.input_shape = input_shape
 
