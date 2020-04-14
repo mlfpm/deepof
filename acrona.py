@@ -127,7 +127,7 @@ class get_coordinates:
 
         return scales
 
-    def get_distances(self):
+    def get_distances(self, verbose=1):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
 
@@ -137,7 +137,7 @@ class get_coordinates:
             print("Computing distance based coordinates...")
 
         distance_dict = defaultdict()
-        pandarallel.initialize(nb_workers=self.p, verbose=1)
+        pandarallel.initialize(nb_workers=self.p, verbose=verbose)
 
         nodes = self.distances
         if nodes == "All":
@@ -220,11 +220,11 @@ class coordinates:
             return "DLC analysis of {} videos".format(len(self._videos))
 
     def get_coords(self):
-        return self._tables
+        return table_dict(self._tables)
 
     def get_distances(self):
         if self.distances != None:
-            return self.distances
+            return table_dict(self.distances)
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )
@@ -251,9 +251,24 @@ class coordinates:
     def get_arenas(self):
         return self._arena, self._arena_dims, self._scales
 
+    def plot_heatmaps(self, bodyparts, save=False, i=0):
+        plot_heatmap(
+            self._tables[i],
+            bodyparts,
+            xlim=self._arena_dims[0],
+            ylim=self._arena_dims[0],
+            save=save,
+        )
+
+
+class table_dict:
+    def __init__(self, table_dict):
+        self.tables = table_dict
+
     def preprocess(
         self,
         window_size=1,
+        window_step=1,
         scale=True,
         test_proportion=0,
         random_state=None,
@@ -262,10 +277,10 @@ class coordinates:
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
 
-        rmax = max([i.shape[0] for i in self._tables.values()])
+        rmax = max([i.shape[0] for i in self.tables.values()])
 
         X_train = np.concatenate(
-            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self._tables.values()]
+            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.tables.values()]
         )
 
         if test_proportion:
@@ -295,19 +310,10 @@ class coordinates:
             if verbose:
                 print("Done!")
 
-        X_train = rolling_window(X_train, window_size)
+        X_train = rolling_window(X_train, window_size, window_step)
 
         if test_proportion:
-            X_test = rolling_window(X_test, window_size)
+            X_test = rolling_window(X_test, window_size, window_step)
             return X_train, X_test
 
         return X_train
-
-    def plot_heatmaps(self, bodyparts, save=False, i=0):
-        plot_heatmap(
-            self._tables[i],
-            bodyparts,
-            xlim=self._arena_dims[0],
-            ylim=self._arena_dims[0],
-            save=save,
-        )
