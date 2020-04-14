@@ -127,7 +127,36 @@ def side_by_side(pos_dict, fnum, tol, rev=False):
         )
 
 
-def arena_recognition(frame):
+def recognize_arena(
+    Tracks, Videos, vid_index, path=".", recoglimit=1, arena_type="circular",
+):
+
+    vid_name = re.findall("(.*?)_", Tracks[vid_index])[0]
+    cap = cv2.VideoCapture(path + Videos[vid_index])
+
+    # Loop over the first frames in the video to get resolution and center of the arena
+    fnum, h, w = 0, None, None
+
+    while cap.isOpened() and fnum < recoglimit:
+        ret, frame = cap.read()
+        # if frame is read correctly ret is True
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            break
+
+        if arena_type == "circular":
+
+            # Detect arena and extract positions
+            arena = circular_arena_recognition(frame)[0]
+            if h == None and w == None:
+                h, w = frame.shape[0], frame.shape[1]
+
+        fnum += 1
+
+    return arena
+
+
+def circular_arena_recognition(frame):
     """Returns x,y position of the center and the radius of the recognised arena"""
 
     # Convert image to greyscale, threshold it, blur it and detect the biggest best fitting circle
@@ -330,7 +359,7 @@ def Tag_video(
             break
 
         # Detect arena and extract positions
-        arena = arena_recognition(frame)[0]
+        arena = circular_arena_recognition(frame)[0]
         if h == None and w == None:
             h, w = frame.shape[0], frame.shape[1]
 
@@ -657,16 +686,23 @@ def plot_speed(Behaviour_dict, Treatments):
     plt.show()
 
 
-def plot_heatmap(dframe, bodyparts, save=False):
+def plot_heatmap(dframe, bodyparts, xlim, ylim, save=False):
     """Returns a heatmap of the movement of a specific bodypart in the arena.
        If more than one bodypart is passed, it returns one subplot for each"""
 
-    fig, ax = plt.subplots(1, len(bodyparts), sharex="col", sharey="row")
+    fig, ax = plt.subplots(1, len(bodyparts), sharex=True, sharey=True)
 
     for i, bpart in enumerate(bodyparts):
         heatmap = dframe[bpart]
-        sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax[i])
-        ax[i].set_title(bpart)
+        if len(bodyparts) > 1:
+            sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax[i])
+        else:
+            sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax)
+            ax = np.array([ax])
+
+    [x.set_xlim(0, xlim) for x in ax]
+    [x.set_ylim(0, ylim) for x in ax]
+    [x.set_title(bp) for x, bp in zip(ax, bodyparts)]
 
     if save != False:
         plt.savefig(save)
