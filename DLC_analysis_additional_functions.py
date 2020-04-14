@@ -46,12 +46,12 @@ def smooth_boolean_array(a):
     return a == 1
 
 
-def rolling_window(a, window_size, write=True):
+def rolling_window(a, window_size, window_step, write=True):
     shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
     strides = (a.strides[0],) + a.strides
     return np.lib.stride_tricks.as_strided(
         a, shape=shape, strides=strides, writeable=write
-    )
+    )[::window_step]
 
     ##### IMAGE/VIDEO PROCESSING FUNCTIONS #####
 
