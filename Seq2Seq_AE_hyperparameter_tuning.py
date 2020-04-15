@@ -75,6 +75,7 @@ def tune_search(train, test, project_name):
         epochs=30,
         validation_data=(test, test),
         verbose=1,
+        batch_size=1024,
         callbacks=[tf.keras.callbacks.EarlyStopping("val_loss", patience=3)],
     )
 
