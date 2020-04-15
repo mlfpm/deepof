@@ -1,6 +1,7 @@
 import acrona, pickle
 from AutoEncoder_HyperModels import *
 from kerastuner import BayesianOptimization
+from multiprocessing import cpu_count
 from sys import argv
 
 script, input_type = argv
@@ -12,7 +13,7 @@ with open(
 
 DLC_social_1 = acrona.get_coordinates(
     path="../../Desktop/DLC_social_1/",  # Path where to find the required files
-    p=16,  # Number of processes used for parallelization
+    p=cpu_count(),  # Number of processes used for parallelization
     smooth_alpha=0.1,  # Alpha value for exponentially weighted smoothing
     distances=[
         "B_Center",
@@ -51,7 +52,7 @@ print("Validation set of shape: {}".format(dist_test.shape))
 
 
 def tune_search(train, test, project_name):
-    # Trajectory-based AE hyperparameter tuning
+    """Define the search space using keras-tuner and bayesian optimization"""
     COORDS_INPUT_SHAPE = train.shape
     hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
 
