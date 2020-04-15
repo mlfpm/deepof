@@ -70,7 +70,12 @@ def tune_search(train, test, project_name):
     print(tuner.search_space_summary())
 
     tuner.search(
-        train, train, epochs=20, validation_data=(test, test), verbose=1,
+        train,
+        train,
+        epochs=30,
+        validation_data=(test, test),
+        verbose=1,
+        callbacks=[tf.keras.callbacks.EarlyStopping("val_loss", patience=3)],
     )
 
     print(tuner.results_summary())
