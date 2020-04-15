@@ -1,6 +1,9 @@
 import acrona, pickle
 from AutoEncoder_HyperModels import *
 from kerastuner import BayesianOptimization
+from sys import argv
+
+script, input_type = argv
 
 with open(
     "../../Desktop/DLC_social_1/DLC_social_1_exp_conditions.pickle", "rb"
@@ -46,38 +49,41 @@ print()
 print("Training set of shape: {}".format(dist_train.shape))
 print("Validation set of shape: {}".format(dist_test.shape))
 
-# Trajectory-based AE hyperparameter tuning
-COORDS_INPUT_SHAPE = coords_train.shape
 
-coords_hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
+def tune_search(train, test, project_name):
+    # Trajectory-based AE hyperparameter tuning
+    COORDS_INPUT_SHAPE = train.shape
+    hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
 
-coords_tuner = BayesianOptimization(
-    coords_hypermodel,
-    max_trials=100,
-    executions_per_trial=3,
-    objective="val_mae",
-    seed=42,
-    directory="BayesianOptx",
-    project_name="Trajectory_seq2seq_AE_tuning",
-    distribution_strategy=tf.distribute.MirroredStrategy(),
-)
+    tuner = BayesianOptimization(
+        hypermodel,
+        max_trials=100,
+        executions_per_trial=3,
+        objective="val_mae",
+        seed=42,
+        directory="BayesianOptx",
+        project_name=project_name,
+        # distribution_strategy=tf.distribute.MirroredStrategy(),
+    )
 
-# Distance-based AE hyperparameter tuning
-DIST_INPUT_SHAPE = dist_train.shape
+    print(tuner.search_space_summary())
 
-dist_hypermodel = SEQ_2_SEQ_AE(input_shape=DIST_INPUT_SHAPE)
+    tuner.search(
+        train, train, epochs=20, validation_data=(test, test), verbose=1,
+    )
 
-dist_tuner = BayesianOptimization(
-    dist_hypermodel,
-    max_trials=100,
-    executions_per_trial=3,
-    objective="val_mae",
-    seed=42,
-    directory="BayesianOptx",
-    project_name="Distance_seq2seq_AE_tuning",
-    distribution_strategy=tf.distribute.MirroredStrategy(),
-)
+    print(tuner.results_summary())
+    return tuner.get_best_models()[0]
 
 
-print(coords_tuner.search_space_summary())
-print(dist_tuner.search_space_summary())
+if input_type == "coords":
+    best_model = tune_search(
+        coords_train, coords_test, "Coord-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+    )
+    best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+elif input_type == "dist":
+    best_model = tune_search(
+        dist_train, dist_test, "Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+    )
+    best_model.save("Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
