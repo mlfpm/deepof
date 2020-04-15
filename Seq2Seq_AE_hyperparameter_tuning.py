@@ -24,7 +24,7 @@ DLC_social_1 = acrona.get_coordinates(
         "B_Right_flank",
         "B_Tail_base",
     ],
-    ego="B_Center",
+    ego=False,
     arena="circular",  # Type of arena used in the experiments
     arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
