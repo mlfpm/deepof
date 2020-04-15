@@ -6,9 +6,7 @@ from sys import argv
 
 script, input_type, path = argv
 
-with open(
-    path+"DLC_social_1_exp_conditions.pickle", "rb"
-) as handle:
+with open(path + "DLC_social_1_exp_conditions.pickle", "rb") as handle:
     Treatment_dict = pickle.load(handle)
 
 DLC_social_1 = acrona.get_coordinates(
