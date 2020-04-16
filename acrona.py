@@ -4,8 +4,11 @@ import pandas as pd
 from collections import defaultdict
 from pandarallel import pandarallel
 from pandas_profiling import ProfileReport
+from sklearn import random_projection
 from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import KernelPCA
 from tqdm import tqdm
 from DLC_analysis_additional_functions import *
 
@@ -265,6 +268,15 @@ class table_dict:
     def __init__(self, table_dict):
         self.tables = table_dict
 
+    def get_training_set(self):
+        rmax = max([i.shape[0] for i in self.tables.values()])
+
+        X_train = np.concatenate(
+            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.tables.values()]
+        )
+
+        return X_train
+
     def preprocess(
         self,
         window_size=1,
@@ -277,11 +289,7 @@ class table_dict:
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
 
-        rmax = max([i.shape[0] for i in self.tables.values()])
-
-        X_train = np.concatenate(
-            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.tables.values()]
-        )
+        X_train = self.get_training_set()
 
         if test_proportion:
             if verbose:
@@ -317,3 +325,33 @@ class table_dict:
             return X_train, X_test
 
         return X_train
+
+    def random_projection(self, n_components=None, sample=1000):
+
+        X = self.get_training_set()
+        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+
+        rproj = random_projection.GaussianRandomProjection(n_components=n_components)
+        X = rproj.fit_transform(X)
+
+        return X, rproj
+
+    def pca(self, n_components=None, sample=1000, kernel='linear'):
+
+        X = self.get_training_set()
+        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+
+        pca = KernelPCA(n_components=n_components, kernel=kernel)
+        X = pca.fit_transform(X)
+
+        return X, pca
+
+    def tSNE(self, n_components=None, sample=1000):
+
+        X = self.get_training_set()
+        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+
+        tsne = TSNE(n_components=n_components)
+        X = tsne.fit_transform(X)
+
+        return X, tsne
