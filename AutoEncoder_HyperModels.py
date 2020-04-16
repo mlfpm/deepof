@@ -93,10 +93,10 @@ class SEQ_2_SEQ_AE(HyperModel):
     def build(self, hp):
         # Hyperparameters to tune
         CONV_filters = hp.Int(
-            "units_conv", min_value=32, max_value=1024, step=32, default=256
+            "units_conv", min_value=32, max_value=256, step=32, default=256
         )
         LSTM_units_1 = hp.Int(
-            "units_lstm", min_value=128, max_value=1024, step=32, default=256
+            "units_lstm", min_value=128, max_value=512, step=32, default=256
         )
         LSTM_units_2 = int(LSTM_units_1 / 2)
         DENSE_1 = int(LSTM_units_2)
@@ -107,7 +107,7 @@ class SEQ_2_SEQ_AE(HyperModel):
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
         ENCODING = hp.Int(
-            "units_dense2", min_value=32, max_value=256, step=32, default=32
+            "units_dense2", min_value=32, max_value=128, step=32, default=32
         )
 
         # Encoder Layers
