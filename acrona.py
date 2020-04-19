@@ -169,6 +169,9 @@ class get_coordinates:
 
         return distance_dict, table_dict, lik_dict
 
+    def get_angles(self, velocities=0):
+        pass
+
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
