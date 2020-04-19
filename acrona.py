@@ -27,6 +27,7 @@ class get_coordinates:
         smooth_alpha=0.1,
         p=1,
         verbose=True,
+        polar_coords=False,
         distances=False,
         ego=False,
     ):
@@ -47,6 +48,7 @@ class get_coordinates:
         self.smooth_alpha = smooth_alpha
         self.p = p
         self.verbose = verbose
+        self.polar_coords = polar_coords
         self.distances = distances
         self.ego = ego
 
@@ -181,6 +183,13 @@ class get_coordinates:
         else:
             distances, tables, quality = self.get_distances()
 
+        def tab2polar():
+            pass
+
+        if self.polar_coords:
+            for key,tab in tables.items():
+                tables[key] = tab.apply(tab2polar)
+
         if self.verbose == 1:
             print("Done!")
 
@@ -267,15 +276,15 @@ class coordinates:
         )
 
 
-class table_dict:
-    def __init__(self, table_dict):
-        self.tables = table_dict
+class table_dict(dict):
+    def __init__(self, *args, **kwargs):
+        self.update(*args, **kwargs)
 
     def get_training_set(self):
-        rmax = max([i.shape[0] for i in self.tables.values()])
+        rmax = max([i.shape[0] for i in self.values()])
 
         X_train = np.concatenate(
-            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.tables.values()]
+            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.values()]
         )
 
         return X_train
