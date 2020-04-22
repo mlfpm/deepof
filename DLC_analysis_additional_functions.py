@@ -720,8 +720,8 @@ def plot_heatmap(dframe, bodyparts, xlim, ylim, save=False):
             sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax)
             ax = np.array([ax])
 
-    [x.set_xlim(0, xlim) for x in ax]
-    [x.set_ylim(0, ylim) for x in ax]
+    [x.set_xlim(xlim) for x in ax]
+    [x.set_ylim(ylim) for x in ax]
     [x.set_title(bp) for x, bp in zip(ax, bodyparts)]
 
     if save != False:
