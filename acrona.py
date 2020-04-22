@@ -183,12 +183,9 @@ class get_coordinates:
         else:
             distances, tables, quality = self.get_distances()
 
-        def tab2polar():
-            pass
-
         if self.polar_coords:
             for key,tab in tables.items():
-                tables[key] = tab.apply(tab2polar)
+                tables[key] = tab2polar(tab)
 
         if self.verbose == 1:
             print("Done!")
