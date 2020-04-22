@@ -148,10 +148,9 @@ def side_by_side(pos_dict, fnum, tol, rev=False):
 
 
 def recognize_arena(
-    Tracks, Videos, vid_index, path=".", recoglimit=1, arena_type="circular",
+    Videos, vid_index, path=".", recoglimit=1, arena_type="circular",
 ):
 
-    vid_name = re.findall("(.*?)_", Tracks[vid_index])[0]
     cap = cv2.VideoCapture(path + Videos[vid_index])
 
     # Loop over the first frames in the video to get resolution and center of the arena
