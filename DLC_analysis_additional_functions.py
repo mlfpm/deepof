@@ -27,6 +27,26 @@ def Likelihood_qc(dframe, threshold=0.9):
     return np.all(Likes > threshold, axis=0)
 
 
+def bp2polar(tab):
+    tab_ = np.array(tab)
+    complex_ = tab_[:, 0] + 1j * tab_[:, 1]
+    polar = pd.DataFrame(np.array([abs(complex_), np.angle(complex_)]).T)
+    polar.rename(columns={0: "rho", 1: "phi"}, inplace=True)
+    return polar
+
+
+def tab2polar(tabdict):
+    result = []
+    for df in list(tabdict.columns.levels[0]):
+        result.append(bp2polar(tabdict[df]))
+    result = pd.concat(result, axis=1)
+    idx = pd.MultiIndex.from_product(
+        [list(tabdict.columns.levels[0]), ["rho", "phi"]], names=["bodyparts", "coords"]
+    )
+    result.columns = idx
+    return result
+
+
 # Paired distance between bodyparts
 def bpart_distance(frame, labels, absdist_arena, pixdist_arena):
     """Designed to be applied to a dataframe with frames as rows and body parts as columns. Returns a dataframe
