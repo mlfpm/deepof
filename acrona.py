@@ -1,6 +1,3 @@
-import os, re
-import numpy as np
-import pandas as pd
 from collections import defaultdict
 from pandarallel import pandarallel
 from pandas_profiling import ProfileReport
@@ -27,6 +24,7 @@ class get_coordinates:
         smooth_alpha=0.1,
         p=1,
         verbose=True,
+        center_coords=True,
         polar_coords=False,
         distances=False,
         ego=False,
@@ -48,6 +46,7 @@ class get_coordinates:
         self.smooth_alpha = smooth_alpha
         self.p = p
         self.verbose = verbose
+        self.center_coords = center_coords
         self.polar_coords = polar_coords
         self.distances = distances
         self.ego = ego
@@ -64,6 +63,7 @@ class get_coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
 
+    @property
     def load_tables(self):
         """Loads videos and tables into dictionaries"""
 
@@ -105,8 +105,23 @@ class get_coordinates:
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]
 
+        if self.center_coords:
+
+            if self.arena == "circular":
+
+                for key, value in table_dict.items():
+
+                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
+                        :, (slice("coords"), ["x"])
+                    ].applymap(lambda x: x - self.arena_dims[0] / 2)
+
+                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
+                        :, (slice("coords"), ["y"])
+                    ].applymap(lambda y: y - self.arena_dims[0] / 2)
+
         return table_dict, lik_dict
 
+    @property
     def get_scale(self):
         """Returns the arena as recognised from the videos"""
 
@@ -128,7 +143,7 @@ class get_coordinates:
             ]
 
         else:
-            raise NotImplementedError
+            raise NotImplementedError("arenas must be set to one of: 'circular'")
 
         return scales
 
@@ -136,7 +151,7 @@ class get_coordinates:
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
 
-        table_dict, lik_dict = self.load_tables()
+        table_dict, lik_dict = self.load_tables
 
         if self.verbose:
             print("Computing distance based coordinates...")
@@ -152,7 +167,7 @@ class get_coordinates:
             i in list(table_dict.values())[0].columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
-        scales = self.get_scale()
+        scales = self.get_scale
 
         for ind, key in tqdm(
             enumerate(table_dict.keys()), total=len(table_dict.keys())
@@ -177,14 +192,14 @@ class get_coordinates:
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
-        if self.distances == False:
-            tables, quality = self.load_tables()
+        if not self.distances:
+            tables, quality = self.load_tables
             distances = None
         else:
             distances, tables, quality = self.get_distances()
 
         if self.polar_coords:
-            for key,tab in tables.items():
+            for key, tab in tables.items():
                 tables[key] = tab2polar(tab)
 
         if self.verbose == 1:
@@ -195,7 +210,7 @@ class get_coordinates:
             self.videos,
             self.arena,
             self.arena_dims,
-            self.get_scale(),
+            self.get_scale,
             quality,
             self.exp_conditions,
             distances,
@@ -264,13 +279,15 @@ class coordinates:
         return self._arena, self._arena_dims, self._scales
 
     def plot_heatmaps(self, bodyparts, save=False, i=0):
-        plot_heatmap(
-            self._tables[i],
-            bodyparts,
-            xlim=self._arena_dims[0],
-            ylim=self._arena_dims[0],
-            save=save,
-        )
+
+        if self._arena == "circular":
+            plot_heatmap(
+                self._tables[list(self._tables.keys())[i]],
+                bodyparts,
+                xlim=[-self._arena_dims[0]/2, self._arena_dims[0]/2],
+                ylim=[-self._arena_dims[0]/2, self._arena_dims[0]/2],
+                save=save,
+            )
 
 
 class table_dict(dict):
@@ -345,7 +362,7 @@ class table_dict(dict):
 
         return X, rproj
 
-    def pca(self, n_components=None, sample=1000, kernel='linear'):
+    def pca(self, n_components=None, sample=1000, kernel="linear"):
 
         X = self.get_training_set()
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
