@@ -50,6 +50,7 @@ class get_coordinates:
         self.polar_coords = polar_coords
         self.distances = distances
         self.ego = ego
+        self.scales = self.get_scale
 
         assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
             re.findall("(.*)\.", tab)[0] for tab in self.tables
@@ -109,15 +110,15 @@ class get_coordinates:
 
             if self.arena == "circular":
 
-                for key, value in table_dict.items():
+                for i, (key, value) in enumerate(table_dict.items()):
 
                     value.loc[:, (slice("coords"), ["x"])] = value.loc[
                         :, (slice("coords"), ["x"])
-                    ].applymap(lambda x: x - self.arena_dims[0] / 2)
+                    ].applymap(lambda x: x - self.scales[i][0] / 2)
 
                     value.loc[:, (slice("coords"), ["y"])] = value.loc[
                         :, (slice("coords"), ["y"])
-                    ].applymap(lambda y: y - self.arena_dims[0] / 2)
+                    ].applymap(lambda y: y - self.scales[i][1] / 2)
 
         return table_dict, lik_dict
 
@@ -128,24 +129,23 @@ class get_coordinates:
         if self.arena in ["circular"]:
 
             scales = [
-                (
+                list(
                     recognize_arena(
-                        self.tables,
                         self.videos,
                         vid_index,
                         path=self.video_path,
                         arena_type=self.arena,
-                    )[2]
-                    * 2,
-                    self.arena_dims[0],
+                    )
+                    * 2
                 )
+                + self.arena_dims
                 for vid_index, _ in enumerate(self.videos)
             ]
 
         else:
             raise NotImplementedError("arenas must be set to one of: 'circular'")
 
-        return scales
+        return np.array(scales)
 
     def get_distances(self, verbose=1):
         """Computes the distances between all selected bodyparts over time.
@@ -167,7 +167,7 @@ class get_coordinates:
             i in list(table_dict.values())[0].columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
-        scales = self.get_scale
+        scales = self.scales[:, 2:]
 
         for ind, key in tqdm(
             enumerate(table_dict.keys()), total=len(table_dict.keys())
@@ -210,7 +210,7 @@ class get_coordinates:
             self.videos,
             self.arena,
             self.arena_dims,
-            self.get_scale,
+            self.scales[:, 2:],
             quality,
             self.exp_conditions,
             distances,
@@ -284,8 +284,8 @@ class coordinates:
             plot_heatmap(
                 self._tables[list(self._tables.keys())[i]],
                 bodyparts,
-                xlim=[-self._arena_dims[0]/2, self._arena_dims[0]/2],
-                ylim=[-self._arena_dims[0]/2, self._arena_dims[0]/2],
+                xlim=[-self._arena_dims[0] / 2, self._arena_dims[0] / 2],
+                ylim=[-self._arena_dims[0] / 2, self._arena_dims[0] / 2],
                 save=save,
             )
 
