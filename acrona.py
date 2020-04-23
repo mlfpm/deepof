@@ -147,11 +147,9 @@ class get_coordinates:
 
         return np.array(scales)
 
-    def get_distances(self, verbose=1):
+    def get_distances(self, table_dict, verbose=1):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
-
-        table_dict, lik_dict = self.load_tables
 
         if self.verbose:
             print("Computing distance based coordinates...")
@@ -184,7 +182,7 @@ class get_coordinates:
                     :, [dist for dist in val.columns if self.ego in dist]
                 ]
 
-        return distance_dict, table_dict, lik_dict
+        return distance_dict
 
     def get_angles(self, velocities=0):
         pass
@@ -192,11 +190,11 @@ class get_coordinates:
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
 
-        if not self.distances:
-            tables, quality = self.load_tables
-            distances = None
-        else:
-            distances, tables, quality = self.get_distances()
+        tables, quality = self.load_tables
+        distances = None
+
+        if self.distances:
+            distances = self.get_distances(tables)
 
         if self.polar_coords:
             for key, tab in tables.items():
