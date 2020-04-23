@@ -25,7 +25,6 @@ class get_coordinates:
         p=1,
         verbose=True,
         center_coords=True,
-        polar_coords=False,
         distances=False,
         ego=False,
     ):
@@ -47,7 +46,6 @@ class get_coordinates:
         self.p = p
         self.verbose = verbose
         self.center_coords = center_coords
-        self.polar_coords = polar_coords
         self.distances = distances
         self.ego = ego
         self.scales = self.get_scale
@@ -196,10 +194,6 @@ class get_coordinates:
         if self.distances:
             distances = self.get_distances(tables)
 
-        if self.polar_coords:
-            for key, tab in tables.items():
-                tables[key] = tab2polar(tab)
-
         if self.verbose == 1:
             print("Done!")
 
@@ -244,8 +238,13 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self):
-        return table_dict(self._tables)
+    def get_coords(self, polar=False):
+        tabs = self._tables.copy()
+        if polar:
+            for key, tab in tabs.items():
+                tabs[key] = tab2polar(tab)
+
+        return table_dict(tabs)
 
     def get_distances(self):
         if self.distances != None:
