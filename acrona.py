@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from pandarallel import pandarallel
 from pandas_profiling import ProfileReport
 from sklearn import random_projection
@@ -104,20 +105,6 @@ class get_coordinates:
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]
 
-        if self.center_coords:
-
-            if self.arena == "circular":
-
-                for i, (key, value) in enumerate(table_dict.items()):
-
-                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
-                        :, (slice("coords"), ["x"])
-                    ].applymap(lambda x: x - self.scales[i][0] / 2)
-
-                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
-                        :, (slice("coords"), ["y"])
-                    ].applymap(lambda y: y - self.scales[i][1] / 2)
-
         return table_dict, lik_dict
 
     @property
@@ -183,7 +170,8 @@ class get_coordinates:
         return distance_dict
 
     def get_angles(self, velocities=0):
-        pass
+        """Computes the angles between all selected bodyparts over time.
+           If ego is provided, it only returns angles to a specified bodypart"""
 
     def run(self):
         """Generates a dataset using all the options specified during initialization"""
@@ -238,8 +226,21 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self, polar=False):
-        tabs = self._tables.copy()
+    def get_coords(self, center=True, polar=False):
+        tabs = deepcopy(self._tables)
+
+        if center:
+            if self._arena == "circular":
+                for i, (key, value) in enumerate(tabs.items()):
+
+                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
+                        :, (slice("coords"), ["x"])
+                    ].applymap(lambda x: x - self._scales[i][0] / 2)
+
+                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
+                        :, (slice("coords"), ["y"])
+                    ].applymap(lambda y: y - self._scales[i][1] / 2)
+
         if polar:
             for key, tab in tabs.items():
                 tabs[key] = tab2polar(tab)
