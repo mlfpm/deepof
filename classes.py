@@ -8,7 +8,7 @@ from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import KernelPCA
 from tqdm import tqdm
-from DLC_analysis_additional_functions import *
+from utils import *
 
 
 class get_coordinates:
