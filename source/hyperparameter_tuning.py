@@ -1,3 +1,5 @@
+# @author lucasmiranda42
+
 import pickle
 from source.classes import *
 from hypermodels import *

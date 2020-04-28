@@ -1,6 +1,4 @@
-### Lucas Miranda, 02.01.2020
-### Pose recognition functions for DLC tracked mice
-### Collaboration with Dr. Mathias Schmidt
+# @author lucasmiranda42
 
 import cv2
 import matplotlib.pyplot as plt

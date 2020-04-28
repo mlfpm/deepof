@@ -1,3 +1,5 @@
+# @author lucasmiranda42
+
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import LSTM, Bidirectional

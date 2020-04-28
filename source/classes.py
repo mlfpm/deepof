@@ -1,3 +1,5 @@
+# @author lucasmiranda42
+
 from collections import defaultdict
 from copy import deepcopy
 from pandarallel import pandarallel
