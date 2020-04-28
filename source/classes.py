@@ -16,7 +16,11 @@ import warnings
 
 
 class get_coordinates:
-    """ Class for loading and preprocessing DLC data of individual and social mice. """
+    """
+
+    Class for loading and preprocessing DLC data of individual and social mice.
+
+    """
 
     def __init__(
         self,
@@ -25,13 +29,14 @@ class get_coordinates:
         path=".",
         exp_conditions=False,
         arena="circular",
-        arena_dims=[1],
         smooth_alpha=0.1,
+        arena_dims=tuple(1),
         p=1,
         center_coords=True,
         distances=False,
         ego=False,
     ):
+
         self.path = path
         self.video_path = self.path + "Videos/"
         self.table_path = self.path + "Tables/"
@@ -68,6 +73,11 @@ class get_coordinates:
     def load_tables(self, verbose):
         """Loads videos and tables into dictionaries"""
 
+        if self.table_format not in [".h5", ".csv"]:
+            raise NotImplementedError(
+                "Tracking files must be in either h5 or csv format"
+            )
+
         if verbose:
             print("Loading and smoothing trajectories...")
 
@@ -91,16 +101,18 @@ class get_coordinates:
         for key, value in table_dict.items():
             x = value.xs("x", level="coords", axis=1, drop_level=False)
             y = value.xs("y", level="coords", axis=1, drop_level=False)
-            l = value.xs("likelihood", level="coords", axis=1, drop_level=True)
+            lik: pd.DataFrame = value.xs(
+                "likelihood", level="coords", axis=1, drop_level=True
+            )
 
             table_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
-            lik_dict[key] = l
+            lik_dict[key] = lik
 
         if self.smooth_alpha:
 
             for dframe in tqdm(table_dict.keys()):
                 table_dict[dframe] = table_dict[dframe].apply(
-                    lambda x: smooth_mult_trajectory(x, alpha=self.smooth_alpha), axis=0
+                    lambda t: smooth_mult_trajectory(t, alpha=self.smooth_alpha), axis=0
                 )
 
         for key, tab in table_dict.items():
@@ -124,7 +136,7 @@ class get_coordinates:
                     )
                     * 2
                 )
-                + self.arena_dims
+                + list(self.arena_dims)
                 for vid_index, _ in enumerate(self.videos)
             ]
 
@@ -254,7 +266,7 @@ class coordinates:
         )
 
     def get_distances(self):
-        if self.distances != None:
+        if self.distances is not None:
             return table_dict(self.distances, typ="dist")
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
@@ -302,12 +314,9 @@ class table_dict(dict):
             )
 
         if not self._center:
-            warnings.warn(
-                "Heatmaps look better if you center the data. Set center=True in get_coords and rerun this function to give it a try!"
-            )
+            warnings.warn("Heatmaps look better if you center the data")
 
         if self._arena == "circular":
-
             x_lim = (
                 [-self._arena_dims[i][2] / 2, self._arena_dims[i][2] / 2]
                 if self._center
@@ -401,7 +410,7 @@ class table_dict(dict):
 
         return X, pca
 
-    def tSNE(self, n_components=None, sample=1000):
+    def tsne(self, n_components=None, sample=1000):
 
         X = self.get_training_set()
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]

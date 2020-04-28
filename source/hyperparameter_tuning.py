@@ -2,7 +2,7 @@
 
 import pickle
 from source.classes import *
-from hypermodels import *
+from source.hypermodels import *
 from kerastuner import BayesianOptimization
 from multiprocessing import cpu_count
 from sys import argv
@@ -12,7 +12,7 @@ script, input_type, path = argv
 with open(path + "DLC_social_1_exp_conditions.pickle", "rb") as handle:
     Treatment_dict = pickle.load(handle)
 
-DLC_social_1 = classes.get_coordinates(
+DLC_social_1 = get_coordinates(
     path=path,  # Path where to find the required files
     p=cpu_count(),  # Number of processes used for parallelization
     smooth_alpha=0.1,  # Alpha value for exponentially weighted smoothing
@@ -31,7 +31,6 @@ DLC_social_1 = classes.get_coordinates(
     video_format=".mp4",
     table_format=".h5",
     exp_conditions=Treatment_dict,
-    verbose=True,
 )
 
 DLC_social_1_coords = DLC_social_1.run()

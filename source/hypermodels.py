@@ -11,6 +11,7 @@ from tensorflow.keras import Sequential
 from keras import backend as K
 from kerastuner import HyperModel
 
+
 # Custom layers for efficiency
 class DenseTranspose(Layer):
     def __init__(self, dense, output_dim, activation=None, **kwargs):
@@ -41,7 +42,7 @@ class DenseTranspose(Layer):
         return self.activation(z + self.biases)
 
     def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.output_dim)
+        return input_shape[0], self.output_dim
 
 
 class UncorrelatedFeaturesConstraint(Constraint):
