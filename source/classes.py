@@ -30,7 +30,7 @@ class get_coordinates:
         exp_conditions=False,
         arena="circular",
         smooth_alpha=0.1,
-        arena_dims=tuple(1),
+        arena_dims=[1],
         p=1,
         center_coords=True,
         distances=False,
@@ -136,7 +136,7 @@ class get_coordinates:
                     )
                     * 2
                 )
-                + list(self.arena_dims)
+                + self.arena_dims
                 for vid_index, _ in enumerate(self.videos)
             ]
 
