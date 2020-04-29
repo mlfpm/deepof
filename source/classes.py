@@ -31,7 +31,6 @@ class get_coordinates:
         arena="circular",
         smooth_alpha=0.1,
         arena_dims=[1],
-        p=1,
         center_coords=True,
         distances=False,
         ego=False,
@@ -54,7 +53,6 @@ class get_coordinates:
         self.arena = arena
         self.arena_dims = arena_dims
         self.smooth_alpha = smooth_alpha
-        self.p = p
         self.center_coords = center_coords
         self.distances = distances
         self.ego = ego
