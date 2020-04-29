@@ -9,7 +9,6 @@ from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from source.utils import *
-from tqdm import tqdm
 import os
 import networkx as nx
 import warnings
@@ -81,7 +80,7 @@ class get_coordinates:
             )
 
         if verbose:
-            print("Loading and smoothing trajectories...")
+            print("Loading trajectories...")
 
         if self.table_format == ".h5":
             table_dict = {
@@ -112,7 +111,10 @@ class get_coordinates:
 
         if self.smooth_alpha:
 
-            for dframe in tqdm(table_dict.keys()):
+            if verbose:
+                print("Smoothing trajectories...")
+
+            for dframe in table_dict.keys():
                 table_dict[dframe] = table_dict[dframe].apply(
                     lambda t: smooth_mult_trajectory(t, alpha=self.smooth_alpha), axis=0
                 )
@@ -147,9 +149,12 @@ class get_coordinates:
 
         return np.array(scales)
 
-    def get_distances(self, table_dict):
+    def get_distances(self, table_dict, verbose):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
+
+        if verbose:
+            print("Computing distances...")
 
         nodes = self.distances
         if nodes == "All":
@@ -162,12 +167,8 @@ class get_coordinates:
         scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: bpart_distance(
-                tab,
-                scales[i,1],
-                scales[i,0],
-            )
-            for i,(key, tab) in enumerate(table_dict.items())
+            key: bpart_distance(tab, scales[i, 1], scales[i, 0],)
+            for i, (key, tab) in enumerate(table_dict.items())
         }
 
         if self.ego:
@@ -178,7 +179,7 @@ class get_coordinates:
 
         return distance_dict
 
-    def get_angles(self, table_dict):
+    def get_angles(self, table_dict, verbose):
         """
 
         Computes all the angles between adjacent bodypart trios per video and per frame in the data.
@@ -190,6 +191,9 @@ class get_coordinates:
             angle_dict (dictionary): dict containing angle dataframes per vido
 
         """
+
+        if verbose:
+            print("Computing angles...")
 
         bp_net = nx.Graph(self.connectivity)
         cliques = nx.enumerate_all_cliques(bp_net)
@@ -215,7 +219,7 @@ class get_coordinates:
 
         return angle_dict
 
-    def run(self, verbose=1):
+    def run(self, verbose=False):
         """Generates a dataset using all the options specified during initialization"""
 
         tables, quality = self.load_tables(verbose)
@@ -223,12 +227,12 @@ class get_coordinates:
         angles = None
 
         if self.distances:
-            distances = self.get_distances(tables)
+            distances = self.get_distances(tables, verbose)
 
         if self.angles:
-            angles = self.get_angles(tables)
+            angles = self.get_angles(tables, verbose)
 
-        if verbose == 1:
+        if verbose:
             print("Done!")
 
         return coordinates(
