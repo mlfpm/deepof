@@ -14,7 +14,7 @@ import networkx as nx
 import warnings
 
 
-class get_coordinates:
+class project:
     """
 
     Class for loading and preprocessing DLC data of individual and social mice.
@@ -463,12 +463,12 @@ class table_dict(dict):
 
         return X, pca
 
-    def tsne(self, n_components=None, sample=1000):
+    def tsne(self, n_components=None, sample=1000, perplexity=30):
 
         X = self.get_training_set()
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
-        tsne = TSNE(n_components=n_components)
+        tsne = TSNE(n_components=n_components, perplexity=perplexity)
         X = tsne.fit_transform(X)
 
         return X, tsne

@@ -11,7 +11,7 @@ script, input_type, path = argv
 with open(path + "DLC_social_1_exp_conditions.pickle", "rb") as handle:
     Treatment_dict = pickle.load(handle)
 
-DLC_social_1 = get_coordinates(
+DLC_social_1 = Project(
     path=path,  # Path where to find the required files
     p=cpu_count(),  # Number of processes used for parallelization
     smooth_alpha=0.1,  # Alpha value for exponentially weighted smoothing
