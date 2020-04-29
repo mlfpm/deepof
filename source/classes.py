@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from source.utils import *
 from tqdm import tqdm
 import os
+import networkx as nx
 import warnings
 
 
@@ -35,6 +36,8 @@ class get_coordinates:
         center_coords=True,
         distances=False,
         ego=False,
+        angles=False,
+        connectivity=None,
     ):
 
         self.path = path
@@ -56,6 +59,8 @@ class get_coordinates:
         self.center_coords = center_coords
         self.distances = distances
         self.ego = ego
+        self.angles = angles
+        self.connectivity = connectivity
         self.scales = self.get_scale
 
         assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
@@ -181,31 +186,69 @@ class get_coordinates:
 
         return distance_dict
 
-    def get_angles(self, velocities=0):
-        """Computes the angles between all selected bodyparts over time.
-           If ego is provided, it only returns angles to a specified bodypart"""
+    def get_angles(self, table_dict):
+        """
+
+        Computes all the angles between adjacent bodypart trios per video and per frame in the data.
+        Parameters (from self):
+            connectivity (dictionary): dict stating to which bodyparts each bodypart is connected;
+            table_dict (dict of dataframes): tables loaded from the data;
+
+        Output:
+            angle_dict (dictionary): dict containing angle dataframes per vido
+
+        """
+
+        bp_net = nx.Graph(self.connectivity)
+        cliques = nx.enumerate_all_cliques(bp_net)
+        cliques = [i for i in cliques if len(i) == 3]
+
+        angle_dict = {}
+        for key, tab in table_dict.items():
+
+            dats = []
+            for clique in cliques:
+                dat = pd.DataFrame(
+                    angle_trio(np.array(tab[clique]).reshape(3, tab.shape[0], 2))
+                ).T
+
+                orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
+                dat.columns = [tuple(clique[i] for i in order) for order in orders]
+
+                dats.append(dat)
+
+            dats = pd.concat(dats, axis=1)
+
+            angle_dict[key] = dats
+
+        return angle_dict
 
     def run(self, verbose=1):
         """Generates a dataset using all the options specified during initialization"""
 
         tables, quality = self.load_tables(verbose)
         distances = None
+        angles = None
 
         if self.distances:
             distances = self.get_distances(tables, verbose)
+
+        if self.angles:
+            angles = self.get_angles(tables)
 
         if verbose == 1:
             print("Done!")
 
         return coordinates(
-            tables,
-            self.videos,
-            self.arena,
-            self.arena_dims,
-            self.scales,
-            quality,
-            self.exp_conditions,
-            distances,
+            tables=tables,
+            videos=self.videos,
+            arena=self.arena,
+            arena_dims=self.arena_dims,
+            scales=self.scales,
+            quality=quality,
+            exp_conditions=self.exp_conditions,
+            distances=distances,
+            angles=angles,
         )
 
 
@@ -220,9 +263,11 @@ class coordinates:
         quality,
         exp_conditions=None,
         distances=None,
+        angles=None,
     ):
         self._tables = tables
         self.distances = distances
+        self.angles = angles
         self._videos = videos
         self._exp_conditions = exp_conditions
         self._arena = arena
@@ -271,6 +316,18 @@ class coordinates:
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )
+
+    def get_angles(self, degrees=False):
+        if self.angles is not None:
+            if degrees == True:
+                return table_dict(
+                    {key: np.degrees(tab) for key, tab in self.angles.items()},
+                    typ="angles",
+                )
+
+            else:
+                return table_dict(self.angles, typ="angles")
+        raise ValueError("Angles not computed. Read the documentation for more details")
 
     def get_videos(self, play=False):
         if play:

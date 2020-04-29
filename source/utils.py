@@ -12,6 +12,7 @@ import scipy
 import seaborn as sns
 from itertools import cycle, combinations
 from joblib import Parallel, delayed
+from numpy.core.umath_tests import inner1d
 from scipy import spatial
 from sklearn import mixture
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
@@ -57,6 +58,24 @@ def bpart_distance(frame, labels, absdist_arena, pixdist_arena):
     dist = (dist * absdist_arena) / pixdist_arena
     dist.index = list(combinations(labels, 2))
     return dist
+
+
+def angle(a, b, c):
+    ba = a - b
+    bc = c - b
+
+    cosine_angle = inner1d(ba, bc) / (
+        np.linalg.norm(ba, axis=1) * np.linalg.norm(bc, axis=1)
+    )
+    angle = np.arccos(cosine_angle)
+
+    return angle
+
+
+def angle_trio(array, degrees=False):
+    a, b, c = array
+
+    return np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c),])
 
 
 def smooth_boolean_array(a):
