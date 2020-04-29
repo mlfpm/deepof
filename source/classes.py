@@ -150,15 +150,9 @@ class get_coordinates:
 
         return np.array(scales)
 
-    def get_distances(self, table_dict, verbose=1):
+    def get_distances(self, table_dict):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
-
-        if verbose:
-            print("Computing distance based coordinates...")
-
-        distance_dict = defaultdict()
-        pandarallel.initialize(nb_workers=self.p, verbose=verbose)
 
         nodes = self.distances
         if nodes == "All":
@@ -170,13 +164,14 @@ class get_coordinates:
 
         scales = self.scales[:, 2:]
 
-        for ind, key in tqdm(
-            enumerate(table_dict.keys()), total=len(table_dict.keys())
-        ):
-            distance_dict[key] = table_dict[key][nodes].parallel_apply(
-                lambda x: bpart_distance(x, nodes, scales[ind][1], scales[ind][0]),
-                axis=1,
+        distance_dict = {
+            key: bpart_distance(
+                tab,
+                scales[i,1],
+                scales[i,0],
             )
+            for i,(key, tab) in enumerate(table_dict.items())
+        }
 
         if self.ego:
             for key, val in distance_dict.items():
@@ -231,7 +226,7 @@ class get_coordinates:
         angles = None
 
         if self.distances:
-            distances = self.get_distances(tables, verbose)
+            distances = self.get_distances(tables)
 
         if self.angles:
             angles = self.get_angles(tables)
@@ -312,7 +307,7 @@ class coordinates:
 
     def get_distances(self):
         if self.distances is not None:
-            return table_dict(self.distances, typ="dist")
+            return table_dict(self.distances, typ="dists")
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )
