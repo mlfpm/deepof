@@ -49,15 +49,23 @@ def tab2polar(tabdict):
     return result
 
 
-# Paired distance between bodyparts
-def bpart_distance(frame, labels, absdist_arena, pixdist_arena):
-    """Designed to be applied to a dataframe with frames as rows and body parts as columns. Returns a dataframe
-    with frames as rows and distances as columns"""
+def compute_dist(pair_df, arena_abs, arena_rel):
+    a, b = pair_df[:, :2], pair_df[:, 2:]
+    ab = a - b
+    dist = np.sqrt(inner1d(ab, ab))
+    return pd.DataFrame(dist * arena_abs / arena_rel)
 
-    dist = pd.Series(spatial.distance.pdist(frame.unstack()))
-    dist = (dist * absdist_arena) / pixdist_arena
-    dist.index = list(combinations(labels, 2))
-    return dist
+
+def bpart_distance(dataframe, arena_abs, arena_rel):
+    indexes = combinations(dataframe.columns.levels[0], 2)
+
+    dists = []
+    for idx in indexes:
+        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]), arena_abs, arena_rel)
+        dist.columns = [idx]
+        dists.append(dist)
+
+    return pd.concat(dists, axis=1)
 
 
 def angle(a, b, c):
