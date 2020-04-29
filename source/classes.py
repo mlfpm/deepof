@@ -2,7 +2,6 @@
 
 from collections import defaultdict
 from copy import deepcopy
-from pandarallel import pandarallel
 from pandas_profiling import ProfileReport
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
