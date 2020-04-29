@@ -1,6 +1,5 @@
 # @author lucasmiranda42
 
-import pickle
 from source.classes import *
 from source.hypermodels import *
 from kerastuner import BayesianOptimization
