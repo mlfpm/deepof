@@ -285,13 +285,13 @@ class coordinates:
         if center:
             if self._arena == "circular":
                 for i, (key, value) in enumerate(tabs.items()):
-                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
-                        :, (slice("coords"), ["x"])
-                    ].applymap(lambda x: x - self._scales[i][0] / 2)
+                    value.loc[:, (slice("coords"), ["x"])] = (
+                        value.loc[:, (slice("coords"), ["x"])] - self._scales[i][0] / 2
+                    )
 
-                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
-                        :, (slice("coords"), ["y"])
-                    ].applymap(lambda y: y - self._scales[i][1] / 2)
+                    value.loc[:, (slice("coords"), ["y"])] = (
+                        value.loc[:, (slice("coords"), ["y"])] - self._scales[i][1] / 2
+                    )
 
         if polar:
             for key, tab in tabs.items():

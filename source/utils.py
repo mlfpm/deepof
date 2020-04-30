@@ -320,7 +320,7 @@ def Single_behaviour_analysis(
                 / len(behavioural_dict[ind][behaviour_name])
             )
 
-    if plot == True:
+    if plot:
         sns.boxplot(list(beh_dict.keys()), list(beh_dict.values()), orient="vertical")
 
         plt.title("{} across groups".format(behaviour_name))
@@ -337,7 +337,7 @@ def Single_behaviour_analysis(
 
         plt.show()
 
-    if stats == True:
+    if stats:
         for i in combinations(treatment_dict.keys(), 2):
             print(i)
             print(scipy.stats.mannwhitneyu(beh_dict[i[0]], beh_dict[i[1]]))
@@ -394,7 +394,7 @@ def Tag_video(
 
     # Keep track of the frame number, to align with the tracking data
     fnum = 0
-    if save == True:
+    if save:
         writer = None
 
     # Loop over the first frames in the video to get resolution and center of the arena
@@ -618,12 +618,12 @@ def Tag_video(
                     2,
                 )
 
-                if show == True:
+                if show:
                     cv2.imshow("frame", frame)
 
-                if save == True:
+                if save:
 
-                    if writer == None:
+                    if writer is None:
                         # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
                         # Define the FPS. Also frame size is passed.
                         writer = cv2.VideoWriter()
