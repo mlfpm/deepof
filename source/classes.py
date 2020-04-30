@@ -114,10 +114,13 @@ class project:
             if verbose:
                 print("Smoothing trajectories...")
 
-            for dframe in table_dict.keys():
-                table_dict[dframe] = table_dict[dframe].apply(
-                    lambda t: smooth_mult_trajectory(t, alpha=self.smooth_alpha), axis=0
+            for key, tab in table_dict.items():
+                cols = tab.columns
+                smooth = pd.DataFrame(
+                    smooth_mult_trajectory(np.array(tab), alpha=self.smooth_alpha)
                 )
+                smooth.columns = cols
+                table_dict[key] = smooth
 
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]

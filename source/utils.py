@@ -12,10 +12,10 @@ import scipy
 import seaborn as sns
 from itertools import cycle, combinations
 from joblib import Parallel, delayed
+from numba import jit
 from numpy.core.umath_tests import inner1d
 from scipy import spatial
 from sklearn import mixture
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from tqdm import tqdm_notebook as tqdm
 
 
@@ -128,11 +128,15 @@ def index_frames(video_list, sample=False, index=0, pkl=False):
     return True
 
 
-def smooth_mult_trajectory(trajectory, alpha=0.25):
-    """smoothens a trajectory using exponentially alpha weighted averages"""
-    exp_smooth = ExponentialSmoothing(trajectory)
-    fit = exp_smooth.fit(alpha)
-    return fit.predict(0)
+@jit
+def smooth_mult_trajectory(series, alpha=0.15):
+    """smoothens a trajectory using exponentially weighted averages"""
+
+    result = [series[0]]
+    for n in range(len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+
+    return np.array(result)
 
     ##### BEHAVIOUR RECOGNITION FUNCTIONS #####
 
