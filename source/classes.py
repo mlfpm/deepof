@@ -31,9 +31,9 @@ class project:
         smooth_alpha=0.1,
         arena_dims=[1],
         center_coords=True,
-        distances=False,
+        distances='All',
         ego=False,
-        angles=False,
+        angles=True,
         connectivity=None,
     ):
 
@@ -282,7 +282,7 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self, center=True, polar=False):
+    def get_coords(self, center=True, polar=False, speed=0):
         tabs = deepcopy(self._tables)
 
         if center:
@@ -300,6 +300,17 @@ class coordinates:
             for key, tab in tabs.items():
                 tabs[key] = tab2polar(tab)
 
+        if speed:
+            for order in range(speed):
+                for key, tab in tabs.items():
+                    try:
+                        cols = tab.columns.levels[0]
+                    except AttributeError:
+                        cols = tab.columns
+                    vel = rolling_speed(tab, typ="coords", order=order + 1)
+                    vel.columns = cols
+                    tabs[key] = vel
+
         return table_dict(
             tabs,
             "coords",
@@ -309,23 +320,50 @@ class coordinates:
             polar=polar,
         )
 
-    def get_distances(self):
+    def get_distances(self, speed=0):
+
+        tabs = deepcopy(self.distances)
+
         if self.distances is not None:
-            return table_dict(self.distances, typ="dists")
+
+            if speed:
+                for order in range(speed):
+                    for key, tab in tabs.items():
+                        try:
+                            cols = tab.columns.levels[0]
+                        except AttributeError:
+                            cols = tab.columns
+                        vel = rolling_speed(tab, typ="dists", order=order + 1)
+                        vel.columns = cols
+                        tabs[key] = vel
+
+            return table_dict(tabs, typ="dists")
+
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )
 
-    def get_angles(self, degrees=False):
-        if self.angles is not None:
-            if degrees == True:
-                return table_dict(
-                    {key: np.degrees(tab) for key, tab in self.angles.items()},
-                    typ="angles",
-                )
+    def get_angles(self, degrees=False, speed=0):
 
-            else:
-                return table_dict(self.angles, typ="angles")
+        tabs = deepcopy(self.angles)
+
+        if self.angles is not None:
+            if degrees:
+                tabs = {key: np.degrees(tab) for key, tab in tabs.items()}
+
+            if speed:
+                for order in range(speed):
+                    for key, tab in tabs.items():
+                        try:
+                            cols = tab.columns.levels[0]
+                        except AttributeError:
+                            cols = tab.columns
+                        vel = rolling_speed(tab, typ="dists", order=order + 1)
+                        vel.columns = cols
+                        tabs[key] = vel
+
+            return table_dict(tabs, typ="angles")
+
         raise ValueError("Angles not computed. Read the documentation for more details")
 
     def get_videos(self, play=False):

@@ -244,11 +244,26 @@ def climb_wall(arena, pos_dict, fnum, tol, mouse):
     return np.linalg.norm(nose - center) > arena[2] + tol
 
 
-def rolling_speed(dframe, pause=10, rounds=5):
+def rolling_speed(dframe, typ, pause=10, rounds=5, order=1):
     """Returns the average speed over 10 frames in pixels per frame"""
 
-    distances = np.linalg.norm(np.array(dframe) - np.array(dframe.shift()), axis=1)
-    distances = pd.Series(distances, index=dframe.index)
+    s = dframe.shape[0]
+
+    if typ == "coords":
+        bp = dframe.shape[1] / 2 if order == 1 else dframe.shape[1]
+        d = 2 if order == 1 else 1
+
+    else:
+        bp = dframe.shape[1]
+        d = 1
+
+    distances = np.linalg.norm(
+        np.array(dframe).reshape(s, int(bp), d)
+        - np.array(dframe.shift()).reshape(s, int(bp), d),
+        axis=2,
+    )
+
+    distances = pd.DataFrame(distances, index=dframe.index)
     speeds = np.round(distances.rolling(pause).mean(), rounds)
     speeds[np.isnan(speeds)] = 0.0
 
