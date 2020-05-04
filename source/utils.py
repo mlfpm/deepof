@@ -16,6 +16,7 @@ from numba import jit
 from numpy.core.umath_tests import inner1d
 from scipy import spatial
 from sklearn import mixture
+from source.classes import *
 from tqdm import tqdm_notebook as tqdm
 
 
@@ -101,6 +102,40 @@ def rolling_window(a, window_size, window_step, write=True):
         a, shape=shape, strides=strides, writeable=write
     )[::window_step]
 
+
+def merge_tables(*args):
+    """
+
+    Takes a number of table_dict objects and merges them
+    Returns a table_dict object of type 'merged'
+
+    """
+    merged_dict = {key: [] for key in args[0].keys()}
+    for tabdict in args:
+        for key, val in tabdict.items():
+            merged_dict[key].append(val)
+
+    merged_tables = table_dict(
+        {
+            key: pd.concat(val, axis=1, ignore_index=True)
+            for key, val in merged_dict.items()
+        },
+        typ="merged",
+    )
+
+    return merged_tables
+
+
+@jit
+def smooth_mult_trajectory(series, alpha=0.15):
+    """smooths a trajectory using exponentially weighted averages"""
+
+    result = [series[0]]
+    for n in range(len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+
+    return np.array(result)
+
     ##### IMAGE/VIDEO PROCESSING FUNCTIONS #####
 
 
@@ -126,17 +161,6 @@ def index_frames(video_list, sample=False, index=0, pkl=False):
         pbar.update(1)
 
     return True
-
-
-@jit
-def smooth_mult_trajectory(series, alpha=0.15):
-    """smoothens a trajectory using exponentially weighted averages"""
-
-    result = [series[0]]
-    for n in range(len(series)):
-        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
-
-    return np.array(result)
 
     ##### BEHAVIOUR RECOGNITION FUNCTIONS #####
 

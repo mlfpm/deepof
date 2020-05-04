@@ -31,7 +31,7 @@ class project:
         smooth_alpha=0.1,
         arena_dims=[1],
         center_coords=True,
-        distances='All',
+        distances="All",
         ego=False,
         angles=True,
         connectivity=None,
@@ -513,7 +513,3 @@ class table_dict(dict):
         X = tsne.fit_transform(X)
 
         return X, tsne
-
-class merged_table_dict(table_dict):
-    def __init__(self, *args):
-        pass
