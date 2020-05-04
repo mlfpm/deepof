@@ -10,8 +10,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from source.utils import *
 import os
-import networkx as nx
 import warnings
+
+import networkx as nx
+
+from source.utils import *
 
 
 class project:
@@ -133,19 +136,20 @@ class project:
 
         if self.arena in ["circular"]:
 
-            scales = [
-                list(
-                    recognize_arena(
-                        self.videos,
-                        vid_index,
-                        path=self.video_path,
-                        arena_type=self.arena,
+            scales = []
+            for vid_index, _ in enumerate(self.videos):
+                scales.append(
+                    list(
+                        recognize_arena(
+                            self.videos,
+                            vid_index,
+                            path=self.video_path,
+                            arena_type=self.arena,
+                        )
+                        * 2
                     )
-                    * 2
+                    + self.arena_dims
                 )
-                + self.arena_dims
-                for vid_index, _ in enumerate(self.videos)
-            ]
 
         else:
             raise NotImplementedError("arenas must be set to one of: 'circular'")
