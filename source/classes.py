@@ -513,3 +513,7 @@ class table_dict(dict):
         X = tsne.fit_transform(X)
 
         return X, tsne
+
+class merged_table_dict(table_dict):
+    def __init__(self, *args):
+        pass
