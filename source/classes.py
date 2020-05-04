@@ -10,7 +10,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import os
 import warnings
-
 import networkx as nx
 
 from source.utils import *
@@ -447,7 +446,8 @@ class table_dict(dict):
         random_state=None,
         verbose=False,
         filter=None,
-        sigma=None
+        sigma=None,
+        shift=0
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
@@ -485,6 +485,7 @@ class table_dict(dict):
 
         if filter == "gaussian":
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
+            r = [i - shift for i in r]
             g = np.array(
                 [
                     1
