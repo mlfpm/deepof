@@ -8,7 +8,6 @@ from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from source.utils import *
 import os
 import warnings
 
@@ -447,6 +446,8 @@ class table_dict(dict):
         test_proportion=0,
         random_state=None,
         verbose=False,
+        filter=None,
+        sigma=None
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
@@ -482,8 +483,25 @@ class table_dict(dict):
 
         X_train = rolling_window(X_train, window_size, window_step)
 
+        if filter == "gaussian":
+            r = range(-int(window_size / 2), int(window_size / 2) + 1)
+            g = np.array(
+                [
+                    1
+                    / (sigma * np.sqrt(2 * np.pi))
+                    * np.exp(-float(x) ** 2 / (2 * sigma ** 2))
+                    for x in r
+                ]
+            )
+            g /= np.max(g)
+            X_train = X_train * g.reshape(1, window_size, 1)
+
         if test_proportion:
             X_test = rolling_window(X_test, window_size, window_step)
+
+            if filter == "gaussian":
+                X_test = X_test * g.reshape(1, window_size, 1)
+
             return X_train, X_test
 
         return X_train
@@ -517,3 +535,26 @@ class table_dict(dict):
         X = tsne.fit_transform(X)
 
         return X, tsne
+
+
+def merge_tables(*args):
+    """
+
+    Takes a number of table_dict objects and merges them
+    Returns a table_dict object of type 'merged'
+
+    """
+    merged_dict = {key: [] for key in args[0].keys()}
+    for tabdict in args:
+        for key, val in tabdict.items():
+            merged_dict[key].append(val)
+
+    merged_tables = table_dict(
+        {
+            key: pd.concat(val, axis=1, ignore_index=True)
+            for key, val in merged_dict.items()
+        },
+        typ="merged",
+    )
+
+    return merged_tables
