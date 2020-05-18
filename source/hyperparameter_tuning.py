@@ -3,7 +3,6 @@
 from source.classes import *
 from source.hypermodels import *
 from kerastuner import BayesianOptimization
-from multiprocessing import cpu_count
 from sys import argv
 
 script, input_type, path = argv
@@ -34,11 +33,28 @@ DLC_social_1 = project(
 DLC_social_1_coords = DLC_social_1.run()
 
 coords = DLC_social_1_coords.get_coords()
-distances = DLC_social_1_coords.get_distances
+distances = DLC_social_1_coords.get_distances()
+angles = DLC_social_1_coords.get_angles()
+coords_distances = merge_tables(coords, distances)
+coords_angles = merge_tables(coords, angles)
+coords_dist_angles = merge_tables(coords, distances, angles)
+
 coords_train, coords_test = coords.preprocess(
     window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
 )
 dist_train, dist_test = distances.preprocess(
+    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
+)
+angles_train, angles_test = angles.preprocess(
+    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
+)
+coords_dist_train, coords_dist_test = coords_distances.preprocess(
+    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
+)
+coords_angles_train, coords_angles_test = coords_angles.preprocess(
+    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
+)
+coords_dist_angles_train, coords_dist_angles_test = coords_dist_angles.preprocess(
     window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
 )
 
@@ -56,8 +72,8 @@ def tune_search(train, test, project_name):
 
     tuner = BayesianOptimization(
         hypermodel,
-        max_trials=100,
-        executions_per_trial=3,
+        max_trials=25,
+        executions_per_trial=1,
         objective="val_mae",
         seed=42,
         directory="BayesianOptx",
@@ -87,8 +103,40 @@ if input_type == "coords":
     )
     best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
-elif input_type == "dist":
+elif input_type == "dists":
     best_model = tune_search(
         dist_train, dist_test, "Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
     )
     best_model.save("Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+elif input_type == "angles":
+    best_model = tune_search(
+        angles_train, angles_test, "Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+    )
+    best_model.save("Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+elif input_type == "coords+dist":
+    best_model = tune_search(
+        coords_dist_train,
+        coords_dist_test,
+        "Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+    )
+    best_model.save("Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+elif input_type == "coords+angle":
+    best_model = tune_search(
+        coords_angles_train,
+        coords_angles_test,
+        "Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+    )
+    best_model.save("Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+elif input_type == "coords+dist+angle":
+    best_model = tune_search(
+        coords_dist_angles_train,
+        coords_dist_angles_test,
+        "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+    )
+    best_model.save(
+        "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf"
+    )

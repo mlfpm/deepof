@@ -207,3 +207,11 @@ class SEQ_2_SEQ_AE(HyperModel):
         )
 
         return model
+
+
+class SEQ_2_SEQ_VAE(HyperModel):
+    def __init__(self, input_shape):
+        self.input_shape = input_shape
+
+    def build(self, hp):
+        pass

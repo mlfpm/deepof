@@ -316,7 +316,7 @@ class coordinates:
         if length:
             for key, tab in tabs.items():
                 tabs[key].index = pd.timedelta_range(
-                    "00:00:00", length, periods=tab.shape[0]+1, closed='left'
+                    "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                 )
 
         return table_dict(
@@ -348,7 +348,7 @@ class coordinates:
             if length:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
-                        "00:00:00", length, periods=tab.shape[0] + 1, closed='left'
+                        "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                     )
 
             return table_dict(tabs, typ="dists")
@@ -379,7 +379,7 @@ class coordinates:
             if length:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
-                        "00:00:00", length, periods=tab.shape[0] + 1, closed='left'
+                        "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                     )
 
             return table_dict(tabs, typ="angles")
