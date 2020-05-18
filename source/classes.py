@@ -284,7 +284,7 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self, center=True, polar=False, speed=0):
+    def get_coords(self, center=True, polar=False, speed=0, length=None):
         tabs = deepcopy(self._tables)
 
         if center:
@@ -313,6 +313,12 @@ class coordinates:
                     vel.columns = cols
                     tabs[key] = vel
 
+        if length:
+            for key, tab in tabs.items():
+                tabs[key].index = pd.timedelta_range(
+                    "00:00:00", length, periods=tab.shape[0]+1, closed='left'
+                )
+
         return table_dict(
             tabs,
             "coords",
@@ -322,7 +328,7 @@ class coordinates:
             polar=polar,
         )
 
-    def get_distances(self, speed=0):
+    def get_distances(self, speed=0, length=None):
 
         tabs = deepcopy(self.distances)
 
@@ -339,13 +345,19 @@ class coordinates:
                         vel.columns = cols
                         tabs[key] = vel
 
+            if length:
+                for key, tab in tabs.items():
+                    tabs[key].index = pd.timedelta_range(
+                        "00:00:00", length, periods=tab.shape[0] + 1, closed='left'
+                    )
+
             return table_dict(tabs, typ="dists")
 
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )
 
-    def get_angles(self, degrees=False, speed=0):
+    def get_angles(self, degrees=False, speed=0, length=None):
 
         tabs = deepcopy(self.angles)
 
@@ -363,6 +375,12 @@ class coordinates:
                         vel = rolling_speed(tab, typ="dists", order=order + 1)
                         vel.columns = cols
                         tabs[key] = vel
+
+            if length:
+                for key, tab in tabs.items():
+                    tabs[key].index = pd.timedelta_range(
+                        "00:00:00", length, periods=tab.shape[0] + 1, closed='left'
+                    )
 
             return table_dict(tabs, typ="angles")
 
@@ -447,7 +465,7 @@ class table_dict(dict):
         verbose=False,
         filter=None,
         sigma=None,
-        shift=0
+        shift=0,
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
