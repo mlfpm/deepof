@@ -15,6 +15,23 @@ tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_fr
 with open(path + "DLC_social_1_exp_conditions.pickle", "rb") as handle:
     Treatment_dict = pickle.load(handle)
 
+# Which angles to compute?
+bp_dict = {
+    "B_Nose": ["B_Left_ear", "B_Right_ear"],
+    "B_Left_ear": ["B_Nose", "B_Right_ear", "B_Center", "B_Left_flank"],
+    "B_Right_ear": ["B_Nose", "B_Left_ear", "B_Center", "B_Right_flank"],
+    "B_Center": [
+        "B_Left_ear",
+        "B_Right_ear",
+        "B_Left_flank",
+        "B_Right_flank",
+        "B_Tail_base",
+    ],
+    "B_Left_flank": ["B_Left_ear", "B_Center", "B_Tail_base"],
+    "B_Right_flank": ["B_Right_ear", "B_Center", "B_Tail_base"],
+    "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
+}
+
 DLC_social_1 = project(
     path=path,  # Path where to find the required files
     smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
@@ -28,6 +45,8 @@ DLC_social_1 = project(
         "B_Tail_base",
     ],
     ego=False,
+    angles=True,
+    connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
     arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
