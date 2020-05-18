@@ -1,4 +1,4 @@
-# Acrona
+# DeepOF
 ### DeepLabCut postprocessing package
 
 Includes:
