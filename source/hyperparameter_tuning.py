@@ -1,11 +1,16 @@
 # @author lucasmiranda42
 
+from datetime import datetime
 from source.classes import *
 from source.hypermodels import *
 from kerastuner import BayesianOptimization
 from sys import argv
+from tensorflow import keras
 
 script, input_type, path = argv
+
+log_dir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(path + "DLC_social_1_exp_conditions.pickle", "rb") as handle:
     Treatment_dict = pickle.load(handle)
@@ -90,7 +95,10 @@ def tune_search(train, test, project_name):
         validation_data=(test, test),
         verbose=1,
         batch_size=1024,
-        callbacks=[tf.keras.callbacks.EarlyStopping("val_loss", patience=3)],
+        callbacks=[
+            tensorboard_callback,
+            tf.keras.callbacks.EarlyStopping("val_loss", patience=3),
+        ],
     )
 
     print(tuner.results_summary())
