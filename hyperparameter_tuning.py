@@ -35,7 +35,7 @@ DLC_social_1 = project(
     exp_conditions=Treatment_dict,
 )
 
-DLC_social_1_coords = DLC_social_1.run()
+DLC_social_1_coords = DLC_social_1.run(verbose=True)
 
 coords = DLC_social_1_coords.get_coords()
 distances = DLC_social_1_coords.get_distances()
