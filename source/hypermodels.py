@@ -377,7 +377,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
         def vae_loss(x, x_decoded_mean):
             huber_loss = Huber(reduction="sum", delta=100.0)
             huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
-            kl_loss = -0.5 * K.mean(
+            kl_loss = -0.5 * tf.reduce_mean(
                 1 + z_log_sigma - K.square(z_mean) - K.exp(z_log_sigma), axis=-1
             )
             return K.mean(huber_loss + kl_loss[:, None])
@@ -390,7 +390,6 @@ class SEQ_2_SEQ_VAE(HyperModel):
 
         vae.compile(
             loss=(vae_loss if self.loss == "ELBO" else vae_mmd_loss),
-            experimental_run_tf_function=False,
             optimizer=Adam(
                 lr=hp.Float(
                     "learning_rate",
