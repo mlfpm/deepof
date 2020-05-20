@@ -1,7 +1,7 @@
 # @author lucasmiranda42
 
 from kerastuner import HyperModel
-from tensorflow.keras import backend as K
+from keras import backend as K
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import Constraint, UnitNorm
 from tensorflow.keras.layers import Bidirectional, Dense, Dropout
