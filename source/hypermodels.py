@@ -1,15 +1,44 @@
 # @author lucasmiranda42
 
-import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import LSTM, Bidirectional
-from tensorflow.keras.layers import Dense, Layer
-from tensorflow.keras.layers import RepeatVector, Dropout
-from tensorflow.keras.layers import TimeDistributed
-from tensorflow.keras.constraints import UnitNorm, Constraint
-from tensorflow.keras import Sequential
-from keras import backend as K
 from kerastuner import HyperModel
+from tensorflow.keras import backend as K
+from tensorflow.keras import Input, Model, Sequential
+from tensorflow.keras.constraints import Constraint, UnitNorm
+from tensorflow.keras.layers import Bidirectional, Dense, Dropout
+from tensorflow.keras.layers import Lambda, Layer, LSTM
+from tensorflow.keras.layers import RepeatVector, TimeDistributed
+from tensorflow.keras.losses import Huber
+from tensorflow.keras.optimizers import Adam
+import tensorflow as tf
+
+
+# Helper functions
+def sampling(args, epsilon_std=1.0):
+    z_mean, z_log_sigma = args
+    epsilon = K.random_normal(shape=K.shape(z_mean), mean=0.0, stddev=epsilon_std)
+    return z_mean + K.exp(z_log_sigma) * epsilon
+
+
+def compute_kernel(x, y):
+    x_size = K.shape(x)[0]
+    y_size = K.shape(y)[0]
+    dim = K.shape(x)[1] * K.shape(x)[2]
+    tiled_x = K.tile(K.reshape(x, K.stack([x_size, 1, dim])), K.stack([1, y_size, 1]))
+    tiled_y = K.tile(K.reshape(y, K.stack([1, y_size, dim])), K.stack([x_size, 1, 1]))
+    return K.exp(
+        -tf.reduce_mean(K.square(tiled_x - tiled_y), axis=2) / K.cast(dim, tf.float32)
+    )
+
+
+def compute_mmd(x, y):
+    x_kernel = compute_kernel(x, x)
+    y_kernel = compute_kernel(y, y)
+    xy_kernel = compute_kernel(x, y)
+    return (
+        tf.reduce_mean(x_kernel)
+        + tf.reduce_mean(y_kernel)
+        - 2 * tf.reduce_mean(xy_kernel)
+    )
 
 
 # Custom layers for efficiency
@@ -37,7 +66,7 @@ class DenseTranspose(Layer):
         )
         super().build(batch_input_shape)
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
         z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
         return self.activation(z + self.biases)
 
@@ -89,8 +118,10 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return self.weightage * self.uncorrelated_feature(x)
 
 
+# Hypermodels
 class SEQ_2_SEQ_AE(HyperModel):
     def __init__(self, input_shape):
+        super().__init__()
         self.input_shape = input_shape
 
     def build(self, hp):
@@ -192,7 +223,7 @@ class SEQ_2_SEQ_AE(HyperModel):
         model = Sequential([encoder, decoder], name="DLC_Autoencoder")
 
         model.compile(
-            loss=tf.keras.losses.Huber(reduction="sum", delta=100.0),
+            loss=Huber(reduction="sum", delta=100.0),
             optimizer=Adam(
                 lr=hp.Float(
                     "learning_rate",
@@ -210,15 +241,174 @@ class SEQ_2_SEQ_AE(HyperModel):
 
 
 class SEQ_2_SEQ_VAE(HyperModel):
-    def __init__(self, input_shape):
+    def __init__(self, input_shape, loss="MMD"):
+        super().__init__()
         self.input_shape = input_shape
+        self.loss = loss
+
+        assert self.loss in [
+            "MMD",
+            "ELBO",
+        ], "Loss function not recognised. Select one of MMD and ELBO"
 
     def build(self, hp):
-        pass
+        # Hyperparameters to tune
+        CONV_filters = hp.Int(
+            "units_conv", min_value=32, max_value=256, step=32, default=256
+        )
+        LSTM_units_1 = hp.Int(
+            "units_lstm", min_value=128, max_value=512, step=32, default=256
+        )
+        LSTM_units_2 = int(LSTM_units_1 / 2)
+        DENSE_1 = int(LSTM_units_2)
+        DENSE_2 = hp.Int(
+            "units_dense1", min_value=32, max_value=256, step=32, default=64
+        )
+        DROPOUT_RATE = hp.Float(
+            "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
+        )
+        ENCODING = hp.Int(
+            "units_dense2", min_value=32, max_value=128, step=32, default=32
+        )
+
+        # Encoder Layers
+        Model_E0 = tf.keras.layers.Conv1D(
+            filters=CONV_filters,
+            kernel_size=5,
+            strides=1,
+            padding="causal",
+            activation="relu",
+        )
+        Model_E1 = Bidirectional(
+            LSTM(
+                LSTM_units_1,
+                activation="tanh",
+                return_sequences=True,
+                kernel_constraint=UnitNorm(axis=0),
+            )
+        )
+        Model_E2 = Bidirectional(
+            LSTM(
+                LSTM_units_2,
+                activation="tanh",
+                return_sequences=False,
+                kernel_constraint=UnitNorm(axis=0),
+            )
+        )
+        Model_E3 = Dense(DENSE_1, activation="relu", kernel_constraint=UnitNorm(axis=0))
+        Model_E4 = Dense(DENSE_2, activation="relu", kernel_constraint=UnitNorm(axis=0))
+        Model_E5 = Dense(
+            ENCODING,
+            activation="relu",
+            kernel_constraint=UnitNorm(axis=1),
+            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+        )
+
+        # Decoder layers
+        Model_D4 = Bidirectional(
+            LSTM(
+                LSTM_units_1,
+                activation="tanh",
+                return_sequences=True,
+                kernel_constraint=UnitNorm(axis=1),
+            )
+        )
+        Model_D5 = Bidirectional(
+            LSTM(
+                LSTM_units_1,
+                activation="sigmoid",
+                return_sequences=True,
+                kernel_constraint=UnitNorm(axis=1),
+            )
+        )
+
+        # Define and instanciate encoder
+        x = Input(shape=self.input_shape[1:])
+        encoder = Model_E0(x)
+        encoder = Model_E1(encoder)
+        encoder = Model_E2(encoder)
+        encoder = Model_E3(encoder)
+        encoder = Dropout(DROPOUT_RATE)(encoder)
+        encoder = Model_E4(encoder)
+        encoder = Model_E5(encoder)
+        z_mean = Dense(ENCODING)(encoder)
+        z_log_sigma = Dense(ENCODING)(encoder)
+
+        # note that "output_shape" isn't necessary with the TensorFlow backend
+        # so you could write `Lambda(sampling)([z_mean, z_log_sigma])`
+        z = Lambda(sampling)([z_mean, z_log_sigma])
+
+        # Define and instanciate decoder
+        decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(z)
+        decoder = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)(
+            decoder
+        )
+        decoder = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)(
+            decoder
+        )
+        decoder = RepeatVector(self.input_shape[1])(decoder)
+        decoder = Model_D4(decoder)
+        decoder = Model_D5(decoder)
+        x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(decoder)
+
+        # end-to-end autoencoder
+        vae = Model(x, x_decoded_mean)
+
+        # encoder, from inputs to latent space
+        encoder = Model(x, z_mean)
+
+        # generator, from latent space to reconstructed inputs
+        decoder_input = Input(shape=(ENCODING,))
+        decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(
+            decoder_input
+        )
+        decoder = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)(
+            decoder
+        )
+        decoder = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)(
+            decoder
+        )
+        decoder = RepeatVector(self.input_shape[1])(decoder)
+        decoder = Model_D4(decoder)
+        decoder = Model_D5(decoder)
+        x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(decoder)
+        generator = Model(decoder_input, x_decoded_mean)
+
+        def vae_loss(x, x_decoded_mean):
+            huber_loss = Huber(reduction="sum", delta=100.0)
+            huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
+            kl_loss = -0.5 * K.mean(
+                1 + z_log_sigma - K.square(z_mean) - K.exp(z_log_sigma), axis=-1
+            )
+            return K.mean(huber_loss + kl_loss[:, None])
+
+        def vae_mmd_loss(x, x_decoded_mean):
+            huber_loss = Huber(reduction="sum", delta=100.0)
+            huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
+            mmd_loss = compute_mmd(x, x_decoded_mean)
+            return huber_loss + mmd_loss
+
+        vae.compile(
+            loss=(vae_loss if self.loss == "ELBO" else vae_mmd_loss),
+            optimizer=Adam(
+                lr=hp.Float(
+                    "learning_rate",
+                    min_value=1e-4,
+                    max_value=1e-2,
+                    sampling="LOG",
+                    default=1e-3,
+                ),
+                clipvalue=0.5,
+            ),
+            metrics=["mae"],
+        )
+
+        return vae
 
 
 class SEQ_2_SEQ_MVAE(HyperModel):
     def __init__(self, input_shape):
+        super().__init__()
         self.input_shape = input_shape
 
     def build(self, hp):
@@ -227,6 +417,7 @@ class SEQ_2_SEQ_MVAE(HyperModel):
 
 class SEQ_2_SEQ_MMVAE(HyperModel):
     def __init__(self, input_shape):
+        super().__init__()
         self.input_shape = input_shape
 
     def build(self, hp):
