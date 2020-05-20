@@ -7,7 +7,7 @@ from kerastuner import BayesianOptimization
 from sys import argv
 from tensorflow import keras
 
-script, input_type, path = argv
+script, input_type, hyp, path = argv
 
 log_dir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
@@ -89,10 +89,19 @@ print("Training set of shape: {}".format(dist_train.shape))
 print("Validation set of shape: {}".format(dist_test.shape))
 
 
-def tune_search(train, test, project_name):
+def tune_search(train, test, project_name, hyp):
     """Define the search space using keras-tuner and bayesian optimization"""
     COORDS_INPUT_SHAPE = train.shape
-    hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
+    if hyp == "S2SAE":
+        hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
+    elif hyp == "S2SVAE-MMD":
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="MMD")
+    elif hyp == "S2SVAE-ELBO":
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="ELBO")
+    else:
+        raise ValueError(
+            "Hypermodel not recognised. Try one of S2SAE, S2SVAE-ELBO or S2SVAE-MMD"
+        )
 
     tuner = BayesianOptimization(
         hypermodel,
@@ -102,7 +111,9 @@ def tune_search(train, test, project_name):
         seed=42,
         directory="BayesianOptx",
         project_name=project_name,
-        # distribution_strategy=tf.distribute.MirroredStrategy(),
+        distribution_strategy=(
+            None if hyp == "S2SAE" else tf.distribute.MirroredStrategy()
+        ),
     )
 
     print(tuner.search_space_summary())
@@ -126,19 +137,19 @@ def tune_search(train, test, project_name):
 
 if input_type == "coords":
     best_model = tune_search(
-        coords_train, coords_test, "Coord-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+        coords_train, coords_test, "Coord-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
     )
     best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
 elif input_type == "dists":
     best_model = tune_search(
-        dist_train, dist_test, "Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+        dist_train, dist_test, "Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
     )
     best_model.save("Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
 elif input_type == "angles":
     best_model = tune_search(
-        angles_train, angles_test, "Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5"
+        angles_train, angles_test, "Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
     )
     best_model.save("Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
@@ -147,6 +158,7 @@ elif input_type == "coords+dist":
         coords_dist_train,
         coords_dist_test,
         "Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+        hyp=hyp,
     )
     best_model.save("Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
@@ -155,6 +167,7 @@ elif input_type == "coords+angle":
         coords_angles_train,
         coords_angles_test,
         "Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+        hyp=hyp,
     )
     best_model.save("Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
 
@@ -163,6 +176,7 @@ elif input_type == "coords+dist+angle":
         coords_dist_angles_train,
         coords_dist_angles_test,
         "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
+        hyp=hyp,
     )
     best_model.save(
         "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf"

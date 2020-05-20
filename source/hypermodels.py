@@ -390,6 +390,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
 
         vae.compile(
             loss=(vae_loss if self.loss == "ELBO" else vae_mmd_loss),
+            experimental_run_tf_function=False,
             optimizer=Adam(
                 lr=hp.Float(
                     "learning_rate",
@@ -398,7 +399,6 @@ class SEQ_2_SEQ_VAE(HyperModel):
                     sampling="LOG",
                     default=1e-3,
                 ),
-                clipvalue=0.5,
             ),
             metrics=["mae"],
         )
