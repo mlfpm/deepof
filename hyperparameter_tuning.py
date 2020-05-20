@@ -111,9 +111,6 @@ def tune_search(train, test, project_name, hyp):
         seed=42,
         directory="BayesianOptx",
         project_name=project_name,
-        distribution_strategy=(
-            None if hyp == "S2SAE" else tf.distribute.MirroredStrategy()
-        ),
     )
 
     print(tuner.search_space_summary())
@@ -127,7 +124,7 @@ def tune_search(train, test, project_name, hyp):
         batch_size=256,
         callbacks=[
             tensorboard_callback,
-            tf.keras.callbacks.EarlyStopping("val_loss", patience=3),
+            tf.keras.callbacks.EarlyStopping("val_mae", patience=3),
         ],
     )
 

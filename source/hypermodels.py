@@ -380,9 +380,9 @@ class SEQ_2_SEQ_VAE(HyperModel):
             kl_loss = -0.5 * tf.reduce_mean(
                 1 + z_log_sigma - K.square(z_mean) - K.exp(z_log_sigma), axis=-1
             )
-            return K.mean(huber_loss + kl_loss[:, None])
+            return tf.reduce_mean(huber_loss + kl_loss[:, None])
 
-        def vae_mmd_loss(x, x_decoded_mean):
+        def vae_mmd_loss(x, x_decoded_mean, sigma_sqr=1.0):
             huber_loss = Huber(reduction="sum", delta=100.0)
             huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
             mmd_loss = compute_mmd(x, x_decoded_mean)
@@ -400,6 +400,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
                 ),
             ),
             metrics=["mae"],
+            experimental_run_tf_function=False,
         )
 
         return vae
