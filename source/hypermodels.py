@@ -377,7 +377,13 @@ class SEQ_2_SEQ_VAE(HyperModel):
         z_mean = Dense(ENCODING)(encoder)
         z_log_sigma = Dense(ENCODING)(encoder)
 
+        if "ELBO" in self.loss:
+            z_mean, z_log_sigma = KLDivergenceLayer()([z_mean, z_log_sigma])
+
         z = Lambda(sampling)([z_mean, z_log_sigma])
+
+        if "MMD" in self.loss:
+            z = MMDiscrepancyLayer()(z)
 
         # Define and instanciate decoder
         decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(z)
