@@ -1,7 +1,7 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-from source.classes import *
+from source.preprocess import *
 from source.hypermodels import *
 from kerastuner import BayesianOptimization
 from sys import argv
