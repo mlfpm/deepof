@@ -94,13 +94,15 @@ def tune_search(train, test, project_name, hyp):
     COORDS_INPUT_SHAPE = train.shape
     if hyp == "S2SAE":
         hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
+    elif hyp == "S2SVAE":
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="ELBO+MMD")
     elif hyp == "S2SVAE-MMD":
         hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="MMD")
     elif hyp == "S2SVAE-ELBO":
         hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="ELBO")
     else:
         raise ValueError(
-            "Hypermodel not recognised. Try one of S2SAE, S2SVAE-ELBO or S2SVAE-MMD"
+            "Hypermodel not recognised. Try one of S2SAE, S2SVAE, S2SVAE-ELBO or S2SVAE-MMD"
         )
 
     tuner = BayesianOptimization(
