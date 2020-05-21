@@ -41,7 +41,7 @@ def compute_mmd(x, y):
     )
 
 
-# Custom layers for efficiency
+# Custom layers for efficiency/losses
 class DenseTranspose(Layer):
     def __init__(self, dense, output_dim, activation=None, **kwargs):
         self.dense = dense
@@ -116,6 +116,47 @@ class UncorrelatedFeaturesConstraint(Constraint):
     def __call__(self, x):
         self.covariance = self.get_covariance(x)
         return self.weightage * self.uncorrelated_feature(x)
+
+
+class KLDivergenceLayer(Layer):
+
+    """ Identity transform layer that adds KL divergence
+    to the final model loss.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.is_placeholder = True
+        super(KLDivergenceLayer, self).__init__(*args, **kwargs)
+
+    def call(self, inputs, **kwargs):
+
+        mu, log_var = inputs
+
+        kl_batch = -0.5 * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
+
+        self.add_loss(K.mean(kl_batch), inputs=inputs)
+
+        return inputs
+
+
+class MMDiscrepancyLayer(Layer):
+    """ Identity transform layer that adds MM discrepancy
+    to the final model loss.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.is_placeholder = True
+        super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
+
+    def call(self, z, **kwargs):
+        true_samples = K.random_normal(
+            K.shape(z), mean=0.0, stddev=2.0 / K.cast_to_floatx(K.shape(z)[1])
+        )
+        mmd_batch = compute_mmd(z, true_samples)
+
+        self.add_loss(K.mean(mmd_batch), inputs=z)
+
+        return z
 
 
 # Hypermodels
