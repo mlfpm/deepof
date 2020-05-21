@@ -282,7 +282,7 @@ class SEQ_2_SEQ_AE(HyperModel):
 
 
 class SEQ_2_SEQ_VAE(HyperModel):
-    def __init__(self, input_shape, loss="MMD"):
+    def __init__(self, input_shape, loss="ELBO+MMD"):
         super().__init__()
         self.input_shape = input_shape
         self.loss = loss
@@ -290,7 +290,8 @@ class SEQ_2_SEQ_VAE(HyperModel):
         assert self.loss in [
             "MMD",
             "ELBO",
-        ], "Loss function not recognised. Select one of MMD and ELBO"
+            "ELBO+MMD"
+        ], "Loss function not recognised. Select one of ELBO, MMD and ELBO+MMD"
 
     def build(self, hp):
         # Hyperparameters to tune
@@ -372,13 +373,11 @@ class SEQ_2_SEQ_VAE(HyperModel):
         encoder = Dropout(DROPOUT_RATE)(encoder)
         encoder = Model_E4(encoder)
         encoder = Model_E5(encoder)
+
         z_mean = Dense(ENCODING)(encoder)
         z_log_sigma = Dense(ENCODING)(encoder)
 
-        # note that "output_shape" isn't necessary with the TensorFlow backend
-        # so you could write `Lambda(sampling)([z_mean, z_log_sigma])`
         z = Lambda(sampling)([z_mean, z_log_sigma])
-        true_samples = K.random_normal(K.shape(z_mean), mean=0.0, stddev=1.0)
 
         # Define and instanciate decoder
         decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(z)
@@ -396,42 +395,12 @@ class SEQ_2_SEQ_VAE(HyperModel):
         # end-to-end autoencoder
         vae = Model(x, x_decoded_mean)
 
-        # encoder, from inputs to latent space
-        encoder = Model(x, z_mean)
-
-        # generator, from latent space to reconstructed inputs
-        decoder_input = Input(shape=(ENCODING,))
-        decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(
-            decoder_input
-        )
-        decoder = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)(
-            decoder
-        )
-        decoder = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)(
-            decoder
-        )
-        decoder = RepeatVector(self.input_shape[1])(decoder)
-        decoder = Model_D4(decoder)
-        decoder = Model_D5(decoder)
-        x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(decoder)
-        generator = Model(decoder_input, x_decoded_mean)
-
-        def vae_loss(x, x_decoded_mean):
+        def huber_loss(x, x_decoded_mean):
             huber_loss = Huber(reduction="sum", delta=100.0)
-            huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
-            kl_loss = -0.5 * tf.reduce_mean(
-                1 + z_log_sigma - K.square(z_mean) - K.exp(z_log_sigma), axis=-1
-            )
-            return tf.reduce_mean(huber_loss + kl_loss[:, None])
-
-        def vae_mmd_loss(x, x_decoded_mean):
-            huber_loss = Huber(reduction="sum", delta=100.0)
-            huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
-            mmd_loss = compute_mmd(z, true_samples)
-            return K.mean(huber_loss + mmd_loss)
+            return self.input_shape[1:] * huber_loss(x, x_decoded_mean)
 
         vae.compile(
-            loss=(vae_loss if self.loss == "ELBO" else vae_mmd_loss),
+            loss=huber_loss,
             optimizer=Adam(
                 lr=hp.Float(
                     "learning_rate",
