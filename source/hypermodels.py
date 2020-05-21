@@ -22,7 +22,7 @@ def sampling(args, epsilon_std=1.0):
 def compute_kernel(x, y):
     x_size = K.shape(x)[0]
     y_size = K.shape(y)[0]
-    dim = K.shape(x)[1] * K.shape(x)[2]
+    dim = K.shape(x)[1]
     tiled_x = K.tile(K.reshape(x, K.stack([x_size, 1, dim])), K.stack([1, y_size, 1]))
     tiled_y = K.tile(K.reshape(y, K.stack([1, y_size, dim])), K.stack([x_size, 1, 1]))
     return K.exp(
@@ -337,6 +337,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
         # note that "output_shape" isn't necessary with the TensorFlow backend
         # so you could write `Lambda(sampling)([z_mean, z_log_sigma])`
         z = Lambda(sampling)([z_mean, z_log_sigma])
+        true_samples = K.random_normal(K.shape(z_mean), mean=0.0, stddev=1.0)
 
         # Define and instanciate decoder
         decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(z)
@@ -382,11 +383,11 @@ class SEQ_2_SEQ_VAE(HyperModel):
             )
             return tf.reduce_mean(huber_loss + kl_loss[:, None])
 
-        def vae_mmd_loss(x, x_decoded_mean, sigma_sqr=1.0):
+        def vae_mmd_loss(x, x_decoded_mean):
             huber_loss = Huber(reduction="sum", delta=100.0)
             huber_loss = self.input_shape[1:] * huber_loss(x, x_decoded_mean)
-            mmd_loss = compute_mmd(x, x_decoded_mean)
-            return huber_loss + mmd_loss
+            mmd_loss = compute_mmd(z, true_samples)
+            return K.mean(huber_loss + mmd_loss)
 
         vae.compile(
             loss=(vae_loss if self.loss == "ELBO" else vae_mmd_loss),
@@ -422,6 +423,7 @@ class SEQ_2_SEQ_MMVAE(HyperModel):
 
     def build(self, hp):
         pass
+
 
 # TODO:
 #     1) Refactor VAE losses to be proper losses, using K.add_loss() instead of global variables!
