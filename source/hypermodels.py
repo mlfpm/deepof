@@ -290,7 +290,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
         assert self.loss in [
             "MMD",
             "ELBO",
-            "ELBO+MMD"
+            "ELBO+MMD",
         ], "Loss function not recognised. Select one of ELBO, MMD and ELBO+MMD"
 
     def build(self, hp):
