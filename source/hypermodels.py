@@ -439,7 +439,3 @@ class SEQ_2_SEQ_MMVAE(HyperModel):
 
     def build(self, hp):
         pass
-
-
-# TODO:
-#     1) Refactor VAE losses to be proper losses, using K.add_loss() instead of global variables!
