@@ -6,7 +6,7 @@ from source.hypermodels import *
 from kerastuner import BayesianOptimization
 from tensorflow import keras
 import argparse
-import os
+import os, pickle
 
 parser = argparse.ArgumentParser(
     description="hyperparameter tuning for DeepOF autoencoder models"
@@ -63,7 +63,9 @@ assert hyp in [
 log_dir = os.path.abspath("logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-with open(os.path.abspath(path + "/DLC_social_1_exp_conditions.pickle"), "rb") as handle:
+with open(
+    os.path.abspath(path + "/DLC_social_1_exp_conditions.pickle"), "rb"
+) as handle:
     Treatment_dict = pickle.load(handle)
 
 # Which angles to compute?
@@ -209,10 +211,17 @@ def tune_search(train, test, project_name, hyp):
 
 
 # Runs hyperparameter tuning with the specified parameters and saves the result
-best_model = tune_search(
+best_hyperparameters = tune_search(
     input_dict[input_type][0],
     input_dict[input_type][0],
-    "{}-based_{}_BAYESIAN_OPT.json".format(input_type, hyp),
+    "{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
     hyp=hyp,
 )
-best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
+
+#Save a compiled, untrained version of the best model
+best_model = tuner.hypermodel.build(best_hyperparameters)
+best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf")
+
+#Save the best hyperparameters
+with open("{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "rb") as handle:
+    pickle.dump(best_hyperparameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
