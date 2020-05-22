@@ -7,9 +7,57 @@ from kerastuner import BayesianOptimization
 from tensorflow import keras
 import argparse
 
+parser = argparse.ArgumentParser(
+    description="hyperparameter tuning for DeepOF autoencoder models"
+)
 
+parser.add_argument("--path", "-p", help="set path", type=str)
+parser.add_argument(
+    "--input-type",
+    "-d",
+    help="Select an input type for the autoencoder hypermodels. \
+    It must be one of coords, dists, angles, coords+dist, coords+angle or coords+dist+angle",
+    type=str,
+    default="coords",
+)
+parser.add_argument(
+    "--bayopt",
+    "-n",
+    help="sets the number of Bayesian optimization iterations to run. Default is 25",
+    default=25,
+    type=int,
+)
+parser.add_argument(
+    "--hypermodel",
+    "-h",
+    help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO and S2SVAE-MMD. \
+          Please refer to the documentation for details on each option.",
+    default="S2SVAE",
+    type=str,
+)
 
-script, input_type, hyp, path = argv
+args = parser.parse_args()
+path = args.path
+input_type = args.input_type
+bayopt_trials = args.bayopt
+hyp = args.hypermodel
+
+if not path:
+    raise ValueError("Set a valid data path for the training to run")
+assert input_type in [
+    "coords",
+    "dists",
+    "angles",
+    "coords+dist",
+    "coords+angle",
+    "coords+dist+angle",
+], "Invalid input type. Type python hyperparameter_tuning.py -h for help."
+assert hyp in [
+    "S2SAE",
+    "S2SVAE",
+    "S2SVAE-ELBO",
+    "S2SVAE-MMD",
+], "Invalid hypermodel. Type python hyperparameter_tuning.py -h for help."
 
 log_dir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
@@ -86,9 +134,6 @@ coords_dist_angles_train, coords_dist_angles_test = coords_dist_angles.preproces
 
 print("Training set of shape: {}".format(coords_train.shape))
 print("Validation set of shape: {}".format(coords_test.shape))
-print()
-print("Training set of shape: {}".format(dist_train.shape))
-print("Validation set of shape: {}".format(dist_test.shape))
 
 
 def tune_search(train, test, project_name, hyp):
@@ -109,7 +154,7 @@ def tune_search(train, test, project_name, hyp):
 
     tuner = BayesianOptimization(
         hypermodel,
-        max_trials=25,
+        max_trials=bayopt_trials,
         executions_per_trial=1,
         objective="val_mae",
         seed=42,
