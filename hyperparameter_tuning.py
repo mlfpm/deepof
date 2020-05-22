@@ -6,7 +6,7 @@ from source.hypermodels import *
 from kerastuner import BayesianOptimization
 from tensorflow import keras
 import argparse
-import glob
+import os
 
 parser = argparse.ArgumentParser(
     description="hyperparameter tuning for DeepOF autoencoder models"
@@ -30,7 +30,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--hypermodel",
-    "-h",
+    "-m",
     help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO and S2SVAE-MMD. \
           Please refer to the documentation for details on each option.",
     default="S2SVAE",
@@ -38,7 +38,7 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-path = glob.glob(args.path)
+path = os.path.abspath(args.path)
 input_type = args.input_type
 bayopt_trials = args.bayopt
 hyp = args.hypermodel
@@ -60,10 +60,10 @@ assert hyp in [
     "S2SVAE-MMD",
 ], "Invalid hypermodel. Type python hyperparameter_tuning.py -h for help."
 
-log_dir = glob.glob("logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+log_dir = os.path.abspath("logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-with open(glob.glob([path, "DLC_social_1_exp_conditions.pickle"]), "rb") as handle:
+with open(os.path.abspath(path + "/DLC_social_1_exp_conditions.pickle"), "rb") as handle:
     Treatment_dict = pickle.load(handle)
 
 # Which angles to compute?

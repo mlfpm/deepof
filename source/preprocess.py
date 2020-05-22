@@ -39,8 +39,8 @@ class project:
     ):
 
         self.path = path
-        self.video_path = self.path + "Videos/"
-        self.table_path = self.path + "Tables/"
+        self.video_path = self.path + "/Videos/"
+        self.table_path = self.path + "/Tables/"
         self.videos = sorted(
             [vid for vid in os.listdir(self.video_path) if vid.endswith(video_format)]
         )
