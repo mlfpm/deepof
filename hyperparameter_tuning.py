@@ -4,8 +4,10 @@ from datetime import datetime
 from source.preprocess import *
 from source.hypermodels import *
 from kerastuner import BayesianOptimization
-from sys import argv
 from tensorflow import keras
+import argparse
+
+
 
 script, input_type, hyp, path = argv
 
