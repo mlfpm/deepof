@@ -113,44 +113,70 @@ coords_distances = merge_tables(coords, distances)
 coords_angles = merge_tables(coords, angles)
 coords_dist_angles = merge_tables(coords, distances, angles)
 
-coords_train, coords_test = coords.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
-dist_train, dist_test = distances.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
-angles_train, angles_test = angles.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
-coords_dist_train, coords_dist_test = coords_distances.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
-coords_angles_train, coords_angles_test = coords_angles.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
-coords_dist_angles_train, coords_dist_angles_test = coords_dist_angles.preprocess(
-    window_size=50, window_step=10, test_proportion=0.05, scale=True, random_state=42
-)
 
-print("Training set of shape: {}".format(coords_train.shape))
-print("Validation set of shape: {}".format(coords_test.shape))
+input_dict = {
+    "coords": coords.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+    "dists": distances.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+    "angles": angles.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+    "coords+dist": coords_distances.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+    "coords+angle": coords_angles.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+    "coords+dist+angle": coords_dist_angles.preprocess(
+        window_size=50,
+        window_step=10,
+        test_proportion=0.05,
+        scale=True,
+        random_state=42,
+    ),
+}
+
+for input in input_dict.keys():
+    print("{} train shape: {}".format(input, input_dict[input][0].shape))
+    print("{} validation shape: {}".format(input, input_dict[input][1].shape))
+    print()
 
 
 def tune_search(train, test, project_name, hyp):
     """Define the search space using keras-tuner and bayesian optimization"""
-    COORDS_INPUT_SHAPE = train.shape
     if hyp == "S2SAE":
-        hypermodel = SEQ_2_SEQ_AE(input_shape=COORDS_INPUT_SHAPE)
+        hypermodel = SEQ_2_SEQ_AE(input_shape=train.shape)
     elif hyp == "S2SVAE":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="ELBO+MMD")
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="ELBO+MMD")
     elif hyp == "S2SVAE-MMD":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="MMD")
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="MMD")
     elif hyp == "S2SVAE-ELBO":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=COORDS_INPUT_SHAPE, loss="ELBO")
+        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="ELBO")
     else:
-        raise ValueError(
-            "Hypermodel not recognised. Try one of S2SAE, S2SVAE, S2SVAE-ELBO or S2SVAE-MMD"
-        )
+        return False
 
     tuner = BayesianOptimization(
         hypermodel,
@@ -181,49 +207,11 @@ def tune_search(train, test, project_name, hyp):
     return tuner.get_best_hyperparameters(num_trials=1)[0]
 
 
-if input_type == "coords":
-    best_model = tune_search(
-        coords_train, coords_test, "Coord-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
-    )
-    best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
-
-elif input_type == "dists":
-    best_model = tune_search(
-        dist_train, dist_test, "Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
-    )
-    best_model.save("Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
-
-elif input_type == "angles":
-    best_model = tune_search(
-        angles_train, angles_test, "Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", hyp=hyp
-    )
-    best_model.save("Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
-
-elif input_type == "coords+dist":
-    best_model = tune_search(
-        coords_dist_train,
-        coords_dist_test,
-        "Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
-        hyp=hyp,
-    )
-    best_model.save("Coords+Dist-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
-
-elif input_type == "coords+angle":
-    best_model = tune_search(
-        coords_angles_train,
-        coords_angles_test,
-        "Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
-        hyp=hyp,
-    )
-    best_model.save("Coords+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
-
-elif input_type == "coords+dist+angle":
-    best_model = tune_search(
-        coords_dist_angles_train,
-        coords_dist_angles_test,
-        "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5",
-        hyp=hyp,
-    )
-    best_model.save(
-        "Coords+Dist+Angle-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf"
-    )
+# Runs hyperparameter tuning with the specified parameters and saves the result
+best_model = tune_search(
+    input_dict[input_type][0],
+    input_dict[input_type][0],
+    "{}-based_{}_BAYESIAN_OPT.json".format(input_type, hyp),
+    hyp=hyp,
+)
+best_model.save("Coords-based_SEQ2SEQ_AE_BAYESIAN_OPT.h5", save_format="tf")
