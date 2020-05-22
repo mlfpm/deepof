@@ -207,21 +207,23 @@ def tune_search(train, test, project_name, hyp):
     )
 
     print(tuner.results_summary())
-    return tuner.get_best_hyperparameters(num_trials=1)[0]
+    best_hyperparameters = tuner.get_best_hyperparameters(num_trials=1)[0]
+    best_model = tuner.hypermodel.build(best_hyperparameters)
+
+    return best_hyperparameters, best_model
 
 
-# Runs hyperparameter tuning with the specified parameters and saves the result
-best_hyperparameters = tune_search(
+# Runs hyperparameter tuning with the specified parameters and saves the results
+best_hyperparameters, best_model = tune_search(
     input_dict[input_type][0],
     input_dict[input_type][0],
     "{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
     hyp=hyp,
 )
 
-#Save a compiled, untrained version of the best model
-best_model = tuner.hypermodel.build(best_hyperparameters)
+#Saves a compiled, untrained version of the best model
 best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf")
 
-#Save the best hyperparameters
+#Saves the best hyperparameters
 with open("{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "rb") as handle:
     pickle.dump(best_hyperparameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
