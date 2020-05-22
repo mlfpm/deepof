@@ -131,7 +131,7 @@ def tune_search(train, test, project_name, hyp):
     )
 
     print(tuner.results_summary())
-    return tuner.get_best_models()[0]
+    return tuner.get_best_hyperparameters(num_trials=1)[0]
 
 
 if input_type == "coords":
