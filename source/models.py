@@ -244,8 +244,16 @@ class SEQ_2_SEQ_VAE:
         encoder = Model(x, z_mean, name="SEQ_2_SEQ_VEncoder")
         vae = Model(x, x_decoded_mean, name="SEQ_2_SEQ_VAE")
 
-        #g = Input(shape=self.ENCODING)
-        #generator = Model(g, x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
+        # Build generator as a separate entity
+        g = Input(shape=self.ENCODING)
+        _generator = Model_D0(g)
+        _generator = Model_D1(_generator)
+        _generator = Model_D2(_generator)
+        _generator = Model_D3(_generator)
+        _generator = Model_D4(_generator)
+        _generator = Model_D5(_generator)
+        _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
+        generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         def huber_loss(x, x_decoded_mean):
             huber_loss = Huber(reduction="sum", delta=100.0)
@@ -258,7 +266,7 @@ class SEQ_2_SEQ_VAE:
             experimental_run_tf_function=False,
         )
 
-        return encoder, vae
+        return encoder, generator, vae
 
 
 class SEQ_2_SEQ_MVAE:

@@ -60,7 +60,9 @@ assert hyp in [
     "S2SVAE-MMD",
 ], "Invalid hypermodel. Type python hyperparameter_tuning.py -h for help."
 
-log_dir = os.path.abspath("logs/fit/{}_{}".format(hyp, datetime.now().strftime("%Y%m%d-%H%M%S")))
+log_dir = os.path.abspath(
+    "logs/fit/{}_{}".format(hyp, datetime.now().strftime("%Y%m%d-%H%M%S"))
+)
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(
@@ -221,9 +223,11 @@ best_hyperparameters, best_model = tune_search(
     hyp=hyp,
 )
 
-#Saves a compiled, untrained version of the best model
+# Saves a compiled, untrained version of the best model
 best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf")
 
-#Saves the best hyperparameters
-with open("{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb") as handle:
+# Saves the best hyperparameters
+with open(
+    "{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb"
+) as handle:
     pickle.dump(best_hyperparameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
