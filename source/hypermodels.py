@@ -199,6 +199,10 @@ class SEQ_2_SEQ_VAE(HyperModel):
         )
 
         # Decoder layers
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)
+        Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
                 LSTM_units_1,
@@ -238,17 +242,13 @@ class SEQ_2_SEQ_VAE(HyperModel):
             z = MMDiscrepancyLayer()(z)
 
         # Define and instanciate decoder
-        decoder = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)(z)
-        decoder = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)(
-            decoder
-        )
-        decoder = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)(
-            decoder
-        )
-        decoder = RepeatVector(self.input_shape[1])(decoder)
-        decoder = Model_D4(decoder)
-        decoder = Model_D5(decoder)
-        x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(decoder)
+        generator = Model_D0(z)
+        generator = Model_D1(generator)
+        generator = Model_D2(generator)
+        generator = Model_D3(generator)
+        generator = Model_D4(generator)
+        generator = Model_D5(generator)
+        x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
         # end-to-end autoencoder
         vae = Model(x, x_decoded_mean)
