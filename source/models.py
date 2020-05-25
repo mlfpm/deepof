@@ -281,3 +281,4 @@ class SEQ_2_SEQ_MMVAE:
 #      - Bidirectional LSTM switches
 #      - Change LSTMs for GRU
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
+#      - Tied/Untied weights!
