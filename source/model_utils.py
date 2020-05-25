@@ -143,10 +143,8 @@ class MMDiscrepancyLayer(Layer):
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
 
     def call(self, z, **kwargs):
-        true_samples = K.random_normal(
-            K.shape(z), mean=0.0, stddev=2.0 / K.cast_to_floatx(K.shape(z)[1])
-        )
-        mmd_batch = compute_mmd(z, true_samples)
+        true_samples = K.random_normal(K.shape(z))
+        mmd_batch = compute_mmd(true_samples, z)
 
         self.add_loss(K.mean(mmd_batch), inputs=z)
 
