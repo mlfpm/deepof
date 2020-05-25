@@ -60,7 +60,7 @@ assert hyp in [
     "S2SVAE-MMD",
 ], "Invalid hypermodel. Type python hyperparameter_tuning.py -h for help."
 
-log_dir = os.path.abspath("logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+log_dir = os.path.abspath("logs/fit/{}_{}".format(hyp, datetime.now().strftime("%Y%m%d-%H%M%S")))
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(
