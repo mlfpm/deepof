@@ -49,6 +49,7 @@ class SEQ_2_SEQ_AE:
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
+                input_shape=self.input_shape[1:],
             )
         )
         Model_E2 = Bidirectional(
