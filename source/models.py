@@ -275,3 +275,9 @@ class SEQ_2_SEQ_MVAE:
 
 class SEQ_2_SEQ_MMVAE:
     pass
+
+# TODO:
+#      - Initial Convnet switch
+#      - Bidirectional LSTM switches
+#      - Change LSTMs for GRU
+#      - VAE loss function (though this should be analysed later on taking the encodings into account)
