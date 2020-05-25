@@ -92,7 +92,7 @@ class SEQ_2_SEQ_AE:
 
         # Define and instanciate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
-        encoder.add(Model_E0)
+        #encoder.add(Model_E0)
         encoder.add(Model_E1)
         encoder.add(Model_E2)
         encoder.add(Model_E3)
@@ -212,8 +212,8 @@ class SEQ_2_SEQ_VAE:
 
         # Define and instanciate encoder
         x = Input(shape=self.input_shape[1:])
-        encoder = Model_E0(x)
-        encoder = Model_E1(encoder)
+        #encoder = Model_E0(x)
+        encoder = Model_E1(x)#(encoder)
         encoder = Model_E2(encoder)
         encoder = Model_E3(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
