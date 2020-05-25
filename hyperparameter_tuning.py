@@ -225,5 +225,5 @@ best_hyperparameters, best_model = tune_search(
 best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf")
 
 #Saves the best hyperparameters
-with open("{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "rb") as handle:
+with open("{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb") as handle:
     pickle.dump(best_hyperparameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
