@@ -49,7 +49,6 @@ class SEQ_2_SEQ_AE:
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
-                input_shape=self.input_shape[1:],
             )
         )
         Model_E2 = Bidirectional(
@@ -93,6 +92,7 @@ class SEQ_2_SEQ_AE:
 
         # Define and instanciate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
+        encoder.add(Input(shape=self.input_shape[1:]))
         #encoder.add(Model_E0)
         encoder.add(Model_E1)
         encoder.add(Model_E2)
