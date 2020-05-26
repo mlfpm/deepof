@@ -284,3 +284,4 @@ class SEQ_2_SEQ_MMVAE:
 #      - Change LSTMs for GRU
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Tied/Untied weights!
+#      - Smaller input sliding window (10-15 frames)
