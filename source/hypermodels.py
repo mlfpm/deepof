@@ -72,6 +72,10 @@ class SEQ_2_SEQ_AE(HyperModel):
         )
 
         # Decoder layers
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", input_shape=(ENCODING,), output_dim=64)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=128)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=256)
+        Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
                 LSTM_units_1,
@@ -101,14 +105,10 @@ class SEQ_2_SEQ_AE(HyperModel):
 
         # Define and instanciate decoder
         decoder = Sequential(name="DLC_Decoder")
-        decoder.add(
-            DenseTranspose(
-                Model_E5, activation="relu", input_shape=(ENCODING,), output_dim=64
-            )
-        )
-        decoder.add(DenseTranspose(Model_E4, activation="relu", output_dim=128))
-        decoder.add(DenseTranspose(Model_E3, activation="relu", output_dim=256))
-        decoder.add(RepeatVector(self.input_shape[1]))
+        decoder.add(Model_D0)
+        decoder.add(Model_D1)
+        decoder.add(Model_D2)
+        decoder.add(Model_D3)
         decoder.add(Model_D4)
         decoder.add(Model_D5)
         decoder.add(TimeDistributed(Dense(self.input_shape[2])))
@@ -275,7 +275,7 @@ class SEQ_2_SEQ_VAE(HyperModel):
         return vae
 
 
-class SEQ_2_SEQ_MVAE(HyperModel):
+class SEQ_2_SEQ_VAME(HyperModel):
     def __init__(self, input_shape):
         super().__init__()
         self.input_shape = input_shape

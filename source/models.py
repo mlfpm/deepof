@@ -72,6 +72,10 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
+        Model_D0 = Dense(self.DENSE_2, activation="relu")
+        Model_D1 = Dense(self.DENSE_1, activation="relu")
+        Model_D2 = Dense(self.DENSE_1, activation="relu")
+        Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
                 self.LSTM_units_1,
@@ -102,10 +106,10 @@ class SEQ_2_SEQ_AE:
 
         # Define and instanciate decoder
         decoder = Sequential(name="SEQ_2_SEQ_Decoder")
-        decoder.add(Dense(self.DENSE_2, activation="relu"))
-        decoder.add(Dense(self.DENSE_1, activation="relu"))
-        decoder.add(Dense(self.DENSE_1, activation="relu"))
-        decoder.add(RepeatVector(self.input_shape[1]))
+        decoder.add(Model_D0)
+        decoder.add(Model_D1)
+        decoder.add(Model_D2)
+        decoder.add(Model_D3)
         decoder.add(Model_D4)
         decoder.add(Model_D5)
         decoder.add(TimeDistributed(Dense(self.input_shape[2])))
@@ -265,7 +269,7 @@ class SEQ_2_SEQ_VAE:
         return encoder, generator, vae
 
 
-class SEQ_2_SEQ_MVAE:
+class SEQ_2_SEQ_VAME:
     pass
 
 
@@ -279,5 +283,7 @@ class SEQ_2_SEQ_MMVAE:
 #      - Bidirectional LSTM switches (done!)
 #      - Change LSTMs for GRU (done!)
 #      - Tied/Untied weights
+#      - orthogonal/non-orthogonal weights
+# TODO next:
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Smaller input sliding window (10-15 frames)
