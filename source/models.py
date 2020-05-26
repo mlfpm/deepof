@@ -3,7 +3,7 @@
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.layers import Bidirectional, Dense, Dropout
-from tensorflow.keras.layers import Lambda, LSTM, GRU
+from tensorflow.keras.layers import Lambda, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
@@ -43,7 +43,7 @@ class SEQ_2_SEQ_AE:
             activation="relu",
         )
         Model_E1 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
@@ -51,7 +51,7 @@ class SEQ_2_SEQ_AE:
             )
         )
         Model_E2 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
@@ -73,7 +73,7 @@ class SEQ_2_SEQ_AE:
 
         # Decoder layers
         Model_D4 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
@@ -81,7 +81,7 @@ class SEQ_2_SEQ_AE:
             )
         )
         Model_D5 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
@@ -102,13 +102,9 @@ class SEQ_2_SEQ_AE:
 
         # Define and instanciate decoder
         decoder = Sequential(name="SEQ_2_SEQ_Decoder")
-        decoder.add(
-            DenseTranspose(
-                Model_E5, activation="relu", input_shape=(self.ENCODING,), output_dim=64
-            )
-        )
-        decoder.add(DenseTranspose(Model_E4, activation="relu", output_dim=128))
-        decoder.add(DenseTranspose(Model_E3, activation="relu", output_dim=256))
+        decoder.add(Dense(self.DENSE_2, activation="relu"))
+        decoder.add(Dense(self.DENSE_1, activation="relu"))
+        decoder.add(Dense(self.DENSE_1, activation="relu"))
         decoder.add(RepeatVector(self.input_shape[1]))
         decoder.add(Model_D4)
         decoder.add(Model_D5)
@@ -159,7 +155,7 @@ class SEQ_2_SEQ_VAE:
             activation="relu",
         )
         Model_E1 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
@@ -167,7 +163,7 @@ class SEQ_2_SEQ_VAE:
             )
         )
         Model_E2 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
@@ -189,12 +185,12 @@ class SEQ_2_SEQ_VAE:
 
         # Decoder layers
 
-        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=self.ENCODING)
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2)
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1)
+        Model_D0 = Dense(self.DENSE_2, activation="relu")
+        Model_D1 = Dense(self.DENSE_1, activation="relu")
+        Model_D2 = Dense(self.DENSE_1, activation="relu")
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
@@ -202,7 +198,7 @@ class SEQ_2_SEQ_VAE:
             )
         )
         Model_D5 = Bidirectional(
-            GRU(
+            LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
@@ -281,7 +277,7 @@ class SEQ_2_SEQ_MMVAE:
 #      - Baseline networks (done!)
 #      - Initial Convnet switch (done!)
 #      - Bidirectional LSTM switches (done!)
-#      - Change LSTMs for GRU
+#      - Change LSTMs for GRU (done!)
 #      - Tied/Untied weights
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Smaller input sliding window (10-15 frames)
