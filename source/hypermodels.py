@@ -72,9 +72,9 @@ class SEQ_2_SEQ_AE(HyperModel):
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(Model_E5, activation="relu", input_shape=(ENCODING,), output_dim=64)
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=128)
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=256)
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(

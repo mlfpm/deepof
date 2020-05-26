@@ -72,9 +72,9 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
-        Model_D0 = Dense(self.DENSE_2, activation="relu")
-        Model_D1 = Dense(self.DENSE_1, activation="relu")
-        Model_D2 = Dense(self.DENSE_1, activation="relu")
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=self.ENCODING)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -189,9 +189,9 @@ class SEQ_2_SEQ_VAE:
 
         # Decoder layers
 
-        Model_D0 = Dense(self.DENSE_2, activation="relu")
-        Model_D1 = Dense(self.DENSE_1, activation="relu")
-        Model_D2 = Dense(self.DENSE_1, activation="relu")
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=self.ENCODING)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
