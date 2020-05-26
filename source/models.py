@@ -3,7 +3,7 @@
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.layers import Bidirectional, Dense, Dropout
-from tensorflow.keras.layers import Lambda, LSTM
+from tensorflow.keras.layers import Lambda, LSTM, GRU
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
@@ -42,16 +42,16 @@ class SEQ_2_SEQ_AE:
             padding="causal",
             activation="relu",
         )
-        Model_E1 = (
-            LSTM(
+        Model_E1 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
-        Model_E2 = (
-            LSTM(
+        Model_E2 = Bidirectional(
+            GRU(
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
@@ -72,16 +72,16 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
-        Model_D4 = (
-            LSTM(
+        Model_D4 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
         )
-        Model_D5 = (
-            LSTM(
+        Model_D5 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
@@ -158,16 +158,16 @@ class SEQ_2_SEQ_VAE:
             padding="causal",
             activation="relu",
         )
-        Model_E1 = (
-            LSTM(
+        Model_E1 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
-        Model_E2 = (
-            LSTM(
+        Model_E2 = Bidirectional(
+            GRU(
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
@@ -193,16 +193,16 @@ class SEQ_2_SEQ_VAE:
         Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2)
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1)
         Model_D3 = RepeatVector(self.input_shape[1])
-        Model_D4 = (
-            LSTM(
+        Model_D4 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
         )
-        Model_D5 = (
-            LSTM(
+        Model_D5 = Bidirectional(
+            GRU(
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
@@ -280,8 +280,8 @@ class SEQ_2_SEQ_MMVAE:
 # TODO:
 #      - Baseline networks (done!)
 #      - Initial Convnet switch (done!)
-#      - Bidirectional LSTM switches
+#      - Bidirectional LSTM switches (done!)
 #      - Change LSTMs for GRU
+#      - Tied/Untied weights
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
-#      - Tied/Untied weights!
 #      - Smaller input sliding window (10-15 frames)
