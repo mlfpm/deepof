@@ -68,7 +68,7 @@ class SEQ_2_SEQ_AE:
             self.ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            #activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )
 
         # Decoder layers
@@ -184,7 +184,7 @@ class SEQ_2_SEQ_VAE:
             self.ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            #activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )
 
         # Decoder layers
@@ -282,8 +282,9 @@ class SEQ_2_SEQ_MMVAE:
 #      - Initial Convnet switch (done!)
 #      - Bidirectional LSTM switches (done!)
 #      - Change LSTMs for GRU (done!)
-#      - Tied/Untied weights
+#      - Tied/Untied weights (done!)
 #      - orthogonal/non-orthogonal weights
+#      - Unit Norm constraint
 # TODO next:
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Smaller input sliding window (10-15 frames)
