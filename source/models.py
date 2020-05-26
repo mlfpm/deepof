@@ -41,9 +41,8 @@ class SEQ_2_SEQ_AE:
             strides=1,
             padding="causal",
             activation="relu",
-            input_shape=self.input_shape[1:],
         )
-        Model_E1 = Bidirectional(
+        Model_E1 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
@@ -51,7 +50,7 @@ class SEQ_2_SEQ_AE:
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
-        Model_E2 = Bidirectional(
+        Model_E2 = (
             LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
@@ -73,7 +72,7 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
-        Model_D4 = Bidirectional(
+        Model_D4 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
@@ -81,7 +80,7 @@ class SEQ_2_SEQ_AE:
                 kernel_constraint=UnitNorm(axis=1),
             )
         )
-        Model_D5 = Bidirectional(
+        Model_D5 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
@@ -93,7 +92,7 @@ class SEQ_2_SEQ_AE:
         # Define and instanciate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
         encoder.add(Input(shape=self.input_shape[1:]))
-        #encoder.add(Model_E0)
+        encoder.add(Model_E0)
         encoder.add(Model_E1)
         encoder.add(Model_E2)
         encoder.add(Model_E3)
@@ -159,7 +158,7 @@ class SEQ_2_SEQ_VAE:
             padding="causal",
             activation="relu",
         )
-        Model_E1 = Bidirectional(
+        Model_E1 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
@@ -167,7 +166,7 @@ class SEQ_2_SEQ_VAE:
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
-        Model_E2 = Bidirectional(
+        Model_E2 = (
             LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
@@ -194,7 +193,7 @@ class SEQ_2_SEQ_VAE:
         Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2)
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1)
         Model_D3 = RepeatVector(self.input_shape[1])
-        Model_D4 = Bidirectional(
+        Model_D4 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
@@ -202,7 +201,7 @@ class SEQ_2_SEQ_VAE:
                 kernel_constraint=UnitNorm(axis=1),
             )
         )
-        Model_D5 = Bidirectional(
+        Model_D5 = (
             LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
@@ -213,8 +212,8 @@ class SEQ_2_SEQ_VAE:
 
         # Define and instanciate encoder
         x = Input(shape=self.input_shape[1:])
-        #encoder = Model_E0(x)
-        encoder = Model_E1(x)#(encoder)
+        encoder = Model_E0(x)
+        encoder = Model_E1(encoder)
         encoder = Model_E2(encoder)
         encoder = Model_E3(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
@@ -277,8 +276,10 @@ class SEQ_2_SEQ_MVAE:
 class SEQ_2_SEQ_MMVAE:
     pass
 
+
 # TODO:
-#      - Initial Convnet switch
+#      - Baseline networks (done!)
+#      - Initial Convnet switch (done!)
 #      - Bidirectional LSTM switches
 #      - Change LSTMs for GRU
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
