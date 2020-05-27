@@ -242,7 +242,7 @@ class SEQ_2_SEQ_VAE:
 
         # end-to-end autoencoder
         encoder = Model(x, z_mean, name="SEQ_2_SEQ_VEncoder")
-        vae = Model(x, [x_decoded_mean, x_decoded_mean], name="SEQ_2_SEQ_VAE")
+        vae = Model(x, x_decoded_mean, name="SEQ_2_SEQ_VAE")
 
         # Build generator as a separate entity
         g = Input(shape=self.ENCODING)
