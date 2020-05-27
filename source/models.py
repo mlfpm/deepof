@@ -223,11 +223,16 @@ class SEQ_2_SEQ_VAE:
         # Define and instanciate encoder
         x = Input(shape=self.input_shape[1:])
         encoder = Model_E0(x)
+        encoder = BatchNormalization()(encoder)
         encoder = Model_E1(encoder)
+        encoder = BatchNormalization()(encoder)
         encoder = Model_E2(encoder)
+        encoder = BatchNormalization()(encoder)
         encoder = Model_E3(encoder)
+        encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
         encoder = Model_E4(encoder)
+        encoder = BatchNormalization()(encoder)
         encoder = Model_E5(encoder)
 
         z_mean = Dense(self.ENCODING)(encoder)
@@ -243,10 +248,15 @@ class SEQ_2_SEQ_VAE:
 
         # Define and instanciate generator
         generator = Model_D0(z)
+        generator = BatchNormalization()(generator)
         generator = Model_D1(generator)
+        generator = BatchNormalization()(generator)
         generator = Model_D2(generator)
+        generator = BatchNormalization()(generator)
         generator = Model_D3(generator)
+        generator = BatchNormalization()(generator)
         generator = Model_D4(generator)
+        generator = BatchNormalization()(generator)
         generator = Model_D5(generator)
         x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
