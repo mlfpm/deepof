@@ -2,7 +2,7 @@
 
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform
+from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional, Dense
 from tensorflow.keras.layers import Dropout, Lambda, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
@@ -77,7 +77,7 @@ class SEQ_2_SEQ_AE:
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
-            kernel_initializer=he_uniform(),
+            kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
@@ -223,7 +223,7 @@ class SEQ_2_SEQ_VAE:
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
-            kernel_initializer=he_uniform(),
+            kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
@@ -347,11 +347,11 @@ class SEQ_2_SEQ_MMVAE:
 #      - orthogonal/non-orthogonal weights (done!)
 #      - Unit Norm constraint (done!)
 #      - add batch normalization (done! -> added to baseline)
-#      - add He initialization (done!)
-#      - try reverse sequence as output!
+#      - add He initialization (done! -> added to baseline)
+#      - try reverse sequence as output! (done!)
+#      - try orthonotmal initialization in encoding layer
 #      - add linear Dense in the end
 #      - add another dropout
-#      - try orthonotmal initialization in encoding layer
 
 
 # TODO next:
