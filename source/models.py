@@ -348,10 +348,11 @@ class SEQ_2_SEQ_MMVAE:
 #      - Unit Norm constraint (done!)
 #      - add batch normalization (done! -> added to baseline)
 #      - add He initialization (done!)
+#      - try reverse sequence as output!
 #      - add linear Dense in the end
 #      - add another dropout
 #      - try orthonotmal initialization in encoding layer
-#      - try reverse sequence as output!
+
 
 # TODO next:
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
