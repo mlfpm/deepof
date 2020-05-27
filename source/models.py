@@ -85,19 +85,16 @@ class SEQ_2_SEQ_AE:
             Model_E5,
             activation="relu",
             output_dim=self.ENCODING,
-            kernel_initializer=he_uniform(),
         )
         Model_D1 = DenseTranspose(
             Model_E4,
             activation="relu",
             output_dim=self.DENSE_2,
-            kernel_initializer=he_uniform(),
         )
         Model_D2 = DenseTranspose(
             Model_E3,
             activation="relu",
             output_dim=self.DENSE_1,
-            kernel_initializer=he_uniform(),
         )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -235,19 +232,16 @@ class SEQ_2_SEQ_VAE:
             Model_E5,
             activation="relu",
             output_dim=self.ENCODING,
-            kernel_initializer=he_uniform(),
         )
         Model_D1 = DenseTranspose(
             Model_E4,
             activation="relu",
             output_dim=self.DENSE_2,
-            kernel_initializer=he_uniform(),
         )
         Model_D2 = DenseTranspose(
             Model_E3,
             activation="relu",
             output_dim=self.DENSE_1,
-            kernel_initializer=he_uniform(),
         )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
