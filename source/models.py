@@ -347,8 +347,8 @@ class SEQ_2_SEQ_MMVAE:
 #      - orthogonal/non-orthogonal weights (done!)
 #      - Unit Norm constraint (done!)
 #      - add batch normalization (done! -> added to baseline)
-#      - add He initialization
-#      - remove sigmoid activation from last layer
+#      - add He initialization (done!)
+#      - add linear Dense in the end
 #      - add another dropout
 #      - try orthonotmal initialization in encoding layer
 #      - try reverse sequence as output!
