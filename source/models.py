@@ -2,8 +2,8 @@
 
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.layers import Bidirectional, Dense, Dropout
-from tensorflow.keras.layers import Lambda, LSTM
+from tensorflow.keras.layers import BatchNormalization, Bidirectional, Dense
+from tensorflow.keras.layers import Dropout, Lambda, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
@@ -97,20 +97,30 @@ class SEQ_2_SEQ_AE:
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
         encoder.add(Input(shape=self.input_shape[1:]))
         encoder.add(Model_E0)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E1)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E2)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E3)
+        encoder.add(BatchNormalization())
         encoder.add(Dropout(self.DROPOUT_RATE))
         encoder.add(Model_E4)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E5)
 
         # Define and instanciate decoder
         decoder = Sequential(name="SEQ_2_SEQ_Decoder")
         decoder.add(Model_D0)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D1)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D2)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D3)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D4)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D5)
         decoder.add(TimeDistributed(Dense(self.input_shape[2])))
 
@@ -285,6 +295,10 @@ class SEQ_2_SEQ_MMVAE:
 #      - Tied/Untied weights (done!)
 #      - orthogonal/non-orthogonal weights (done!)
 #      - Unit Norm constraint
+
+#      - add batch normalization
+#      - add He initialization
+
 # TODO next:
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Smaller input sliding window (10-15 frames)
