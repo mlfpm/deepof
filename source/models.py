@@ -304,8 +304,7 @@ class SEQ_2_SEQ_MMVAE:
 #      - Change LSTMs for GRU (done!)
 #      - Tied/Untied weights (done!)
 #      - orthogonal/non-orthogonal weights (done!)
-#      - Unit Norm constraint
-
+#      - Unit Norm constraint (done!)
 #      - add batch normalization
 #      - add He initialization
 
