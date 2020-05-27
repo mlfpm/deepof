@@ -47,7 +47,7 @@ class SEQ_2_SEQ_AE:
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E2 = Bidirectional(
@@ -55,19 +55,19 @@ class SEQ_2_SEQ_AE:
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E3 = Dense(
-            self.DENSE_1, activation="relu", #kernel_constraint=UnitNorm(axis=0)
+            self.DENSE_1, activation="relu", kernel_constraint=UnitNorm(axis=0)
         )
         Model_E4 = Dense(
-            self.DENSE_2, activation="relu", #kernel_constraint=UnitNorm(axis=0)
+            self.DENSE_2, activation="relu", kernel_constraint=UnitNorm(axis=0)
         )
         Model_E5 = Dense(
             self.ENCODING,
             activation="relu",
-            #kernel_constraint=UnitNorm(axis=1),
+            kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )
 
@@ -81,7 +81,7 @@ class SEQ_2_SEQ_AE:
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
         Model_D5 = Bidirectional(
@@ -89,7 +89,7 @@ class SEQ_2_SEQ_AE:
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
 
@@ -163,7 +163,7 @@ class SEQ_2_SEQ_VAE:
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E2 = Bidirectional(
@@ -171,19 +171,19 @@ class SEQ_2_SEQ_VAE:
                 self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E3 = Dense(
-            self.DENSE_1, activation="relu", #kernel_constraint=UnitNorm(axis=0)
+            self.DENSE_1, activation="relu", kernel_constraint=UnitNorm(axis=0)
         )
         Model_E4 = Dense(
-            self.DENSE_2, activation="relu", #kernel_constraint=UnitNorm(axis=0)
+            self.DENSE_2, activation="relu", kernel_constraint=UnitNorm(axis=0)
         )
         Model_E5 = Dense(
             self.ENCODING,
             activation="relu",
-            #kernel_constraint=UnitNorm(axis=1),
+            kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )
 
@@ -198,7 +198,7 @@ class SEQ_2_SEQ_VAE:
                 self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
         Model_D5 = Bidirectional(
@@ -206,7 +206,7 @@ class SEQ_2_SEQ_VAE:
                 self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
 
