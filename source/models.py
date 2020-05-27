@@ -352,7 +352,7 @@ class SEQ_2_SEQ_MMVAE:
 #      - Tied/Untied weights (done!)
 #      - orthogonal/non-orthogonal weights (done!)
 #      - Unit Norm constraint (done!)
-#      - add batch normalization (done!)
+#      - add batch normalization (done! -> added to baseline)
 #      - add He initialization
 #      - remove sigmoid activation from last layer
 #      - add another dropout
