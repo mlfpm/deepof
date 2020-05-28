@@ -523,5 +523,6 @@ class SEQ_2_SEQ_MMVAE:
 
 
 # TODO next:
+#      - MERGE BatchNormalization layers in generator and _generator in SEQ_2_SEQ_VAE
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
 #      - Smaller input sliding window (10-15 frames)
