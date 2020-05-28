@@ -139,9 +139,10 @@ class SEQ_2_SEQ_AE:
         decoder.add(Model_D2)
         encoder.add(BatchNormalization())
         decoder.add(Model_D3)
-        encoder.add(BatchNormalization())
+        decoder.add(BatchNormalization())
         decoder.add(Model_D4)
         encoder.add(BatchNormalization())
+        encoder.add(Dropout(self.DROPOUT_RATE))
         decoder.add(Model_D5)
         decoder.add(TimeDistributed(Dense(self.input_shape[2])))
 
@@ -298,6 +299,7 @@ class SEQ_2_SEQ_VAE:
         generator = BatchNormalization()(generator)
         generator = Model_D4(generator)
         generator = BatchNormalization()(generator)
+        generator = Dropout(self.DROPOUT_RATE)(generator)
         generator = Model_D5(generator)
         x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
@@ -308,10 +310,16 @@ class SEQ_2_SEQ_VAE:
         # Build generator as a separate entity
         g = Input(shape=self.ENCODING)
         _generator = Model_D0(g)
+        _generator = BatchNormalization()(_generator)
         _generator = Model_D1(_generator)
+        _generator = BatchNormalization()(_generator)
         _generator = Model_D2(_generator)
+        _generator = BatchNormalization()(_generator)
         _generator = Model_D3(_generator)
+        _generator = BatchNormalization()(_generator)
         _generator = Model_D4(_generator)
+        _generator = BatchNormalization()(_generator)
+        _generator = Dropout(self.DROPOUT_RATE)(_generator)
         _generator = Model_D5(_generator)
         _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
@@ -349,9 +357,9 @@ class SEQ_2_SEQ_MMVAE:
 #      - add batch normalization (done! -> added to baseline)
 #      - add He initialization (done! -> added to baseline)
 #      - try reverse sequence as output! (done!)
-#      - try orthonotmal initialization in encoding layer
-#      - add linear Dense in the end
+#      - try orthonotmal initialization in encoding layer (done! -> added to baseline)
 #      - add another dropout
+#      - add linear Dense in the end
 
 
 # TODO next:
