@@ -3,8 +3,9 @@
 from kerastuner import HyperModel
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.layers import Bidirectional, Dense, Dropout
-from tensorflow.keras.layers import Lambda, LSTM
+from tensorflow.keras.initializers import he_uniform, Orthogonal
+from tensorflow.keras.layers import BatchNormalization, Bidirectional, Dense
+from tensorflow.keras.layers import Dropout, Lambda, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
@@ -38,13 +39,14 @@ class SEQ_2_SEQ_AE(HyperModel):
         )
 
         # Encoder Layers
+        # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
             filters=CONV_filters,
             kernel_size=5,
             strides=1,
             padding="causal",
             activation="relu",
-            input_shape=self.input_shape[1:],
+            kernel_initializer=he_uniform(),
         )
         Model_E1 = Bidirectional(
             LSTM(
@@ -62,19 +64,30 @@ class SEQ_2_SEQ_AE(HyperModel):
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
-        Model_E3 = Dense(DENSE_1, activation="relu", kernel_constraint=UnitNorm(axis=0))
-        Model_E4 = Dense(DENSE_2, activation="relu", kernel_constraint=UnitNorm(axis=0))
+        Model_E3 = Dense(
+            DENSE_1,
+            activation="relu",
+            kernel_constraint=UnitNorm(axis=0),
+            kernel_initializer=he_uniform(),
+        )
+        Model_E4 = Dense(
+            DENSE_2,
+            activation="relu",
+            kernel_constraint=UnitNorm(axis=0),
+            kernel_initializer=he_uniform(),
+        )
         Model_E5 = Dense(
             ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING)
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2)
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1)
+        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING,)
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2,)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -94,26 +107,37 @@ class SEQ_2_SEQ_AE(HyperModel):
         )
 
         # Define and instanciate encoder
-        encoder = Sequential(name="DLC_encoder")
+        encoder = Sequential(name="SEQ_2_SEQ_Encoder")
+        encoder.add(Input(shape=self.input_shape[1:]))
         encoder.add(Model_E0)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E1)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E2)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E3)
+        encoder.add(BatchNormalization())
         encoder.add(Dropout(DROPOUT_RATE))
         encoder.add(Model_E4)
+        encoder.add(BatchNormalization())
         encoder.add(Model_E5)
 
         # Define and instanciate decoder
-        decoder = Sequential(name="DLC_Decoder")
+        decoder = Sequential(name="SEQ_2_SEQ_Decoder")
         decoder.add(Model_D0)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D1)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D2)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D3)
+        decoder.add(BatchNormalization())
         decoder.add(Model_D4)
+        encoder.add(BatchNormalization())
         decoder.add(Model_D5)
         decoder.add(TimeDistributed(Dense(self.input_shape[2])))
 
-        model = Sequential([encoder, decoder], name="DLC_Autoencoder")
+        model = Sequential([encoder, decoder], name="SEQ_2_SEQ_AE")
 
         model.compile(
             loss=Huber(reduction="sum", delta=100.0),
