@@ -82,20 +82,10 @@ class SEQ_2_SEQ_AE:
 
         # Decoder layers
         Model_D0 = DenseTranspose(
-            Model_E5,
-            activation="relu",
-            output_dim=self.ENCODING,
+            Model_E5, activation="relu", output_dim=self.ENCODING,
         )
-        Model_D1 = DenseTranspose(
-            Model_E4,
-            activation="relu",
-            output_dim=self.DENSE_2,
-        )
-        Model_D2 = DenseTranspose(
-            Model_E3,
-            activation="relu",
-            output_dim=self.DENSE_1,
-        )
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2,)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -229,20 +219,10 @@ class SEQ_2_SEQ_VAE:
         # Decoder layers
 
         Model_D0 = DenseTranspose(
-            Model_E5,
-            activation="relu",
-            output_dim=self.ENCODING,
+            Model_E5, activation="relu", output_dim=self.ENCODING,
         )
-        Model_D1 = DenseTranspose(
-            Model_E4,
-            activation="relu",
-            output_dim=self.DENSE_2,
-        )
-        Model_D2 = DenseTranspose(
-            Model_E3,
-            activation="relu",
-            output_dim=self.DENSE_1,
-        )
+        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2,)
+        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -321,9 +301,9 @@ class SEQ_2_SEQ_VAE:
         _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
-        def huber_loss(x, x_decoded_mean):
-            huber_loss = Huber(reduction="sum", delta=100.0)
-            return self.input_shape[1:] * huber_loss(x, x_decoded_mean)
+        def huber_loss(x_, x_decoded_mean_):
+            huber = Huber(reduction="sum", delta=100.0)
+            return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
         vae.compile(
             loss=huber_loss,
@@ -341,6 +321,7 @@ class SEQ_2_SEQ_VAME:
 
 class SEQ_2_SEQ_MMVAE:
     pass
+
 
 # TODO next:
 #      - VAE loss function (though this should be analysed later on taking the encodings into account)
