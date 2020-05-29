@@ -6,7 +6,7 @@ from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional, Dense
 from tensorflow.keras.layers import Dropout, Lambda, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
-from tensorflow.keras.losses import Huber, MeanSquaredError
+from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
 from source.model_utils import *
 import tensorflow as tf
@@ -137,7 +137,7 @@ class SEQ_2_SEQ_AE:
         model = Sequential([encoder, decoder], name="SEQ_2_SEQ_AE")
 
         model.compile(
-            loss=MeanSquaredError(),#Huber(reduction="sum", delta=100.0),
+            loss=Huber(reduction="sum", delta=100.0),
             optimizer=Adam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
         )
@@ -309,7 +309,7 @@ class SEQ_2_SEQ_VAE:
             return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
         vae.compile(
-            loss=MeanSquaredError(),#huber_loss,
+            loss=huber_loss,
             optimizer=Adam(lr=self.learn_rate,),
             metrics=["mae"],
             experimental_run_tf_function=False,
@@ -518,7 +518,7 @@ class SEQ_2_SEQ_VAEP:
             return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
         vaep.compile(
-            loss=MeanSquaredError(),#huber_loss,
+            loss=huber_loss,
             optimizer=Adam(lr=self.learn_rate,),
             metrics=["mae"],
             experimental_run_tf_function=False,
