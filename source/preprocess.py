@@ -7,7 +7,7 @@ from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import os
 import warnings
 import networkx as nx
@@ -466,6 +466,7 @@ class table_dict(dict):
         filter=None,
         sigma=None,
         shift=0,
+        standard_scaler=True,
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
@@ -483,7 +484,11 @@ class table_dict(dict):
             if verbose:
                 print("Scaling data...")
 
-            scaler = StandardScaler()
+            if standard_scaler:
+                scaler = StandardScaler()
+            else:
+                scaler = MinMaxScaler()
+
             X_train = scaler.fit_transform(
                 X_train.reshape(-1, X_train.shape[-1])
             ).reshape(X_train.shape)
