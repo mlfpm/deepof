@@ -104,7 +104,7 @@ class SEQ_2_SEQ_AE:
             )
         )
 
-        # Define and instanciate encoder
+        # Define and instantiate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
         encoder.add(Input(shape=self.input_shape[1:]))
         encoder.add(Model_E0)
@@ -120,7 +120,7 @@ class SEQ_2_SEQ_AE:
         encoder.add(BatchNormalization())
         encoder.add(Model_E5)
 
-        # Define and instanciate decoder
+        # Define and instantiate decoder
         decoder = Sequential(name="SEQ_2_SEQ_Decoder")
         decoder.add(Model_D0)
         encoder.add(BatchNormalization())
@@ -244,7 +244,7 @@ class SEQ_2_SEQ_VAE:
             )
         )
 
-        # Define and instanciate encoder
+        # Define and instantiate encoder
         x = Input(shape=self.input_shape[1:])
         encoder = Model_E0(x)
         encoder = BatchNormalization()(encoder)
@@ -270,7 +270,7 @@ class SEQ_2_SEQ_VAE:
         if "MMD" in self.loss:
             z = MMDiscrepancyLayer()(z)
 
-        # Define and instanciate generator
+        # Define and instantiate generator
         generator = Model_D0(z)
         generator = Model_B1(generator)
         generator = Model_D1(generator)
@@ -417,7 +417,7 @@ class SEQ_2_SEQ_VAEP:
             )
         )
 
-        # Define and instanciate encoder
+        # Define and instantiate encoder
         x = Input(shape=self.input_shape[1:])
         encoder = Model_E0(x)
         encoder = BatchNormalization()(encoder)
@@ -443,7 +443,7 @@ class SEQ_2_SEQ_VAEP:
         if "MMD" in self.loss:
             z = MMDiscrepancyLayer()(z)
 
-        # Define and instanciate generator
+        # Define and instantiate generator
         generator = Model_D0(z)
         generator = Model_B1(generator)
         generator = Model_D1(generator)
@@ -457,20 +457,8 @@ class SEQ_2_SEQ_VAEP:
         generator = Model_B5(generator)
         x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
-        # Define and instanciate predictor
-        predictor = Dense(
-            self.ENCODING, activation="relu", kernel_initializer=he_uniform()
-        )(z)
-        predictor = BatchNormalization()(predictor)
-        predictor = Dense(
-            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
-        )(predictor)
-        predictor = BatchNormalization()(predictor)
-        predictor = Dense(
-            self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
-        )(predictor)
-        predictor = BatchNormalization()(predictor)
-        predictor = RepeatVector(self.input_shape[1])(predictor)
+        # Define and instantiate predictor
+        predictor = RepeatVector(self.input_shape[1])(z)
         predictor = Bidirectional(
             LSTM(
                 self.LSTM_units_1,
