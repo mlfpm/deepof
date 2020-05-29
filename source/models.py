@@ -470,7 +470,7 @@ class SEQ_2_SEQ_VAEP:
             self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
         )(predictor)
         predictor = BatchNormalization()(predictor)
-        predictor = RepeatVector(self.input_shape[1] - 1)(predictor)
+        predictor = RepeatVector(self.input_shape[1])(predictor)
         predictor = Bidirectional(
             LSTM(
                 self.LSTM_units_1,
