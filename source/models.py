@@ -458,7 +458,13 @@ class SEQ_2_SEQ_VAEP:
         x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
         # Define and instantiate predictor
-        predictor = RepeatVector(self.input_shape[1])(z)
+        predictor = Dense(self.ENCODING, activation='relu', kernel_initializer=he_uniform())(z)
+        predictor = BatchNormalization()(predictor)
+        predictor = Dense(self.DENSE_2, activation='relu', kernel_initializer=he_uniform())(predictor)
+        predictor = BatchNormalization()(predictor)
+        predictor = Dense(self.DENSE_1, activation='relu', kernel_initializer=he_uniform())(predictor)
+        predictor = BatchNormalization()(predictor)
+        predictor = RepeatVector(self.input_shape[1]-1)(predictor)
         predictor = Bidirectional(
             LSTM(
                 self.LSTM_units_1,
