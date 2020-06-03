@@ -530,9 +530,8 @@ class SEQ_2_SEQ_VAEP:
 class SEQ_2_SEQ_MMVAE:
     pass
 
-
 # TODO:
-#       - cleaner implementation of reparameterization trick (sampling on input, outside the main graph)
+#       - Add learning rate scheduler callback
 #       - KL / MMD warmup (Ladder Variational Autoencoders)
 #       - Gaussian Mixture + Categorical priors -> Deep Clustering
 #       - free bits paper
