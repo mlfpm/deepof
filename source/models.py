@@ -157,6 +157,8 @@ class SEQ_2_SEQ_VAE:
         ENCODING=32,
         learn_rate=1e-3,
         loss="ELBO+MMD",
+        kl_warmup_epochs=0,
+        mmd_warmup_epochs=0,
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -168,6 +170,8 @@ class SEQ_2_SEQ_VAE:
         self.ENCODING = ENCODING
         self.learn_rate = learn_rate
         self.loss = loss
+        self.kl_warmup = kl_warmup_epochs
+        self.mmd_warmup = mmd_warmup_epochs
 
     def build(self):
         # Encoder Layers
@@ -330,6 +334,8 @@ class SEQ_2_SEQ_VAEP:
         ENCODING=32,
         learn_rate=1e-3,
         loss="ELBO+MMD",
+        kl_warmup_epochs=0,
+        mmd_warmup_epochs=0,
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -341,6 +347,8 @@ class SEQ_2_SEQ_VAEP:
         self.ENCODING = ENCODING
         self.learn_rate = learn_rate
         self.loss = loss
+        self.kl_warmup = kl_warmup_epochs
+        self.mmd_warmup = mmd_warmup_epochs
 
     def build(self):
         # Encoder Layers
@@ -529,6 +537,7 @@ class SEQ_2_SEQ_VAEP:
 
 class SEQ_2_SEQ_MMVAE:
     pass
+
 
 # TODO:
 #       - Add learning rate scheduler callback
