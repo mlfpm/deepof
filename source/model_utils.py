@@ -129,7 +129,7 @@ class KLDivergenceLayer(Layer):
 
         kL_batch = -0.5 * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
 
-        self.add_loss(beta * K.mean(kL_batch), inputs=inputs)
+        self.add_loss(self.beta * K.mean(kL_batch), inputs=inputs)
 
         return inputs
 
@@ -148,6 +148,6 @@ class MMDiscrepancyLayer(Layer):
         true_samples = K.random_normal(K.shape(z))
         mmd_batch = compute_mmd(true_samples, z)
 
-        self.add_loss(beta * K.mean(mmd_batch), inputs=z)
+        self.add_loss(self.beta * K.mean(mmd_batch), inputs=z)
 
         return z
