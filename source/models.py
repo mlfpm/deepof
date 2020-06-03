@@ -531,7 +531,10 @@ class SEQ_2_SEQ_MMVAE:
     pass
 
 
-# TODO next:
-#      - MERGE BatchNormalization layers in generator and _generator in SEQ_2_SEQ_VAE
-#      - VAE loss function (though this should be analysed later on taking the encodings into account)
-#      - Smaller input sliding window (10-15 frames)
+# TODO:
+#       - cleaner implementation of reparameterization trick (sampling on input, outside the main graph)
+#       - KL / MMD warmup (Ladder Variational Autoencoders)
+#       - Gaussian Mixture + Categorical priors -> Deep Clustering
+#       - free bits paper
+#       - Attention mechanism for encoder / decoder (does it make sense?)
+#       - Transformer encoder/decoder (does it make sense?)
