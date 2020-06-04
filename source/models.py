@@ -486,7 +486,9 @@ class SEQ_2_SEQ_VAEP:
                 def klwarmup(epoch):
                     kl_beta = K.min([epoch / self.kl_warmup, 1])
 
-                kl_wu = LambdaCallback(on_epoch_end=lambda epoch, log: klwarmup(epoch))
+                kl_wu = LambdaCallback(
+                    on_epoch_begin=lambda epoch, log: klwarmup(epoch)
+                )
 
             z_mean, z_log_sigma = KLDivergenceLayer(beta=kl_beta)([z_mean, z_log_sigma])
 
@@ -502,7 +504,7 @@ class SEQ_2_SEQ_VAEP:
                     mmd_beta = K.min([epoch / self.mmd_warmup, 1])
 
                 mmd_wu = LambdaCallback(
-                    on_epoch_end=lambda epoch, log: mmdwarmup(epoch)
+                    on_epoch_begin=lambda epoch, log: mmdwarmup(epoch)
                 )
 
             z = MMDiscrepancyLayer(beta=mmd_beta)(z)
