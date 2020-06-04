@@ -123,6 +123,11 @@ class KLDivergenceLayer(Layer):
         self.beta = beta
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({"beta": self.beta})
+        return config
+
     def call(self, inputs, **kwargs):
 
         mu, log_var = inputs
@@ -143,6 +148,11 @@ class MMDiscrepancyLayer(Layer):
         self.is_placeholder = True
         self.beta = beta
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({"beta": self.beta})
+        return config
 
     def call(self, z, **kwargs):
         true_samples = K.random_normal(K.shape(z))
