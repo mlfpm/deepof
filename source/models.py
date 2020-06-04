@@ -280,9 +280,7 @@ class SEQ_2_SEQ_VAE:
             if self.kl_warmup:
 
                 def klwarmup(epoch):
-                    value = K.min([epoch / self.kl_warmup, 1])
-                    print("beta:", value)
-                    kl_beta = value
+                    kl_beta = K.min([epoch / self.kl_warmup, 1])
 
                 kl_wu = LambdaCallback(on_epoch_end=lambda epoch, log: klwarmup(epoch))
 
@@ -297,9 +295,7 @@ class SEQ_2_SEQ_VAE:
             if self.kl_warmup:
 
                 def mmdwarmup(epoch):
-                    value = K.min([epoch / self.mmd_warmup, 1])
-                    print("mmd_beta:", value)
-                    mmd_beta = value
+                    mmd_beta = K.min([epoch / self.mmd_warmup, 1])
 
                 mmd_wu = LambdaCallback(
                     on_epoch_end=lambda epoch, log: mmdwarmup(epoch)
@@ -488,9 +484,7 @@ class SEQ_2_SEQ_VAEP:
             if self.kl_warmup:
 
                 def klwarmup(epoch):
-                    value = K.min([epoch / self.kl_warmup, 1])
-                    print("beta:", value)
-                    kl_beta = value
+                    kl_beta = K.min([epoch / self.kl_warmup, 1])
 
                 kl_wu = LambdaCallback(on_epoch_end=lambda epoch, log: klwarmup(epoch))
 
@@ -505,9 +499,7 @@ class SEQ_2_SEQ_VAEP:
             if self.kl_warmup:
 
                 def mmdwarmup(epoch):
-                    value = K.min([epoch / self.mmd_warmup, 1])
-                    print("mmd_beta:", value)
-                    mmd_beta = value
+                    mmd_beta = K.min([epoch / self.mmd_warmup, 1])
 
                 mmd_wu = LambdaCallback(
                     on_epoch_end=lambda epoch, log: mmdwarmup(epoch)

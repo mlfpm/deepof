@@ -129,11 +129,8 @@ class KLDivergenceLayer(Layer):
         return config
 
     def call(self, inputs, **kwargs):
-
         mu, log_var = inputs
-
         kL_batch = -0.5 * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
-
         self.add_loss(self.beta * K.mean(kL_batch), inputs=inputs)
 
         return inputs
