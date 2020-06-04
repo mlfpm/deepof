@@ -118,7 +118,7 @@ class KLDivergenceLayer(Layer):
     to the final model loss.
     """
 
-    def __init__(self, beta=1, *args, **kwargs):
+    def __init__(self, beta=1.0, *args, **kwargs):
         self.is_placeholder = True
         self.beta = beta
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
@@ -131,7 +131,9 @@ class KLDivergenceLayer(Layer):
     def call(self, inputs, **kwargs):
         mu, log_var = inputs
         kL_batch = -0.5 * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
+
         self.add_loss(self.beta * K.mean(kL_batch), inputs=inputs)
+        self.add_metric(self.beta, aggregation="mean", name="kl_rate")
 
         return inputs
 
@@ -141,7 +143,7 @@ class MMDiscrepancyLayer(Layer):
     to the final model loss.
     """
 
-    def __init__(self, beta=1, *args, **kwargs):
+    def __init__(self, beta=1.0, *args, **kwargs):
         self.is_placeholder = True
         self.beta = beta
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
@@ -156,5 +158,6 @@ class MMDiscrepancyLayer(Layer):
         mmd_batch = compute_mmd(true_samples, z)
 
         self.add_loss(self.beta * K.mean(mmd_batch), inputs=z)
+        self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
 
         return z
