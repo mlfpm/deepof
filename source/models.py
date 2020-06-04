@@ -383,6 +383,10 @@ class SEQ_2_SEQ_VAEP:
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
 
+        assert (
+            "ELBO" in self.loss or "MMD" in self.loss
+        ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
+
     def build(self):
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
