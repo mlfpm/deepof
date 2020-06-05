@@ -130,9 +130,9 @@ class KLDivergenceLayer(Layer):
 
     def call(self, inputs, **kwargs):
         mu, log_var = inputs
-        kL_batch = -0.5 * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
+        kL_batch = -0.5 * self.beta * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
 
-        self.add_loss(self.beta * K.mean(kL_batch), inputs=inputs)
+        self.add_loss(K.mean(kL_batch), inputs=inputs)
         self.add_metric(self.beta, aggregation="mean", name="kl_rate")
 
         return inputs
@@ -155,9 +155,9 @@ class MMDiscrepancyLayer(Layer):
 
     def call(self, z, **kwargs):
         true_samples = K.random_normal(K.shape(z))
-        mmd_batch = compute_mmd(true_samples, z)
+        mmd_batch = self.beta * compute_mmd(true_samples, z)
 
-        self.add_loss(self.beta * K.mean(mmd_batch), inputs=z)
+        self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
 
         return z
