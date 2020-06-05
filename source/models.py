@@ -345,7 +345,6 @@ class SEQ_2_SEQ_VAE:
             loss=huber_loss,
             optimizer=Adam(lr=self.learn_rate,),
             metrics=["mae"],
-            experimental_run_tf_function=False,
         )
 
         return encoder, generator, vae, kl_warmup_callback, mmd_warmup_callback
@@ -587,7 +586,6 @@ class SEQ_2_SEQ_VAEP:
             loss=huber_loss,
             optimizer=Adam(lr=self.learn_rate,),
             metrics=["mae"],
-            experimental_run_tf_function=False,
         )
 
         return encoder, generator, vaep, kl_warmup_callback, mmd_warmup_callback
