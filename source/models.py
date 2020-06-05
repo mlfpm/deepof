@@ -277,6 +277,7 @@ class SEQ_2_SEQ_VAE:
         if "ELBO" in self.loss:
 
             kl_beta = K.variable(1.0, name="kl_beta")
+            kl_beta._trainable = False
             if self.kl_warmup:
 
                 kl_warmup_callback = LambdaCallback(
@@ -293,6 +294,7 @@ class SEQ_2_SEQ_VAE:
         if "MMD" in self.loss:
 
             mmd_beta = K.variable(1.0, name="mmd_beta")
+            mmd_beta._trainable = False
             if self.mmd_warmup:
 
                 mmd_warmup_callback = LambdaCallback(
@@ -480,6 +482,7 @@ class SEQ_2_SEQ_VAEP:
         if "ELBO" in self.loss:
 
             kl_beta = K.variable(1.0, name="kl_beta")
+            kl_beta._trainable = False
             if self.kl_warmup:
                 kl_warmup_callback = LambdaCallback(
                     on_epoch_begin=lambda epoch, logs: K.set_value(
@@ -495,6 +498,7 @@ class SEQ_2_SEQ_VAEP:
         if "MMD" in self.loss:
 
             mmd_beta = K.variable(1.0, name="mmd_beta")
+            mmd_beta._trainable = False
             if self.mmd_warmup:
                 mmd_warmup_callback = LambdaCallback(
                     on_epoch_begin=lambda epoch, logs: K.set_value(
