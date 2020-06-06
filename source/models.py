@@ -609,6 +609,7 @@ class SEQ_2_SEQ_MMVAEP:
             loss="ELBO+MMD",
             kl_warmup_epochs=0,
             mmd_warmup_epochs=0,
+            number_of_components=1,
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -622,6 +623,7 @@ class SEQ_2_SEQ_MMVAEP:
         self.loss = loss
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
+        self.number_of_components = number_of_components
 
         assert (
                 "ELBO" in self.loss or "MMD" in self.loss
