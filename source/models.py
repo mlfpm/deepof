@@ -722,9 +722,11 @@ class SEQ_2_SEQ_MMVAEP:
         # Categorical prior on mixture of Gaussians
         categories = Dense(self.number_of_components, activation="softmax")
 
-        for _ in range(self.number_of_components):
-            z_mean = Dense(self.ENCODING)(encoder)
-            z_log_sigma = Dense(self.ENCODING)(encoder)
+        for i in range(self.number_of_components):
+            z_mean = Dense(self.ENCODING, name="{}_gaussian_mean".format(i+1))(encoder)
+            z_log_sigma = Dense(self.ENCODING, name="{}_gaussian_sigma".format(i+1))(
+                encoder
+            )
 
         # Define and control custom loss functions
         kl_warmup_callback = False
