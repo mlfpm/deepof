@@ -852,11 +852,10 @@ class SEQ_2_SEQ_MMVAEP:
 
 
 # TODO:
-#       - Models as promer tf.keras.Model subclasses
 #       - Gaussian Mixture + Categorical priors -> Deep Clustering
+#       - MCMC sampling (n>1)
 #
 # TODO (in the non-immediate future):
-#       - MCMC sampling (n>1)
 #       - free bits paper
 #       - Attention mechanism for encoder / decoder (does it make sense?)
 #       - Transformer encoder/decoder (does it make sense?)
