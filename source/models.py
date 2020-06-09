@@ -281,9 +281,6 @@ class SEQ_2_SEQ_VAE:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E5(encoder)
 
-        # z_mean = Dense(self.ENCODING)(encoder)
-        # z_log_sigma = Dense(self.ENCODING)(encoder)
-
         encoder = Dense(
             tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
         )(encoder)
@@ -302,17 +299,10 @@ class SEQ_2_SEQ_VAE:
                     )
                 )
 
-            # z_mean, z_log_sigma = KLDivergenceLayer(beta=kl_beta)([z_mean, z_log_sigma])
+        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
 
-        # z = Lambda(sampling)([z_mean, z_log_sigma])
-        z = tfpl.MultivariateNormalTriL(
-            self.ENCODING,
-            activity_regularizer=(
-                tfpl.KLDivergenceRegularizer(self.prior, weight=kl_beta)
-                if "ELBO" in self.loss
-                else None
-            ),
-        )(encoder)
+        if "ELBO" in self.loss:
+            z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:
@@ -327,7 +317,7 @@ class SEQ_2_SEQ_VAE:
                     )
                 )
 
-            z = MMDiscrepancyLayer(beta=mmd_beta)(z)
+            z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
         # Define and instantiate generator
         generator = Model_D0(z)
@@ -388,6 +378,7 @@ class SEQ_2_SEQ_VAEP:
         loss="ELBO+MMD",
         kl_warmup_epochs=0,
         mmd_warmup_epochs=0,
+        prior="standard_normal",
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -399,8 +390,15 @@ class SEQ_2_SEQ_VAEP:
         self.ENCODING = ENCODING
         self.learn_rate = learn_rate
         self.loss = loss
+        self.prior = prior
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
+
+        if self.prior == "standard_normal":
+            self.prior = tfd.Independent(
+                tfd.Normal(loc=tf.zeros(self.ENCODING), scale=1),
+                reinterpreted_batch_ndims=1,
+            )
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
@@ -496,8 +494,9 @@ class SEQ_2_SEQ_VAEP:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E5(encoder)
 
-        z_mean = Dense(self.ENCODING)(encoder)
-        z_log_sigma = Dense(self.ENCODING)(encoder)
+        encoder = Dense(
+            tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
+        )(encoder)
 
         # Define and control custom loss functions
         kl_warmup_callback = False
@@ -512,9 +511,10 @@ class SEQ_2_SEQ_VAEP:
                     )
                 )
 
-            z_mean, z_log_sigma = KLDivergenceLayer(beta=kl_beta)([z_mean, z_log_sigma])
+        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
 
-        z = Lambda(sampling)([z_mean, z_log_sigma])
+        if "ELBO" in self.loss:
+            z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:
@@ -583,7 +583,7 @@ class SEQ_2_SEQ_VAEP:
         )(predictor)
 
         # end-to-end autoencoder
-        encoder = Model(x, z_mean, name="SEQ_2_SEQ_VEncoder")
+        encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         vaep = Model(
             inputs=x, outputs=[x_decoded_mean, x_predicted_mean], name="SEQ_2_SEQ_VAE"
         )
@@ -629,6 +629,7 @@ class SEQ_2_SEQ_MMVAEP:
         loss="ELBO+MMD",
         kl_warmup_epochs=0,
         mmd_warmup_epochs=0,
+        prior="standard_normal",
         number_of_components=1,
     ):
         self.input_shape = input_shape
@@ -641,13 +642,16 @@ class SEQ_2_SEQ_MMVAEP:
         self.ENCODING = ENCODING
         self.learn_rate = learn_rate
         self.loss = loss
+        self.prior = prior
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
 
-        assert (
-            self.number_of_components > 0
-        ), "The number of components must be an integer greater than zero"
+        if self.prior == "standard_normal":
+            self.prior = tfd.Independent(
+                tfd.Normal(loc=tf.zeros(self.ENCODING), scale=1),
+                reinterpreted_batch_ndims=1,
+            )
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
@@ -743,19 +747,9 @@ class SEQ_2_SEQ_MMVAEP:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E5(encoder)
 
-        # Categorical prior on mixture of Gaussians
-        categories = Dense(self.number_of_components, activation="softmax")
-
-        # Define mean and log_sigma as lists of vectors with an item per prior component
-        z_mean = []
-        z_log_sigma = []
-        for i in range(self.number_of_components):
-            z_mean.append(
-                Dense(self.ENCODING, name="{}_gaussian_mean".format(i + 1))(encoder)
-            )
-            z_log_sigma.append(
-                Dense(self.ENCODING, name="{}_gaussian_sigma".format(i + 1))(encoder)
-            )
+        encoder = Dense(
+            tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
+        )(encoder)
 
         # Define and control custom loss functions
         kl_warmup_callback = False
@@ -770,11 +764,10 @@ class SEQ_2_SEQ_MMVAEP:
                     )
                 )
 
-            z_mean, z_log_sigma = KLDivergenceLayer(beta=kl_beta)(
-                [z_mean[0], z_log_sigma[0]]
-            )
+        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
 
-        z = Lambda(sampling)([z_mean, z_log_sigma])
+        if "ELBO" in self.loss:
+            z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:
@@ -803,7 +796,7 @@ class SEQ_2_SEQ_MMVAEP:
         generator = Model_D5(generator)
         generator = Model_B5(generator)
         x_decoded_mean = TimeDistributed(
-            Dense(self.input_shape[2]), name="gmvaep_reconstruction"
+            Dense(self.input_shape[2]), name="vaep_reconstruction"
         )(generator)
 
         # Define and instantiate predictor
@@ -839,11 +832,11 @@ class SEQ_2_SEQ_MMVAEP:
         )(predictor)
         predictor = BatchNormalization()(predictor)
         x_predicted_mean = TimeDistributed(
-            Dense(self.input_shape[2]), name="gmvaep_prediction"
+            Dense(self.input_shape[2]), name="vaep_prediction"
         )(predictor)
 
         # end-to-end autoencoder
-        encoder = Model(x, z_mean, name="SEQ_2_SEQ_VEncoder")
+        encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         gmvaep = Model(
             inputs=x, outputs=[x_decoded_mean, x_predicted_mean], name="SEQ_2_SEQ_VAE"
         )

@@ -7,20 +7,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 tfd = tfp.distributions
+tfpl = tfp.layers
 
 # Helper functions
-def sampling(args, epsilon_std=1.0, number_of_components=1, categorical=None):
-    z_mean, z_log_sigma = args
-
-    if number_of_components == 1:
-        epsilon = K.random_normal(shape=K.shape(z_mean), mean=0.0, stddev=epsilon_std)
-        return z_mean + K.exp(z_log_sigma) * epsilon
-
-    else:
-        # Implement mixture of gaussians encoding and sampling
-        pass
-
-
 def compute_kernel(x, y):
     x_size = K.shape(x)[0]
     y_size = K.shape(y)[0]
@@ -120,35 +109,20 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return self.weightage * self.uncorrelated_feature(x)
 
 
-class KLDivergenceLayer(Layer):
-
-    """ Identity transform layer that adds KL divergence
-    to the final model loss.
-    """
-
-    def __init__(self, beta=1.0, *args, **kwargs):
+class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
+    def __init__(self, *args, **kwargs):
         self.is_placeholder = True
-        self.beta = beta
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
 
-    def get_config(self):
-        config = super().get_config().copy()
-        config.update({"beta": self.beta})
-        return config
-
-    def call(self, inputs, **kwargs):
-        mu, log_var = inputs
-        KL_batch = (
-            -0.5
-            * self.beta
-            * K.sum(1 + log_var - K.square(mu) - K.exp(log_var), axis=-1)
+    def call(self, distribution_a):
+        kl_batch = self._regularizer(distribution_a)
+        self.add_loss(kl_batch, inputs=[distribution_a])
+        self.add_metric(
+            kl_batch, aggregation="mean", name="kl_divergence",
         )
+        self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")
 
-        self.add_loss(K.mean(KL_batch), inputs=inputs)
-        self.add_metric(KL_batch, aggregation="mean", name="kl_divergence")
-        self.add_metric(self.beta, aggregation="mean", name="kl_rate")
-
-        return inputs
+        return distribution_a
 
 
 class MMDiscrepancyLayer(Layer):
@@ -156,20 +130,21 @@ class MMDiscrepancyLayer(Layer):
     to the final model loss.
     """
 
-    def __init__(self, beta=1.0, *args, **kwargs):
+    def __init__(self, prior, beta=1.0, *args, **kwargs):
         self.is_placeholder = True
         self.beta = beta
+        self.prior = prior
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
 
     def get_config(self):
         config = super().get_config().copy()
         config.update({"beta": self.beta})
+        config.update({"prior": self.prior})
         return config
 
     def call(self, z, **kwargs):
-        true_samples = K.random_normal(K.shape(z))
+        true_samples = self.prior.sample(1)
         mmd_batch = self.beta * compute_mmd(true_samples, z)
-
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
         self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
