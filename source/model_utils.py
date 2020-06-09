@@ -4,13 +4,21 @@ from keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
+import tensorflow_probability as tfp
 
+tfd = tfp.distributions
 
 # Helper functions
-def sampling(args, epsilon_std=1.0):
+def sampling(args, epsilon_std=1.0, number_of_components=1, categorical=None):
     z_mean, z_log_sigma = args
-    epsilon = K.random_normal(shape=K.shape(z_mean), mean=0.0, stddev=epsilon_std)
-    return z_mean + K.exp(z_log_sigma) * epsilon
+
+    if number_of_components == 1:
+        epsilon = K.random_normal(shape=K.shape(z_mean), mean=0.0, stddev=epsilon_std)
+        return z_mean + K.exp(z_log_sigma) * epsilon
+
+    else:
+        # Implement mixture of gaussians encoding and sampling
+        pass
 
 
 def compute_kernel(x, y):
