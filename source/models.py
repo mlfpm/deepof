@@ -528,7 +528,7 @@ class SEQ_2_SEQ_VAEP:
                     )
                 )
 
-            z = MMDiscrepancyLayer(beta=mmd_beta)(z)
+            z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
         # Define and instantiate generator
         generator = Model_D0(z)
@@ -648,9 +648,17 @@ class SEQ_2_SEQ_MMVAEP:
         self.number_of_components = number_of_components
 
         if self.prior == "standard_normal":
-            self.prior = tfd.Independent(
-                tfd.Normal(loc=tf.zeros(self.ENCODING), scale=1),
-                reinterpreted_batch_ndims=1,
+            self.prior = tfd.mixture.Mixture(
+                tfd.categorical.Categorical(
+                    probs=tf.ones(self.number_of_components) / self.number_of_components
+                ),
+                [
+                    tfd.Independent(
+                        tfd.Normal(loc=tf.zeros(self.ENCODING), scale=1),
+                        reinterpreted_batch_ndims=1,
+                    )
+                    for _ in range(self.number_of_components)
+                ],
             )
 
         assert (
@@ -747,8 +755,14 @@ class SEQ_2_SEQ_MMVAEP:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E5(encoder)
 
-        encoder = Dense(
-            tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
+        # Map encoder to a categorical distribution over the components
+        zcat = Dense(self.number_of_components, activation="softmax")(encoder)
+
+        # Map encoder to a dense layer representing the parameters of
+        # the gaussian mixture latent space
+        zgauss = Dense(
+            tfpl.MixtureNormal.params_size(self.number_of_components, self.ENCODING),
+            activation=None,
         )(encoder)
 
         # Define and control custom loss functions
@@ -764,7 +778,7 @@ class SEQ_2_SEQ_MMVAEP:
                     )
                 )
 
-        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
+        z = tfpl.MixtureNormal(self.number_of_components, self.ENCODING)(zgauss)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -781,7 +795,7 @@ class SEQ_2_SEQ_MMVAEP:
                     )
                 )
 
-            z = MMDiscrepancyLayer(beta=mmd_beta)(z)
+            z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
         # Define and instantiate generator
         generator = Model_D0(z)
@@ -869,8 +883,11 @@ class SEQ_2_SEQ_MMVAEP:
 
 
 # TODO:
+#       - Try sample, mean and mode for MMDiscrepancyLayer
 #       - Gaussian Mixture + Categorical priors -> Deep Clustering
-#       - MCMC sampling (n>1)
+#           - prior of equal gaussians
+#           - prior of equal gaussians + gaussian noise on the means (not exactly the same init)
+#       - MCMC sampling (n>1) (already suported by tfp! we should try it)
 #
 # TODO (in the non-immediate future):
 #       - free bits paper

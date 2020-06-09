@@ -109,6 +109,15 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return self.weightage * self.uncorrelated_feature(x)
 
 
+class GaussianMixtureLayer(Layer):
+    def __init(self, *args, **kwargs):
+        self.is_placeholder = True
+        super(GaussianMixtureLayer, self).__init__(*args, **kwargs)
+
+    def call(self, inputs, **kwargs):
+        pass
+
+
 class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     def __init__(self, *args, **kwargs):
         self.is_placeholder = True
