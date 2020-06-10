@@ -883,6 +883,7 @@ class SEQ_2_SEQ_MMVAEP:
 
 
 # TODO:
+#       - Try Bayesian nets!
 #       - Gaussian Mixture + Categorical priors -> Deep Clustering
 #           - prior of equal gaussians
 #           - prior of equal gaussians + gaussian noise on the means (not exactly the same init)
