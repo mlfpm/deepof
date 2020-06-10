@@ -114,7 +114,7 @@ class MultivariateNormalDiag(tfpl.DistributionLambda):
         self,
         event_size,
         convert_to_tensor_fn=tfd.Distribution.sample,
-        validate_args=False,
+        validate_args=True,
         **kwargs
     ):
 
