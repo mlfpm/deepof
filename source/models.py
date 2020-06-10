@@ -282,7 +282,7 @@ class SEQ_2_SEQ_VAE:
         encoder = Model_E5(encoder)
 
         encoder = Dense(
-            MultivariateNormalDiag.params_size(self.ENCODING), activation=None
+            tfpl.IndependentNormal.params_size(self.ENCODING), activation=None
         )(encoder)
 
         # Define and control custom loss functions
@@ -299,7 +299,7 @@ class SEQ_2_SEQ_VAE:
                     )
                 )
 
-        z = MultivariateNormalDiag(self.ENCODING)(encoder)
+        z = tfpl.IndependentNormal(self.ENCODING)(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -495,7 +495,7 @@ class SEQ_2_SEQ_VAEP:
         encoder = Model_E5(encoder)
 
         encoder = Dense(
-            MultivariateNormalDiag.params_size(self.ENCODING), activation=None
+            tfpl.IndependentNormal.params_size(self.ENCODING), activation=None
         )(encoder)
 
         # Define and control custom loss functions
@@ -511,7 +511,7 @@ class SEQ_2_SEQ_VAEP:
                     )
                 )
 
-        z = MultivariateNormalDiag(self.ENCODING)(encoder)
+        z = tfpl.IndependentNormal(self.ENCODING)(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
