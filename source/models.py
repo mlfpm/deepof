@@ -310,6 +310,7 @@ class SEQ_2_SEQ_VAE:
         # Define and instantiate generator
         generator = Model_D1(z)
         generator = Model_B1(generator)
+        generator = Dropout(self.DROPOUT_RATE)(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
         generator = Model_D3(generator)
@@ -327,6 +328,7 @@ class SEQ_2_SEQ_VAE:
         g = Input(shape=self.ENCODING)
         _generator = Model_D1(g)
         _generator = Model_B1(_generator)
+        _generator = Dropout(self.DROPOUT_RATE)(_generator)
         _generator = Model_D2(_generator)
         _generator = Model_B2(_generator)
         _generator = Model_D3(_generator)
@@ -505,6 +507,7 @@ class SEQ_2_SEQ_VAEP:
         # Define and instantiate generator
         generator = Model_D1(z)
         generator = Model_B1(generator)
+        generator = Dropout(self.DROPOUT_RATE)(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
         generator = Model_D3(generator)
@@ -521,6 +524,7 @@ class SEQ_2_SEQ_VAEP:
             self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
         )(z)
         predictor = BatchNormalization()(predictor)
+        predictor = Dropout(self.DROPOUT_RATE)(predictor)
         predictor = Dense(
             self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
         )(predictor)
@@ -558,6 +562,7 @@ class SEQ_2_SEQ_VAEP:
         g = Input(shape=self.ENCODING)
         _generator = Model_D1(g)
         _generator = Model_B1(_generator)
+        _generator = Dropout(self.DROPOUT_RATE)(_generator)
         _generator = Model_D2(_generator)
         _generator = Model_B2(_generator)
         _generator = Model_D3(_generator)
