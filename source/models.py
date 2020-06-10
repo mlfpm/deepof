@@ -235,7 +235,9 @@ class SEQ_2_SEQ_VAE:
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_D1 = Dense(self.DENSE_2, activation="relu", kernel_initializer=he_uniform())
+        Model_D1 = Dense(
+            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+        )
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -287,7 +289,12 @@ class SEQ_2_SEQ_VAE:
                     )
                 )
 
-        z = tfpl.IndependentNormal(self.ENCODING)(encoder)
+        z = tfpl.IndependentNormal(
+            self.ENCODING,
+            kernel_constraint=UnitNorm(axis=1),
+            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            kernel_initializer=Orthogonal(),
+        )(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -310,7 +317,6 @@ class SEQ_2_SEQ_VAE:
         # Define and instantiate generator
         generator = Model_D1(z)
         generator = Model_B1(generator)
-        generator = Dropout(self.DROPOUT_RATE)(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
         generator = Model_D3(generator)
@@ -328,7 +334,6 @@ class SEQ_2_SEQ_VAE:
         g = Input(shape=self.ENCODING)
         _generator = Model_D1(g)
         _generator = Model_B1(_generator)
-        _generator = Dropout(self.DROPOUT_RATE)(_generator)
         _generator = Model_D2(_generator)
         _generator = Model_B2(_generator)
         _generator = Model_D3(_generator)
@@ -434,7 +439,9 @@ class SEQ_2_SEQ_VAEP:
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_D1 = Model_D1 = Dense(self.DENSE_2, activation="relu", kernel_initializer=he_uniform())
+        Model_D1 = Model_D1 = Dense(
+            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+        )
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -485,7 +492,12 @@ class SEQ_2_SEQ_VAEP:
                     )
                 )
 
-        z = tfpl.IndependentNormal(self.ENCODING)(encoder)
+        z = tfpl.IndependentNormal(
+            self.ENCODING,
+            kernel_constraint=UnitNorm(axis=1),
+            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            kernel_initializer=Orthogonal(),
+        )(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -507,7 +519,6 @@ class SEQ_2_SEQ_VAEP:
         # Define and instantiate generator
         generator = Model_D1(z)
         generator = Model_B1(generator)
-        generator = Dropout(self.DROPOUT_RATE)(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
         generator = Model_D3(generator)
@@ -524,7 +535,6 @@ class SEQ_2_SEQ_VAEP:
             self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
         )(z)
         predictor = BatchNormalization()(predictor)
-        predictor = Dropout(self.DROPOUT_RATE)(predictor)
         predictor = Dense(
             self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
         )(predictor)
@@ -562,7 +572,6 @@ class SEQ_2_SEQ_VAEP:
         g = Input(shape=self.ENCODING)
         _generator = Model_D1(g)
         _generator = Model_B1(_generator)
-        _generator = Dropout(self.DROPOUT_RATE)(_generator)
         _generator = Model_D2(_generator)
         _generator = Model_B2(_generator)
         _generator = Model_D3(_generator)
