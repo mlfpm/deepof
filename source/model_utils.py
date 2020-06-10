@@ -129,10 +129,13 @@ class MultivariateNormalDiag(tfpl.DistributionLambda):
         """Create the distribution instance from a `params` vector."""
         with tf.name_scope(name or "MultivariateNormalDiag"):
             params = tf.convert_to_tensor(params, name="params")
-        return tfd.mvn_diag.MultivariateNormalDiag(
-            loc=params[..., :event_size],
-            scale_diag=params[..., event_size:]+epsilon,
-            validate_args=validate_args,
+        return tfd.Independent(
+            tfd.mvn_diag.MultivariateNormalDiag(
+                loc=params[..., :event_size],
+                scale_diag=params[..., event_size:] + epsilon,
+                validate_args=validate_args,
+            ),
+            reinterpreted_batch_ndims=1,
         )
 
     @staticmethod
