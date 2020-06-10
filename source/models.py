@@ -291,9 +291,7 @@ class SEQ_2_SEQ_VAE:
 
         z = tfpl.IndependentNormal(
             self.ENCODING,
-            kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
-            kernel_initializer=Orthogonal(),
         )(encoder)
 
         if "ELBO" in self.loss:
@@ -439,7 +437,7 @@ class SEQ_2_SEQ_VAEP:
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_D1 = Model_D1 = Dense(
+        Model_D1 = Dense(
             self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
         )
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
@@ -494,9 +492,7 @@ class SEQ_2_SEQ_VAEP:
 
         z = tfpl.IndependentNormal(
             self.ENCODING,
-            kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
-            kernel_initializer=Orthogonal(),
         )(encoder)
 
         if "ELBO" in self.loss:
