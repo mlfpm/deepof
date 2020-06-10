@@ -282,7 +282,7 @@ class SEQ_2_SEQ_VAE:
         encoder = Model_E5(encoder)
 
         encoder = Dense(
-            tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
+            MultivariateNormalDiag.params_size(self.ENCODING), activation=None
         )(encoder)
 
         # Define and control custom loss functions
@@ -299,7 +299,7 @@ class SEQ_2_SEQ_VAE:
                     )
                 )
 
-        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
+        z = MultivariateNormalDiag(self.ENCODING)(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -495,7 +495,7 @@ class SEQ_2_SEQ_VAEP:
         encoder = Model_E5(encoder)
 
         encoder = Dense(
-            tfpl.MultivariateNormalTriL.params_size(self.ENCODING), activation=None
+            MultivariateNormalDiag.params_size(self.ENCODING), activation=None
         )(encoder)
 
         # Define and control custom loss functions
@@ -511,7 +511,7 @@ class SEQ_2_SEQ_VAEP:
                     )
                 )
 
-        z = tfpl.MultivariateNormalTriL(self.ENCODING)(encoder)
+        z = MultivariateNormalDiag(self.ENCODING)(encoder)
 
         if "ELBO" in self.loss:
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
@@ -585,7 +585,7 @@ class SEQ_2_SEQ_VAEP:
         # end-to-end autoencoder
         encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         vaep = Model(
-            inputs=x, outputs=[x_decoded_mean, x_predicted_mean], name="SEQ_2_SEQ_VAE"
+            inputs=x, outputs=[x_decoded_mean, x_predicted_mean], name="SEQ_2_SEQ_VAEP"
         )
 
         # Build generator as a separate entity
@@ -883,7 +883,6 @@ class SEQ_2_SEQ_MMVAEP:
 
 
 # TODO:
-#       - Try sample, mean and mode for MMDiscrepancyLayer
 #       - Gaussian Mixture + Categorical priors -> Deep Clustering
 #           - prior of equal gaussians
 #           - prior of equal gaussians + gaussian noise on the means (not exactly the same init)
