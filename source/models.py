@@ -6,7 +6,7 @@ from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional, Dense
-from tensorflow.keras.layers import Dropout, Lambda, LSTM
+from tensorflow.keras.layers import Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
