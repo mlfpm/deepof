@@ -229,24 +229,13 @@ class SEQ_2_SEQ_VAE:
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
-        Model_E5 = Dense(
-            self.ENCODING,
-            activation="relu",
-            kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
-            kernel_initializer=Orthogonal(),
-        )
 
         # Decoder layers
         Model_B1 = BatchNormalization()
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_B5 = BatchNormalization()
-        Model_D0 = DenseTranspose(
-            Model_E5, activation="relu", output_dim=self.ENCODING,
-        )
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2,)
+        Model_D1 = Dense(self.DENSE_2, activation="relu", kernel_initializer=he_uniform())
         Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -279,7 +268,6 @@ class SEQ_2_SEQ_VAE:
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
-        encoder = Model_E5(encoder)
 
         encoder = Dense(
             tfpl.IndependentNormal.params_size(self.ENCODING), activation=None
@@ -320,17 +308,15 @@ class SEQ_2_SEQ_VAE:
             z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
         # Define and instantiate generator
-        generator = Model_D0(z)
+        generator = Model_D1(z)
         generator = Model_B1(generator)
-        generator = Model_D1(generator)
-        generator = Model_B2(generator)
         generator = Model_D2(generator)
-        generator = Model_B3(generator)
+        generator = Model_B2(generator)
         generator = Model_D3(generator)
         generator = Model_D4(generator)
-        generator = Model_B4(generator)
+        generator = Model_B3(generator)
         generator = Model_D5(generator)
-        generator = Model_B5(generator)
+        generator = Model_B4(generator)
         x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(generator)
 
         # end-to-end autoencoder
@@ -339,17 +325,15 @@ class SEQ_2_SEQ_VAE:
 
         # Build generator as a separate entity
         g = Input(shape=self.ENCODING)
-        _generator = Model_D0(g)
+        _generator = Model_D1(g)
         _generator = Model_B1(_generator)
-        _generator = Model_D1(_generator)
-        _generator = Model_B2(_generator)
         _generator = Model_D2(_generator)
-        _generator = Model_B3(_generator)
+        _generator = Model_B2(_generator)
         _generator = Model_D3(_generator)
         _generator = Model_D4(_generator)
-        _generator = Model_B4(_generator)
+        _generator = Model_B3(_generator)
         _generator = Model_D5(_generator)
-        _generator = Model_B5(_generator)
+        _generator = Model_B4(_generator)
         _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
