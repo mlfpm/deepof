@@ -152,7 +152,7 @@ class SEQ_2_SEQ_AE:
         return encoder, decoder, model
 
 
-class SEQ_2_SEQ_GMMVAE:
+class SEQ_2_SEQ_GMVAE:
     def __init__(
         self,
         input_shape,
