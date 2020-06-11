@@ -427,4 +427,4 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             experimental_run_tf_function=False,
         )
 
-        return gmvaep
+        return gmvaep, kl_warmup_callback, mmd_warmup_callback
