@@ -430,11 +430,9 @@ class SEQ_2_SEQ_GMVAE:
         )
 
 
-# TODO:
+# TODO (in the non-immediate future):
 #       - Try Bayesian nets!
 #       - MCMC sampling (n>1) (already suported by tfp! we should try it)
-#
-# TODO (in the non-immediate future):
 #       - free bits paper
 #       - Attention mechanism for encoder / decoder (does it make sense?)
 #       - Transformer encoder/decoder (does it make sense?)
