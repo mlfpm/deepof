@@ -6,7 +6,7 @@ from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, Orthogonal
-from tensorflow.keras.layers import BatchNormalization, Bidirectional, Concatenate
+from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
@@ -606,6 +606,7 @@ class SEQ_2_SEQ_MMVAEP:
         mmd_warmup_epochs=0,
         prior="standard_normal",
         number_of_components=1,
+        predictor=True,
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -621,6 +622,7 @@ class SEQ_2_SEQ_MMVAEP:
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
+        self.predictor = predictor
 
         if self.prior == "standard_normal":
             self.prior = tfd.mixture.Mixture(
@@ -790,43 +792,48 @@ class SEQ_2_SEQ_MMVAEP:
             Dense(self.input_shape[2]), name="vaep_reconstruction"
         )(generator)
 
-        # Define and instantiate predictor
-        predictor = Dense(
-            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
-        )(z)
-        predictor = BatchNormalization()(predictor)
-        predictor = Dense(
-            self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
-        )(predictor)
-        predictor = BatchNormalization()(predictor)
-        predictor = RepeatVector(self.input_shape[1])(predictor)
-        predictor = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
-                activation="tanh",
-                return_sequences=True,
-                kernel_constraint=UnitNorm(axis=1),
-            )
-        )(predictor)
-        predictor = BatchNormalization()(predictor)
-        predictor = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
-                activation="sigmoid",
-                return_sequences=True,
-                kernel_constraint=UnitNorm(axis=1),
-            )
-        )(predictor)
-        predictor = BatchNormalization()(predictor)
-        x_predicted_mean = TimeDistributed(
-            Dense(self.input_shape[2]), name="vaep_prediction"
-        )(predictor)
+        if self.predictor:
+            # Define and instantiate predictor
+            predictor = Dense(
+                self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+            )(z)
+            predictor = BatchNormalization()(predictor)
+            predictor = Dense(
+                self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+            )(predictor)
+            predictor = BatchNormalization()(predictor)
+            predictor = RepeatVector(self.input_shape[1])(predictor)
+            predictor = Bidirectional(
+                LSTM(
+                    self.LSTM_units_1,
+                    activation="tanh",
+                    return_sequences=True,
+                    kernel_constraint=UnitNorm(axis=1),
+                )
+            )(predictor)
+            predictor = BatchNormalization()(predictor)
+            predictor = Bidirectional(
+                LSTM(
+                    self.LSTM_units_1,
+                    activation="sigmoid",
+                    return_sequences=True,
+                    kernel_constraint=UnitNorm(axis=1),
+                )
+            )(predictor)
+            predictor = BatchNormalization()(predictor)
+            x_predicted_mean = TimeDistributed(
+                Dense(self.input_shape[2]), name="vaep_prediction"
+            )(predictor)
 
         # end-to-end autoencoder
         encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         grouper = Model(x, z_cat, name="Deep_Gaussian_Mixture_clustering")
         gmvaep = Model(
-            inputs=x, outputs=[x_decoded_mean, x_predicted_mean], name="SEQ_2_SEQ_VAEP"
+            inputs=x,
+            outputs=(
+                [x_decoded_mean, x_predicted_mean] if self.predictor else x_decoded_mean
+            ),
+            name="SEQ_2_SEQ_VAE",
         )
 
         # Build generator as a separate entity
