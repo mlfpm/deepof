@@ -175,11 +175,52 @@ def tune_search(train, test, project_name, hyp):
     if hyp == "S2SAE":
         hypermodel = SEQ_2_SEQ_AE(input_shape=train.shape)
     elif hyp == "S2SVAE":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="ELBO+MMD")
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape,
+            loss="ELBO+MMD",
+            predictor=False,
+            number_of_components=1,
+        )
     elif hyp == "S2SVAE-MMD":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="MMD")
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape, loss="MMD", predictor=False, number_of_components=1
+        )
     elif hyp == "S2SVAE-ELBO":
-        hypermodel = SEQ_2_SEQ_VAE(input_shape=train.shape, loss="ELBO")
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape,
+            loss="ELBO",
+            predictor=False,
+            number_of_components=1,
+        )
+    elif hyp == "S2SVAEP":
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape,
+            loss="ELBO+MMD",
+            predictor=True,
+            number_of_components=1,
+        )
+    elif hyp == "S2SVAEP-MMD":
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape, loss="MMD", predictor=True, number_of_components=1
+        )
+    elif hyp == "S2SVAEP-ELBO":
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape, loss="ELBO", predictor=True, number_of_components=1
+        )
+    elif hyp == "S2SVAEP-CLUST5":
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape,
+            loss="ELBO+MMD",
+            predictor=True,
+            number_of_components=5,
+        )
+    elif hyp == "S2SVAEP-CLUST10":
+        hypermodel = SEQ_2_SEQ_GMVAE(
+            input_shape=train.shape,
+            loss="ELBO+MMD",
+            predictor=True,
+            number_of_components=10,
+        )
     else:
         return False
 
