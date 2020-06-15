@@ -50,6 +50,20 @@ parser.add_argumant(
     default="ELBO+MMD",
     type=str,
 )
+parser.add_argument(
+    "--kl_warmup",
+    "-klw",
+    help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
+    default=10,
+    type=int,
+)
+parser.add_argument(
+    "--mmd_warmup",
+    "-mmdw",
+    help="Number of epochs during which the MMD weight increases linearly from zero to 1. Defaults to 10",
+    default=10,
+    type=int,
+)
 
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
@@ -59,6 +73,8 @@ k = args.components
 predictor = args.predictor
 variational = args.variational
 loss = args.loss
+kl_wu = args.kl_warmup
+mmd_wu = args.wwu_warmup
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -74,10 +90,13 @@ assert input_type in [
 ], "Invalid input type. Type python hyperparameter_tuning.py -h for help."
 
 log_dir = os.path.abspath(
-    "logs/fit/{}_{}_{}".format(
-        ["VAE" if variational else "AE"],
+    "logs/fit/{}{}_{}_{}_{}_{}_{}".format(
+        ["GMVAE" if variational else "AE"],
+        ["P" if predictor else ""],
         "components={}".format(k),
         "loss={}".format(loss),
+        "kl_warmup={}".format(kl_wu),
+        "mmd_warmup={}".format(mmd_wu),
         datetime.now().strftime("%Y%m%d-%H%M%S"),
     )
 )
