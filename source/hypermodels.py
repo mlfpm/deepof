@@ -164,17 +164,27 @@ class SEQ_2_SEQ_AE(HyperModel):
 
 class SEQ_2_SEQ_GMVAE(HyperModel):
     def __init__(
-        self,
-        input_shape,
-        loss="ELBO+MMD",
-        kl_warmup_epochs=0,
-        mmd_warmup_epochs=0,
-        prior="standard_normal",
-        number_of_components=1,
-        predictor=True,
+            self,
+            input_shape,
+            CONV_filters=256,
+            LSTM_units_1=256,
+            LSTM_units_2=128,
+            DENSE_2=64,
+            learn_rate=1e-3,
+            loss="ELBO+MMD",
+            kl_warmup_epochs=0,
+            mmd_warmup_epochs=0,
+            prior="standard_normal",
+            number_of_components=1,
+            predictor=True,
     ):
-        super().__init__()
         self.input_shape = input_shape
+        self.CONV_filters = CONV_filters
+        self.LSTM_units_1 = LSTM_units_1
+        self.LSTM_units_2 = LSTM_units_2
+        self.DENSE_1 = LSTM_units_2
+        self.DENSE_2 = DENSE_2
+        self.learn_rate = learn_rate
         self.loss = loss
         self.prior = prior
         self.kl_warmup = kl_warmup_epochs
@@ -183,23 +193,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.predictor = predictor
 
         assert (
-            "ELBO" in self.loss or "MMD" in self.loss
+                "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     def build(self, hp):
-
         # Hyperparameters to tune
-        CONV_filters = hp.Int(
-            "units_conv", min_value=32, max_value=256, step=32, default=256
-        )
-        LSTM_units_1 = hp.Int(
-            "units_lstm", min_value=128, max_value=512, step=32, default=256
-        )
-        LSTM_units_2 = int(LSTM_units_1 / 2)
-        DENSE_1 = int(LSTM_units_2)
-        DENSE_2 = hp.Int(
-            "units_dense1", min_value=32, max_value=256, step=32, default=64
-        )
         DROPOUT_RATE = hp.Float(
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
@@ -223,7 +221,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
-            filters=CONV_filters,
+            filters=self.CONV_filters,
             kernel_size=5,
             strides=1,
             padding="causal",
@@ -232,7 +230,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         )
         Model_E1 = Bidirectional(
             LSTM(
-                LSTM_units_1,
+                self.LSTM_units_1,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
@@ -240,20 +238,20 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         )
         Model_E2 = Bidirectional(
             LSTM(
-                LSTM_units_2,
+                self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=False,
                 kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E3 = Dense(
-            DENSE_1,
+            self.DENSE_1,
             activation="relu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
         Model_E4 = Dense(
-            DENSE_2,
+            self.DENSE_2,
             activation="relu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
@@ -264,13 +262,16 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_D1 = Dense(DENSE_2, activation="relu", kernel_initializer=he_uniform())
-        Model_D2 = Dense(DENSE_1, activation="relu", kernel_initializer=he_uniform())
-        # Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1,)
+        Model_D1 = Dense(
+            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+        )
+        Model_D2 = Dense(
+            self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+        )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
-                LSTM_units_2,
+                self.LSTM_units_2,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
@@ -278,7 +279,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         )
         Model_D5 = Bidirectional(
             LSTM(
-                LSTM_units_1,
+                self.LSTM_units_1,
                 activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
@@ -301,7 +302,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         z_cat = Dense(self.number_of_components, activation="softmax")(encoder)
         z_gauss = Dense(
-            tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
+            tfpl.IndependentNormal.params_size(
+                ENCODING * self.number_of_components
+            ),
             activation=None,
         )(encoder)
 
@@ -321,11 +324,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         z_gauss = Reshape([2 * ENCODING, self.number_of_components])(z_gauss)
         z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(probs=gauss[0],),
+                cat=tfd.categorical.Categorical(probs=gauss[0], ),
                 components=[
                     tfd.Independent(
                         tfd.Normal(
-                            loc=gauss[1][..., :ENCODING, k],
+                            loc=gauss[1][..., : ENCODING, k],
                             scale=softplus(gauss[1][..., ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
@@ -370,17 +373,17 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         if self.predictor:
             # Define and instantiate predictor
             predictor = Dense(
-                DENSE_2, activation="relu", kernel_initializer=he_uniform()
+                self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
             )(z)
             predictor = BatchNormalization()(predictor)
             predictor = Dense(
-                DENSE_1, activation="relu", kernel_initializer=he_uniform()
+                self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
             )(predictor)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(self.input_shape[1])(predictor)
             predictor = Bidirectional(
                 LSTM(
-                    LSTM_units_1,
+                    self.LSTM_units_1,
                     activation="tanh",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
@@ -389,7 +392,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             predictor = BatchNormalization()(predictor)
             predictor = Bidirectional(
                 LSTM(
-                    LSTM_units_1,
+                    self.LSTM_units_1,
                     activation="sigmoid",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
@@ -428,4 +431,4 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             experimental_run_tf_function=False,
         )
 
-        return gmvaep  # , kl_warmup_callback, mmd_warmup_callback
+        return gmvaep
