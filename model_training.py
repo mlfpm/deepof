@@ -233,3 +233,35 @@ for input in input_dict_train.keys():
     print("{} train shape: {}".format(input, input_dict_train[input].shape))
     print("{} validation shape: {}".format(input, input_dict_val[input].shape))
     print()
+
+# Training loop
+if not variational:
+    encoder, decoder, ae = SEQ_2_SEQ_AE(input_dict_train[input_type].shape).build()
+    ae.build(input_dict_train[input_type].shape)
+
+    print(ae.summary())
+
+    # Fit the specified model to the data
+    history = ae.fit(
+        x=input_dict_train[input_type],
+        y=input_dict_train[input_type],
+        epochs=250,
+        batch_size=512,
+        verbose=1,
+        validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
+        callbacks=[
+            tensorboard_callback,
+            tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
+            tf.keras.callbacks.ModelCheckpoint(
+                "./logs/checkpoints/", verbose=1, save_best_only=False,
+                save_weights_only=True, mode='auto', save_freq='epoch'
+            )
+        ],
+    )
+
+else:
+    if not predictor:
+        pass
+
+    else:
+        pass
