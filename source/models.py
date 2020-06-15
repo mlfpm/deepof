@@ -158,7 +158,7 @@ class SEQ_2_SEQ_GMVAE:
         input_shape,
         CONV_filters=256,
         LSTM_units_1=256,
-        LSTM_units_2=64,
+        LSTM_units_2=128,
         DENSE_2=64,
         DROPOUT_RATE=0.25,
         ENCODING=32,
