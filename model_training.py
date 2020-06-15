@@ -7,12 +7,24 @@ from tensorflow import keras
 import argparse
 import os, pickle
 
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
 )
 
-parser.add_argument("--train_path", "-tp", help="set training set path", type=str)
-parser.add_argument("--val_path", "-vp", help="set validation set path", type=str)
+parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
+parser.add_argument("--val-path", "-vp", help="set validation set path", type=str)
 parser.add_argument(
     "--components",
     "-k",
@@ -24,7 +36,8 @@ parser.add_argument(
     "--input-type",
     "-d",
     help="Select an input type for the autoencoder hypermodels. \
-    It must be one of coords, dists, angles, coords+dist, coords+angle or coords+dist+angle",
+    It must be one of coords, dists, angles, coords+dist, coords+angle or coords+dist+angle. \
+    Defaults to coords.",
     type=str,
     default="coords",
 )
@@ -33,16 +46,16 @@ parser.add_argument(
     "-p",
     help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
     default=True,
-    type=bool,
+    type=str2bool,
 )
 parser.add_argument(
     "--variational",
     "-v",
     help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
     default=True,
-    type=bool,
+    type=str2bool,
 )
-parser.add_argumant(
+parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
@@ -51,14 +64,14 @@ parser.add_argumant(
     type=str,
 )
 parser.add_argument(
-    "--kl_warmup",
+    "--kl-warmup",
     "-klw",
     help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
     default=10,
     type=int,
 )
 parser.add_argument(
-    "--mmd_warmup",
+    "--mmd-warmup",
     "-mmdw",
     help="Number of epochs during which the MMD weight increases linearly from zero to 1. Defaults to 10",
     default=10,
@@ -71,10 +84,10 @@ val_path = os.path.abspath(args.val_path)
 input_type = args.input_type
 k = args.components
 predictor = args.predictor
-variational = args.variational
+variational = bool(args.variational)
 loss = args.loss
 kl_wu = args.kl_warmup
-mmd_wu = args.wwu_warmup
+mmd_wu = args.mmd_warmup
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -91,8 +104,8 @@ assert input_type in [
 
 log_dir = os.path.abspath(
     "logs/fit/{}{}_{}_{}_{}_{}_{}".format(
-        ["GMVAE" if variational else "AE"],
-        ["P" if predictor else ""],
+        ("GMVAE" if variational else "AE"),
+        ("P" if predictor else ""),
         "components={}".format(k),
         "loss={}".format(loss),
         "kl_warmup={}".format(kl_wu),
@@ -253,15 +266,83 @@ if not variational:
             tensorboard_callback,
             tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
             tf.keras.callbacks.ModelCheckpoint(
-                "./logs/checkpoints/", verbose=1, save_best_only=False,
-                save_weights_only=True, mode='auto', save_freq='epoch'
-            )
+                "./logs/checkpoints/",
+                verbose=1,
+                save_best_only=False,
+                save_weights_only=True,
+                save_freq="epoch",
+            ),
         ],
     )
 
 else:
-    if not predictor:
-        pass
+    (
+        encoder,
+        generator,
+        grouper,
+        gmvaep,
+        kl_warmup_callback,
+        mmd_warmup_callback,
+    ) = SEQ_2_SEQ_GMVAE(
+        input_dict_train[input_type].shape,
+        loss=loss,
+        number_of_components=k,
+        kl_warmup_epochs=kl_wu,
+        mmd_warmup_epochs=mmd_wu,
+        predictor=predictor,
+    ).build()
+    gmvaep.build(input_dict_train[input_type].shape)
 
+    print(gmvaep.summary())
+
+    if not predictor:
+        history = gmvaep.fit(
+            x=input_dict_train[input_type],
+            y=input_dict_train[input_type],
+            epochs=250,
+            batch_size=512,
+            verbose=1,
+            validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
+            callbacks=[
+                tensorboard_callback,
+                kl_warmup_callback,
+                mmd_warmup_callback,
+                tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
+                tf.keras.callbacks.ModelCheckpoint(
+                    "./logs/checkpoints/",
+                    verbose=1,
+                    save_best_only=False,
+                    save_weights_only=True,
+                    save_freq="epoch",
+                ),
+            ],
+        )
     else:
-        pass
+        history = gmvaep.fit(
+            x=input_dict_train[input_type][:-1],
+            y=[input_dict_train[input_type][:-1], input_dict_train[input_type][1:]],
+            epochs=250,
+            batch_size=512,
+            verbose=1,
+            validation_data=(
+                input_dict_val[input_type][:-1],
+                [input_dict_val[input_type][:-1], input_dict_val[input_type][1:]],
+            ),
+            callbacks=[
+                tensorboard_callback,
+                kl_warmup_callback,
+                mmd_warmup_callback,
+                tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
+                tf.keras.callbacks.ModelCheckpoint(
+                    "./logs/checkpoints/",
+                    verbose=1,
+                    save_best_only=False,
+                    save_weights_only=True,
+                    save_freq="epoch",
+                ),
+            ],
+        )
+
+# TODO:
+#    - Input dictionary with parameters for the models (optional)
+#    - Check that all checkpoints are being saved
