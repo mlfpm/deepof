@@ -265,11 +265,12 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
         Model_D1 = Dense(DENSE_2, activation="relu", kernel_initializer=he_uniform())
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1,)
+        Model_D2 = Dense(DENSE_1, activation="relu", kernel_initializer=he_uniform())
+        # Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
-                LSTM_units_1,
+                LSTM_units_2,
                 activation="tanh",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
@@ -427,4 +428,4 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             experimental_run_tf_function=False,
         )
 
-        return gmvaep, kl_warmup_callback, mmd_warmup_callback
+        return gmvaep  # , kl_warmup_callback, mmd_warmup_callback
