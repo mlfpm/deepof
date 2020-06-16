@@ -176,6 +176,11 @@ class project:
             for i, (key, tab) in enumerate(table_dict.items())
         }
 
+        for key in distance_dict.keys():
+            distance_dict[key] = distance_dict[key].loc[
+                :, [np.all([i in nodes for i in j]) for j in distance_dict[key].columns]
+            ]
+
         if self.ego:
             for key, val in distance_dict.items():
                 distance_dict[key] = val.loc[
