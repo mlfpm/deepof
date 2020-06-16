@@ -164,19 +164,19 @@ class SEQ_2_SEQ_AE(HyperModel):
 
 class SEQ_2_SEQ_GMVAE(HyperModel):
     def __init__(
-            self,
-            input_shape,
-            CONV_filters=256,
-            LSTM_units_1=256,
-            LSTM_units_2=128,
-            DENSE_2=64,
-            learn_rate=1e-3,
-            loss="ELBO+MMD",
-            kl_warmup_epochs=0,
-            mmd_warmup_epochs=0,
-            prior="standard_normal",
-            number_of_components=1,
-            predictor=True,
+        self,
+        input_shape,
+        CONV_filters=256,
+        LSTM_units_1=256,
+        LSTM_units_2=128,
+        DENSE_2=64,
+        learn_rate=1e-3,
+        loss="ELBO+MMD",
+        kl_warmup_epochs=0,
+        mmd_warmup_epochs=0,
+        prior="standard_normal",
+        number_of_components=1,
+        predictor=True,
     ):
         self.input_shape = input_shape
         self.CONV_filters = CONV_filters
@@ -193,7 +193,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.predictor = predictor
 
         assert (
-                "ELBO" in self.loss or "MMD" in self.loss
+            "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     def build(self, hp):
@@ -302,9 +302,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         z_cat = Dense(self.number_of_components, activation="softmax")(encoder)
         z_gauss = Dense(
-            tfpl.IndependentNormal.params_size(
-                ENCODING * self.number_of_components
-            ),
+            tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
             activation=None,
         )(encoder)
 
@@ -324,11 +322,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         z_gauss = Reshape([2 * ENCODING, self.number_of_components])(z_gauss)
         z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(probs=gauss[0], ),
+                cat=tfd.categorical.Categorical(probs=gauss[0],),
                 components=[
                     tfd.Independent(
                         tfd.Normal(
-                            loc=gauss[1][..., : ENCODING, k],
+                            loc=gauss[1][..., :ENCODING, k],
                             scale=softplus(gauss[1][..., ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
