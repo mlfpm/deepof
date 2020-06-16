@@ -294,6 +294,7 @@ best_hyperparameters, best_model = tune_search(
 )
 
 # Saves a compiled, untrained version of the best model
+best_model.build(input_dict_train[input_type].shape)
 best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf")
 
 # Saves the best hyperparameters
