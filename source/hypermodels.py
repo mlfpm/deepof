@@ -41,9 +41,7 @@ class SEQ_2_SEQ_AE(HyperModel):
         DROPOUT_RATE = hp.Float(
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
-        ENCODING = hp.Int(
-            "encoding", min_value=32, max_value=128, step=32, default=32
-        )
+        ENCODING = hp.Int("encoding", min_value=32, max_value=128, step=32, default=32)
 
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(

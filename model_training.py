@@ -96,6 +96,7 @@ variational = bool(args.variational)
 loss = args.loss
 kl_wu = args.kl_warmup
 mmd_wu = args.mmd_warmup
+hparams = args.hyperparameters
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -121,6 +122,21 @@ log_dir = os.path.abspath(
         datetime.now().strftime("%Y%m%d-%H%M%S"),
     )
 )
+
+# Loads hyperparameters, most likely obtained from hyperparameter_tuning.py
+if hparams is not None:
+    with open(hparams, "rb") as handle:
+        hparams = pickle.load(handle)
+else:
+    hparams = {
+        "units_conv": 256,
+        "units_lstm": 256,
+        "units_dense2": 64,
+        "dropout_rate": 0.25,
+        "encoding": 32,
+        "learning_rate": 1e-3,
+    }
+
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(
@@ -257,7 +273,9 @@ for input in input_dict_train.keys():
 
 # Training loop
 if not variational:
-    encoder, decoder, ae = SEQ_2_SEQ_AE(input_dict_train[input_type].shape).build()
+    encoder, decoder, ae = SEQ_2_SEQ_AE(
+        input_dict_train[input_type].shape, **hparams
+    ).build()
     ae.build(input_dict_train[input_type].shape)
 
     print(ae.summary())
@@ -298,6 +316,7 @@ else:
         kl_warmup_epochs=kl_wu,
         mmd_warmup_epochs=mmd_wu,
         predictor=predictor,
+        **hparams
     ).build()
     gmvaep.build(input_dict_train[input_type].shape)
 

@@ -301,4 +301,4 @@ best_model.save("{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_form
 with open(
     "{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb"
 ) as handle:
-    pickle.dump(best_hyperparameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(best_hyperparameters.values, handle, protocol=pickle.HIGHEST_PROTOCOL)
