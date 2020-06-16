@@ -111,17 +111,18 @@ assert input_type in [
     "coords+dist+angle",
 ], "Invalid input type. Type python hyperparameter_tuning.py -h for help."
 
-log_dir = os.path.abspath(
-    "logs/fit/{}{}_{}_{}_{}_{}_{}".format(
-        ("GMVAE" if variational else "AE"),
-        ("P" if predictor else ""),
-        "components={}".format(k),
-        "loss={}".format(loss),
-        "kl_warmup={}".format(kl_wu),
-        "mmd_warmup={}".format(mmd_wu),
-        datetime.now().strftime("%Y%m%d-%H%M%S"),
-    )
+run_ID = "{}{}{}{}{}{}_{}".format(
+    ("GMVAE" if variational else "AE"),
+    ("P" if predictor and variational else ""),
+    ("_components={}".format(k) if variational else ""),
+    ("_loss={}".format(loss) if variational else ""),
+    ("_kl_warmup={}".format(kl_wu) if variational else ""),
+    ("_mmd_warmup={}".format(mmd_wu) if variational else ""),
+    datetime.now().strftime("%Y%m%d-%H%M%S"),
 )
+
+log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
+
 
 # Loads hyperparameters, most likely obtained from hyperparameter_tuning.py
 if hparams is not None:
@@ -272,6 +273,16 @@ for input in input_dict_train.keys():
     print()
 
 # Training loop
+cp_callback = (
+    tf.keras.callbacks.ModelCheckpoint(
+        "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
+        verbose=1,
+        save_best_only=False,
+        save_weights_only=True,
+        save_freq="epoch",
+    ),
+)
+
 if not variational:
     encoder, decoder, ae = SEQ_2_SEQ_AE(
         input_dict_train[input_type].shape, **hparams
@@ -279,7 +290,7 @@ if not variational:
     ae.build(input_dict_train[input_type].shape)
 
     print(ae.summary())
-
+    ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
     # Fit the specified model to the data
     history = ae.fit(
         x=input_dict_train[input_type],
@@ -291,13 +302,7 @@ if not variational:
         callbacks=[
             tensorboard_callback,
             tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
-            tf.keras.callbacks.ModelCheckpoint(
-                "./logs/checkpoints/",
-                verbose=1,
-                save_best_only=False,
-                save_weights_only=True,
-                save_freq="epoch",
-            ),
+            cp_callback,
         ],
     )
 
@@ -335,13 +340,7 @@ else:
                 kl_warmup_callback,
                 mmd_warmup_callback,
                 tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
-                tf.keras.callbacks.ModelCheckpoint(
-                    "./logs/checkpoints/",
-                    verbose=1,
-                    save_best_only=False,
-                    save_weights_only=True,
-                    save_freq="epoch",
-                ),
+                cp_callback,
             ],
         )
     else:
@@ -360,16 +359,6 @@ else:
                 kl_warmup_callback,
                 mmd_warmup_callback,
                 tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
-                tf.keras.callbacks.ModelCheckpoint(
-                    "./logs/checkpoints/",
-                    verbose=1,
-                    save_best_only=False,
-                    save_weights_only=True,
-                    save_freq="epoch",
-                ),
+                cp_callback,
             ],
         )
-
-# TODO:
-#    - Input dictionary with parameters for the models (optional)
-#    - Check that all checkpoints are being saved
