@@ -23,23 +23,22 @@ class SEQ_2_SEQ_AE:
     def __init__(
         self,
         input_shape,
-        CONV_filters=256,
-        LSTM_units_1=256,
-        LSTM_units_2=64,
-        DENSE_2=64,
-        DROPOUT_RATE=0.25,
-        ENCODING=32,
-        learn_rate=1e-3,
+        units_conv=256,
+        units_lstm=256,
+        units_dense2=64,
+        dropout_rate=0.25,
+        encoding=32,
+        learning_rate=1e-3,
     ):
         self.input_shape = input_shape
-        self.CONV_filters = CONV_filters
-        self.LSTM_units_1 = LSTM_units_1
-        self.LSTM_units_2 = LSTM_units_2
-        self.DENSE_1 = LSTM_units_2
-        self.DENSE_2 = DENSE_2
-        self.DROPOUT_RATE = DROPOUT_RATE
-        self.ENCODING = ENCODING
-        self.learn_rate = learn_rate
+        self.CONV_filters = units_conv
+        self.LSTM_units_1 = units_lstm
+        self.LSTM_units_2 = int(units_lstm / 2)
+        self.DENSE_1 = int(units_lstm / 2)
+        self.DENSE_2 = units_dense2
+        self.DROPOUT_RATE = dropout_rate
+        self.ENCODING = encoding
+        self.learn_rate = learning_rate
 
     def build(self):
         # Encoder Layers
@@ -156,13 +155,13 @@ class SEQ_2_SEQ_GMVAE:
     def __init__(
         self,
         input_shape,
-        CONV_filters=256,
-        LSTM_units_1=256,
-        LSTM_units_2=128,
-        DENSE_2=64,
-        DROPOUT_RATE=0.25,
-        ENCODING=32,
-        learn_rate=1e-3,
+        units_conv=256,
+        units_lstm=256,
+        units_dense1=128,
+        units_dense2=64,
+        dropout_rate=0.25,
+        encoding=32,
+        learning_rate=1e-3,
         loss="ELBO+MMD",
         kl_warmup_epochs=0,
         mmd_warmup_epochs=0,
@@ -171,14 +170,14 @@ class SEQ_2_SEQ_GMVAE:
         predictor=True,
     ):
         self.input_shape = input_shape
-        self.CONV_filters = CONV_filters
-        self.LSTM_units_1 = LSTM_units_1
-        self.LSTM_units_2 = LSTM_units_2
-        self.DENSE_1 = LSTM_units_2
-        self.DENSE_2 = DENSE_2
-        self.DROPOUT_RATE = DROPOUT_RATE
-        self.ENCODING = ENCODING
-        self.learn_rate = learn_rate
+        self.CONV_filters = units_conv
+        self.LSTM_units_1 = units_lstm
+        self.LSTM_units_2 = int(units_lstm / 2)
+        self.DENSE_1 = int(units_lstm / 2)
+        self.DENSE_2 = units_dense2
+        self.DROPOUT_RATE = dropout_rate
+        self.ENCODING = encoding
+        self.learn_rate = learning_rate
         self.loss = loss
         self.prior = prior
         self.kl_warmup = kl_warmup_epochs

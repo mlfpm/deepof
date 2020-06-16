@@ -43,7 +43,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--predictor",
-    "-p",
+    "-pred",
     help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
     default=True,
     type=str2bool,
@@ -76,6 +76,14 @@ parser.add_argument(
     help="Number of epochs during which the MMD weight increases linearly from zero to 1. Defaults to 10",
     default=10,
     type=int,
+)
+parser.add_argument(
+    "--hyperparameters",
+    "-hp",
+    help="Path pointing to a pickled dictionary of network hyperparameters. "
+    "Thought to be used with the output of hyperparameter_tuning.py",
+    default=None,
+    type=str,
 )
 
 args = parser.parse_args()

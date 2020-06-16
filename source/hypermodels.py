@@ -36,13 +36,13 @@ class SEQ_2_SEQ_AE(HyperModel):
         LSTM_units_2 = int(LSTM_units_1 / 2)
         DENSE_1 = int(LSTM_units_2)
         DENSE_2 = hp.Int(
-            "units_dense1", min_value=32, max_value=256, step=32, default=64
+            "units_dense2", min_value=32, max_value=256, step=32, default=64
         )
         DROPOUT_RATE = hp.Float(
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
         ENCODING = hp.Int(
-            "units_dense2", min_value=32, max_value=128, step=32, default=32
+            "encoding", min_value=32, max_value=128, step=32, default=32
         )
 
         # Encoder Layers
