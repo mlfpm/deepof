@@ -104,7 +104,7 @@ loss = args.loss
 kl_wu = args.kl_warmup
 mmd_wu = args.mmd_warmup
 hparams = args.hyperparameters
-encoding = args.encoding
+encoding = args.encoding_size
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
