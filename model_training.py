@@ -85,6 +85,13 @@ parser.add_argument(
     default=None,
     type=str,
 )
+parser.add_argument(
+    "--encoding_size",
+    "--e",
+    help="Sets the dimensionality of the latent space. Defaults to 16.",
+    default=16,
+    type=int,
+)
 
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
@@ -97,6 +104,7 @@ loss = args.loss
 kl_wu = args.kl_warmup
 mmd_wu = args.mmd_warmup
 hparams = args.hyperparameters
+encoding = args.encoding
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -134,7 +142,7 @@ else:
         "units_lstm": 256,
         "units_dense2": 64,
         "dropout_rate": 0.25,
-        "encoding": 8,
+        "encoding": encoding,
         "learning_rate": 1e-3,
     }
 
