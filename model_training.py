@@ -134,7 +134,7 @@ else:
         "units_lstm": 256,
         "units_dense2": 64,
         "dropout_rate": 0.25,
-        "encoding": 32,
+        "encoding": 8,
         "learning_rate": 1e-3,
     }
 
