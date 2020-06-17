@@ -27,7 +27,7 @@ class SEQ_2_SEQ_AE:
         units_lstm=256,
         units_dense2=64,
         dropout_rate=0.25,
-        encoding=32,
+        encoding=16,
         learning_rate=1e-3,
     ):
         self.input_shape = input_shape
@@ -157,10 +157,9 @@ class SEQ_2_SEQ_GMVAE:
         input_shape,
         units_conv=256,
         units_lstm=256,
-        units_dense1=128,
         units_dense2=64,
         dropout_rate=0.25,
-        encoding=32,
+        encoding=8,
         learning_rate=1e-3,
         loss="ELBO+MMD",
         kl_warmup_epochs=0,
