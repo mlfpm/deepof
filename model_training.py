@@ -117,7 +117,7 @@ assert input_type in [
     "coords+dist",
     "coords+angle",
     "coords+dist+angle",
-], "Invalid input type. Type python hyperparameter_tuning.py -h for help."
+], "Invalid input type. Type python model_training.py -h for help."
 
 run_ID = "{}{}{}{}{}{}_{}".format(
     ("GMVAE" if variational else "AE"),
@@ -149,7 +149,10 @@ else:
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(
-    os.path.abspath(train_path + "/DLC_social_1_exp_conditions.pickle"), "rb"
+    os.path.abspath(
+        train_path + [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
+    ),
+    "rb",
 ) as handle:
     Treatment_dict = pickle.load(handle)
 
