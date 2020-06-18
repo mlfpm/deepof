@@ -5,7 +5,7 @@ from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform, Orthogonal
+from tensorflow.keras.initializers import Constant, he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
@@ -284,7 +284,11 @@ class SEQ_2_SEQ_GMVAE:
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
 
-        z_cat = Dense(self.number_of_components, activation="softmax")(encoder)
+        z_cat = Dense(
+            self.number_of_components,
+            activation="softmax",
+            kernel_initializer=Constant(value=1 / self.number_of_components),
+        )(encoder)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components

@@ -298,7 +298,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
 
-        z_cat = Dense(self.number_of_components, activation="softmax")(encoder)
+        z_cat = Dense(
+            self.number_of_components,
+            activation="softmax",
+            kernel_initializer=Constant(value=1 / self.number_of_components),
+        )(encoder)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
             activation=None,
