@@ -162,8 +162,8 @@ else:
     }
 
 # with open(
-#     os.path.abspath(
-#         data_path + "/" + [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
+#     os.path.join(
+#         data_path, [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
 #     ),
 #     "rb",
 # ) as handle:
