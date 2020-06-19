@@ -150,10 +150,8 @@ else:
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 with open(
-    os.path.abspath(
-        train_path
-        + "/"
-        + [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
+    os.path.join(
+        train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
     ),
     "rb",
 ) as handle:
