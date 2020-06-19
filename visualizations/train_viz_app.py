@@ -59,7 +59,7 @@ fig2 = px.bar(
 
 fig2.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
 fig2.update_xaxes(showgrid=True)
-fig2.update_yaxes(showgrid=True, range=[0, samples / 1.5])
+fig2.update_yaxes(showgrid=True, range=[0, samples])
 
 fig2.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
