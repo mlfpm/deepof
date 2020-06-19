@@ -160,13 +160,13 @@ else:
         "learning_rate": 1e-3,
     }
 
-#with open(
-#    os.path.abspath(
-#        data_path + "/" + [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
-#    ),
-#    "rb",
-#) as handle:
-#    Treatment_dict = pickle.load(handle)
+with open(
+    os.path.abspath(
+        data_path + "/" + [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
+    ),
+    "rb",
+) as handle:
+    Treatment_dict = pickle.load(handle)
 
 # Which angles to compute?
 bp_dict = {
@@ -204,7 +204,7 @@ DLC_social = project(
     arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
-    #exp_conditions=Treatment_dict,
+    exp_conditions=Treatment_dict,
 )
 
 
