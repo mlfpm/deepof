@@ -7,6 +7,7 @@ sys.path.insert(1, "../")
 
 from copy import deepcopy
 from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import mean_absolute_error
 from source.preprocess import *
 from source.models import *
@@ -160,13 +161,13 @@ else:
         "learning_rate": 1e-3,
     }
 
-with open(
-    os.path.abspath(
-        data_path + "/" + [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
-    ),
-    "rb",
-) as handle:
-    Treatment_dict = pickle.load(handle)
+# with open(
+#     os.path.abspath(
+#         data_path + "/" + [i for i in os.listdir(data_path) if i.endswith(".pickle")][0]
+#     ),
+#     "rb",
+# ) as handle:
+#     Treatment_dict = pickle.load(handle)
 
 # Which angles to compute?
 bp_dict = {
@@ -204,7 +205,7 @@ DLC_social = project(
     arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
-    exp_conditions=Treatment_dict,
+    # exp_conditions=Treatment_dict,
 )
 
 
@@ -304,10 +305,24 @@ for checkpoint in tqdm(checkpoints):
 print("Done!")
 
 print("Reducing latent space to 2 dimensions for dataviz...")
-reducer = PCA(n_components=2)
-encs = [reducer.fit_transform(i) for i in tqdm(predictions)]
+reducer = LinearDiscriminantAnalysis(n_components=2)
+encs = []
+for i in range(len(checkpoints) + 1):
 
-# As projection direction is difficult to predict in PCA,
+    if i == 0:
+        clusts = (
+            np.array([int(i) for i in np.random.uniform(0, k, samples)])
+            if variational
+            else np.zeros(samples)
+        )
+        encs.append(reducer.fit_transform(predictions[i], clusts))
+    else:
+        encs.append(
+            reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
+        )
+
+
+# As projection direction is difficult to predict in LDA,
 # axes are flipped to maintain subsequent representations
 # of the input closer to one another
 flip_encs = flip_axes(encs)

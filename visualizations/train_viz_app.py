@@ -27,7 +27,7 @@ fig = px.scatter(
     y="y",
     animation_frame="epoch",
     color="cluster",
-    labels={"x": "PCA 1", "y": "PCA 2"},
+    labels={"x": "LDA 1", "y": "LDA 2"},
     width=550,
     height=500,
     color_discrete_sequence=px.colors.qualitative.T10,
@@ -37,9 +37,7 @@ fig.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
 fig.update_xaxes(showgrid=True, range=[-0.2, 1.2])
 fig.update_yaxes(showgrid=True, range=[-0.2, 1.2])
 
-fig.update_layout(
-    {"paper_bgcolor": "rgba(0, 0, 0, 0)"}
-)
+fig.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
 # Cluster membership animated over epochs
 clust_occur = pd.DataFrame(
@@ -63,9 +61,7 @@ fig2.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
 fig2.update_xaxes(showgrid=True)
 fig2.update_yaxes(showgrid=True, range=[0, samples / 1.5])
 
-fig2.update_layout(
-    {"paper_bgcolor": "rgba(0, 0, 0, 0)"}
-)
+fig2.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
 
 # Scatterplot reconstruction over epochs
@@ -84,9 +80,7 @@ fig3.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
 fig3.update_xaxes(showgrid=True, range=[-2, 2])
 fig3.update_yaxes(showgrid=True, range=[-2, 2])
 
-fig3.update_layout(
-    {"paper_bgcolor": "rgba(0, 0, 0, 0)"}
-)
+fig3.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
 fig4 = px.line(
     data_frame=maedf,
@@ -94,12 +88,10 @@ fig4 = px.line(
     y="mae",
     color_discrete_sequence=px.colors.qualitative.T10,
 )
-#fig4.update_xaxes(showgrid=False)
-#fig4.update_yaxes(showgrid=False)
+# fig4.update_xaxes(showgrid=False)
+# fig4.update_yaxes(showgrid=False)
 
-fig4.update_layout(
-    {"paper_bgcolor": "rgba(0, 0, 0, 0)"}
-)
+fig4.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
 # Combine all three figures in a Dash application
 app = dash.Dash(__name__)
