@@ -350,7 +350,6 @@ dfencs["epoch"] = np.array(
 dfencs.columns = ["x", "y", "cluster", "epoch"]
 dfencs["trajectories"] = np.tile(pttest[:, 6, 1], len(checkpoints) + 1)
 
-print(trajectories.shape)
 print(np.concatenate(reconstructions).shape)
 
 dfencs["reconstructions"] = np.concatenate(reconstructions)[:, 6, 1]
