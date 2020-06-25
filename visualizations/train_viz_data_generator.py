@@ -149,6 +149,7 @@ assert input_type in [
 if hparams is not None:
     with open(hparams, "rb") as handle:
         hparams = pickle.load(handle)
+    hparams["encoding"] = encoding
 else:
     hparams = {
         "units_conv": 256,
