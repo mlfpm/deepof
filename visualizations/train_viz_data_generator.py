@@ -6,7 +6,6 @@ import sys
 sys.path.insert(1, "../")
 
 from copy import deepcopy
-from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import mean_absolute_error
 from source.preprocess import *
@@ -302,7 +301,7 @@ for checkpoint in tqdm(checkpoints):
         reconstructions.append(ae.predict(pttest))
 
 print("Done!")
-print([i.shape for i in predictions])
+
 print("Reducing latent space to 2 dimensions for dataviz...")
 reducer = LinearDiscriminantAnalysis(n_components=2)
 encs = []
@@ -314,6 +313,8 @@ for i in range(len(checkpoints) + 1):
             if variational
             else np.zeros(samples)
         )
+        print(predictions[i].shape)
+        print(np.array(clusts).shape)
         encs.append(reducer.fit_transform(predictions[i], clusts))
     else:
         encs.append(
