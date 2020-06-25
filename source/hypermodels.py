@@ -6,7 +6,7 @@ from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform, Orthogonal
+from tensorflow.keras.initializers import he_uniform, Orthogonal, RandomNormal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
@@ -301,7 +301,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         z_cat = Dense(
             self.number_of_components,
             activation="softmax",
-            kernel_initializer=Constant(value=1 / self.number_of_components),
+            kernel_initializer=RandomNormal(
+                mean=(1 / self.number_of_components), stddev=0.05, seed=None
+            ),
         )(encoder)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
