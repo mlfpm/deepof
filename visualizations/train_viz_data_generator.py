@@ -302,7 +302,7 @@ for checkpoint in tqdm(checkpoints):
         reconstructions.append(ae.predict(pttest))
 
 print("Done!")
-print(predictions)
+print([i.shape for i in predictions])
 print("Reducing latent space to 2 dimensions for dataviz...")
 reducer = LinearDiscriminantAnalysis(n_components=2)
 encs = []
