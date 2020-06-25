@@ -82,8 +82,6 @@ parser.add_argument(
     "-hp",
     help="Path pointing to a pickled dictionary of network hyperparameters. "
     "Thought to be used with the output of hyperparameter_tuning.py",
-    default=None,
-    type=str,
 )
 parser.add_argument(
     "--encoding-size",
