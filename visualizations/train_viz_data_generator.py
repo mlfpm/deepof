@@ -313,8 +313,6 @@ for i in range(len(checkpoints) + 1):
             if variational
             else np.zeros(samples)
         )
-        print(predictions[i].shape)
-        print(np.array(clusts).shape)
         encs.append(reducer.fit_transform(predictions[i], clusts))
     else:
         encs.append(
