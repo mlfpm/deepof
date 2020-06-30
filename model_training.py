@@ -368,7 +368,9 @@ else:
                 tensorboard_callback,
                 kl_warmup_callback,
                 mmd_warmup_callback,
-                tf.keras.callbacks.EarlyStopping("val_mae", patience=5),
+                tf.keras.callbacks.EarlyStopping(
+                    "val_mae", patience=5, restore_best_weights=True
+                ),
                 cp_callback,
             ],
         )
