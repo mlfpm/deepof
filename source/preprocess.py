@@ -501,9 +501,6 @@ class table_dict(dict):
             if standard_scaler:
                 assert np.allclose(np.mean(X_train), 0)
                 assert np.allclose(np.std(X_train), 1)
-            else:
-                assert np.all(X_train >= 0)
-                assert np.all(X_train <= 1)
 
             if test_proportion:
                 X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(

@@ -237,22 +237,52 @@ coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
 
 input_dict_train = {
     "coords": coords1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
     "dists": distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
     "angles": angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
     "coords+dist": coords_distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
     "coords+angle": coords_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=110,
     ),
 }
 
