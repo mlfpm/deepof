@@ -384,8 +384,8 @@ else:
         generator,
         grouper,
         gmvaep,
-        mmd_warmup_callback,
         kl_warmup_callback,
+        mmd_warmup_callback,
     ) = SEQ_2_SEQ_GMVAE(
         input_dict_train[input_type].shape,
         loss=loss,

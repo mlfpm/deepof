@@ -352,9 +352,7 @@ dfcats_max = pd.concat(
     [
         pd.DataFrame(
             (
-                [str(int(i)) for i in np.random.uniform(0, k, samples)]
-                if variational
-                else np.zeros(samples)
+                np.zeros(samples)
             )
         ),
         pd.DataFrame(np.array(np.max((np.concatenate(clusters)), axis=1), dtype=str)),
