@@ -297,19 +297,6 @@ class SEQ_2_SEQ_GMVAE:
             activation=None,
         )(encoder)
 
-        # Define and control custom loss functions
-        kl_warmup_callback = False
-        if "ELBO" in self.loss:
-
-            kl_beta = K.variable(1.0, name="kl_beta")
-            kl_beta._trainable = False
-            if self.kl_warmup:
-                kl_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: K.set_value(
-                        kl_beta, K.min([epoch / self.kl_warmup, 1])
-                    )
-                )
-
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
         z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
@@ -328,7 +315,19 @@ class SEQ_2_SEQ_GMVAE:
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )([z_cat, z_gauss])
 
+        # Define and control custom loss functions
+        kl_warmup_callback = False
         if "ELBO" in self.loss:
+
+            kl_beta = K.variable(1.0, name="kl_beta")
+            kl_beta._trainable = False
+            if self.kl_warmup:
+                kl_warmup_callback = LambdaCallback(
+                    on_epoch_begin=lambda epoch, logs: K.set_value(
+                        kl_beta, K.min([epoch / self.kl_warmup, 1])
+                    )
+                )
+
             z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
