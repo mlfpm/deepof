@@ -242,7 +242,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "dists": distances1.preprocess(
         window_size=11,
@@ -250,7 +250,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "angles": angles1.preprocess(
         window_size=11,
@@ -258,7 +258,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+dist": coords_distances1.preprocess(
         window_size=11,
@@ -266,7 +266,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+angle": coords_angles1.preprocess(
         window_size=11,
@@ -274,7 +274,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
@@ -282,7 +282,7 @@ input_dict_train = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
 }
 
@@ -293,7 +293,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "dists": distances2.preprocess(
         window_size=11,
@@ -301,7 +301,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "angles": angles2.preprocess(
         window_size=11,
@@ -309,7 +309,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+dist": coords_distances2.preprocess(
         window_size=11,
@@ -317,7 +317,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+angle": coords_angles2.preprocess(
         window_size=11,
@@ -325,7 +325,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
         window_size=11,
@@ -333,7 +333,7 @@ input_dict_val = {
         scale=True,
         random_state=42,
         filter="gaussian",
-        sigma=110,
+        sigma=55,
     ),
 }
 
