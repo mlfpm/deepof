@@ -191,7 +191,7 @@ class SEQ_2_SEQ_GMVAE:
                 ),
                 [
                     tfd.Independent(
-                        tfd.Normal(loc=tf.zeros(self.ENCODING), scale=1),
+                        tfd.Normal(loc=tf.random_normal(self.ENCODING), scale=1),
                         reinterpreted_batch_ndims=1,
                     )
                     for _ in range(self.number_of_components)
