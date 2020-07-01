@@ -357,9 +357,7 @@ dfcats_max = pd.concat(
                 else np.zeros(samples)
             )
         ),
-        pd.DataFrame(
-            np.array(np.max((np.concatenate(clusters)), axis=1), dtype=str)
-        ),
+        pd.DataFrame(np.array(np.max((np.concatenate(clusters)), axis=1), dtype=str)),
     ],
 ).reset_index(drop=True)
 
