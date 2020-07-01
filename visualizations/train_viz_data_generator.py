@@ -350,11 +350,7 @@ dfcats = pd.concat(
 
 dfcats_max = pd.concat(
     [
-        pd.DataFrame(
-            (
-                np.zeros(samples)
-            )
-        ),
+        pd.DataFrame((np.zeros(samples))),
         pd.DataFrame(np.array(np.max((np.concatenate(clusters)), axis=1), dtype=str)),
     ],
 ).reset_index(drop=True)
@@ -387,6 +383,6 @@ maedf["mae"] = [
 ]
 
 # Save dataframes to .h5
-dfencs.to_hdf("dash_data_1.h5", key="df", mode="w")
-clust_occur.to_hdf("dash_data_2.h5", key="df", mode="w")
-maedf.to_hdf("dash_data_3.h5", key="df", mode="w")
+dfencs.astype(float).to_hdf("dash_data_1.h5", key="df", mode="w")
+clust_occur.astype(float).to_hdf("dash_data_2.h5", key="df", mode="w")
+maedf.astype(float).to_hdf("dash_data_3.h5", key="df", mode="w")
