@@ -12,7 +12,7 @@ import dash_html_components as html
 import pandas as pd
 import plotly.express as px
 
-script, samples, df1, df2, df3 = argv
+script, samples, df1, df2, df3, out = argv
 samples = int(samples)
 
 # Load plotting data
@@ -80,18 +80,40 @@ fig3.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
 fig3.update_xaxes(showgrid=True, range=[-2, 2])
 fig3.update_yaxes(showgrid=True, range=[-2, 2])
 
+# Histogram with confidence in best cluster
+fig4 = px.histogram(
+    data_frame=dfencs,
+    x="confidence",
+    animation_frame="epoch",
+    labels={"confidence": "Confidence in best cluster"},
+    width=550,
+    height=500,
+    color_discrete_sequence=px.colors.qualitative.T10,
+)
+
+fig4.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1
+fig4.update_xaxes(showgrid=True, range=[-0.05, 1.05])
+
+fig4.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
+
 fig3.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
 
-fig4 = px.line(
+fig5 = px.line(
     data_frame=maedf,
     x="epoch",
     y="mae",
     color_discrete_sequence=px.colors.qualitative.T10,
 )
-# fig4.update_xaxes(showgrid=False)
-# fig4.update_yaxes(showgrid=False)
+# fig5.update_xaxes(showgrid=False)
+# fig5.update_yaxes(showgrid=False)
 
-fig4.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
+fig5.update_layout({"paper_bgcolor": "rgba(0, 0, 0, 0)"})
+
+# Save figures as html
+fig.write_html("{}_latent_LDA.html".format(out))
+fig2.write_html("{}_cluster_distribution.html".format(out))
+fig3.write_html("{}_scatter_reconstruction.html".format(out))
+fig4.write_html("{}_confidence_histogram.html".format(out))
 
 # Combine all three figures in a Dash application
 app = dash.Dash(__name__)
@@ -101,14 +123,20 @@ app.layout = html.Div(
         html.H1(children="deepof GMVAE training demo", className="row"),
         html.Div(
             [
-                html.Div([dcc.Graph(figure=fig)], className="four columns"),
-                html.Div([dcc.Graph(figure=fig2)], className="four columns"),
-                html.Div([dcc.Graph(figure=fig3)], className="four columns"),
+                html.Div([dcc.Graph(figure=fig)], className="six columns"),
+                html.Div([dcc.Graph(figure=fig2)], className="six columns"),
             ],
             className="row",
         ),
         html.Div(
-            [html.Div([dcc.Graph(figure=fig4)], className="twelve columns"),],
+            [
+                html.Div([dcc.Graph(figure=fig3)], className="six columns"),
+                html.Div([dcc.Graph(figure=fig4)], className="six columns"),
+            ],
+            className="row",
+        ),
+        html.Div(
+            [html.Div([dcc.Graph(figure=fig5)], className="twelve columns"),],
             className="row",
         ),
     ]
