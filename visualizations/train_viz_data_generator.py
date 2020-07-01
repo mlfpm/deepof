@@ -348,12 +348,27 @@ dfcats = pd.concat(
     ],
 ).reset_index(drop=True)
 
-dfencs = pd.concat([dfencs, dfcats], axis=1)
+dfcats_max = pd.concat(
+    [
+        pd.DataFrame(
+            (
+                [str(int(i)) for i in np.random.uniform(0, k, samples)]
+                if variational
+                else np.zeros(samples)
+            )
+        ),
+        pd.DataFrame(
+            np.array(np.max((np.concatenate(clusters)), axis=1), dtype=str)
+        ),
+    ],
+).reset_index(drop=True)
+
+dfencs = pd.concat([dfencs, dfcats, dfcats_max], axis=1)
 
 dfencs["epoch"] = np.array(
     [j + 1 for j in range(len(flip_encs)) for i in range(len(flip_encs[0]))]
 )
-dfencs.columns = ["x", "y", "cluster", "epoch"]
+dfencs.columns = ["x", "y", "cluster", "confidence", "epoch"]
 dfencs["trajectories"] = np.tile(pttest[:, 6, 1], len(checkpoints) + 1)
 dfencs["reconstructions"] = np.concatenate(reconstructions)[:, 6, 1]
 
