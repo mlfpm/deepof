@@ -383,6 +383,6 @@ maedf["mae"] = [
 ]
 
 # Save dataframes to .h5
-dfencs.astype(float).to_hdf("dash_data_1.h5", key="df", mode="w")
-clust_occur.astype(float).to_hdf("dash_data_2.h5", key="df", mode="w")
-maedf.astype(float).to_hdf("dash_data_3.h5", key="df", mode="w")
+dfencs.to_hdf("dash_data_1.h5", key="df", mode="w")
+clust_occur.to_hdf("dash_data_2.h5", key="df", mode="w")
+maedf.to_hdf("dash_data_3.h5", key="df", mode="w")
