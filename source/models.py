@@ -344,17 +344,17 @@ class SEQ_2_SEQ_GMVAE:
 
             z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
-        # z = Latent_space_control()(z, z_gauss, z_cat)
+        z = Latent_space_control()(z, z_gauss, z_cat)
 
-        # Latent space callback to control dead (zero) dimensions in the latent space
-        dead_neuron_rate_callback = LambdaCallback(
-            on_epoch_end=lambda epoch, logs: tf.math.zero_fraction(z_gauss)
-        )
-
-        # Latent space callback to control the latent silhouette clustering index
-        silhouette_callback = LambdaCallback(
-            on_epoch_end=tf.numpy_function(silhouette_score, [z, tf.math.argmax(z_cat, axis=1)], tf.float32)
-        )
+        # # Latent space callback to control dead (zero) dimensions in the latent space
+        # dead_neuron_rate_callback = LambdaCallback(
+        #     on_epoch_end=lambda epoch, logs: tf.math.zero_fraction(z_gauss)
+        # )
+        #
+        # # Latent space callback to control the latent silhouette clustering index
+        # silhouette_callback = LambdaCallback(
+        #     on_epoch_end=tf.numpy_function(silhouette_score, [z, tf.math.argmax(z_cat, axis=1)], tf.float32)
+        # )
 
         # Define and instantiate generator
         generator = Model_D1(z)
@@ -441,8 +441,8 @@ class SEQ_2_SEQ_GMVAE:
             generator,
             grouper,
             gmvaep,
-            dead_neuron_rate_callback,
-            silhouette_callback,
+            #dead_neuron_rate_callback,
+            #silhouette_callback,
             kl_warmup_callback,
             mmd_warmup_callback,
         )

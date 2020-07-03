@@ -384,8 +384,8 @@ else:
         generator,
         grouper,
         gmvaep,
-        dead_neuron_rate_callback,
-        silhouette_callback,
+        #dead_neuron_rate_callback,
+        #silhouette_callback,
         kl_warmup_callback,
         mmd_warmup_callback,
     ) = SEQ_2_SEQ_GMVAE(
@@ -404,8 +404,8 @@ else:
     callbacks_ = [
         tensorboard_callback,
         cp_callback,
-        dead_neuron_rate_callback,
-        silhouette_callback,
+        #dead_neuron_rate_callback,
+        #silhouette_callback,
         tf.keras.callbacks.EarlyStopping(
             "val_mae", patience=5, restore_best_weights=True
         ),
