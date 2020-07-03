@@ -345,7 +345,7 @@ class SEQ_2_SEQ_GMVAE:
             z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
         # Identity layer controlling clustering and latent space statistics
-        #z = Latent_space_control()(z, z_gauss, z_cat)
+        z = Latent_space_control()(z, z_gauss, z_cat)
 
         # Define and instantiate generator
         generator = Model_D1(z)
