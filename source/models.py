@@ -344,6 +344,18 @@ class SEQ_2_SEQ_GMVAE:
 
             z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
 
+        # z = Latent_space_control()(z, z_gauss, z_cat)
+
+        # Latent space callback to control dead (zero) dimensions in the latent space
+        dead_neuron_rate_callback = LambdaCallback(
+            on_epoch_end=lambda epoch, logs: tf.math.zero_fraction(z_gauss)
+        )
+
+        # Latent space callback to control the latent silhouette clustering index
+        silhouette_callback = LambdaCallback(
+            on_epoch_end=tf.numpy_function(silhouette_score, [z, tf.math.argmax(z_cat, axis=1)], tf.float32)
+        )
+
         # Define and instantiate generator
         generator = Model_D1(z)
         generator = Model_B1(generator)
@@ -429,6 +441,8 @@ class SEQ_2_SEQ_GMVAE:
             generator,
             grouper,
             gmvaep,
+            dead_neuron_rate_callback,
+            silhouette_callback,
             kl_warmup_callback,
             mmd_warmup_callback,
         )
@@ -437,7 +451,7 @@ class SEQ_2_SEQ_GMVAE:
 # TODO:
 #       - latent space metrics to control overregulatization (turned off dimensions). Useful for warmup tuning
 #       - Clustering metrics for model selection and aid training (eg early stopping)
-#           - Silhouette / likelihood / classifier accuracy metrics
+#           - Silhouette / likelihood (AIC / BIC) / classifier accuracy metrics
 #       - design clustering-conscious hyperparameter tuing pipeline
 
 # TODO (in the non-immediate future):

@@ -371,10 +371,10 @@ if not variational:
         validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
         callbacks=[
             tensorboard_callback,
+            cp_callback,
             tf.keras.callbacks.EarlyStopping(
                 "val_mae", patience=5, restore_best_weights=True
             ),
-            cp_callback,
         ],
     )
 
@@ -384,6 +384,8 @@ else:
         generator,
         grouper,
         gmvaep,
+        dead_neuron_rate_callback,
+        silhouette_callback,
         kl_warmup_callback,
         mmd_warmup_callback,
     ) = SEQ_2_SEQ_GMVAE(
@@ -401,15 +403,17 @@ else:
 
     callbacks_ = [
         tensorboard_callback,
+        cp_callback,
+        dead_neuron_rate_callback,
+        silhouette_callback,
         tf.keras.callbacks.EarlyStopping(
             "val_mae", patience=5, restore_best_weights=True
         ),
-        cp_callback,
     ]
 
-    if "ELBO" in loss:
+    if "ELBO" in loss and kl_wu > 0:
         callbacks_.append(kl_warmup_callback)
-    if "MMD" in loss:
+    if "MMD" in loss and mmd_wu > 0:
         callbacks_.append(mmd_warmup_callback)
 
     if not predictor:

@@ -1,6 +1,7 @@
 # @author lucasmiranda42
 
 from keras import backend as K
+from sklearn.metrics import silhouette_score
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
@@ -148,5 +149,28 @@ class MMDiscrepancyLayer(Layer):
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
         self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
+
+        return z
+
+
+class Latent_space_control(Layer):
+    """ Identity layer that adds latent space and clustering stats
+     to the metrics compiled by the model
+     """
+
+    def __init__(self, *args, **kwargs):
+        super(Latent_space_control, self).__init__(*args, **kwargs)
+
+    def call(self, z, z_gauss, z_cat, **kwargs):
+
+        # Adds metric that monitors dead neurons in the latent space
+        self.add_metric(
+            tf.math.zero_fraction(z_gauss), aggregation="mean", name="dead_neurons"
+        )
+
+        # Adds Silhouette score controling overlap between clusters
+        hard_labels = tf.math.argmax(z_cat, axis=1)
+        silhouette = tf.numpy_function(silhouette_score, [z, hard_labels], tf.float32)
+        self.add_metric(silhouette, aggregation="mean", name="silhouette")
 
         return z
