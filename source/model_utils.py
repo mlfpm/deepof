@@ -171,7 +171,7 @@ class Latent_space_control(Layer):
         # Adds Silhouette score controling overlap between clusters
         hard_labels = tf.math.argmax(z_cat, axis=1)
         silhouette = tf.numpy_function(silhouette_score, [z, hard_labels], tf.float32)
-        self.add_loss(- K.mean(silhouette), inputs=[z, hard_labels])
+        self.add_loss(-K.mean(silhouette), inputs=[z, hard_labels])
         self.add_metric(silhouette, aggregation="mean", name="silhouette")
 
         return z
