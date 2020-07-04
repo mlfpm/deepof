@@ -294,6 +294,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "dists": distances2.preprocess(
         window_size=11,
@@ -302,6 +303,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "angles": angles2.preprocess(
         window_size=11,
@@ -310,6 +312,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "coords+dist": coords_distances2.preprocess(
         window_size=11,
@@ -318,6 +321,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "coords+angle": coords_angles2.preprocess(
         window_size=11,
@@ -326,6 +330,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
         window_size=11,
@@ -334,6 +339,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
 }
 

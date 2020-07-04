@@ -472,6 +472,7 @@ class table_dict(dict):
         sigma=None,
         shift=0,
         standard_scaler=True,
+        shuffle=False,
     ):
         """Builds a sliding window. If desired, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
@@ -532,7 +533,14 @@ class table_dict(dict):
             if filter == "gaussian":
                 X_test = X_test * g.reshape(1, window_size, 1)
 
+            if shuffle:
+                X_train = np.random.choice(X_train, X_train.shape[0], replace=False)
+                X_test = np.random.choice(X_test, X_test.shape[0], replace=False)
+
             return X_train, X_test
+
+        if shuffle:
+            X_train = np.random.choice(X_train, X_train.shape[0], replace=False)
 
         return X_train
 
