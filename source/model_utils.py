@@ -198,11 +198,11 @@ class Gaussian_mixture_overlap(Layer):
             locs = (target[..., : self.lat_dims, k],)
             scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
 
-            dists.append(tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1]))
+            dists.append(
+                tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
+            )
 
-        print(dists)
         dists = [tf.transpose(gauss.sample(self.samples), [1, 0, 2]) for gauss in dists]
-        print(dists)
 
         if self.metric == "mmd":
 
@@ -215,7 +215,7 @@ class Gaussian_mixture_overlap(Layer):
                     dtype=tf.float32,
                 )
             )
-            print(intercomponent_mmd)
+
             self.add_metric(
                 intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
             )
