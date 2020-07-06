@@ -167,6 +167,7 @@ class SEQ_2_SEQ_GMVAE:
         prior="standard_normal",
         number_of_components=1,
         predictor=True,
+        overlap_metric="mmd",
     ):
         self.input_shape = input_shape
         self.CONV_filters = units_conv
@@ -183,6 +184,7 @@ class SEQ_2_SEQ_GMVAE:
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
         self.predictor = predictor
+        self.overlap_metric = overlap_metric
 
         if self.prior == "standard_normal":
             self.prior = tfd.mixture.Mixture(
@@ -298,6 +300,10 @@ class SEQ_2_SEQ_GMVAE:
         )(encoder)
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
+        z_gauss = Gaussian_mixture_overlap(
+            self.ENCODING, self.number_of_components, metric=self.overlap_metric
+        )(z_gauss)
+
         z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
                 cat=tfd.categorical.Categorical(probs=gauss[0],),
@@ -438,10 +444,10 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - latent space metrics to control overregulatization (turned off dimensions). Useful for warmup tuning
+#       - latent space metrics to control overregulatization (turned off dimensions). Useful for warmup tuning (done!)
 #       - Clustering metrics for model selection and aid training (eg early stopping)
-#           - Silhouette / likelihood (AIC / BIC) / classifier accuracy metrics
-#       - design clustering-conscious hyperparameter tuing pipeline
+#           - Silhouette / mMMD / Fischer-Mao / Wasserstein
+#       - design clustering-conscious hyperparameter tuning pipeline
 
 # TODO (in the non-immediate future):
 #       - Try Bayesian nets!
