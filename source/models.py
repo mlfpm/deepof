@@ -168,6 +168,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_metric="mmd",
+        overlap_loss=False,
     ):
         self.input_shape = input_shape
         self.CONV_filters = units_conv
@@ -185,6 +186,7 @@ class SEQ_2_SEQ_GMVAE:
         self.number_of_components = number_of_components
         self.predictor = predictor
         self.overlap_metric = overlap_metric
+        self.overlap_loss = overlap_loss
 
         if self.prior == "standard_normal":
             self.prior = tfd.mixture.Mixture(
@@ -301,7 +303,10 @@ class SEQ_2_SEQ_GMVAE:
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
         z_gauss = Gaussian_mixture_overlap(
-            self.ENCODING, self.number_of_components, metric=self.overlap_metric
+            self.ENCODING,
+            self.number_of_components,
+            metric=self.overlap_metric,
+            loss=self.overlap_loss,
         )(z_gauss)
 
         z = tfpl.DistributionLambda(
