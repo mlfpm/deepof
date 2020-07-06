@@ -151,7 +151,7 @@ class MMDiscrepancyLayer(Layer):
 
     def call(self, z, **kwargs):
         true_samples = self.prior.sample(1)
-        mmd_batch = self.beta * compute_mmd(true_samples, z)
+        mmd_batch = self.beta * compute_mmd([true_samples, z])
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
         self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
