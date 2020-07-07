@@ -90,6 +90,20 @@ parser.add_argument(
     default=16,
     type=int,
 )
+parser.add_argument(
+    "--overlap-loss",
+    "-ol",
+    help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
+    default=False,
+    type=str2bool
+)
+parser.add_argument(
+    "--batch-size",
+    "-bs",
+    help="set training batch size. Defaults to 512",
+    type=int,
+    default=512
+)
 
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
@@ -103,6 +117,8 @@ kl_wu = args.kl_warmup
 mmd_wu = args.mmd_warmup
 hparams = args.hyperparameters
 encoding = args.encoding_size
+batch_size = args.batch_size
+overlap_loss = args.overlap_loss
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -372,7 +388,7 @@ if not variational:
         x=input_dict_train[input_type],
         y=input_dict_train[input_type],
         epochs=250,
-        batch_size=512,
+        batch_size=batch_size,
         verbose=1,
         validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
         callbacks=[
@@ -399,6 +415,7 @@ else:
         kl_warmup_epochs=kl_wu,
         mmd_warmup_epochs=mmd_wu,
         predictor=predictor,
+        overlap_loss=overlap_loss,
         **hparams
     ).build()
     gmvaep.build(input_dict_train[input_type].shape)
@@ -423,7 +440,7 @@ else:
             x=input_dict_train[input_type],
             y=input_dict_train[input_type],
             epochs=250,
-            batch_size=512,
+            batch_size=batch_size,
             verbose=1,
             validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
             callbacks=callbacks_,
@@ -433,7 +450,7 @@ else:
             x=input_dict_train[input_type][:-1],
             y=[input_dict_train[input_type][:-1], input_dict_train[input_type][1:]],
             epochs=250,
-            batch_size=512,
+            batch_size=batch_size,
             verbose=1,
             validation_data=(
                 input_dict_val[input_type][:-1],

@@ -5,7 +5,7 @@ from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform, Orthogonal, RandomNormal
+from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
@@ -155,6 +155,7 @@ class SEQ_2_SEQ_GMVAE:
     def __init__(
         self,
         input_shape,
+        batch_size=512,
         units_conv=256,
         units_lstm=256,
         units_dense2=64,
@@ -167,10 +168,10 @@ class SEQ_2_SEQ_GMVAE:
         prior="standard_normal",
         number_of_components=1,
         predictor=True,
-        overlap_metric="mmd",
         overlap_loss=False,
     ):
         self.input_shape = input_shape
+        self.batch_size = batch_size
         self.CONV_filters = units_conv
         self.LSTM_units_1 = units_lstm
         self.LSTM_units_2 = int(units_lstm / 2)
@@ -185,7 +186,6 @@ class SEQ_2_SEQ_GMVAE:
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
         self.predictor = predictor
-        self.overlap_metric = overlap_metric
         self.overlap_loss = overlap_loss
 
         if self.prior == "standard_normal":
@@ -303,10 +303,7 @@ class SEQ_2_SEQ_GMVAE:
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
         z_gauss = Gaussian_mixture_overlap(
-            self.ENCODING,
-            self.number_of_components,
-            metric=self.overlap_metric,
-            loss=self.overlap_loss,
+            self.ENCODING, self.number_of_components, loss=self.overlap_loss,
         )(z_gauss)
 
         z = tfpl.DistributionLambda(
@@ -353,10 +350,12 @@ class SEQ_2_SEQ_GMVAE:
                     )
                 )
 
-            z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
+            z = MMDiscrepancyLayer(
+                batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
+            )(z)
 
         # Identity layer controlling clustering and latent space statistics
-        z = Latent_space_control()(z, z_gauss, z_cat)
+        z = Latent_space_control(loss=self.overlap_loss)(z, z_gauss, z_cat)
 
         # Define and instantiate generator
         generator = Model_D1(z)

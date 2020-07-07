@@ -2,6 +2,7 @@
 
 from itertools import combinations
 from keras import backend as K
+from scipy.stats import wasserstein_distance
 from sklearn.metrics import silhouette_score
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
@@ -133,24 +134,26 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
 
 class MMDiscrepancyLayer(Layer):
     """
-    Identity transform layer that adds MM discrepancy
+    Identity transform layer that adds MM Discrepancy
     to the final model loss.
     """
 
-    def __init__(self, prior, beta=1.0, *args, **kwargs):
+    def __init__(self, batch_size, prior, beta=1.0, *args, **kwargs):
         self.is_placeholder = True
+        self.batch_size = batch_size
         self.beta = beta
         self.prior = prior
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
 
     def get_config(self):
         config = super().get_config().copy()
+        config.update({"batch_size": self.batch_size})
         config.update({"beta": self.beta})
         config.update({"prior": self.prior})
         return config
 
     def call(self, z, **kwargs):
-        true_samples = self.prior.sample(1)
+        true_samples = self.prior.sample(self.batch_size)
         mmd_batch = self.beta * compute_mmd([true_samples, z])
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
@@ -166,18 +169,10 @@ class Gaussian_mixture_overlap(Layer):
     """
 
     def __init__(
-        self,
-        lat_dims,
-        n_components,
-        metric="mmd",
-        loss=False,
-        samples=100,
-        *args,
-        **kwargs
+        self, lat_dims, n_components, loss=False, samples=100, *args, **kwargs
     ):
         self.lat_dims = lat_dims
         self.n_components = n_components
-        self.metric = metric
         self.loss = loss
         self.samples = samples
         super(Gaussian_mixture_overlap, self).__init__(*args, **kwargs)
@@ -186,7 +181,6 @@ class Gaussian_mixture_overlap(Layer):
         config = super().get_config().copy()
         config.update({"lat_dims": self.lat_dims})
         config.update({"n_components": self.n_components})
-        config.update({"metric": self.metric})
         config.update({"loss": self.loss})
         config.update({"samples": self.samples})
         return config
@@ -204,27 +198,23 @@ class Gaussian_mixture_overlap(Layer):
 
         dists = [tf.transpose(gauss.sample(self.samples), [1, 0, 2]) for gauss in dists]
 
-        if self.metric == "mmd":
-
-            intercomponent_mmd = K.mean(
-                tf.convert_to_tensor(
-                    [
-                        tf.vectorized_map(compute_mmd, [dists[c[0]], dists[c[1]]])
-                        for c in combinations(range(len(dists)), 2)
-                    ],
-                    dtype=tf.float32,
-                )
+        ### MMD-based overlap ###
+        intercomponent_mmd = K.mean(
+            tf.convert_to_tensor(
+                [
+                    tf.vectorized_map(compute_mmd, [dists[c[0]], dists[c[1]]])
+                    for c in combinations(range(len(dists)), 2)
+                ],
+                dtype=tf.float32,
             )
+        )
 
-            self.add_metric(
-                intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
-            )
+        self.add_metric(
+            intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
+        )
 
-            if self.loss:
-                self.add_loss(-intercomponent_mmd, inputs=[target])
-
-        elif self.metric == "wasserstein":
-            pass
+        if self.loss:
+            self.add_loss(-intercomponent_mmd, inputs=[target])
 
         return target
 
@@ -250,7 +240,7 @@ class Latent_space_control(Layer):
             tf.math.zero_fraction(z_gauss), aggregation="mean", name="dead_neurons"
         )
 
-        # Adds Silhouette score controling overlap between clusters
+        # Adds Silhouette score controlling overlap between clusters
         hard_labels = tf.math.argmax(z_cat, axis=1)
         silhouette = tf.numpy_function(silhouette_score, [z, hard_labels], tf.float32)
         self.add_metric(silhouette, aggregation="mean", name="silhouette")
