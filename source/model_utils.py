@@ -2,7 +2,6 @@
 
 from itertools import combinations
 from keras import backend as K
-from scipy.stats import wasserstein_distance
 from sklearn.metrics import silhouette_score
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
