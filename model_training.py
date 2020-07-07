@@ -102,7 +102,7 @@ parser.add_argument(
     "-bs",
     help="set training batch size. Defaults to 512",
     type=int,
-    default=32
+    default=512
 )
 
 args = parser.parse_args()

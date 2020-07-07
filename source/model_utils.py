@@ -201,7 +201,7 @@ class Gaussian_mixture_overlap(Layer):
         intercomponent_mmd = K.mean(
             tf.convert_to_tensor(
                 [
-                    tf.vectorized_map(compute_mmd, [dists[c[0]], dists[c[1]]])
+                    tf.map_fn(compute_mmd, [dists[c[0]], dists[c[1]]], dtype=tf.float32)
                     for c in combinations(range(len(dists)), 2)
                 ],
                 dtype=tf.float32,

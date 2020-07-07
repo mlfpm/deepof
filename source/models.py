@@ -448,6 +448,7 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
+#       - Add a parameter to enable/disable the mmd control (too slow if not needed)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 
