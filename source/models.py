@@ -448,10 +448,8 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - latent space metrics to control overregulatization (turned off dimensions). Useful for warmup tuning (done!)
-#       - Clustering metrics for model selection and aid training (eg early stopping)
-#           - Silhouette / mMMD / Fischer-Mao / Wasserstein
 #       - design clustering-conscious hyperparameter tuning pipeline
+#       - execute the pipeline ;)
 
 # TODO (in the non-immediate future):
 #       - Try Bayesian nets!
