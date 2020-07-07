@@ -197,7 +197,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=tf.random.normal(
-                                shape=[self.ENCODING], stddev=1 / self.ENCODING
+                                shape=[self.ENCODING], stddev=10
                             ),
                             scale=1,
                         ),
@@ -448,7 +448,7 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - Add a parameter to enable/disable the mmd control (too slow if not needed)
+#       - weight components according to their loadings? (dying components do not contribute that much to the loss)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 
