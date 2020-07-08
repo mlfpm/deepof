@@ -359,7 +359,7 @@ for i in range(len(checkpoints) + 1):
         encs.append(reducer.fit_transform(predictions[i], clusts))
     else:
         encs.append(
-            reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
+            reducer.fit_transform(predictions[i], np.random.uniform(0, k, samples))#np.argmax(clusters[i - 1], axis=1))
         )
 
 # As projection direction is difficult to predict in LDA,
