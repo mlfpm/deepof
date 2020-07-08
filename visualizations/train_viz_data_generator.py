@@ -351,14 +351,12 @@ for i in range(len(checkpoints) + 1):
 
     if i == 0:
         clusts = (
-            np.array([int(i) for i in np.random.uniform(0, k, samples)])
+            np.array([int(i) for i in np.random.uniform(0, k, 15000)])
             if variational
             else np.zeros(samples)
         )
         encs.append(reducer.fit_transform(predictions[i], clusts))
     else:
-        print(i)
-        np.argmax(clusters[i - 1], axis=1)
         encs.append(
             reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
         )
