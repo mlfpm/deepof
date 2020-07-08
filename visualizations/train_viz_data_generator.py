@@ -347,6 +347,9 @@ print("Done!")
 print("Reducing latent space to 2 dimensions for dataviz...")
 reducer = LinearDiscriminantAnalysis(n_components=2)
 encs = []
+
+checkpoints = [chechpoints[29]]
+
 for i in range(len(checkpoints) + 1):
 
     if i == 0:
