@@ -325,7 +325,7 @@ else:
 
 
 print("Building predictions from pretrained models...")
-
+chechpoints = [checkpoints[29]]
 for checkpoint in tqdm(checkpoints):
 
     if variational:
