@@ -225,7 +225,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
     "dists": distances1.preprocess(
         window_size=11,
@@ -234,7 +234,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
     "angles": angles1.preprocess(
         window_size=11,
@@ -243,7 +243,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
     "coords+dist": coords_distances1.preprocess(
         window_size=11,
@@ -252,7 +252,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
     "coords+angle": coords_angles1.preprocess(
         window_size=11,
@@ -261,7 +261,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
@@ -270,7 +270,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=False,
+        shuffle=True,
     ),
 }
 
@@ -290,7 +290,7 @@ checkpoints = sorted(
 )
 
 pttest_idx = np.random.choice(list(range(input_dict[input_type].shape[0])), samples)
-pttest = input_dict[input_type][:15000]#[pttest_idx]
+pttest = input_dict[input_type][pttest_idx]
 
 # Instanciate all models
 clusters = []
@@ -324,7 +324,7 @@ else:
 
 
 print("Building predictions from pretrained models...")
-chechpoints = [checkpoints[29]]
+
 for checkpoint in tqdm(checkpoints):
 
     if variational:
@@ -347,14 +347,11 @@ print("Done!")
 print("Reducing latent space to 2 dimensions for dataviz...")
 reducer = LinearDiscriminantAnalysis(n_components=2)
 encs = []
-
-checkpoints = [chechpoints[29]]
-
 for i in range(len(checkpoints) + 1):
 
     if i == 0:
         clusts = (
-            np.array([int(i) for i in np.random.uniform(0, k, 15000)])
+            np.array([int(i) for i in np.random.uniform(0, k, samples)])
             if variational
             else np.zeros(samples)
         )

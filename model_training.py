@@ -395,7 +395,7 @@ if not variational:
             tensorboard_callback,
             cp_callback,
             tf.keras.callbacks.EarlyStopping(
-                "val_intercomponent_mmd", patience=5, restore_best_weights=True
+                "val_mae", patience=5, restore_best_weights=True
             ),
         ],
     )
@@ -426,7 +426,7 @@ else:
         tensorboard_callback,
         cp_callback,
         tf.keras.callbacks.EarlyStopping(
-            "val_mae", patience=5, restore_best_weights=True
+            "val_intercomponent_mmd", patience=5, restore_best_weights=True
         ),
     ]
 
