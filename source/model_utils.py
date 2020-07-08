@@ -207,7 +207,7 @@ class Gaussian_mixture_overlap(Layer):
         )
 
         self.add_metric(
-            intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
+            -intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
         )
 
         if self.loss:
