@@ -230,7 +230,7 @@ class Latent_space_control(Layer):
     def get_config(self):
         config = super().get_config().copy()
         config.update({"loss": self.loss})
-        config.update({"silhouette": silhouette})
+        config.update({"silhouette": self.silhouette})
 
     def call(self, z, z_gauss, z_cat, **kwargs):
 
