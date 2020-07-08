@@ -167,9 +167,7 @@ class Gaussian_mixture_overlap(Layer):
     using a specified metric (MMD, Wasserstein, Fischer-Rao)
     """
 
-    def __init__(
-        self, lat_dims, n_components, loss=False, samples=10, *args, **kwargs
-    ):
+    def __init__(self, lat_dims, n_components, loss=False, samples=10, *args, **kwargs):
         self.lat_dims = lat_dims
         self.n_components = n_components
         self.loss = loss
@@ -224,13 +222,15 @@ class Latent_space_control(Layer):
     to the metrics compiled by the model
     """
 
-    def __init__(self, loss=False, *args, **kwargs):
+    def __init__(self, silhouette=False, loss=False, *args, **kwargs):
         self.loss = loss
+        self.silhouette = silhouette
         super(Latent_space_control, self).__init__(*args, **kwargs)
 
     def get_config(self):
         config = super().get_config().copy()
         config.update({"loss": self.loss})
+        config.update({"silhouette": silhouette})
 
     def call(self, z, z_gauss, z_cat, **kwargs):
 
@@ -240,11 +240,14 @@ class Latent_space_control(Layer):
         )
 
         # Adds Silhouette score controlling overlap between clusters
-        # hard_labels = tf.math.argmax(z_cat, axis=1)
-        # silhouette = tf.numpy_function(silhouette_score, [z, hard_labels], tf.float32)
-        # self.add_metric(silhouette, aggregation="mean", name="silhouette")
+        if self.silhouette:
+            hard_labels = tf.math.argmax(z_cat, axis=1)
+            silhouette = tf.numpy_function(
+                silhouette_score, [z, hard_labels], tf.float32
+            )
+            self.add_metric(silhouette, aggregation="mean", name="silhouette")
 
-        if self.loss:
-            self.add_loss(-K.mean(silhouette), inputs=[z, hard_labels])
+            if self.loss:
+                self.add_loss(-K.mean(silhouette), inputs=[z, hard_labels])
 
         return z

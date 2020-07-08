@@ -3,6 +3,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import multiprocessing
+import networkx as nx
 import numpy as np
 import pandas as pd
 import pickle
@@ -10,7 +11,7 @@ import pims
 import re
 import scipy
 import seaborn as sns
-from itertools import cycle, combinations
+from itertools import cycle, combinations, product
 from joblib import Parallel, delayed
 from numba import jit
 from numpy.core.umath_tests import inner1d
@@ -728,6 +729,45 @@ def GMM_Model_Selection(
                 best_bic_gmm = res[0][0]
 
     return bic, m_bic, best_bic_gmm
+
+    ##### RESULT ANALYSIS FUNCTIONS #####
+
+
+def cluster_transition_matrix(
+    cluster_sequence, autocorrelation=True, return_graph=False
+):
+    """
+    Computes the transition matrix between clusters and the autocorrelation in the sequence.
+    """
+
+    # Stores all possible transitions between clusters
+    clusters = set(cluster_sequence)
+    trans = {t: 0 for t in product(clusters, clusters)}
+    k = len(clusters)
+
+    # Stores the cluster sequence as a string
+    transtr = "".join(list(cluster_sequence))
+
+    # Assigns to each transition the number of times it occurs in the sequence
+    for t in trans:
+        trans[t] = len(re.findall("".join(t), transtr, overlapped=True))
+
+    # Normalizes the counts to add up to 1 for each departing cluster
+    trans_normed = np.zeros([k, k])
+    for t in trans:
+        trans_normed[int(t[0]), int(t[1])] = np.round(
+            trans[t] / sum({i: j for i, j in trans.items() if i[0] == t[0]}.values()), 3
+        )
+
+    # If specified, returns the transition matrix as an nx.Graph object
+    if return_graph:
+        trans_normed = nx.Graph(trans_normed)
+
+    if autocorrelation:
+        cluster_sequence = list(map(int, cluster_sequence))
+        return trans_normed, np.corrcoef(cluster_sequence[:-1], cluster_sequence[1:])
+
+    return trans_normed
 
     ##### PLOTTING FUNCTIONS #####
 

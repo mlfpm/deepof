@@ -95,14 +95,14 @@ parser.add_argument(
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
     default=False,
-    type=str2bool
+    type=str2bool,
 )
 parser.add_argument(
     "--batch-size",
     "-bs",
     help="set training batch size. Defaults to 512",
     type=int,
-    default=512
+    default=512,
 )
 
 args = parser.parse_args()
@@ -395,7 +395,7 @@ if not variational:
             tensorboard_callback,
             cp_callback,
             tf.keras.callbacks.EarlyStopping(
-                "val_mae", patience=5, restore_best_weights=True
+                "val_intercomponent_mmd", patience=5, restore_best_weights=True
             ),
         ],
     )
