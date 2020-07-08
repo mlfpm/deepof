@@ -290,8 +290,7 @@ checkpoints = sorted(
 )
 
 pttest_idx = np.random.choice(list(range(input_dict[input_type].shape[0])), samples)
-#pttest = input_dict[input_type][pttest_idx]
-pttest = input_dict[input_type][:50000]
+pttest = input_dict[input_type]#[pttest_idx]
 
 # Instanciate all models
 clusters = []
