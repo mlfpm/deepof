@@ -291,7 +291,7 @@ checkpoints = sorted(
 
 pttest_idx = np.random.choice(list(range(input_dict[input_type].shape[0])), samples)
 #pttest = input_dict[input_type][pttest_idx]
-pttest = input_dict[input_type][:5000]
+pttest = input_dict[input_type][:50000]
 
 # Instanciate all models
 clusters = []
@@ -347,29 +347,29 @@ print("Done!")
 
 print("Reducing latent space to 2 dimensions for dataviz...")
 reducer = LinearDiscriminantAnalysis(n_components=2)
-# encs = []
-# for i in range(len(checkpoints) + 1):
-#
-#     if i == 0:
-#         clusts = (
-#             np.array([int(i) for i in np.random.uniform(0, k, samples)])
-#             if variational
-#             else np.zeros(samples)
-#         )
-#         encs.append(reducer.fit_transform(predictions[i], clusts))
-#     else:
-#         encs.append(
-#             reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
-#         )
+encs = []
+for i in range(len(checkpoints) + 1):
+
+    if i == 0:
+        clusts = (
+            np.array([int(i) for i in np.random.uniform(0, k, samples)])
+            if variational
+            else np.zeros(samples)
+        )
+        encs.append(reducer.fit_transform(predictions[i], clusts))
+    else:
+        encs.append(
+            reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
+        )
 
 # As projection direction is difficult to predict in LDA,
 # axes are flipped to maintain subsequent representations
 # of the input closer to one another
-# flip_encs = flip_axes(encs)
+flip_encs = flip_axes(encs)
 print("Done!")
 
 # Latent space animated PCA over epochs
-# dfencs = pd.DataFrame(MinMaxScaler().fit_transform(np.concatenate(flip_encs)))
+dfencs = pd.DataFrame(MinMaxScaler().fit_transform(np.concatenate(flip_encs)))
 dfcats = pd.concat(
     [
         pd.DataFrame(
@@ -392,11 +392,11 @@ dfcats_max = pd.concat(
     ],
 ).reset_index(drop=True)
 
-dfencs = pd.concat([dfcats, dfcats_max], axis=1)
+dfencs = pd.concat([dfencs, dfcats, dfcats_max], axis=1)
 
-# dfencs["epoch"] = np.array(
-#     [j + 1 for j in range(len(flip_encs)) for i in range(len(flip_encs[0]))]
-# )
+dfencs["epoch"] = np.array(
+    [j + 1 for j in range(len(flip_encs)) for i in range(len(flip_encs[0]))]
+)
 dfencs.columns = ["x", "y", "cluster", "confidence", "epoch"]
 dfencs["trajectories"] = np.tile(pttest[:, 6, 1], len(checkpoints) + 1)
 dfencs["reconstructions"] = np.concatenate(reconstructions)[:, 6, 1]
