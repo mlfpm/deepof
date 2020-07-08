@@ -357,6 +357,8 @@ for i in range(len(checkpoints) + 1):
         )
         encs.append(reducer.fit_transform(predictions[i], clusts))
     else:
+        print(i)
+        np.argmax(clusters[i - 1], axis=1)
         encs.append(
             reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
         )
