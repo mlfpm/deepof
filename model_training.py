@@ -441,7 +441,7 @@ for run in range(runs):
             tensorboard_callback,
             cp_callback,
             tf.keras.callbacks.EarlyStopping(
-                "val_intercomponent_mmd", patience=5, restore_best_weights=True
+                "val_intercomponent_mmd", patience=1, restore_best_weights=True
             ),
         ]
 
