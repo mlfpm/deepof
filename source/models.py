@@ -369,7 +369,7 @@ class SEQ_2_SEQ_GMVAE:
             Dense(self.input_shape[2]), name="vaep_reconstruction"
         )(generator)
 
-        if self.predictor:
+        if self.predictor > 0:
             # Define and instantiate predictor
             predictor = Dense(
                 self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
@@ -408,7 +408,7 @@ class SEQ_2_SEQ_GMVAE:
         gmvaep = Model(
             inputs=x,
             outputs=(
-                [x_decoded_mean, x_predicted_mean] if self.predictor else x_decoded_mean
+                [x_decoded_mean, x_predicted_mean] if self.predictor > 0 else x_decoded_mean
             ),
             name="SEQ_2_SEQ_VAE",
         )
@@ -432,7 +432,10 @@ class SEQ_2_SEQ_GMVAE:
             return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
         gmvaep.compile(
-            loss=huber_loss, optimizer=Adam(lr=self.learn_rate,), metrics=["mae"],
+            loss=huber_loss,
+            optimizer=Adam(lr=self.learn_rate,),
+            metrics=["mae"],
+            loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
 
         return (
@@ -446,7 +449,6 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - weight components according to their loadings? (dying components do not contribute that much to the loss)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 

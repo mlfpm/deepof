@@ -45,8 +45,8 @@ parser.add_argument(
     "--predictor",
     "-pred",
     help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
-    default=True,
-    type=str2bool,
+    default=0,
+    type=float,
 )
 parser.add_argument(
     "--variational",
@@ -118,7 +118,7 @@ train_path = os.path.abspath(args.train_path)
 val_path = os.path.abspath(args.val_path)
 input_type = args.input_type
 k = args.components
-predictor = args.predictor
+predictor = float(args.predictor)
 variational = bool(args.variational)
 loss = args.loss
 kl_wu = args.kl_warmup
@@ -144,7 +144,7 @@ assert input_type in [
 
 run_ID = "{}{}{}{}{}{}_{}".format(
     ("GMVAE" if variational else "AE"),
-    ("P" if predictor and variational else ""),
+    ("P" if predictor > 0 and variational else ""),
     ("_components={}".format(k) if variational else ""),
     ("_loss={}".format(loss) if variational else ""),
     ("_kl_warmup={}".format(kl_wu) if variational else ""),
@@ -450,7 +450,7 @@ for run in range(runs):
         if "MMD" in loss and mmd_wu > 0:
             callbacks_.append(mmd_warmup_callback)
 
-        if not predictor:
+        if predictor == 0:
             history = gmvaep.fit(
                 x=input_dict_train[input_type],
                 y=input_dict_train[input_type],
