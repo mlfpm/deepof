@@ -440,9 +440,9 @@ for run in range(runs):
         callbacks_ = [
             tensorboard_callback,
             cp_callback,
-            tf.keras.callbacks.EarlyStopping(
-                "val_intercomponent_mmd", patience=1, restore_best_weights=True
-            ),
+            #tf.keras.callbacks.EarlyStopping(
+            #    "val_intercomponent_mmd", patience=5, restore_best_weights=True
+            #),
         ]
 
         if "ELBO" in loss and kl_wu > 0:
@@ -454,7 +454,7 @@ for run in range(runs):
             history = gmvaep.fit(
                 x=input_dict_train[input_type],
                 y=input_dict_train[input_type],
-                epochs=250,
+                epochs=1,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
