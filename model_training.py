@@ -488,6 +488,8 @@ if runs > 1:
     clust_assignments = pd.DataFrame(clust_assignments)
     clust_assignments.to_hdf(
         "DeepOF_cluster_assignments_across_{}_runs_{}".format(
-            runs, datetime.now().strftime("%Y%m%d-%H%M%S"), key="df", mode="w"
-        )
+            runs, datetime.now().strftime("%Y%m%d-%H%M%S")
+        ),
+        key="df",
+        mode="w",
     )
