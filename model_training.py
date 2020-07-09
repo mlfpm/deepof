@@ -104,6 +104,14 @@ parser.add_argument(
     type=int,
     default=512,
 )
+parser.add_argument(
+    "--stability-check",
+    "-s",
+    help="Sets the number of times that the model is trained and initialised. If greater than 1 (the default), "
+    "saves the cluster assignments to a dataframe on disk",
+    type=int,
+    default=1,
+)
 
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
@@ -119,6 +127,7 @@ hparams = args.hyperparameters
 encoding = args.encoding_size
 batch_size = args.batch_size
 overlap_loss = args.overlap_loss
+runs = args.stability_check
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -364,97 +373,119 @@ for input in input_dict_train.keys():
     print("{} validation shape: {}".format(input, input_dict_val[input].shape))
     print()
 
+
 # Training loop
-cp_callback = (
-    tf.keras.callbacks.ModelCheckpoint(
-        "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
-        verbose=1,
-        save_best_only=False,
-        save_weights_only=True,
-        save_freq="epoch",
-    ),
-)
+if runs > 1:
+    clust_assignments = {}
 
-if not variational:
-    encoder, decoder, ae = SEQ_2_SEQ_AE(
-        input_dict_train[input_type].shape, **hparams
-    ).build()
-    ae.build(input_dict_train[input_type].shape)
+for run in range(runs):
 
-    print(ae.summary())
-    ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
-    # Fit the specified model to the data
-    history = ae.fit(
-        x=input_dict_train[input_type],
-        y=input_dict_train[input_type],
-        epochs=250,
-        batch_size=batch_size,
-        verbose=1,
-        validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
-        callbacks=[
-            tensorboard_callback,
-            cp_callback,
-            tf.keras.callbacks.EarlyStopping(
-                "val_mae", patience=5, restore_best_weights=True
-            ),
-        ],
+    cp_callback = (
+        tf.keras.callbacks.ModelCheckpoint(
+            "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
+            verbose=1,
+            save_best_only=False,
+            save_weights_only=True,
+            save_freq="epoch",
+        ),
     )
 
-else:
-    (
-        encoder,
-        generator,
-        grouper,
-        gmvaep,
-        kl_warmup_callback,
-        mmd_warmup_callback,
-    ) = SEQ_2_SEQ_GMVAE(
-        input_dict_train[input_type].shape,
-        loss=loss,
-        number_of_components=k,
-        kl_warmup_epochs=kl_wu,
-        mmd_warmup_epochs=mmd_wu,
-        predictor=predictor,
-        overlap_loss=overlap_loss,
-        **hparams
-    ).build()
-    gmvaep.build(input_dict_train[input_type].shape)
+    if not variational:
+        encoder, decoder, ae = SEQ_2_SEQ_AE(
+            input_dict_train[input_type].shape, **hparams
+        ).build()
+        ae.build(input_dict_train[input_type].shape)
 
-    print(gmvaep.summary())
-
-    callbacks_ = [
-        tensorboard_callback,
-        cp_callback,
-        tf.keras.callbacks.EarlyStopping(
-            "val_intercomponent_mmd", patience=5, restore_best_weights=True
-        ),
-    ]
-
-    if "ELBO" in loss and kl_wu > 0:
-        callbacks_.append(kl_warmup_callback)
-    if "MMD" in loss and mmd_wu > 0:
-        callbacks_.append(mmd_warmup_callback)
-
-    if not predictor:
-        history = gmvaep.fit(
+        print(ae.summary())
+        ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
+        # Fit the specified model to the data
+        history = ae.fit(
             x=input_dict_train[input_type],
             y=input_dict_train[input_type],
             epochs=250,
             batch_size=batch_size,
             verbose=1,
             validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
-            callbacks=callbacks_,
+            callbacks=[
+                tensorboard_callback,
+                cp_callback,
+                tf.keras.callbacks.EarlyStopping(
+                    "val_mae", patience=5, restore_best_weights=True
+                ),
+            ],
         )
+
     else:
-        history = gmvaep.fit(
-            x=input_dict_train[input_type][:-1],
-            y=[input_dict_train[input_type][:-1], input_dict_train[input_type][1:]],
-            epochs=250,
-            batch_size=batch_size,
-            verbose=1,
-            validation_data=(
-                input_dict_val[input_type][:-1],
-                [input_dict_val[input_type][:-1], input_dict_val[input_type][1:]],
+        (
+            encoder,
+            generator,
+            grouper,
+            gmvaep,
+            kl_warmup_callback,
+            mmd_warmup_callback,
+        ) = SEQ_2_SEQ_GMVAE(
+            input_dict_train[input_type].shape,
+            loss=loss,
+            number_of_components=k,
+            kl_warmup_epochs=kl_wu,
+            mmd_warmup_epochs=mmd_wu,
+            predictor=predictor,
+            overlap_loss=overlap_loss,
+            **hparams
+        ).build()
+        gmvaep.build(input_dict_train[input_type].shape)
+
+        print(gmvaep.summary())
+
+        callbacks_ = [
+            tensorboard_callback,
+            cp_callback,
+            tf.keras.callbacks.EarlyStopping(
+                "val_intercomponent_mmd", patience=5, restore_best_weights=True
             ),
-            callbacks=callbacks_,
+        ]
+
+        if "ELBO" in loss and kl_wu > 0:
+            callbacks_.append(kl_warmup_callback)
+        if "MMD" in loss and mmd_wu > 0:
+            callbacks_.append(mmd_warmup_callback)
+
+        if not predictor:
+            history = gmvaep.fit(
+                x=input_dict_train[input_type],
+                y=input_dict_train[input_type],
+                epochs=250,
+                batch_size=batch_size,
+                verbose=1,
+                validation_data=(
+                    input_dict_val[input_type],
+                    input_dict_val[input_type],
+                ),
+                callbacks=callbacks_,
+            )
+        else:
+            history = gmvaep.fit(
+                x=input_dict_train[input_type][:-1],
+                y=[input_dict_train[input_type][:-1], input_dict_train[input_type][1:]],
+                epochs=250,
+                batch_size=batch_size,
+                verbose=1,
+                validation_data=(
+                    input_dict_val[input_type][:-1],
+                    [input_dict_val[input_type][:-1], input_dict_val[input_type][1:]],
+                ),
+                callbacks=callbacks_,
+            )
+
+        # If stability mode is enable (-s > 1), predict groups in the validation set and add them to the dictionary
+        if runs > 1:
+            clust_assignments[run] = grouper.predict(input_dict_train[input_type])
+
+# If specified (-s > 1), saves the resulting groupings to a dataframe on disk
+if runs > 1:
+    clust_assignments = pd.DataFrame(clust_assignments)
+    clust_assignments.to_hdf(
+        "DeepOF_cluster_assignments_across_{}_runs_{}".format(
+            runs, datetime.now().strftime("%Y%m%d-%H%M%S"), key="df", mode="w"
         )
+    )

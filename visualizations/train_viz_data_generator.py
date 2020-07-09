@@ -6,6 +6,7 @@ import sys
 sys.path.insert(1, "../")
 
 from copy import deepcopy
+from datetime import datetime
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import mean_absolute_error
 from source.preprocess import *
@@ -418,7 +419,10 @@ maedf["mae"] = [
     for i in range(1, len(checkpoints) + 2)
 ]
 
+# Time ID
+time = datetime.now().strftime("%Y%m%d-%H%M%S")
+
 # Save dataframes to .h5
-dfencs.to_hdf("dash_data_1.h5", key="df", mode="w")
-clust_occur.to_hdf("dash_data_2.h5", key="df", mode="w")
-maedf.to_hdf("dash_data_3.h5", key="df", mode="w")
+dfencs.to_hdf("dash_data_1_{}.h5".format(time), key="df", mode="w")
+clust_occur.to_hdf("dash_data_2_{}.h5".format(time), key="df", mode="w")
+maedf.to_hdf("dash_data_3_{}.h5".format(time), key="df", mode="w")
