@@ -440,9 +440,9 @@ for run in range(runs):
         callbacks_ = [
             tensorboard_callback,
             cp_callback,
-            # tf.keras.callbacks.EarlyStopping(
-            #    "val_intercomponent_mmd", patience=5, restore_best_weights=True
-            # ),
+            tf.keras.callbacks.EarlyStopping(
+               "val_intercomponent_mmd", patience=5, restore_best_weights=True
+            ),
         ]
 
         if "ELBO" in loss and kl_wu > 0:
@@ -454,7 +454,7 @@ for run in range(runs):
             history = gmvaep.fit(
                 x=input_dict_train[input_type],
                 y=input_dict_train[input_type],
-                epochs=1,
+                epochs=250,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
@@ -487,7 +487,7 @@ for run in range(runs):
 if runs > 1:
     clust_assignments = pd.DataFrame(clust_assignments)
     clust_assignments.to_hdf(
-        "DeepOF_cluster_assignments_across_{}_runs_{}".format(
+        "DeepOF_cluster_assignments_across_{}_runs_{}.h5".format(
             runs, datetime.now().strftime("%Y%m%d-%H%M%S")
         ),
         key="df",
