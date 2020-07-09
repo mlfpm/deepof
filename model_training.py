@@ -440,9 +440,9 @@ for run in range(runs):
         callbacks_ = [
             tensorboard_callback,
             cp_callback,
-            #tf.keras.callbacks.EarlyStopping(
+            # tf.keras.callbacks.EarlyStopping(
             #    "val_intercomponent_mmd", patience=5, restore_best_weights=True
-            #),
+            # ),
         ]
 
         if "ELBO" in loss and kl_wu > 0:
@@ -479,7 +479,9 @@ for run in range(runs):
 
         # If stability mode is enable (-s > 1), predict groups in the validation set and add them to the dictionary
         if runs > 1:
-            clust_assignments[run] = grouper.predict(input_dict_train[input_type])
+            clust_assignments[run] = np.argmax(
+                grouper.predict(input_dict_train[input_type]), axis=1
+            )
 
 # If specified (-s > 1), saves the resulting groupings to a dataframe on disk
 if runs > 1:
