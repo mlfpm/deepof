@@ -85,7 +85,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--encoding-size",
-    "--e",
+    "-e",
     help="Sets the dimensionality of the latent space. Defaults to 16.",
     default=16,
     type=int,
