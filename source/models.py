@@ -196,8 +196,8 @@ class SEQ_2_SEQ_GMVAE:
                 [
                     tfd.Independent(
                         tfd.Normal(
-                            loc=tf.random.normal(shape=[self.ENCODING], stddev=25),
-                            scale=1,
+                            loc=tf.random.normal(shape=[self.ENCODING], stddev=10),
+                            scale=10,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
