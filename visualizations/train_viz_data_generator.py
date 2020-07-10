@@ -8,6 +8,7 @@ sys.path.insert(1, "../")
 from copy import deepcopy
 from datetime import datetime
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.manifold import TSNE
 from sklearn.metrics import mean_absolute_error
 from source.preprocess import *
 from source.models import *
@@ -16,6 +17,7 @@ import argparse
 import numpy as np
 import os, pickle, re
 import pandas as pd
+import umap
 
 
 def str2bool(v):
@@ -103,7 +105,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--encoding-size",
-    "--e",
+    "-e",
     help="Sets the dimensionality of the latent space. Defaults to 16.",
     default=16,
     type=int,
@@ -116,10 +118,17 @@ parser.add_argument(
 )
 parser.add_argument(
     "--samples",
-    "--s",
+    "-s",
     help="Sets the number of samples (without replacement) to take from the validation set.",
     default=5000,
     type=int,
+)
+parser.add_argument(
+    "--reducer",
+    "-r",
+    help="Sets the dimensionality reduction method of preference to represent the latent space",
+    default="umap",
+    type=str,
 )
 
 args = parser.parse_args()
@@ -133,6 +142,7 @@ hparams = args.hyperparameters
 encoding = args.encoding_size
 checkpoints = args.checkpoint_path
 samples = args.samples
+red = args.reducer
 
 if not data_path:
     raise ValueError("Set a valid data path for the data to be loaded")
@@ -346,7 +356,15 @@ for checkpoint in tqdm(checkpoints):
 print("Done!")
 
 print("Reducing latent space to 2 dimensions for dataviz...")
-reducer = LinearDiscriminantAnalysis(n_components=2)
+if red == "LDA":
+    reducer = LinearDiscriminantAnalysis(n_components=2)
+
+elif red == "UMAP":
+    reducer = umap.UMAP(n_components=2)
+
+elif red == "tSNE":
+    reducer = TSNE(n_components=2)
+
 encs = []
 for i in range(len(checkpoints) + 1):
 
@@ -356,11 +374,19 @@ for i in range(len(checkpoints) + 1):
             if variational
             else np.zeros(samples)
         )
-        encs.append(reducer.fit_transform(predictions[i], clusts))
+        if red == "LDA":
+            encs.append(reducer.fit_transform(predictions[i], clusts))
+        else:
+            encs.append(reducer.fit_transform(predictions[i]))
     else:
-        encs.append(
-            reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
-        )
+        if red == "LDA":
+            encs.append(
+                reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
+            )
+        else:
+            encs.append(reducer.fit_transform(predictions[i]))
+
+
 
 # As projection direction is difficult to predict in LDA,
 # axes are flipped to maintain subsequent representations
