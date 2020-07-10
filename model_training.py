@@ -36,10 +36,10 @@ parser.add_argument(
     "--input-type",
     "-d",
     help="Select an input type for the autoencoder hypermodels. \
-    It must be one of coords, dists, angles, coords+dist, coords+angle or coords+dist+angle. \
+    It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. \
     Defaults to coords.",
     type=str,
-    default="coords",
+    default="dists",
 )
 parser.add_argument(
     "--predictor",
@@ -139,6 +139,7 @@ assert input_type in [
     "angles",
     "coords+dist",
     "coords+angle",
+    "dists+angle",
     "coords+dist+angle",
 ], "Invalid input type. Type python model_training.py -h for help."
 
@@ -234,6 +235,7 @@ distances1 = DLC_social_1_coords.get_distances()
 angles1 = DLC_social_1_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
 coords_angles1 = merge_tables(coords1, angles1)
+dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 # Coordinates for validation data
@@ -242,6 +244,7 @@ distances2 = DLC_social_2_coords.get_distances()
 angles2 = DLC_social_2_coords.get_angles()
 coords_distances2 = merge_tables(coords2, distances2)
 coords_angles2 = merge_tables(coords2, angles2)
+dists_angles2 = merge_tables(distances2, angles2)
 coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
 
 
@@ -279,6 +282,14 @@ input_dict_train = {
         sigma=55,
     ),
     "coords+angle": coords_angles1.preprocess(
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=55,
+    ),
+    "dists+angle": dists_angles1.preprocess(
         window_size=11,
         window_step=10,
         scale=True,
@@ -342,6 +353,14 @@ input_dict_val = {
         sigma=55,
         shuffle=True,
     ),
+    "dists+angle": dists_angles2.preprocess(
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=55,
+    ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
         window_size=11,
         window_step=1,
@@ -364,6 +383,9 @@ if runs > 1:
     clust_assignments = {}
 
 for run in range(runs):
+
+    # To avoid stability issues
+    tf.keras.backend.clear_session()
 
     run_ID = "{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
