@@ -459,7 +459,6 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - tune LSTM to work with cuDNN kernel
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 
