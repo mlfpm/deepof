@@ -70,7 +70,7 @@ parser.add_argument(
     "--input-type",
     "-d",
     help="Select an input type for the autoencoder hypermodels. \
-    It must be one of coords, dists, angles, coords+dist, coords+angle or coords+dist+angle. \
+    It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. \
     Defaults to coords.",
     type=str,
     default="coords",
@@ -227,6 +227,7 @@ distances1 = DLC_social_coords.get_distances()
 angles1 = DLC_social_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
 coords_angles1 = merge_tables(coords1, angles1)
+dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 input_dict = {
@@ -274,6 +275,14 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+    ),
+    "dists+angle": dists_angles1.preprocess(
+        window_size=11,
+        window_step=10,
+        scale=True,
+        random_state=42,
+        filter="gaussian",
+        sigma=55,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
