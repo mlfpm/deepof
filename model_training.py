@@ -398,7 +398,9 @@ for run in range(runs):
     )
 
     log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
-    tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+    tensorboard_callback = keras.callbacks.TensorBoard(
+        log_dir=log_dir, histogram_freq=1
+    )
 
     cp_callback = (
         tf.keras.callbacks.ModelCheckpoint(

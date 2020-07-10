@@ -200,7 +200,7 @@ class SEQ_2_SEQ_GMVAE:
                 [
                     tfd.Independent(
                         tfd.Normal(
-                            loc=tf.random.normal(shape=[self.ENCODING], stddev=10),
+                            loc=tf.random.normal(shape=[self.ENCODING], stddev=15),
                             scale=1,
                         ),
                         reinterpreted_batch_ndims=1,
@@ -418,7 +418,9 @@ class SEQ_2_SEQ_GMVAE:
         gmvaep = Model(
             inputs=x,
             outputs=(
-                [x_decoded_mean, x_predicted_mean] if self.predictor > 0 else x_decoded_mean
+                [x_decoded_mean, x_predicted_mean]
+                if self.predictor > 0
+                else x_decoded_mean
             ),
             name="SEQ_2_SEQ_VAE",
         )
