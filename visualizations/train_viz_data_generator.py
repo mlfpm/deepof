@@ -152,6 +152,7 @@ assert input_type in [
     "angles",
     "coords+dist",
     "coords+angle",
+    "dists+angle",
     "coords+dist+angle",
 ], "Invalid input type. Type python train_viz_app.py -h for help."
 
