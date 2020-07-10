@@ -289,11 +289,12 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self, center=True, polar=False, speed=0, length=None):
+    def get_coords(self, center="arena", polar=False, speed=0, length=None):
         tabs = deepcopy(self._tables)
 
-        if center:
+        if center == "arena":
             if self._arena == "circular":
+
                 for i, (key, value) in enumerate(tabs.items()):
                     value.loc[:, (slice("coords"), ["x"])] = (
                         value.loc[:, (slice("coords"), ["x"])] - self._scales[i][0] / 2
@@ -302,6 +303,19 @@ class coordinates:
                     value.loc[:, (slice("coords"), ["y"])] = (
                         value.loc[:, (slice("coords"), ["y"])] - self._scales[i][1] / 2
                     )
+
+        elif type(center) == str and center != "arena":
+
+            for i, (key, value) in enumerate(tabs.items()):
+                value.loc[:, (slice("coords"), ["x"])] = value.loc[
+                    :, (slice("coords"), ["x"])
+                ].subtract(value[center]["x"], axis=0)
+
+                value.loc[:, (slice("coords"), ["y"])] = value.loc[
+                    :, (slice("coords"), ["y"])
+                ].subtract(value[center]["y"], axis=0)
+
+                tabs[key] = value.loc[:, [tab for tab in value.columns if tab[0] != center]]
 
         if polar:
             for key, tab in tabs.items():

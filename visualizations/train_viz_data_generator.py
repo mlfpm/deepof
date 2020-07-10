@@ -391,11 +391,12 @@ for i in range(len(checkpoints) + 1):
     else:
         if red == "LDA":
             encs.append(
-                reducer.fit_transform(predictions[i], np.argmax(clusters[i - 1], axis=1))
+                reducer.fit_transform(
+                    predictions[i], np.argmax(clusters[i - 1], axis=1)
+                )
             )
         else:
             encs.append(reducer.fit_transform(predictions[i]))
-
 
 
 # As projection direction is difficult to predict in LDA,
