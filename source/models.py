@@ -54,6 +54,7 @@ class SEQ_2_SEQ_AE:
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
             )
@@ -62,6 +63,7 @@ class SEQ_2_SEQ_AE:
             LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=False,
                 kernel_constraint=UnitNorm(axis=0),
             )
@@ -97,6 +99,7 @@ class SEQ_2_SEQ_AE:
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
@@ -105,6 +108,7 @@ class SEQ_2_SEQ_AE:
             LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
@@ -223,6 +227,7 @@ class SEQ_2_SEQ_GMVAE:
             LSTM(
                 self.LSTM_units_1,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
             )
@@ -231,6 +236,7 @@ class SEQ_2_SEQ_GMVAE:
             LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=False,
                 kernel_constraint=UnitNorm(axis=0),
             )
@@ -264,6 +270,7 @@ class SEQ_2_SEQ_GMVAE:
             LSTM(
                 self.LSTM_units_2,
                 activation="tanh",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
@@ -272,6 +279,7 @@ class SEQ_2_SEQ_GMVAE:
             LSTM(
                 self.LSTM_units_1,
                 activation="sigmoid",
+                recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
             )
@@ -384,6 +392,7 @@ class SEQ_2_SEQ_GMVAE:
                 LSTM(
                     self.LSTM_units_1,
                     activation="tanh",
+                    recurrent_activation="sigmoid",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
                 )
@@ -392,7 +401,8 @@ class SEQ_2_SEQ_GMVAE:
             predictor = Bidirectional(
                 LSTM(
                     self.LSTM_units_1,
-                    activation="sigmoid",
+                    activation="tanh",
+                    recurrent_activation="sigmoid",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
                 )
@@ -449,6 +459,7 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
+#       - tune LSTM to work with cuDNN kernel
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 
