@@ -195,7 +195,7 @@ DLC_social_1 = project(
         "B_Right_flank",
         "B_Tail_base",
     ],
-    ego=False,
+    ego="B_Center",
     angles=True,
     connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
@@ -217,7 +217,7 @@ DLC_social_2 = project(
         "B_Right_flank",
         "B_Tail_base",
     ],
-    ego=False,
+    ego="B_Center",
     angles=True,
     connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
