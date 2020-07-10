@@ -157,8 +157,6 @@ else:
         "learning_rate": 1e-3,
     }
 
-tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-
 with open(
     os.path.join(
         train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
@@ -378,6 +376,7 @@ for run in range(runs):
     )
 
     log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
+    tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
     cp_callback = (
         tf.keras.callbacks.ModelCheckpoint(
