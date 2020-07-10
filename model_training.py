@@ -142,19 +142,6 @@ assert input_type in [
     "coords+dist+angle",
 ], "Invalid input type. Type python model_training.py -h for help."
 
-run_ID = "{}{}{}{}{}{}_{}".format(
-    ("GMVAE" if variational else "AE"),
-    ("P" if predictor > 0 and variational else ""),
-    ("_components={}".format(k) if variational else ""),
-    ("_loss={}".format(loss) if variational else ""),
-    ("_kl_warmup={}".format(kl_wu) if variational else ""),
-    ("_mmd_warmup={}".format(mmd_wu) if variational else ""),
-    datetime.now().strftime("%Y%m%d-%H%M%S"),
-)
-
-log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
-
-
 # Loads hyperparameters, most likely obtained from hyperparameter_tuning.py
 if hparams is not None:
     with open(hparams, "rb") as handle:
@@ -379,6 +366,18 @@ if runs > 1:
     clust_assignments = {}
 
 for run in range(runs):
+
+    run_ID = "{}{}{}{}{}{}_{}".format(
+        ("GMVAE" if variational else "AE"),
+        ("P" if predictor > 0 and variational else ""),
+        ("_components={}".format(k) if variational else ""),
+        ("_loss={}".format(loss) if variational else ""),
+        ("_kl_warmup={}".format(kl_wu) if variational else ""),
+        ("_mmd_warmup={}".format(mmd_wu) if variational else ""),
+        datetime.now().strftime("%Y%m%d-%H%M%S"),
+    )
+
+    log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
 
     cp_callback = (
         tf.keras.callbacks.ModelCheckpoint(
