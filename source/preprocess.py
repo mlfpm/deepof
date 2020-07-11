@@ -315,7 +315,9 @@ class coordinates:
                     :, (slice("coords"), ["y"])
                 ].subtract(value[center]["y"], axis=0)
 
-                tabs[key] = value.loc[:, [tab for tab in value.columns if tab[0] != center]]
+                tabs[key] = value.loc[
+                    :, [tab for tab in value.columns if tab[0] != center]
+                ]
 
         if polar:
             for key, tab in tabs.items():

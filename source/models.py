@@ -194,14 +194,16 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.prior == "standard_normal":
             self.prior = tfd.mixture.Mixture(
-                tfd.categorical.Categorical(
+                cat=tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
-                [
+                components=[
                     tfd.Independent(
                         tfd.Normal(
-                            loc=tf.random.normal(shape=[self.ENCODING], stddev=15),
-                            scale=1,
+                            loc=tf.random.uniform(
+                                shape=[self.ENCODING], minval=0, maxval=15
+                            ),
+                            scale=10,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
