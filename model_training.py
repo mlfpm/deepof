@@ -230,7 +230,7 @@ DLC_social_1_coords = DLC_social_1.run(verbose=True)
 DLC_social_2_coords = DLC_social_2.run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_1_coords.get_coords()
+coords1 = DLC_social_1_coords.get_coords(center="B_Center")
 distances1 = DLC_social_1_coords.get_distances()
 angles1 = DLC_social_1_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
@@ -239,7 +239,7 @@ dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 # Coordinates for validation data
-coords2 = DLC_social_2_coords.get_coords()
+coords2 = DLC_social_2_coords.get_coords(center="B_Center")
 distances2 = DLC_social_2_coords.get_distances()
 angles2 = DLC_social_2_coords.get_angles()
 coords_distances2 = merge_tables(coords2, distances2)
