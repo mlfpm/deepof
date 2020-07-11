@@ -203,7 +203,7 @@ class SEQ_2_SEQ_GMVAE:
                             loc=tf.random.uniform(
                                 shape=[self.ENCODING], minval=0, maxval=15
                             ),
-                            scale=10,
+                            scale=1,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
