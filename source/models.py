@@ -193,21 +193,21 @@ class SEQ_2_SEQ_GMVAE:
         self.overlap_loss = overlap_loss
 
         if self.prior == "standard_normal":
+
+            init_means = far_away_uniform_initialiser(
+                [self.number_of_components, self.ENCODING], minval=0, maxval=15
+            )
+
             self.prior = tfd.mixture.Mixture(
                 cat=tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
                 components=[
                     tfd.Independent(
-                        tfd.Normal(
-                            loc=tf.random.uniform(
-                                shape=[self.ENCODING], minval=0, maxval=15
-                            ),
-                            scale=1,
-                        ),
+                        tfd.Normal(loc=init_means[k], scale=1,),
                         reinterpreted_batch_ndims=1,
                     )
-                    for _ in range(self.number_of_components)
+                    for k in range(self.number_of_components)
                 ],
             )
 
