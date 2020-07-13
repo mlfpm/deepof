@@ -434,6 +434,8 @@ for run in range(runs):
             ],
         )
 
+        ae.save_weights("{}_final_weights.h5".format(run_ID))
+
     else:
         (
             encoder,
@@ -495,6 +497,8 @@ for run in range(runs):
                 ),
                 callbacks=callbacks_,
             )
+
+        gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
 
         # If stability mode is enable (-s > 1), predict groups in the validation set and add them to the dictionary
         if runs > 1:
