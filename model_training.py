@@ -384,9 +384,6 @@ if runs > 1:
 
 for run in range(runs):
 
-    # To avoid stability issues
-    tf.keras.backend.clear_session()
-
     run_ID = "{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
         ("P" if predictor > 0 and variational else ""),
@@ -504,6 +501,9 @@ for run in range(runs):
             clust_assignments[run] = np.argmax(
                 grouper.predict(input_dict_train[input_type]), axis=1
             )
+
+    # To avoid stability issues
+    tf.keras.backend.clear_session()
 
 # If specified (-s > 1), saves the resulting groupings to a dataframe on disk
 if runs > 1:
