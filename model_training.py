@@ -384,6 +384,9 @@ if runs > 1:
 
 for run in range(runs):
 
+    # To avoid stability issues
+    tf.keras.backend.clear_session()
+
     run_ID = "{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
         ("P" if predictor > 0 and variational else ""),

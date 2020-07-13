@@ -10,7 +10,7 @@ from source.models import *
 from tqdm import tqdm
 import argparse
 import cv2
-import os, pickle, re
+import os, pickle
 
 
 def str2bool(v):
@@ -89,6 +89,13 @@ parser.add_argument(
 parser.add_argument(
     "--video-name", "-n", help="Sets the video to process", type=str,
 )
+parser.add_argument(
+    "--frame-limit",
+    "-f",
+    help="Sets the maximum number of frames of video to process",
+    type=int,
+    default=-1,
+)
 
 args = parser.parse_args()
 data_path = os.path.abspath(args.data_path)
@@ -101,6 +108,7 @@ hparams = args.hyperparameters
 encoding = args.encoding_size
 model_path = args.model_path
 video_name = args.video_name
+frame_limit = args.frame_limit
 
 if not data_path:
     raise ValueError("Set a valid data path for the data to be loaded")
@@ -189,7 +197,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
     "dists": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -200,7 +208,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
     "angles": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -211,7 +219,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
     "coords+dist": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -222,7 +230,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
     "coords+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -233,7 +241,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
     "dists+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -254,7 +262,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
-        shuffle=True,
+        shuffle=False,
     ),
 }
 
@@ -273,7 +281,31 @@ ae.build(input_dict[input_type].shape)
 ae.load_weights(model_path)
 
 # Predict cluster labels per frame
-frame_labels = np.argmax(grouper.predict(input_dict[input_type]))
+frame_labels = np.argmax(grouper.predict(input_dict[input_type]), axis=1)
 
 print(frame_labels)
 print(frame_labels.shape)
+
+# Open video and print cluster label
+cap = cv2.VideoCapture(
+    os.path.join(
+        data_path,
+        "Videos",
+        [i for i in os.listdir(os.path.join(data_path, "Videos")) if video_name in i][
+            0
+        ],
+    ),
+)
+
+# Loop over the first frames in the video to get resolution and center of the arena
+if frame_limit == -1:
+    frame_limit = np.inf
+fnum = 0
+while cap.isOpened() and fnum < frame_limit:
+    ret, frame = cap.read()
+    # if frame is read correctly ret is True
+    if not ret:
+        print("Can't receive frame (stream end?). Exiting ...")
+        break
+
+
