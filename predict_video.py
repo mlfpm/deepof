@@ -308,5 +308,3 @@ while cap.isOpened() and fnum < frame_limit:
     if not ret:
         print("Can't receive frame (stream end?). Exiting ...")
         break
-
-

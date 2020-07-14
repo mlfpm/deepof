@@ -434,7 +434,7 @@ for run in range(runs):
                 tensorboard_callback,
                 cp_callback,
                 tf.keras.callbacks.EarlyStopping(
-                    "val_mae", patience=15, restore_best_weights=True
+                    "val_mae", patience=5, restore_best_weights=True
                 ),
             ],
         )
@@ -467,7 +467,7 @@ for run in range(runs):
             tensorboard_callback,
             cp_callback,
             tf.keras.callbacks.EarlyStopping(
-                "val_intercomponent_mmd", patience=15, restore_best_weights=True
+                "val_intercomponent_mmd", patience=5, restore_best_weights=True
             ),
         ]
 
@@ -517,10 +517,8 @@ for run in range(runs):
 # If specified (-s > 1), saves the resulting groupings to a dataframe on disk
 if runs > 1:
     clust_assignments = pd.DataFrame(clust_assignments)
-    clust_assignments.to_hdf(
-        "DeepOF_cluster_assignments_across_{}_runs_{}.h5".format(
+    clust_assignments.to_csv(
+        "DeepOF_cluster_assignments_across_{}_runs_{}.csv".format(
             runs, datetime.now().strftime("%Y%m%d-%H%M%S")
-        ),
-        key="df",
-        mode="w",
+        )
     )
