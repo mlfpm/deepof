@@ -96,6 +96,13 @@ parser.add_argument(
     type=int,
     default=-1,
 )
+parser.add_argument(
+    "--action",
+    "-a",
+    help="Defines the action to take regarding the video. Must be 'show' or 'save'",
+    type=int,
+    default=-1,
+)
 
 args = parser.parse_args()
 data_path = os.path.abspath(args.data_path)
@@ -109,6 +116,7 @@ encoding = args.encoding_size
 model_path = args.model_path
 video_name = args.video_name
 frame_limit = args.frame_limit
+action = args.action
 
 if not data_path:
     raise ValueError("Set a valid data path for the data to be loaded")
@@ -301,10 +309,51 @@ cap = cv2.VideoCapture(
 # Loop over the first frames in the video to get resolution and center of the arena
 if frame_limit == -1:
     frame_limit = np.inf
-fnum = 0
+
+fnum, h, w = 0, 0, 0
+if action == "save":
+    writer = None
+
 while cap.isOpened() and fnum < frame_limit:
+
     ret, frame = cap.read()
     # if frame is read correctly ret is True
     if not ret:
         print("Can't receive frame (stream end?). Exiting ...")
         break
+
+    font = cv2.FONT_HERSHEY_COMPLEX_SMALL
+
+    # Store video resolution
+    if h == None and w == None:
+        h, w = frame.shape[0], frame.shape[1]
+
+    # Label positions
+    downleft = (int(w * 0.3 / 10), int(h / 1.05))
+
+    cv2.putText(
+        str(frame_labels[fnum]), "Nose-Nose", downleft, font, 1, (255, 255, 255), 2,
+    )
+
+    if action == "show":
+        cv2.imshow("frame", frame)
+
+    elif action == "save":
+
+        if writer is None:
+            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
+            # Define the FPS. Also frame size is passed.
+            writer = cv2.VideoWriter()
+            writer.open(
+                video_name + "_tagged_clusters.avi",
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                30,
+                (frame.shape[1], frame.shape[0]),
+                True,
+            )
+        writer.write(frame)
+
+    if cv2.waitKey(1) == ord("q"):
+        break
+
+    fnum += 1
