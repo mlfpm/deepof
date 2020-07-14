@@ -28,10 +28,10 @@ class project:
         table_format=".h5",
         path=".",
         exp_conditions=False,
+        subset_condition=None,
         arena="circular",
         smooth_alpha=0.1,
         arena_dims=[1],
-        center_coords=True,
         distances="All",
         ego=False,
         angles=True,
@@ -48,12 +48,12 @@ class project:
             [tab for tab in os.listdir(self.table_path) if tab.endswith(table_format)]
         )
         self.exp_conditions = exp_conditions
+        self.subset_condition = subset_condition
         self.table_format = table_format
         self.video_format = video_format
         self.arena = arena
         self.arena_dims = arena_dims
         self.smooth_alpha = smooth_alpha
-        self.center_coords = center_coords
         self.distances = distances
         self.ego = ego
         self.angles = angles
@@ -125,6 +125,26 @@ class project:
 
         for key, tab in table_dict.items():
             table_dict[key] = tab[tab.columns.levels[0][0]]
+
+        if self.subset_condition:
+            for key, value in table_dict.items():
+                lablist = [
+                    b
+                    for b in value.columns.levels[0]
+                    if not b.startswith(self.subset_condition)
+                ]
+
+                tabcols = value.drop(
+                    lablist, axis=1, level=0
+                ).T.index.remove_unused_levels()
+
+                tab = value.loc[
+                    :, [i for i in value.columns.levels[0] if i not in lablist]
+                ]
+
+                tab.columns = tabcols
+
+                table_dict[key] = tab
 
         return table_dict, lik_dict
 

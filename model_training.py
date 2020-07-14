@@ -185,7 +185,7 @@ bp_dict = {
 
 DLC_social_1 = project(
     path=train_path,  # Path where to find the required files
-    smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
+    smooth_alpha=0.90,  # Alpha value for exponentially weighted smoothing
     distances=[
         "B_Center",
         "B_Nose",
@@ -196,6 +196,7 @@ DLC_social_1 = project(
         "B_Tail_base",
     ],
     ego="B_Center",
+    subset_condition="B",
     angles=True,
     connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
@@ -207,7 +208,7 @@ DLC_social_1 = project(
 
 DLC_social_2 = project(
     path=val_path,  # Path where to find the required files
-    smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
+    smooth_alpha=0.9,  # Alpha value for exponentially weighted smoothing
     distances=[
         "B_Center",
         "B_Nose",
@@ -218,6 +219,7 @@ DLC_social_2 = project(
         "B_Tail_base",
     ],
     ego="B_Center",
+    subset_condition="B",
     angles=True,
     connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
