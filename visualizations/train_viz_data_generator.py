@@ -223,7 +223,7 @@ DLC_social = project(
 DLC_social_coords = DLC_social.run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_coords.get_coords()
+coords1 = DLC_social_coords.get_coords(center="B_Center")
 distances1 = DLC_social_coords.get_distances()
 angles1 = DLC_social_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
