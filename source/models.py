@@ -195,7 +195,7 @@ class SEQ_2_SEQ_GMVAE:
         if self.prior == "standard_normal":
 
             init_means = far_away_uniform_initialiser(
-                [self.number_of_components, self.ENCODING], minval=0, maxval=1
+                [self.number_of_components, self.ENCODING], minval=0, maxval=5
             )
 
             self.prior = tfd.mixture.Mixture(
