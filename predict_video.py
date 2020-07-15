@@ -100,8 +100,8 @@ parser.add_argument(
     "--action",
     "-a",
     help="Defines the action to take regarding the video. Must be 'show' or 'save'",
-    type=int,
-    default=-1,
+    type=str,
+    default=None,
 )
 
 args = parser.parse_args()
@@ -329,10 +329,10 @@ while cap.isOpened() and fnum < frame_limit:
         h, w = frame.shape[0], frame.shape[1]
 
     # Label positions
-    downleft = (int(w * 0.3 / 10), int(h / 1.05))
+    downleft = (30, 30)
 
     cv2.putText(
-        str(frame_labels[fnum]), "Nose-Nose", downleft, font, 1, (255, 255, 255), 2,
+        frame, str(frame_labels[fnum]), downleft, font, 1, (255, 255, 255), 2,
     )
 
     if action == "show":
