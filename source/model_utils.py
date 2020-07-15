@@ -13,7 +13,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 # Helper functions
-def far_away_uniform_initialiser(shape, minval=0, maxval=15, iters=1000000):
+def far_away_uniform_initialiser(shape, minval=0, maxval=15, iters=10000000):
     """
     Returns a uniformly initialised matrix in which the columns are as far as possible
     """
