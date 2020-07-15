@@ -7,7 +7,6 @@ sys.path.insert(1, "../")
 
 from source.preprocess import *
 from source.models import *
-from tqdm import tqdm
 import argparse
 import cv2
 import os, pickle
