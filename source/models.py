@@ -463,6 +463,8 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
+#       - NEW LABELLING
+#       - data augmentation with rotation
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
 #       - compare prior and posterior
