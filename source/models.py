@@ -463,7 +463,7 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - NEW LABELLING
+#       - Learning rate scheduler (for faster / better convergence)
 #       - data augmentation with rotation
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
