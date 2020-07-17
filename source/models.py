@@ -467,7 +467,6 @@ class SEQ_2_SEQ_GMVAE:
 #       - data augmentation with rotation
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
-#       - compare prior and posterior
 
 # TODO (in the non-immediate future):
 #       - Try Bayesian nets!
