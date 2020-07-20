@@ -173,6 +173,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_loss=False,
+        entropy_reg_weight=1,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -191,6 +192,7 @@ class SEQ_2_SEQ_GMVAE:
         self.number_of_components = number_of_components
         self.predictor = predictor
         self.overlap_loss = overlap_loss
+        self.entropy_reg_weight = entropy_reg_weight
 
         if self.prior == "standard_normal":
 
@@ -302,6 +304,7 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
+        z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components

@@ -268,3 +268,30 @@ class Latent_space_control(Layer):
                 self.add_loss(-K.mean(silhouette), inputs=[z, hard_labels])
 
         return z
+
+
+class Entropy_regulariser(Layer):
+    """
+    Identity layer that adds cluster weight entropy to the loss function
+    """
+
+    def __init__(self, weight=False, *args, **kwargs):
+        self.weight = weight
+        super(Entropy_regulariser, self).__init__(*args, **kwargs)
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({"weight": self.weight})
+
+    def call(self, z, **kwargs):
+
+        entropy = K.sum(
+            tf.multiply(z, tf.where(~tf.math.is_inf(K.log(z)), K.log(z), 0)), axis=0
+        )
+
+        # Adds metric that monitors dead neurons in the latent space
+        self.add_metric(-entropy, aggregation="mean", name="weight_entropy")
+
+        self.add_loss(-K.mean(entropy), inputs=[z])
+
+        return z
