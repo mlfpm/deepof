@@ -233,7 +233,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E2 = Bidirectional(
@@ -242,19 +242,19 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=False,
-                #kernel_constraint=UnitNorm(axis=0),
+                kernel_constraint=UnitNorm(axis=0),
             )
         )
         Model_E3 = Dense(
             self.DENSE_1,
             activation="relu",
-            #kernel_constraint=UnitNorm(axis=0),
+            kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
         Model_E4 = Dense(
             self.DENSE_2,
             activation="relu",
-            #kernel_constraint=UnitNorm(axis=0),
+            kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
 
@@ -276,7 +276,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-               # kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
         Model_D5 = Bidirectional(
@@ -285,7 +285,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="sigmoid",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-               # kernel_constraint=UnitNorm(axis=1),
+                kernel_constraint=UnitNorm(axis=1),
             )
         )
 
@@ -333,7 +333,7 @@ class SEQ_2_SEQ_GMVAE:
                     for k in range(self.number_of_components)
                 ],
             ),
-            #activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )([z_cat, z_gauss])
 
         # Define and control custom loss functions
@@ -401,7 +401,7 @@ class SEQ_2_SEQ_GMVAE:
                     activation="tanh",
                     recurrent_activation="sigmoid",
                     return_sequences=True,
-                   # kernel_constraint=UnitNorm(axis=1),
+                    kernel_constraint=UnitNorm(axis=1),
                 )
             )(predictor)
             predictor = BatchNormalization()(predictor)
@@ -411,7 +411,7 @@ class SEQ_2_SEQ_GMVAE:
                     activation="tanh",
                     recurrent_activation="sigmoid",
                     return_sequences=True,
-                   # kernel_constraint=UnitNorm(axis=1),
+                    kernel_constraint=UnitNorm(axis=1),
                 )
             )(predictor)
             predictor = BatchNormalization()(predictor)
@@ -468,14 +468,8 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
+#       - Investigate posterior collapse
 #       - Learning rate scheduler (for faster / better convergence)
-#       - data augmentation with rotation
+#       - data augmentation with rotation / always align fist frame with an axis
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
-
-# TODO (in the non-immediate future):
-#       - Try Bayesian nets!
-#       - MCMC sampling (n>1) (already suported by tfp! we should try it)
-#       - free bits paper
-#       - Attention mechanism for encoder / decoder (does it make sense?)
-#       - Transformer encoder/decoder (does it make sense?)
