@@ -306,9 +306,9 @@ class SEQ_2_SEQ_GMVAE:
         z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
         z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
-            tfpl.IndependentNormal.params_size(
-                self.ENCODING * self.number_of_components
-            ),
+            #tfpl.IndependentNormal.params_size(
+                self.ENCODING * self.number_of_components,
+            #),
             activation=None,
         )(encoder)
 
@@ -326,7 +326,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=tf.ones(shape=self.ENCODING)#softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
