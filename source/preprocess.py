@@ -312,36 +312,60 @@ class coordinates:
     def get_coords(self, center="arena", polar=False, speed=0, length=None):
         tabs = deepcopy(self._tables)
 
+        if polar:
+            for key, tab in tabs.items():
+                tabs[key] = tab2polar(tab)
+
         if center == "arena":
             if self._arena == "circular":
 
                 for i, (key, value) in enumerate(tabs.items()):
-                    value.loc[:, (slice("coords"), ["x"])] = (
-                        value.loc[:, (slice("coords"), ["x"])] - self._scales[i][0] / 2
-                    )
 
-                    value.loc[:, (slice("coords"), ["y"])] = (
-                        value.loc[:, (slice("coords"), ["y"])] - self._scales[i][1] / 2
-                    )
+                    try:
+                        value.loc[:, (slice("coords"), ["x"])] = (
+                            value.loc[:, (slice("coords"), ["x"])]
+                            - self._scales[i][0] / 2
+                        )
+
+                        value.loc[:, (slice("coords"), ["y"])] = (
+                            value.loc[:, (slice("coords"), ["y"])]
+                            - self._scales[i][1] / 2
+                        )
+                    except KeyError:
+                        value.loc[:, (slice("coords"), ["rho"])] = (
+                            value.loc[:, (slice("coords"), ["rho"])]
+                            - self._scales[i][0] / 2
+                        )
+
+                        value.loc[:, (slice("coords"), ["phi"])] = (
+                            value.loc[:, (slice("coords"), ["phi"])]
+                            - self._scales[i][1] / 2
+                        )
 
         elif type(center) == str and center != "arena":
 
             for i, (key, value) in enumerate(tabs.items()):
-                value.loc[:, (slice("coords"), ["x"])] = value.loc[
-                    :, (slice("coords"), ["x"])
-                ].subtract(value[center]["x"], axis=0)
 
-                value.loc[:, (slice("coords"), ["y"])] = value.loc[
-                    :, (slice("coords"), ["y"])
-                ].subtract(value[center]["y"], axis=0)
+                try:
+                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
+                        :, (slice("coords"), ["x"])
+                    ].subtract(value[center]["x"], axis=0)
+
+                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
+                        :, (slice("coords"), ["y"])
+                    ].subtract(value[center]["y"], axis=0)
+                except KeyError:
+                    value.loc[:, (slice("coords"), ["rho"])] = value.loc[
+                        :, (slice("coords"), ["rho"])
+                    ].subtract(value[center]["rho"], axis=0)
+
+                    value.loc[:, (slice("coords"), ["phi"])] = value.loc[
+                        :, (slice("coords"), ["phi"])
+                    ].subtract(value[center]["phi"], axis=0)
 
                 tabs[key] = value.loc[
                     :, [tab for tab in value.columns if tab[0] != center]
                 ]
-
-        if polar:
-            for key, tab in tabs.items():
-                tabs[key] = tab2polar(tab)
 
         if speed:
             for order in range(speed):
