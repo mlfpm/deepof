@@ -313,9 +313,11 @@ class SEQ_2_SEQ_GMVAE:
         )(encoder)
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
-        z_gauss = Gaussian_mixture_overlap(
-            self.ENCODING, self.number_of_components, loss=self.overlap_loss,
-        )(z_gauss)
+
+        if self.overlap_loss:
+            z_gauss = Gaussian_mixture_overlap(
+                self.ENCODING, self.number_of_components, loss=self.overlap_loss,
+            )(z_gauss)
 
         z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
