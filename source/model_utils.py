@@ -275,7 +275,7 @@ class Entropy_regulariser(Layer):
     Identity layer that adds cluster weight entropy to the loss function
     """
 
-    def __init__(self, weight=1., *args, **kwargs):
+    def __init__(self, weight=1.0, *args, **kwargs):
         self.weight = weight
         super(Entropy_regulariser, self).__init__(*args, **kwargs)
 

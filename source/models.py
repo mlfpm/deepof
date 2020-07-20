@@ -173,7 +173,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_loss=False,
-        entropy_reg_weight=0.,
+        entropy_reg_weight=1.0,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
