@@ -28,7 +28,7 @@ class SEQ_2_SEQ_AE:
         units_dense2=64,
         dropout_rate=0.25,
         encoding=16,
-        learning_rate=1e-3,
+        learning_rate=1e-5,
     ):
         self.input_shape = input_shape
         self.CONV_filters = units_conv
