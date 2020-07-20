@@ -312,7 +312,8 @@ class SEQ_2_SEQ_GMVAE:
             activation=None,
         )(encoder)
 
-        z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
+        #z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
+        z_gauss = Reshape([self.ENCODING, self.number_of_components])(z_gauss)
 
         if self.overlap_loss:
             z_gauss = Gaussian_mixture_overlap(
