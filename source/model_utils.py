@@ -292,6 +292,6 @@ class Entropy_regulariser(Layer):
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(entropy, aggregation="mean", name="-weight_entropy")
 
-        #self.add_loss(self.weight * K.sum(entropy), inputs=[z])
+        self.add_loss(self.weight * K.sum(entropy), inputs=[z])
 
         return z
