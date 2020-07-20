@@ -362,6 +362,7 @@ input_dict_val = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=True,
     ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
         window_size=11,
