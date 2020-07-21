@@ -223,7 +223,7 @@ DLC_social = project(
 DLC_social_coords = DLC_social.run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_coords.get_coords(center="B_Center")
+coords1 = DLC_social_coords.get_coords(center="B_Center", align="B_Nose")
 distances1 = DLC_social_coords.get_distances()
 angles1 = DLC_social_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
@@ -240,6 +240,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "dists": distances1.preprocess(
         window_size=11,
@@ -249,6 +250,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "angles": angles1.preprocess(
         window_size=11,
@@ -258,6 +260,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "coords+dist": coords_distances1.preprocess(
         window_size=11,
@@ -267,6 +270,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "coords+angle": coords_angles1.preprocess(
         window_size=11,
@@ -276,6 +280,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "dists+angle": dists_angles1.preprocess(
         window_size=11,
@@ -284,6 +289,7 @@ input_dict = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
@@ -293,6 +299,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
 }
 

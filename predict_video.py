@@ -187,7 +187,7 @@ DLC_social = project(
 DLC_social_coords = DLC_social.run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_coords.get_coords(center="B_Center")
+coords1 = DLC_social_coords.get_coords(center="B_Center", align="B_Nose")
 distances1 = DLC_social_coords.get_distances()
 angles1 = DLC_social_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
@@ -206,6 +206,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
     "dists": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -217,6 +218,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
     "angles": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -228,6 +230,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
     "coords+dist": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -239,6 +242,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
     "coords+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -250,16 +254,19 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
     "dists+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=11,
-        window_step=10,
+        window_step=1,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
+        shuffle=False,
+        align=True,
     ),
     "coords+dist+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -271,6 +278,7 @@ input_dict = {
         filter="gaussian",
         sigma=55,
         shuffle=False,
+        align=True,
     ),
 }
 
