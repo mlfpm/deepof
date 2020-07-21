@@ -158,13 +158,17 @@ else:
         "learning_rate": 1e-3,
     }
 
-with open(
-    os.path.join(
-        train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
-    ),
-    "rb",
-) as handle:
-    Treatment_dict = pickle.load(handle)
+try:
+    with open(
+        os.path.join(
+            train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
+        ),
+        "rb",
+    ) as handle:
+        Treatment_dict = pickle.load(handle)
+except IndexError:
+    Treatment_dict = None
+
 
 # Which angles to compute?
 bp_dict = {
