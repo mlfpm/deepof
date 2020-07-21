@@ -537,3 +537,6 @@ if runs > 1:
             runs, datetime.now().strftime("%Y%m%d-%H%M%S")
         )
     )
+
+# TODO:
+#    - Investigate partial methods for preprocess (lots of calls with the same parameters!)
