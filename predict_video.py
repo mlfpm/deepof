@@ -201,7 +201,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -213,7 +213,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -225,7 +225,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -237,7 +237,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -249,7 +249,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -261,7 +261,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
@@ -273,7 +273,7 @@ input_dict = {
     ).preprocess(
         window_size=11,
         window_step=1,
-        scale=True,
+        scale="standard",
         random_state=42,
         filter="gaussian",
         sigma=55,
