@@ -11,6 +11,7 @@ import pims
 import re
 import scipy
 import seaborn as sns
+from copy import deepcopy
 from itertools import cycle, combinations, product
 from joblib import Parallel, delayed
 from numba import jit
@@ -85,6 +86,32 @@ def angle_trio(array, degrees=False):
     a, b, c = array
 
     return np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c),])
+
+
+def rotate(p, angles, origin=np.array([0, 0])):
+    R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
+
+    o = np.atleast_2d(origin)
+    p = np.atleast_2d(p)
+
+    return np.squeeze((R @ (p.T - o.T) + o.T).T)
+
+
+def align_trajectories(data):
+
+    data = deepcopy(data)
+
+    center_time = (data.shape[1] - 1) // 2
+    angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
+
+    aligned_trajs = np.zeros(data.shape)
+
+    for frame in range(data.shape[0]):
+        aligned_trajs[frame] = rotate(
+            data[frame].reshape([data.shape[1] * data.shape[2] // 2, 2]), angles[frame],
+        ).reshape(data.shape[1:])
+
+    return aligned_trajs
 
 
 def smooth_boolean_array(a):

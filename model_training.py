@@ -232,7 +232,7 @@ DLC_social_1_coords = DLC_social_1.run(verbose=True)
 DLC_social_2_coords = DLC_social_2.run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_1_coords.get_coords(center="B_Center", polar=False)
+coords1 = DLC_social_1_coords.get_coords(center="B_Center", align="B_Nose")
 distances1 = DLC_social_1_coords.get_distances()
 angles1 = DLC_social_1_coords.get_angles()
 coords_distances1 = merge_tables(coords1, distances1)
@@ -241,7 +241,7 @@ dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 # Coordinates for validation data
-coords2 = DLC_social_2_coords.get_coords(center="B_Center", polar=False)
+coords2 = DLC_social_2_coords.get_coords(center="B_Center", align="B_Nose")
 distances2 = DLC_social_2_coords.get_distances()
 angles2 = DLC_social_2_coords.get_angles()
 coords_distances2 = merge_tables(coords2, distances2)
@@ -258,6 +258,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "dists": distances1.preprocess(
         window_size=11,
@@ -266,6 +267,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "angles": angles1.preprocess(
         window_size=11,
@@ -274,6 +276,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "coords+dist": coords_distances1.preprocess(
         window_size=11,
@@ -282,6 +285,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "coords+angle": coords_angles1.preprocess(
         window_size=11,
@@ -290,6 +294,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "dists+angle": dists_angles1.preprocess(
         window_size=11,
@@ -298,6 +303,7 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
@@ -306,54 +312,60 @@ input_dict_train = {
         random_state=42,
         filter="gaussian",
         sigma=55,
+        align=True,
     ),
 }
 
 input_dict_val = {
     "coords": coords2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "dists": distances2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "angles": angles2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "coords+dist": coords_distances2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "coords+angle": coords_angles2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "dists+angle": dists_angles2.preprocess(
         window_size=11,
@@ -363,15 +375,17 @@ input_dict_val = {
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
         window_size=11,
-        window_step=1,
+        window_step=10,
         scale=True,
         random_state=42,
         filter="gaussian",
         sigma=55,
         shuffle=True,
+        align=True,
     ),
 }
 

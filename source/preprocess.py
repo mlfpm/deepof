@@ -309,7 +309,9 @@ class coordinates:
         else:
             return "DLC analysis of {} videos".format(len(self._videos))
 
-    def get_coords(self, center="arena", polar=False, speed=0, length=None):
+    def get_coords(
+        self, center="arena", polar=False, speed=0, length=None, align=False
+    ):
         tabs = deepcopy(self._tables)
 
         if polar:
@@ -383,6 +385,21 @@ class coordinates:
                 tabs[key].index = pd.timedelta_range(
                     "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                 )
+
+        if align:
+            assert (
+                align in list(tabs.values())[0].columns.levels[0]
+            ), "align must be set to the name of a bodypart"
+
+            for key, tab in tabs.items():
+
+                # Bring forward the column to align
+                columns = [i for i in tab.columns if align not in i]
+                columns = [
+                    (align, ("phi" if polar else "x")),
+                    (align, ("rho" if polar else "y")),
+                ] + columns
+                tabs[key] = tab[columns]
 
         return table_dict(
             tabs,
@@ -524,17 +541,17 @@ class table_dict(dict):
         self,
         window_size=1,
         window_step=1,
-        scale=True,
+        scale="standard",
         test_proportion=0,
         random_state=None,
         verbose=False,
         filter=None,
         sigma=None,
         shift=0,
-        standard_scaler=True,
         shuffle=False,
+        align=False,
     ):
-        """Builds a sliding window. If desired, splits train and test and
+        """Builds a sliding window. If specified, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
 
         X_train = self.get_training_set()
@@ -550,16 +567,20 @@ class table_dict(dict):
             if verbose:
                 print("Scaling data...")
 
-            if standard_scaler:
+            if scale == "standard":
                 scaler = StandardScaler()
-            else:
+            elif scale == "minmax":
                 scaler = MinMaxScaler()
+            else:
+                raise ValueError(
+                    "Invalid scaler. Select one of standard, minmax or None"
+                )
 
             X_train = scaler.fit_transform(
                 X_train.reshape(-1, X_train.shape[-1])
             ).reshape(X_train.shape)
 
-            if standard_scaler:
+            if scale == "standard":
                 assert np.allclose(np.mean(X_train), 0)
                 assert np.allclose(np.std(X_train), 1)
 
@@ -572,6 +593,9 @@ class table_dict(dict):
                 print("Done!")
 
         X_train = rolling_window(X_train, window_size, window_step)
+
+        if align:
+            X_train = align_trajectories(X_train)
 
         if filter == "gaussian":
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
