@@ -89,9 +89,7 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(
-            Model_E5, activation="elu", output_dim=self.ENCODING,
-        )
+        Model_D0 = DenseTranspose(Model_E5, activation="elu", output_dim=self.ENCODING,)
         Model_D1 = DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2,)
         Model_D2 = DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
@@ -148,7 +146,7 @@ class SEQ_2_SEQ_AE:
 
         model.compile(
             loss=Huber(reduction="sum", delta=100.0),
-            optimizer=Adam(lr=self.learn_rate, clipvalue=0.5,),
+            optimizer=Adam(lr=self.learn_rate, clipvalue=0.5, nesterov=True),
             metrics=["mae"],
         )
 
@@ -452,7 +450,7 @@ class SEQ_2_SEQ_GMVAE:
 
         gmvaep.compile(
             loss=huber_loss,
-            optimizer=Adam(lr=self.learn_rate,),
+            optimizer=Adam(lr=self.learn_rate, nesterov=True),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
@@ -470,6 +468,5 @@ class SEQ_2_SEQ_GMVAE:
 # TODO:
 #       - Investigate posterior collapse
 #       - Learning rate scheduler (for faster / better convergence)
-#       - data augmentation with rotation / always align fist frame with an axis
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
