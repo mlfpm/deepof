@@ -47,7 +47,7 @@ class SEQ_2_SEQ_AE:
             kernel_size=5,
             strides=1,
             padding="causal",
-            activation="relu",
+            activation="elu",
             kernel_initializer=he_uniform(),
         )
         Model_E1 = Bidirectional(
@@ -70,19 +70,19 @@ class SEQ_2_SEQ_AE:
         )
         Model_E3 = Dense(
             self.DENSE_1,
-            activation="relu",
+            activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
         Model_E4 = Dense(
             self.DENSE_2,
-            activation="relu",
+            activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
         Model_E5 = Dense(
             self.ENCODING,
-            activation="relu",
+            activation="elu",
             kernel_constraint=UnitNorm(axis=1),
             activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
             kernel_initializer=Orthogonal(),
@@ -90,10 +90,10 @@ class SEQ_2_SEQ_AE:
 
         # Decoder layers
         Model_D0 = DenseTranspose(
-            Model_E5, activation="relu", output_dim=self.ENCODING,
+            Model_E5, activation="elu", output_dim=self.ENCODING,
         )
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=self.DENSE_2,)
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=self.DENSE_1,)
+        Model_D1 = DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2,)
+        Model_D2 = DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -224,7 +224,7 @@ class SEQ_2_SEQ_GMVAE:
             kernel_size=5,
             strides=1,
             padding="causal",
-            activation="relu",
+            activation="elu",
             kernel_initializer=he_uniform(),
         )
         Model_E1 = Bidirectional(
@@ -247,13 +247,13 @@ class SEQ_2_SEQ_GMVAE:
         )
         Model_E3 = Dense(
             self.DENSE_1,
-            activation="relu",
+            activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
         Model_E4 = Dense(
             self.DENSE_2,
-            activation="relu",
+            activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
         )
@@ -264,10 +264,10 @@ class SEQ_2_SEQ_GMVAE:
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
         Model_D1 = Dense(
-            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+            self.DENSE_2, activation="elu", kernel_initializer=he_uniform()
         )
         Model_D2 = Dense(
-            self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+            self.DENSE_1, activation="elu", kernel_initializer=he_uniform()
         )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -387,11 +387,11 @@ class SEQ_2_SEQ_GMVAE:
         if self.predictor > 0:
             # Define and instantiate predictor
             predictor = Dense(
-                self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+                self.DENSE_2, activation="elu", kernel_initializer=he_uniform()
             )(z)
             predictor = BatchNormalization()(predictor)
             predictor = Dense(
-                self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+                self.DENSE_1, activation="elu", kernel_initializer=he_uniform()
             )(predictor)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(self.input_shape[1])(predictor)
