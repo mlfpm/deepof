@@ -173,7 +173,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_loss=False,
-        entropy_reg_weight=1.,
+        entropy_reg_weight=1.0,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -226,6 +226,7 @@ class SEQ_2_SEQ_GMVAE:
             padding="causal",
             activation="relu",
             kernel_initializer=he_uniform(),
+            use_bias=False,
         )
         Model_E1 = Bidirectional(
             LSTM(
@@ -234,6 +235,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
+                use_bias=False,
             )
         )
         Model_E2 = Bidirectional(
@@ -243,6 +245,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=False,
                 kernel_constraint=UnitNorm(axis=0),
+                use_bias=False,
             )
         )
         Model_E3 = Dense(
@@ -250,12 +253,14 @@ class SEQ_2_SEQ_GMVAE:
             activation="relu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
+            use_bias=False,
         )
         Model_E4 = Dense(
             self.DENSE_2,
             activation="relu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
+            use_bias=False,
         )
 
         # Decoder layers
@@ -264,10 +269,16 @@ class SEQ_2_SEQ_GMVAE:
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
         Model_D1 = Dense(
-            self.DENSE_2, activation="relu", kernel_initializer=he_uniform()
+            self.DENSE_2,
+            activation="relu",
+            kernel_initializer=he_uniform(),
+            use_bias=False,
         )
         Model_D2 = Dense(
-            self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+            self.DENSE_1,
+            activation="relu",
+            kernel_initializer=he_uniform(),
+            use_bias=False,
         )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
@@ -277,6 +288,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
+                use_bias=False,
             )
         )
         Model_D5 = Bidirectional(
@@ -286,6 +298,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
+                use_bias=False,
             )
         )
 
@@ -391,7 +404,10 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
             predictor = BatchNormalization()(predictor)
             predictor = Dense(
-                self.DENSE_1, activation="relu", kernel_initializer=he_uniform()
+                self.DENSE_1,
+                activation="relu",
+                kernel_initializer=he_uniform(),
+                use_bias=False,
             )(predictor)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(self.input_shape[1])(predictor)
@@ -402,6 +418,7 @@ class SEQ_2_SEQ_GMVAE:
                     recurrent_activation="sigmoid",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
+                    use_bias=False,
                 )
             )(predictor)
             predictor = BatchNormalization()(predictor)
@@ -412,6 +429,7 @@ class SEQ_2_SEQ_GMVAE:
                     recurrent_activation="sigmoid",
                     return_sequences=True,
                     kernel_constraint=UnitNorm(axis=1),
+                    use_bias=False,
                 )
             )(predictor)
             predictor = BatchNormalization()(predictor)
