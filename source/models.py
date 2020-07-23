@@ -148,7 +148,7 @@ class SEQ_2_SEQ_AE:
 
         model.compile(
             loss=Huber(reduction="sum", delta=100.0),
-            optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
+            optimizer=Nadam(lr=self.learn_rate, decay=1e-2, clipvalue=0.5,),
             metrics=["mae"],
         )
 
@@ -470,7 +470,7 @@ class SEQ_2_SEQ_GMVAE:
 
         gmvaep.compile(
             loss=huber_loss,
-            optimizer=Nadam(lr=self.learn_rate,),
+            optimizer=Nadam(lr=self.learn_rate, decay=1e-2),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
