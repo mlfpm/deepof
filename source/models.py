@@ -7,7 +7,7 @@ from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
-from tensorflow.keras.layers import Dense, AlphaDropout, LSTM
+from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Nadam
@@ -123,7 +123,7 @@ class SEQ_2_SEQ_AE:
         encoder.add(BatchNormalization())
         encoder.add(Model_E3)
         encoder.add(BatchNormalization())
-        encoder.add(AlphaDropout(self.DROPOUT_RATE))
+        encoder.add(Dropout(self.DROPOUT_RATE))
         encoder.add(Model_E4)
         encoder.add(BatchNormalization())
         encoder.add(Model_E5)
@@ -297,7 +297,7 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E3(encoder)
         encoder = BatchNormalization()(encoder)
-        encoder = AlphaDropout(self.DROPOUT_RATE)(encoder)
+        encoder = Dropout(self.DROPOUT_RATE)(encoder)
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
 
