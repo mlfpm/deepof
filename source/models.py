@@ -346,7 +346,7 @@ class SEQ_2_SEQ_GMVAE:
                     for k in range(self.number_of_components)
                 ],
             ),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            # activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
         )([z_cat, z_gauss])
 
         # Define and control custom loss functions
