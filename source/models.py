@@ -10,7 +10,7 @@ from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Nadam
 from source.model_utils import *
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -146,7 +146,7 @@ class SEQ_2_SEQ_AE:
 
         model.compile(
             loss=Huber(reduction="sum", delta=100.0),
-            optimizer=Adam(lr=self.learn_rate, clipvalue=0.5, nesterov=True),
+            optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5),
             metrics=["mae"],
         )
 
@@ -450,7 +450,7 @@ class SEQ_2_SEQ_GMVAE:
 
         gmvaep.compile(
             loss=huber_loss,
-            optimizer=Adam(lr=self.learn_rate, nesterov=True),
+            optimizer=Nadam(lr=self.learn_rate),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
