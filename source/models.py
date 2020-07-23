@@ -148,7 +148,7 @@ class SEQ_2_SEQ_AE:
 
         model.compile(
             loss=Huber(reduction="sum", delta=100.0),
-            optimizer=Adam(lr=self.learn_rate, decay=1e-2, clipvalue=0.5,),
+            optimizer=Adam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
         )
 
@@ -469,7 +469,7 @@ class SEQ_2_SEQ_GMVAE:
 
         gmvaep.compile(
             loss=huber_loss,
-            optimizer=Adam(lr=self.learn_rate, decay=1e-2),
+            optimizer=Adam(lr=self.learn_rate),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
@@ -487,6 +487,6 @@ class SEQ_2_SEQ_GMVAE:
 # TODO:
 #       - Investigate posterior collapse
 #       - Learning rate scheduler (for faster / better convergence)
-#       - data augmentation with rotation / always align fist frame with an axis
+#       - Align first frame and untamper sliding window (reduce window stride)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
