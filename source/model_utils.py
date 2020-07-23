@@ -56,6 +56,10 @@ def compute_mmd(tensors):
 
 
 # Custom layers for efficiency/losses
+class MCDropout(tf.keras.layers.Dropout):
+    def call(self, inputs):
+        return super().call(inputs, training=True)
+
 class DenseTranspose(Layer):
     def __init__(self, dense, output_dim, activation=None, **kwargs):
         self.dense = dense
