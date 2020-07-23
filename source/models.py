@@ -163,7 +163,7 @@ class SEQ_2_SEQ_GMVAE:
         units_dense2=64,
         dropout_rate=0.25,
         encoding=16,
-        learning_rate=1e-5,
+        learning_rate=1e-7,
         loss="ELBO+MMD",
         kl_warmup_epochs=0,
         mmd_warmup_epochs=0,
