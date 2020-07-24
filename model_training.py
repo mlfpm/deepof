@@ -260,7 +260,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -269,7 +269,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -278,7 +278,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -287,7 +287,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -296,7 +296,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -305,7 +305,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -314,7 +314,7 @@ input_dict_train = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         align=True,
     ),
@@ -326,7 +326,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -336,7 +336,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -346,7 +346,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -356,7 +356,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -366,7 +366,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-       #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -376,7 +376,7 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
@@ -386,16 +386,16 @@ input_dict_val = {
         window_step=5,
         scale="standard",
         random_state=42,
-        #filter="gaussian",
+        # filter="gaussian",
         sigma=55,
         shuffle=True,
         align=True,
     ),
 }
 
-for input in input_dict_train.keys():
-    print("{} train shape: {}".format(input, input_dict_train[input].shape))
-    print("{} validation shape: {}".format(input, input_dict_val[input].shape))
+for inp in input_dict_train.keys():
+    print("{} train shape: {}".format(inp, input_dict_train[inp].shape))
+    print("{} validation shape: {}".format(inp, input_dict_val[inp].shape))
     print()
 
 
@@ -452,6 +452,10 @@ for run in range(runs):
             callbacks=[
                 tensorboard_callback,
                 cp_callback,
+                OneCycleScheduler(
+                    input_dict_train[input_type].shape(0) // batch_size * 250,
+                    max_rate=0.05,
+                ),
                 tf.keras.callbacks.EarlyStopping(
                     "val_loss", patience=5, restore_best_weights=True
                 ),
