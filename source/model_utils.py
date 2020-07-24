@@ -335,9 +335,7 @@ class Entropy_regulariser(Layer):
 
     def call(self, z, **kwargs):
 
-        entropy = K.sum(
-            tf.multiply(z, tf.where(~tf.math.is_inf(K.log(z)), K.log(z), 0)), axis=1
-        )
+        entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=1)
 
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(entropy, aggregation="mean", name="-weight_entropy")
