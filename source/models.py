@@ -89,9 +89,7 @@ class SEQ_2_SEQ_AE:
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(
-            Model_E5, activation="elu", output_dim=self.ENCODING,
-        )
+        Model_D0 = DenseTranspose(Model_E5, activation="elu", output_dim=self.ENCODING,)
         Model_D1 = DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2,)
         Model_D2 = DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1,)
         Model_D3 = RepeatVector(self.input_shape[1])
