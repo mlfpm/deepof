@@ -166,6 +166,15 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self.is_placeholder = True
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update(
+            {
+                "is_placeholder":self.is_placeholder,
+            }
+        )
+        return config
+
     def call(self, distribution_a):
         kl_batch = self._regularizer(distribution_a)
         self.add_loss(kl_batch, inputs=[distribution_a])
