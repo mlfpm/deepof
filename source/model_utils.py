@@ -5,7 +5,6 @@ from keras import backend as K
 from sklearn.metrics import silhouette_score
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -13,20 +12,27 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 # Helper functions
-def far_away_uniform_initialiser(shape, minval=0, maxval=15, iters=10000000):
+@tf.function
+def far_away_uniform_initialiser(shape, minval=0, maxval=15, iters=100000):
     """
     Returns a uniformly initialised matrix in which the columns are as far as possible
     """
-    init_dist = 0
-    for i in range(iters):
-        temp = np.random.uniform(minval, maxval, shape)
-        dist = np.abs(np.linalg.norm(np.diff(temp)))
+
+    init = tf.random.uniform(shape, minval, maxval)
+    init_dist = tf.abs(tf.norm(tf.math.subtract(init[1:], init[:1])))
+    i = 0
+
+    while tf.less(i, iters):
+        temp = tf.random.uniform(shape, minval, maxval)
+        dist = tf.abs(tf.norm(tf.math.subtract(temp[1:], temp[:1])))
 
         if dist > init_dist:
             init_dist = dist
             init = temp
 
-    return init.astype(np.float32)
+        i += 1
+
+    return init
 
 
 def compute_kernel(x, y):
@@ -40,6 +46,7 @@ def compute_kernel(x, y):
     )
 
 
+@tf.function
 def compute_mmd(tensors):
 
     x = tensors[0]

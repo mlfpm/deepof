@@ -785,7 +785,9 @@ def cluster_transition_matrix(
     trans_normed = np.zeros([k, k]) + 1e-5
     for t in trans.keys():
         trans_normed[int(t[0]), int(t[1])] = np.round(
-            trans[t] / (sum({i: j for i, j in trans.items() if i[0] == t[0]}.values()) + 1e-5), 3
+            trans[t]
+            / (sum({i: j for i, j in trans.items() if i[0] == t[0]}.values()) + 1e-5),
+            3,
         )
 
     # If specified, returns the transition matrix as an nx.Graph object
