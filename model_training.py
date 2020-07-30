@@ -445,7 +445,7 @@ for run in range(runs):
         history = ae.fit(
             x=input_dict_train[input_type],
             y=input_dict_train[input_type],
-            epochs=250,
+            epochs=20,
             batch_size=batch_size,
             verbose=1,
             validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
@@ -490,7 +490,7 @@ for run in range(runs):
             tensorboard_callback,
             cp_callback,
             tf.keras.callbacks.EarlyStopping(
-                "val_loss", patience=5, restore_best_weights=True
+                "val_loss", patience=15, restore_best_weights=True
             ),
         ]
 
@@ -503,7 +503,7 @@ for run in range(runs):
             history = gmvaep.fit(
                 x=input_dict_train[input_type],
                 y=input_dict_train[input_type],
-                epochs=250,
+                epochs=25,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
