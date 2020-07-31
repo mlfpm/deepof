@@ -548,3 +548,5 @@ if runs > 1:
 
 # TODO:
 #    - Investigate partial methods for preprocess (lots of calls with the same parameters!)
+#    - Investigate how goussian filters affect reproducibility (in a systematic way)
+#    - Investigate how smoothing affects reproducibility (in a systematic way)

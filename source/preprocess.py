@@ -528,22 +528,29 @@ class table_dict(dict):
                 list(self.values())[i], bodyparts, xlim=x_lim, ylim=y_lim, save=save,
             )
 
-    def get_training_set(self):
+    def get_training_set(self, test_videos):
         rmax = max([i.shape[0] for i in self.values()])
-
-        X_train = np.concatenate(
+        raw_data = np.array(
             [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.values()]
         )
+        test_index = np.random.choice(range(len(raw_data)), test_videos, replace=False)
 
-        return X_train
+        X_test = []
+        if test_videos > 0:
+            X_test = np.concatenate(list(raw_data[test_index]))
+            X_train = np.concatenate(list(np.delete(raw_data, test_index, axis=0)))
+
+        else:
+            X_train = np.concatenate(list(raw_data))
+
+        return X_train, X_test
 
     def preprocess(
         self,
         window_size=1,
         window_step=1,
         scale="standard",
-        test_proportion=0,
-        random_state=None,
+        test_videos=0,
         verbose=False,
         filter=None,
         sigma=None,
@@ -554,14 +561,7 @@ class table_dict(dict):
         """Builds a sliding window. If specified, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
 
-        X_train = self.get_training_set()
-
-        if test_proportion:
-            if verbose:
-                print("Splitting train and test...")
-            X_train, X_test = train_test_split(
-                X_train, test_size=test_proportion, random_state=random_state
-            )
+        X_train, X_test = self.get_training_set(test_videos)
 
         if scale:
             if verbose:
@@ -584,7 +584,7 @@ class table_dict(dict):
                 assert np.allclose(np.mean(X_train), 0)
                 assert np.allclose(np.std(X_train), 1)
 
-            if test_proportion:
+            if test_videos:
                 X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
                     X_test.shape
                 )
@@ -611,7 +611,7 @@ class table_dict(dict):
             g /= np.max(g)
             X_train = X_train * g.reshape(1, window_size, 1)
 
-        if test_proportion:
+        if test_videos:
             X_test = rolling_window(X_test, window_size, window_step)
 
             if filter == "gaussian":
