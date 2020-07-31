@@ -171,7 +171,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_loss=False,
-        entropy_reg_weight=0.05,
+        entropy_reg_weight=0.0,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -315,9 +315,11 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         encoding_shuffle = MCDropout(self.DROPOUT_RATE)(encoder)
-        z_cat = Dense(self.number_of_components, activation="softmax",)(
-            encoding_shuffle
-        )
+        z_cat = Dense(
+            self.number_of_components,
+            activation="softmax",
+            activity_regularizer=tf.keras.regularizers.l1(),
+        )(encoding_shuffle)
         z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(
