@@ -169,9 +169,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     def get_config(self):
         config = super().get_config().copy()
         config.update(
-            {
-                "is_placeholder":self.is_placeholder,
-            }
+            {"is_placeholder": self.is_placeholder,}
         )
         return config
 
@@ -357,7 +355,7 @@ class Entropy_regulariser(Layer):
 
         # axis=1 increases the entropy of a cluster across instances
         # axis=0 increases the entropy of the assignment for a given instance
-        entropy = - K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=1)
+        entropy = -K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=1)
 
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(entropy, aggregation="mean", name="-weight_entropy")

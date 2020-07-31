@@ -171,7 +171,7 @@ class SEQ_2_SEQ_GMVAE:
         number_of_components=1,
         predictor=True,
         overlap_loss=False,
-        entropy_reg_weight=0.25,
+        entropy_reg_weight=1.0,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -315,7 +315,9 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         encoding_shuffle = MCDropout(self.DROPOUT_RATE)(encoder)
-        z_cat = Dense(self.number_of_components, activation="softmax",)(encoding_shuffle)
+        z_cat = Dense(self.number_of_components, activation="softmax",)(
+            encoding_shuffle
+        )
         z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(
@@ -468,7 +470,7 @@ class SEQ_2_SEQ_GMVAE:
 
         gmvaep.compile(
             loss=huber_loss,
-            optimizer=Nadam(lr=self.learn_rate),
+            optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
