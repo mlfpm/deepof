@@ -488,9 +488,8 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - Investigate posterior collapse
+#       - Investigate posterior collapse (L1 as kernel regulariser does not work)
 #       - Random horizontal flip for data augmentation
-#       - Learning rate scheduler (for faster / better convergence)
 #       - Align first frame and untamper sliding window (reduce window stride)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
