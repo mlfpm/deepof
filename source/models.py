@@ -318,7 +318,7 @@ class SEQ_2_SEQ_GMVAE:
         z_cat = Dense(
             self.number_of_components,
             activation="softmax",
-            kernel_regularizer=tf.keras.regularizers.l1(),
+            activity_regularizer=tf.keras.regularizers.l1(),
         )(encoding_shuffle)
         z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
