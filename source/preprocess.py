@@ -614,6 +614,9 @@ class table_dict(dict):
         if test_videos:
             X_test = rolling_window(X_test, window_size, window_step)
 
+            if align:
+                X_test = align_trajectories(X_test)
+
             if filter == "gaussian":
                 X_test = X_test * g.reshape(1, window_size, 1)
 
