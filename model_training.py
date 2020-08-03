@@ -241,7 +241,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "dists": distances1.preprocess(
@@ -250,7 +250,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "angles": angles1.preprocess(
@@ -259,7 +259,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "coords+dist": coords_distances1.preprocess(
@@ -268,7 +268,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "coords+angle": coords_angles1.preprocess(
@@ -277,7 +277,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "dists+angle": dists_angles1.preprocess(
@@ -286,7 +286,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
@@ -295,7 +295,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
 }
