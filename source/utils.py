@@ -4,6 +4,7 @@ import cv2
 import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
+from numba import njit
 import numpy as np
 import pandas as pd
 import pickle
@@ -97,19 +98,32 @@ def rotate(p, angles, origin=np.array([0, 0])):
     return np.squeeze((R @ (p.T - o.T) + o.T).T)
 
 
-def align_trajectories(data):
+def align_trajectories(data, mode="all"):
+
+    """
+    mode: all aligns all frames in the data
+    mode: center aligns only the central frame
+    """
 
     data = deepcopy(data)
+    dshape = data.shape
 
-    center_time = (data.shape[1] - 1) // 2
-    angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
+    if mode == "center":
+        center_time = (data.shape[1] - 1) // 2
+        angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
+    elif mode == "all":
+        data = data.reshape(-1, dshape[-1])
+        angles = np.arctan2(data[:, 0], data[:, 1])
 
     aligned_trajs = np.zeros(data.shape)
 
     for frame in range(data.shape[0]):
         aligned_trajs[frame] = rotate(
-            data[frame].reshape([data.shape[1] * data.shape[2] // 2, 2]), angles[frame],
+            data[frame].reshape([-1, 2]), angles[frame],
         ).reshape(data.shape[1:])
+
+    if mode == "all":
+        aligned_trajs = aligned_trajs.reshape(dshape)
 
     return aligned_trajs
 

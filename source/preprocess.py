@@ -592,10 +592,13 @@ class table_dict(dict):
             if verbose:
                 print("Done!")
 
+        if align == "all":
+            X_train = align_trajectories(X_train, align)
+
         X_train = rolling_window(X_train, window_size, window_step)
 
-        if align:
-            X_train = align_trajectories(X_train)
+        if align == "center":
+            X_train = align_trajectories(X_train, align)
 
         if filter == "gaussian":
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
@@ -612,10 +615,14 @@ class table_dict(dict):
             X_train = X_train * g.reshape(1, window_size, 1)
 
         if test_videos:
+
+            if align == "all":
+                X_test = align_trajectories(X_test, align)
+
             X_test = rolling_window(X_test, window_size, window_step)
 
-            if align:
-                X_test = align_trajectories(X_test)
+            if align == "center":
+                X_test = align_trajectories(X_test, align)
 
             if filter == "gaussian":
                 X_test = X_test * g.reshape(1, window_size, 1)

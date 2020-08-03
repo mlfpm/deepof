@@ -193,7 +193,6 @@ class SEQ_2_SEQ_GMVAE:
         self.entropy_reg_weight = entropy_reg_weight
 
         if self.prior == "standard_normal":
-
             init_means = far_away_uniform_initialiser(
                 shape=[self.number_of_components, self.ENCODING], minval=0, maxval=5
             )
@@ -315,10 +314,9 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         encoding_shuffle = MCDropout(self.DROPOUT_RATE)(encoder)
-        z_cat = Dense(
-            self.number_of_components,
-            activation="softmax",
-        )(encoding_shuffle)
+        z_cat = Dense(self.number_of_components, activation="softmax",)(
+            encoding_shuffle
+        )
         z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             tfpl.IndependentNormal.params_size(
@@ -382,7 +380,7 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
 
         # Identity layer controlling clustering and latent space statistics
-        z = Latent_space_control(loss=self.overlap_loss)(z, z_gauss, z_cat)
+        z = Dead_neuron_control(loss=self.overlap_loss)(z, z_gauss, z_cat)
 
         # Define and instantiate generator
         generator = Model_D1(z)

@@ -138,7 +138,7 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return covariance
 
     # Constraint penalty
-    def uncorrelated_feature(self, x):
+    def uncorrelated_feature(self):
         if self.encoding_dim <= 1:
             return 0.0
         else:
@@ -301,21 +301,14 @@ class Gaussian_mixture_overlap(Layer):
         return target
 
 
-class Latent_space_control(Layer):
+class Dead_neuron_control(Layer):
     """
     Identity layer that adds latent space and clustering stats
     to the metrics compiled by the model
     """
 
-    def __init__(self, silhouette=False, loss=False, *args, **kwargs):
-        self.loss = loss
-        self.silhouette = silhouette
-        super(Latent_space_control, self).__init__(*args, **kwargs)
-
-    def get_config(self):
-        config = super().get_config().copy()
-        config.update({"loss": self.loss})
-        config.update({"silhouette": self.silhouette})
+    def __init__(self, *args, **kwargs):
+        super(Dead_neuron_control, self).__init__(*args, **kwargs)
 
     def call(self, z, z_gauss, z_cat, **kwargs):
 
@@ -323,17 +316,6 @@ class Latent_space_control(Layer):
         self.add_metric(
             tf.math.zero_fraction(z_gauss), aggregation="mean", name="dead_neurons"
         )
-
-        # Adds Silhouette score controlling overlap between clusters
-        if self.silhouette:
-            hard_labels = tf.math.argmax(z_cat, axis=1)
-            silhouette = tf.numpy_function(
-                silhouette_score, [z, hard_labels], tf.float32
-            )
-            self.add_metric(silhouette, aggregation="mean", name="silhouette")
-
-            if self.loss:
-                self.add_loss(-K.mean(silhouette), inputs=[z, hard_labels])
 
         return z
 
