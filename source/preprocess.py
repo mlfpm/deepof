@@ -528,7 +528,7 @@ class table_dict(dict):
                 list(self.values())[i], bodyparts, xlim=x_lim, ylim=y_lim, save=save,
             )
 
-    def get_training_set(self, test_videos):
+    def get_training_set(self, test_videos=0):
         rmax = max([i.shape[0] for i in self.values()])
         raw_data = np.array(
             [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.values()]
