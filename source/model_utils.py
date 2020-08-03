@@ -2,7 +2,6 @@
 
 from itertools import combinations
 from tensorflow.keras import backend as K
-from sklearn.metrics import silhouette_score
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
 import tensorflow as tf

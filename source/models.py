@@ -380,7 +380,7 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
 
         # Identity layer controlling clustering and latent space statistics
-        z = Dead_neuron_control(loss=self.overlap_loss)(z, z_gauss, z_cat)
+        z = Dead_neuron_control()(z, z_gauss, z_cat)
 
         # Define and instantiate generator
         generator = Model_D1(z)
