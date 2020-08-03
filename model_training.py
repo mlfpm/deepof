@@ -24,6 +24,13 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
+parser.add_argument(
+    "--val-num",
+    "-vn",
+    help="set number of videos of the training" "set to use for validation",
+    type=int,
+    default=None,
+)
 parser.add_argument("--val-path", "-vp", help="set validation set path", type=str)
 parser.add_argument(
     "--components",
@@ -115,6 +122,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
+val_num = args.val_num
 val_path = os.path.abspath(args.val_path)
 input_type = args.input_type
 k = args.components
@@ -131,8 +139,14 @@ runs = args.stability_check
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
-if not val_path:
-    raise ValueError("Set a valid data path for the validation to run")
+if not val_path and not val_num:
+    raise ValueError(
+        "Set a valid data path / validation number for the validation to run"
+    )
+if val_path and val_num:
+    raise ValueError(
+        "Set only one of valid data path / validation number for the validation to run"
+    )
 assert input_type in [
     "coords",
     "dists",
@@ -187,7 +201,7 @@ bp_dict = {
     "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
 }
 
-DLC_social_1 = project(
+DLC_social_1_coords = project(
     path=train_path,  # Path where to find the required files
     smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
     distances=[
@@ -208,32 +222,7 @@ DLC_social_1 = project(
     video_format=".mp4",
     table_format=".h5",
     exp_conditions=Treatment_dict,
-)
-
-DLC_social_2 = project(
-    path=val_path,  # Path where to find the required files
-    smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
-    distances=[
-        "B_Center",
-        "B_Nose",
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    ego="B_Center",
-    subset_condition="B",
-    angles=True,
-    connectivity=bp_dict,
-    arena="circular",  # Type of arena used in the experiments
-    arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
-    video_format=".mp4",
-    table_format=".h5",
-)
-
-DLC_social_1_coords = DLC_social_1.run(verbose=True)
-DLC_social_2_coords = DLC_social_2.run(verbose=True)
+).run(verbose=True)
 
 # Coordinates for training data
 coords1 = DLC_social_1_coords.get_coords(center="B_Center", align="B_Nose")
@@ -244,14 +233,6 @@ coords_angles1 = merge_tables(coords1, angles1)
 dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
-# Coordinates for validation data
-coords2 = DLC_social_2_coords.get_coords(center="B_Center", align="B_Nose")
-distances2 = DLC_social_2_coords.get_distances()
-angles2 = DLC_social_2_coords.get_angles()
-coords_distances2 = merge_tables(coords2, distances2)
-coords_angles2 = merge_tables(coords2, angles2)
-dists_angles2 = merge_tables(distances2, angles2)
-coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
 
 
 input_dict_train = {
@@ -261,7 +242,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "dists": distances1.preprocess(
         window_size=11,
@@ -269,7 +251,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "angles": angles1.preprocess(
         window_size=11,
@@ -277,7 +260,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "coords+dist": coords_distances1.preprocess(
         window_size=11,
@@ -285,7 +269,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "coords+angle": coords_angles1.preprocess(
         window_size=11,
@@ -293,7 +278,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "dists+angle": dists_angles1.preprocess(
         window_size=11,
@@ -301,7 +287,8 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
         window_size=11,
@@ -309,86 +296,119 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align=True,
+        align="all",
+        test_videos=val_num,
     ),
 }
+# If a validation path is specified, use it to build a validation set
+if val_path:
 
-input_dict_val = {
-    "coords": coords2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "dists": distances2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "angles": angles2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "coords+dist": coords_distances2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "coords+angle": coords_angles2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "dists+angle": dists_angles2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-    "coords+dist+angle": coords_dist_angles2.preprocess(
-        window_size=11,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        shuffle=True,
-        align=True,
-    ),
-}
+    DLC_social_2_coords = project(
+        path=val_path,  # Path where to find the required files
+        smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
+        distances=[
+            "B_Center",
+            "B_Nose",
+            "B_Left_ear",
+            "B_Right_ear",
+            "B_Left_flank",
+            "B_Right_flank",
+            "B_Tail_base",
+        ],
+        ego="B_Center",
+        subset_condition="B",
+        angles=True,
+        connectivity=bp_dict,
+        arena="circular",  # Type of arena used in the experiments
+        arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
+        video_format=".mp4",
+        table_format=".h5",
+    ).run(verbose=True)
 
-for inp in input_dict_train.keys():
-    print("{} train shape: {}".format(inp, input_dict_train[inp].shape))
-    print("{} validation shape: {}".format(inp, input_dict_val[inp].shape))
-    print()
+    # Coordinates for validation data
+    coords2 = DLC_social_2_coords.get_coords(center="B_Center", align="B_Nose")
+    distances2 = DLC_social_2_coords.get_distances()
+    angles2 = DLC_social_2_coords.get_angles()
+    coords_distances2 = merge_tables(coords2, distances2)
+    coords_angles2 = merge_tables(coords2, angles2)
+    dists_angles2 = merge_tables(distances2, angles2)
+    coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
 
+    input_dict_val = {
+        "coords": coords2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "dists": distances2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "angles": angles2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "coords+dist": coords_distances2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "coords+angle": coords_angles2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "dists+angle": dists_angles2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+        "coords+dist+angle": coords_dist_angles2.preprocess(
+            window_size=11,
+            window_step=5,
+            scale="standard",
+            # filter="gaussian",
+            sigma=55,
+            shuffle=True,
+            align="all",
+        ),
+    }
+
+# Select training and validation set
+if val_path:
+    X_train = input_dict_train[input_type]
+    X_val = input_dict_val[input_type]
+elif val_num:
+    X_train = input_dict_train[input_type][0]
+    X_val = input_dict_train[input_type][1]
 
 # Training loop
-if runs > 1:
-    clust_assignments = {}
-
 for run in range(runs):
 
     # To avoid stability issues
@@ -429,12 +449,12 @@ for run in range(runs):
         ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
         # Fit the specified model to the data
         history = ae.fit(
-            x=input_dict_train[input_type],
-            y=input_dict_train[input_type],
+            x=X_train,
+            y=X_train,
             epochs=25,
             batch_size=batch_size,
             verbose=1,
-            validation_data=(input_dict_val[input_type], input_dict_val[input_type]),
+            validation_data=(X_val, X_val),
             callbacks=[
                 tensorboard_callback,
                 cp_callback,
@@ -487,50 +507,35 @@ for run in range(runs):
 
         if predictor == 0:
             history = gmvaep.fit(
-                x=input_dict_train[input_type],
-                y=input_dict_train[input_type],
+                x=X_train,
+                y=X_train,
                 epochs=25,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
-                    input_dict_val[input_type],
-                    input_dict_val[input_type],
+                    X_val,
+                    X_val,
                 ),
                 callbacks=callbacks_,
             )
         else:
             history = gmvaep.fit(
-                x=input_dict_train[input_type][:-1],
-                y=[input_dict_train[input_type][:-1], input_dict_train[input_type][1:]],
+                x=X_train[:-1],
+                y=[X_train[:-1], X_train[1:]],
                 epochs=25,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
-                    input_dict_val[input_type][:-1],
-                    [input_dict_val[input_type][:-1], input_dict_val[input_type][1:]],
+                    X_val[:-1],
+                    [X_val[:-1], X_val[1:]],
                 ),
                 callbacks=callbacks_,
             )
 
         gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
 
-        # If stability mode is enable (-s > 1), predict groups in the validation set and add them to the dictionary
-        if runs > 1:
-            clust_assignments[run] = np.argmax(
-                grouper.predict(input_dict_train[input_type]), axis=1
-            )
-
     # To avoid stability issues
     tf.keras.backend.clear_session()
-
-# If specified (-s > 1), saves the resulting groupings to a dataframe on disk
-if runs > 1:
-    clust_assignments = pd.DataFrame(clust_assignments)
-    clust_assignments.to_csv(
-        "DeepOF_cluster_assignments_across_{}_runs_{}.csv".format(
-            runs, datetime.now().strftime("%Y%m%d-%H%M%S")
-        )
-    )
 
 # TODO:
 #    - Investigate partial methods for preprocess (lots of calls with the same parameters!)
