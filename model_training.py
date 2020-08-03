@@ -29,7 +29,7 @@ parser.add_argument(
     "-vn",
     help="set number of videos of the training" "set to use for validation",
     type=int,
-    default=None,
+    default=0,
 )
 parser.add_argument("--val-path", "-vp", help="set validation set path", type=str)
 parser.add_argument(
@@ -123,7 +123,7 @@ parser.add_argument(
 args = parser.parse_args()
 train_path = os.path.abspath(args.train_path)
 val_num = args.val_num
-val_path = os.path.abspath(args.val_path)
+val_path = os.path.abspath(args.val_path) if args.val_path else None
 input_type = args.input_type
 k = args.components
 predictor = float(args.predictor)
@@ -232,7 +232,6 @@ coords_distances1 = merge_tables(coords1, distances1)
 coords_angles1 = merge_tables(coords1, angles1)
 dists_angles1 = merge_tables(distances1, angles1)
 coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
-
 
 
 input_dict_train = {
@@ -439,11 +438,11 @@ for run in range(runs):
         ),
     )
 
+    onecycle = OneCycleScheduler(X_train.shape[0] // batch_size * 250, max_rate=0.05,)
+
     if not variational:
-        encoder, decoder, ae = SEQ_2_SEQ_AE(
-            input_dict_train[input_type].shape, **hparams
-        ).build()
-        ae.build(input_dict_train[input_type].shape)
+        encoder, decoder, ae = SEQ_2_SEQ_AE(X_train.shape, **hparams).build()
+        ae.build(X_train.shape)
 
         print(ae.summary())
         ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
@@ -458,12 +457,9 @@ for run in range(runs):
             callbacks=[
                 tensorboard_callback,
                 cp_callback,
-                OneCycleScheduler(
-                    input_dict_train[input_type].shape(0) // batch_size * 250,
-                    max_rate=0.05,
-                ),
+                onecycle,
                 tf.keras.callbacks.EarlyStopping(
-                    "val_loss", patience=15, restore_best_weights=False
+                    "val_loss", patience=10, restore_best_weights=True
                 ),
             ],
         )
@@ -479,7 +475,7 @@ for run in range(runs):
             kl_warmup_callback,
             mmd_warmup_callback,
         ) = SEQ_2_SEQ_GMVAE(
-            input_dict_train[input_type].shape,
+            X_train.shape,
             loss=loss,
             number_of_components=k,
             kl_warmup_epochs=kl_wu,
@@ -488,15 +484,16 @@ for run in range(runs):
             overlap_loss=overlap_loss,
             **hparams
         ).build()
-        gmvaep.build(input_dict_train[input_type].shape)
+        gmvaep.build(X_train.shape)
 
         print(gmvaep.summary())
 
         callbacks_ = [
             tensorboard_callback,
             cp_callback,
+            onecycle,
             tf.keras.callbacks.EarlyStopping(
-                "val_loss", patience=15, restore_best_weights=False
+                "val_loss", patience=10, restore_best_weights=True
             ),
         ]
 
@@ -509,26 +506,20 @@ for run in range(runs):
             history = gmvaep.fit(
                 x=X_train,
                 y=X_train,
-                epochs=25,
+                epochs=250,
                 batch_size=batch_size,
                 verbose=1,
-                validation_data=(
-                    X_val,
-                    X_val,
-                ),
+                validation_data=(X_val, X_val,),
                 callbacks=callbacks_,
             )
         else:
             history = gmvaep.fit(
                 x=X_train[:-1],
                 y=[X_train[:-1], X_train[1:]],
-                epochs=25,
+                epochs=250,
                 batch_size=batch_size,
                 verbose=1,
-                validation_data=(
-                    X_val[:-1],
-                    [X_val[:-1], X_val[1:]],
-                ),
+                validation_data=(X_val[:-1], [X_val[:-1], X_val[1:]],),
                 callbacks=callbacks_,
             )
 
