@@ -4,7 +4,6 @@ import cv2
 import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
-from numba import njit
 import numpy as np
 import pandas as pd
 import pickle
