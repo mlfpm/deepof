@@ -60,9 +60,9 @@ class project:
         self.connectivity = connectivity
         self.scales = self.get_scale
 
-        assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
-            re.findall("(.*)\.", tab)[0] for tab in self.tables
-        ], "Video files should match table files"
+        # assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
+        #     re.findall("(.*)\.", tab)[0] for tab in self.tables
+        # ], "Video files should match table files"
 
     def __str__(self):
         if self.exp_conditions:
