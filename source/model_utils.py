@@ -137,7 +137,7 @@ class UncorrelatedFeaturesConstraint(Constraint):
         return covariance
 
     # Constraint penalty
-    def uncorrelated_feature(self):
+    def uncorrelated_feature(self, x):
         if self.encoding_dim <= 1:
             return 0.0
         else:
