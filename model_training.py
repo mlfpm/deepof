@@ -241,7 +241,7 @@ input_dict_train = {
         scale="standard",
         # filter="gaussian",
         sigma=55,
-        align="all",
+        align="center",
         test_videos=val_num,
     ),
     "dists": distances1.preprocess(
