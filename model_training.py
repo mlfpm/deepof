@@ -438,7 +438,7 @@ for run in range(runs):
         ),
     )
 
-    onecycle = OneCycleScheduler(X_train.shape[0] // batch_size * 250, max_rate=0.05,)
+    onecycle = OneCycleScheduler(X_train.shape[0] // batch_size * 250, max_rate=0.005,)
 
     if not variational:
         encoder, decoder, ae = SEQ_2_SEQ_AE(X_train.shape, **hparams).build()
