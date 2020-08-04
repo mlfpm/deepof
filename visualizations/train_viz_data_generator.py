@@ -198,7 +198,7 @@ bp_dict = {
 
 DLC_social = project(
     path=data_path,  # Path where to find the required files
-    smooth_alpha=0.90,  # Alpha value for exponentially weighted smoothing
+    smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
     distances=[
         "B_Center",
         "B_Nose",
@@ -233,7 +233,7 @@ coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 input_dict = {
     "coords": coords1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
@@ -243,7 +243,7 @@ input_dict = {
         align=True,
     ),
     "dists": distances1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
@@ -253,7 +253,7 @@ input_dict = {
         align=True,
     ),
     "angles": angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
@@ -263,7 +263,7 @@ input_dict = {
         align=True,
     ),
     "coords+dist": coords_distances1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
@@ -273,7 +273,7 @@ input_dict = {
         align=True,
     ),
     "coords+angle": coords_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
@@ -283,7 +283,7 @@ input_dict = {
         align=True,
     ),
     "dists+angle": dists_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=10,
         scale="standard",
         random_state=42,
@@ -292,7 +292,7 @@ input_dict = {
         align=True,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         random_state=42,
