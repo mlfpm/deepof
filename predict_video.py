@@ -202,11 +202,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "dists": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -214,11 +213,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "angles": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -226,11 +224,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "coords+dist": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -238,11 +235,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "coords+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -250,11 +246,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "dists+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -262,11 +257,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
     "coords+dist+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
@@ -274,11 +268,10 @@ input_dict = {
         window_size=11,
         window_step=1,
         scale="standard",
-        random_state=42,
-        filter="gaussian",
+        filter=None,
         sigma=55,
         shuffle=False,
-        align=True,
+        align="center",
     ),
 }
 
