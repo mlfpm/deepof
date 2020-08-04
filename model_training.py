@@ -236,7 +236,7 @@ coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
 
 input_dict_train = {
     "coords": coords1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -245,7 +245,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "dists": distances1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -254,7 +254,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "angles": angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -263,7 +263,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "coords+dist": coords_distances1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -272,7 +272,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "coords+angle": coords_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -281,7 +281,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "dists+angle": dists_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -290,7 +290,7 @@ input_dict_train = {
         test_videos=val_num,
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=11,
+        window_size=13,
         window_step=5,
         scale="standard",
         # filter="gaussian",
@@ -335,7 +335,7 @@ if val_path:
 
     input_dict_val = {
         "coords": coords2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -344,7 +344,7 @@ if val_path:
             align="all",
         ),
         "dists": distances2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -353,7 +353,7 @@ if val_path:
             align="all",
         ),
         "angles": angles2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -362,7 +362,7 @@ if val_path:
             align="all",
         ),
         "coords+dist": coords_distances2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -371,7 +371,7 @@ if val_path:
             align="all",
         ),
         "coords+angle": coords_angles2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -380,7 +380,7 @@ if val_path:
             align="all",
         ),
         "dists+angle": dists_angles2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",
@@ -389,7 +389,7 @@ if val_path:
             align="all",
         ),
         "coords+dist+angle": coords_dist_angles2.preprocess(
-            window_size=11,
+            window_size=13,
             window_step=5,
             scale="standard",
             # filter="gaussian",

@@ -163,7 +163,7 @@ bp_dict = {
 
 DLC_social = project(
     path=os.path.join(data_path),  # Path where to find the required files
-    smooth_alpha=0.90,  # Alpha value for exponentially weighted smoothing
+    smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
     distances=[
         "B_Center",
         "B_Nose",
@@ -199,7 +199,7 @@ input_dict = {
     "coords": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -210,7 +210,7 @@ input_dict = {
     "dists": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -221,7 +221,7 @@ input_dict = {
     "angles": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -232,7 +232,7 @@ input_dict = {
     "coords+dist": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -243,7 +243,7 @@ input_dict = {
     "coords+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -254,7 +254,7 @@ input_dict = {
     "dists+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
@@ -265,7 +265,7 @@ input_dict = {
     "coords+dist+angle": table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
-        window_size=11,
+        window_size=13,
         window_step=1,
         scale="standard",
         filter=None,
