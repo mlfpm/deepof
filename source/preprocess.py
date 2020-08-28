@@ -588,7 +588,7 @@ class table_dict(dict):
 
             if scale == "standard":
                 assert np.allclose(np.mean(X_train), 0)
-                assert np.allclose(np.std(X_train), 1)
+                assert np.allclose(np.std(X_train, ddof=1), 1)
 
             if test_videos:
                 X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
