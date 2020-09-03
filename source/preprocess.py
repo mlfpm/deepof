@@ -22,19 +22,19 @@ class project:
     """
 
     def __init__(
-            self,
-            video_format=".mp4",
-            table_format=".h5",
-            path=".",
-            exp_conditions=False,
-            subset_condition=None,
-            arena="circular",
-            smooth_alpha=0.1,
-            arena_dims=[1],
-            distances="All",
-            ego=False,
-            angles=True,
-            connectivity=None,
+        self,
+        video_format=".mp4",
+        table_format=".h5",
+        path=".",
+        exp_conditions=False,
+        subset_condition=None,
+        arena="circular",
+        smooth_alpha=0.1,
+        arena_dims=[1],
+        distances="All",
+        ego=False,
+        angles=True,
+        connectivity=None,
     ):
 
         self.path = path
@@ -138,8 +138,8 @@ class project:
                 ).T.index.remove_unused_levels()
 
                 tab = value.loc[
-                      :, [i for i in value.columns.levels[0] if i not in lablist]
-                      ]
+                    :, [i for i in value.columns.levels[0] if i not in lablist]
+                ]
 
                 tab.columns = tabcols
 
@@ -191,20 +191,20 @@ class project:
         scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: bpart_distance(tab, scales[i, 1], scales[i, 0], )
+            key: bpart_distance(tab, scales[i, 1], scales[i, 0],)
             for i, (key, tab) in enumerate(table_dict.items())
         }
 
         for key in distance_dict.keys():
             distance_dict[key] = distance_dict[key].loc[
-                                 :, [np.all([i in nodes for i in j]) for j in distance_dict[key].columns]
-                                 ]
+                :, [np.all([i in nodes for i in j]) for j in distance_dict[key].columns]
+            ]
 
         if self.ego:
             for key, val in distance_dict.items():
                 distance_dict[key] = val.loc[
-                                     :, [dist for dist in val.columns if self.ego in dist]
-                                     ]
+                    :, [dist for dist in val.columns if self.ego in dist]
+                ]
 
         return distance_dict
 
@@ -279,16 +279,16 @@ class project:
 
 class coordinates:
     def __init__(
-            self,
-            tables,
-            videos,
-            arena,
-            arena_dims,
-            scales,
-            quality,
-            exp_conditions=None,
-            distances=None,
-            angles=None,
+        self,
+        tables,
+        videos,
+        arena,
+        arena_dims,
+        scales,
+        quality,
+        exp_conditions=None,
+        distances=None,
+        angles=None,
     ):
         self._tables = tables
         self.distances = distances
@@ -309,7 +309,7 @@ class coordinates:
             return "DLC analysis of {} videos".format(len(self._videos))
 
     def get_coords(
-            self, center="arena", polar=False, speed=0, length=None, align=False
+        self, center="arena", polar=False, speed=0, length=None, align=False
     ):
         tabs = deepcopy(self._tables)
 
@@ -324,23 +324,23 @@ class coordinates:
 
                     try:
                         value.loc[:, (slice("coords"), ["x"])] = (
-                                value.loc[:, (slice("coords"), ["x"])]
-                                - self._scales[i][0] / 2
+                            value.loc[:, (slice("coords"), ["x"])]
+                            - self._scales[i][0] / 2
                         )
 
                         value.loc[:, (slice("coords"), ["y"])] = (
-                                value.loc[:, (slice("coords"), ["y"])]
-                                - self._scales[i][1] / 2
+                            value.loc[:, (slice("coords"), ["y"])]
+                            - self._scales[i][1] / 2
                         )
                     except KeyError:
                         value.loc[:, (slice("coords"), ["rho"])] = (
-                                value.loc[:, (slice("coords"), ["rho"])]
-                                - self._scales[i][0] / 2
+                            value.loc[:, (slice("coords"), ["rho"])]
+                            - self._scales[i][0] / 2
                         )
 
                         value.loc[:, (slice("coords"), ["phi"])] = (
-                                value.loc[:, (slice("coords"), ["phi"])]
-                                - self._scales[i][1] / 2
+                            value.loc[:, (slice("coords"), ["phi"])]
+                            - self._scales[i][1] / 2
                         )
 
         elif type(center) == str and center != "arena":
@@ -349,24 +349,24 @@ class coordinates:
 
                 try:
                     value.loc[:, (slice("coords"), ["x"])] = value.loc[
-                                                             :, (slice("coords"), ["x"])
-                                                             ].subtract(value[center]["x"], axis=0)
+                        :, (slice("coords"), ["x"])
+                    ].subtract(value[center]["x"], axis=0)
 
                     value.loc[:, (slice("coords"), ["y"])] = value.loc[
-                                                             :, (slice("coords"), ["y"])
-                                                             ].subtract(value[center]["y"], axis=0)
+                        :, (slice("coords"), ["y"])
+                    ].subtract(value[center]["y"], axis=0)
                 except KeyError:
                     value.loc[:, (slice("coords"), ["rho"])] = value.loc[
-                                                               :, (slice("coords"), ["rho"])
-                                                               ].subtract(value[center]["rho"], axis=0)
+                        :, (slice("coords"), ["rho"])
+                    ].subtract(value[center]["rho"], axis=0)
 
                     value.loc[:, (slice("coords"), ["phi"])] = value.loc[
-                                                               :, (slice("coords"), ["phi"])
-                                                               ].subtract(value[center]["phi"], axis=0)
+                        :, (slice("coords"), ["phi"])
+                    ].subtract(value[center]["phi"], axis=0)
 
                 tabs[key] = value.loc[
-                            :, [tab for tab in value.columns if tab[0] != center]
-                            ]
+                    :, [tab for tab in value.columns if tab[0] != center]
+                ]
 
         if speed:
             for order in range(speed):
@@ -387,16 +387,16 @@ class coordinates:
 
         if align:
             assert (
-                    align in list(tabs.values())[0].columns.levels[0]
+                align in list(tabs.values())[0].columns.levels[0]
             ), "align must be set to the name of a bodypart"
 
             for key, tab in tabs.items():
                 # Bring forward the column to align
                 columns = [i for i in tab.columns if align not in i]
                 columns = [
-                              (align, ("phi" if polar else "x")),
-                              (align, ("rho" if polar else "y")),
-                          ] + columns
+                    (align, ("phi" if polar else "x")),
+                    (align, ("rho" if polar else "y")),
+                ] + columns
                 tabs[key] = tab[columns]
 
         return table_dict(
@@ -506,7 +506,9 @@ class table_dict(dict):
 
         assert np.all([k in self.keys() for k in keys]), "Invalid keys selected"
 
-        return table_dict({k: value for k, value in self.items() if k in keys}, self._type)
+        return table_dict(
+            {k: value for k, value in self.items() if k in keys}, self._type
+        )
 
     def plot_heatmaps(self, bodyparts, save=False, i=0):
 
@@ -552,17 +554,17 @@ class table_dict(dict):
         return X_train, X_test
 
     def preprocess(
-            self,
-            window_size=1,
-            window_step=1,
-            scale="standard",
-            test_videos=0,
-            verbose=False,
-            filter=None,
-            sigma=None,
-            shift=0,
-            shuffle=False,
-            align=False,
+        self,
+        window_size=1,
+        window_step=1,
+        scale="standard",
+        test_videos=0,
+        verbose=False,
+        filter=None,
+        sigma=None,
+        shift=0,
+        shuffle=False,
+        align=False,
     ):
         """Builds a sliding window. If specified, splits train and test and
            Z-scores the data using sklearn's standard scaler"""

@@ -15,23 +15,30 @@ from copy import deepcopy
 from itertools import cycle, combinations, product
 from joblib import Parallel, delayed
 from numba import jit
-from numpy.core.umath_tests import inner1d
 from scipy import spatial
 from sklearn import mixture
 from tqdm import tqdm_notebook as tqdm
 
 
-##### QUALITY CONTROL AND PREPROCESSING #####
+# QUALITY CONTROL AND PREPROCESSING #
 
-# Likelihood quality control
-def Likelihood_qc(dframe, threshold=0.9):
+
+def likelihood_qc(dframe, threshold=0.9):
     """Returns only rows where all lilelihoods are above a specified threshold"""
     Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
     Likes = np.nan_to_num(Likes, nan=1.0)
     return np.all(Likes > threshold, axis=0)
 
 
-def bp2polar(tab):
+def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
+    """Returns the DataFrame in polar coordinates.
+
+        Parameters:
+            - tab (pandas.DataFrame):Table with cartesian coordinates
+
+        Returns:
+            - polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+
     tab_ = np.array(tab)
     complex_ = tab_[:, 0] + 1j * tab_[:, 1]
     polar = pd.DataFrame(np.array([abs(complex_), np.angle(complex_)]).T)
@@ -39,28 +46,64 @@ def bp2polar(tab):
     return polar
 
 
-def tab2polar(tabdict):
+def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
+    """Returns a pandas.DataFrame in which all the coordinates are polar.
+
+        Parameters:
+            - cartesian_df (pandas.DataFrame):DataFrame containing tables with cartesian coordinates
+
+        Returns:
+            - result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+
     result = []
-    for df in list(tabdict.columns.levels[0]):
-        result.append(bp2polar(tabdict[df]))
+    for df in list(cartesian_df.columns.levels[0]):
+        result.append(bp2polar(cartesian_df[df]))
     result = pd.concat(result, axis=1)
     idx = pd.MultiIndex.from_product(
-        [list(tabdict.columns.levels[0]), ["rho", "phi"]], names=["bodyparts", "coords"]
+        [list(cartesian_df.columns.levels[0]), ["rho", "phi"]],
+        names=["bodyparts", "coords"],
     )
     result.columns = idx
     return result
 
 
-def compute_dist(pair_df, arena_abs, arena_rel):
-    a, b = pair_df[:, :2], pair_df[:, 2:]
+def compute_dist(
+    pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
+) -> pd.DataFrame:
+    """Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
+
+        Parameters:
+            - pair_array (numpy.array): np.array of shape N * 4 containing X,y positions
+            over time for a given pair of body parts
+            - arena_abs (int): diameter of the real arena in cm
+            - arena_rel (int): diameter of the captured arena in pixels
+
+        Returns:
+            - result (pd.DataFrame): pandas.DataFrame with the
+            absolute distances between a pair of body parts"""
+
+    a, b = pair_array[:, :2], pair_array[:, 2:]
     ab = a - b
-    dist = np.sqrt(inner1d(ab, ab))
+    dist = np.sqrt(np.einsum("...i,...i", ab, ab))
     return pd.DataFrame(dist * arena_abs / arena_rel)
 
 
-def bpart_distance(dataframe, arena_abs, arena_rel):
-    indexes = combinations(dataframe.columns.levels[0], 2)
+def bpart_distance(
+    dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
+) -> pd.DataFrame:
+    """Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
+        Parameters:
+            - dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
+        over time for a given set of bp body parts
+            - arena_abs (int): diameter of the real arena in cm
+            - arena_rel (int): diameter of the captured arena in pixels
+
+        Returns:
+            - result (pd.DataFrame): pandas.DataFrame with the
+            absolute distances between all pairs of body parts"""
+
+    indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
     for idx in indexes:
         dist = compute_dist(np.array(dataframe.loc[:, list(idx)]), arena_abs, arena_rel)
@@ -70,40 +113,77 @@ def bpart_distance(dataframe, arena_abs, arena_rel):
     return pd.concat(dists, axis=1)
 
 
-def angle(a, b, c):
+def angle(a: np.array, b: np.array, c: np.array) -> np.array:
+    """Returns a numpy.array with the angles between the provided instances.
+
+        Parameters:
+            - a (2D np.array): positions over time for a bodypart
+            - b (2D np.array): positions over time for a bodypart
+            - c (2D np.array): positions over time for a bodypart
+        Returns:
+            - ang (1D np.array): angles between the three-point-instances"""
+
     ba = a - b
     bc = c - b
 
-    cosine_angle = inner1d(ba, bc) / (
+    cosine_angle = np.einsum("...i,...i", ba, bc) / (
         np.linalg.norm(ba, axis=1) * np.linalg.norm(bc, axis=1)
     )
-    angle = np.arccos(cosine_angle)
+    ang = np.arccos(cosine_angle)
 
-    return angle
-
-
-def angle_trio(array, degrees=False):
-    a, b, c = array
-
-    return np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c),])
+    return ang
 
 
-def rotate(p, angles, origin=np.array([0, 0])):
+def angle_trio(bpart_array: np.array) -> np.array:
+    """Returns a numpy.array with all three possible angles between the provided instances.
+
+        Parameters:
+            - bpart_array (2D numpy.array): positions over time for a bodypart
+
+        Returns:
+            - ang_trio (2D numpy.array): all-three angles between the three-point-instances"""
+    a, b, c = bpart_array
+    ang_trio = np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c)])
+
+    return ang_trio
+
+
+def rotate(
+    p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
+) -> np.array:
+    """Returns a numpy.array with the initial values rotated by angles radians
+
+        Parameters:
+            - p (2D numpy.array): array containing positions of bodyparts over time
+            - angles (2D numpy.array): set of angles (in radians) to rotate p with
+            - origin (2D numpy.array): rotation axis (zero vector by default)
+
+        Returns:
+            - rotated (2D numpy.array): rotated positions over time"""
     R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
 
     o = np.atleast_2d(origin)
     p = np.atleast_2d(p)
 
-    return np.squeeze((R @ (p.T - o.T) + o.T).T)
+    rotated = np.squeeze((R @ (p.T - o.T) + o.T).T)
+
+    return rotated
 
 
-def align_trajectories(data, mode="all"):
+def align_trajectories(data: np.array, mode: str = "all") -> np.array:
+    """Returns a numpy.array with the positions rotated in a way that the center (0 vector)
+    and the body part in the first column of data are aligned with the y axis.
 
-    """
-    mode: all aligns all frames in the data
-    mode: center aligns only the central frame
-    """
+        Parameters:
+            - data (3D numpy.array): array containing positions of body parts over time, where
+            shape is N (sliding window instances) * m (sliding window size) * l (features)
+            - mode (string): specifies if *all* instances of each sliding window get
+            aligned, or only the *center*
 
+        Returns:
+            - aligned_trajs (2D np.array): aligned positions over time"""
+
+    angles = np.zeros(data.shape[0])
     data = deepcopy(data)
     dshape = data.shape
 
@@ -127,20 +207,37 @@ def align_trajectories(data, mode="all"):
     return aligned_trajs
 
 
-def smooth_boolean_array(a):
-    """Returns a boolean array in which isolated appearances of a feature are smoothened"""
+def smooth_boolean_array(a: np.array) -> np.array:
+    """Returns a boolean array in which isolated appearances of a feature are smoothened
+
+        Parameters:
+            - a (1D numpy.array): boolean instances
+
+        Returns:
+            - a (1D numpy.array): smoothened boolean instances"""
+
     for i in range(1, len(a) - 1):
         if a[i - 1] == a[i + 1]:
             a[i] = a[i - 1]
     return a == 1
 
 
-def rolling_window(a, window_size, window_step, write=True):
+def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
+    """Returns a 3D numpy.array with a sliding-window extra dimension
+
+            Parameters:
+                - a (2D np.array): N (instances) * m (features) shape
+
+            Returns:
+                - rolled_a (3D np.array):
+                N (sliding window instances) * l (sliding window size) * m (features)"""
+
     shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
     strides = (a.strides[0],) + a.strides
-    return np.lib.stride_tricks.as_strided(
-        a, shape=shape, strides=strides, writeable=write
+    rolled_a = np.lib.stride_tricks.as_strided(
+        a, shape=shape, strides=strides, writeable=True
     )[::window_step]
+    return rolled_a
 
 
 @jit
@@ -223,7 +320,6 @@ def side_by_side(pos_dict, fnum, tol, rev=False):
 def recognize_arena(
     Videos, vid_index, path=".", recoglimit=1, arena_type="circular",
 ):
-
     cap = cv2.VideoCapture(path + Videos[vid_index])
 
     # Loop over the first frames in the video to get resolution and center of the arena
