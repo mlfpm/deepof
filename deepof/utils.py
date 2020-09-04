@@ -14,7 +14,6 @@ import seaborn as sns
 from copy import deepcopy
 from itertools import cycle, combinations, product
 from joblib import Parallel, delayed
-from numba import jit
 from scipy import spatial
 from sklearn import mixture
 from tqdm import tqdm_notebook as tqdm
@@ -250,7 +249,6 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
     return rolled_a
 
 
-@jit
 def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
     """Returns a smooths a trajectory using exponentially weighted averages
 
