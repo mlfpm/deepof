@@ -11,5 +11,5 @@ test_a:
     - pip install -e ./source/
     - echo "Dependencies installed"
     - echo "Testing all functions in deepof.utils"
-    - pytest ./test_deepof/test_utils.py
+    - pytest
     - echo "Testing deepof.utils complete!"
