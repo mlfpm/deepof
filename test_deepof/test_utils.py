@@ -1,8 +1,5 @@
 # @author lucasmiranda42
 
-import sys
-
-sys.path.append("../")
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
