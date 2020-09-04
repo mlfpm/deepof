@@ -1,7 +1,7 @@
 stages:
   - test
 
-image: deepof
+image: continuumio/anaconda
 
 test_a:
   stage: test
