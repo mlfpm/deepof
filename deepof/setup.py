@@ -24,5 +24,5 @@ setuptools.setup(
     ],
     python_requires=">=3.6",
     platform="Platform independent",
-    License="MIT"
+    License="MIT",
 )
