@@ -9,6 +9,7 @@ from scipy.spatial import distance
 from deepof.utils import *
 
 
+@settings(deadline=None)
 @given(
     mult=st.integers(min_value=1, max_value=10),
     dframe=data_frames(
@@ -49,6 +50,7 @@ def test_likelihood_qc(mult, dframe, threshold):
     assert np.sum(filt1) >= np.sum(filt2)
 
 
+@settings(deadline=None)
 @given(
     tab=data_frames(
         index=range_indexes(min_size=1),
@@ -69,6 +71,7 @@ def test_bp2polar(tab):
     assert np.allclose(polar["phi"], np.arctan2(tab["y"], tab["X"]))
 
 
+@settings(deadline=None)
 @given(
     mult=st.integers(min_value=1, max_value=10),
     cartdf=data_frames(
@@ -95,6 +98,7 @@ def test_tab2polar(mult, cartdf):
     assert cart_df.shape == tab2polar(cart_df).shape
 
 
+@settings(deadline=None)
 @given(
     pair_array=arrays(
         dtype=float,
@@ -116,6 +120,7 @@ def test_compute_dist(pair_array, arena_abs, arena_rel):
     )
 
 
+@settings(deadline=None)
 @given(
     cordarray=arrays(
         dtype=float,
@@ -142,6 +147,7 @@ def test_bpart_distance(cordarray):
     assert bpart.shape[1] == len(list(combinations(range(cord_df.shape[1] // 2), 2)))
 
 
+@settings(deadline=None)
 @given(
     abc=arrays(
         dtype=float,
@@ -170,6 +176,7 @@ def test_angle(abc):
     assert np.allclose(angle(a, b, c), np.array(angles))
 
 
+@settings(deadline=None)
 @given(
     array=arrays(
         dtype=float,
@@ -187,6 +194,7 @@ def test_angle_trio(array):
     assert len(angle_trio(array)) == 3
 
 
+@settings(deadline=None)
 @given(
     p=arrays(
         dtype=float,
@@ -204,6 +212,7 @@ def test_rotate(p):
     assert np.allclose(rotate(p, np.pi), -p)
 
 
+@settings(deadline=None)
 @given(
     data=arrays(
         dtype=float,
@@ -227,6 +236,7 @@ def test_align_trajectories(data):
         assert np.allclose(aligned[:, :, 0], 0)
 
 
+@settings(deadline=None)
 @given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=1000))))
 def test_smooth_boolean_array(a):
     smooth = smooth_boolean_array(a)
@@ -237,6 +247,7 @@ def test_smooth_boolean_array(a):
     assert trans(a) >= trans(smooth)
 
 
+@settings(deadline=None)
 @given(
     a=arrays(
         dtype=float,
