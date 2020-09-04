@@ -4,12 +4,52 @@ import sys
 
 sys.path.append("../")
 from hypothesis import given
+from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
-from itertools import combinations
 from scipy.spatial import distance
 from source.utils import *
+
+
+@given(
+    mult=st.integers(min_value=1, max_value=10),
+    dframe=data_frames(
+        index=range_indexes(min_size=1),
+        columns=columns(["X", "y", "likelihood"], dtype=float),
+        rows=st.tuples(
+            st.floats(
+                min_value=0, max_value=1000, allow_nan=False, allow_infinity=False
+            ),
+            st.floats(
+                min_value=0, max_value=1000, allow_nan=False, allow_infinity=False
+            ),
+            st.floats(
+                min_value=0.01, max_value=1.0, allow_nan=False, allow_infinity=False
+            ),
+        ),
+    ),
+    threshold=st.data(),
+)
+def test_likelihood_qc(mult, dframe, threshold):
+    thresh1 = threshold.draw(st.floats(min_value=0.1, max_value=1.0, allow_nan=False))
+    thresh2 = threshold.draw(
+        st.floats(min_value=thresh1, max_value=1.0, allow_nan=False)
+    )
+
+    dframe = pd.concat([dframe] * mult, axis=0)
+    idx = pd.MultiIndex.from_product(
+        [list(dframe.columns[: len(dframe.columns) // 3]), ["X", "y", "likelihood"]],
+        names=["bodyparts", "coords"],
+    )
+    dframe.columns = idx
+
+    filt1 = likelihood_qc(dframe, thresh1)
+    filt2 = likelihood_qc(dframe, thresh2)
+
+    assert np.sum(filt1) <= dframe.shape[0]
+    assert np.sum(filt2) <= dframe.shape[0]
+    assert np.sum(filt1) >= np.sum(filt2)
 
 
 @given(
@@ -119,7 +159,6 @@ def test_bpart_distance(cordarray):
     ),
 )
 def test_angle(abc):
-
     a, b, c = abc
 
     angles = []
@@ -164,7 +203,6 @@ def test_angle_trio(array):
     )
 )
 def test_rotate(p):
-
     assert np.allclose(rotate(p, 2 * np.pi), p)
     assert np.allclose(rotate(p, np.pi), -p)
 
@@ -195,7 +233,10 @@ def test_align_trajectories(data):
 @given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=1000))))
 def test_smooth_boolean_array(a):
     smooth = smooth_boolean_array(a)
-    trans = lambda x: sum([i + 1 != i for i in range(x.shape[0] - 1)])
+
+    def trans(x):
+        return sum([i + 1 != i for i in range(x.shape[0] - 1)])
+
     assert trans(a) >= trans(smooth)
 
 
@@ -222,3 +263,37 @@ def test_rolling_window(a, window):
 
     assert len(rolled_shape) == len(a.shape) + 1
     assert rolled_shape[1] == window_size
+
+
+@settings(deadline=None)
+@given(
+    alpha=st.data(),
+    series=arrays(
+        dtype=float,
+        shape=st.tuples(st.integers(min_value=10, max_value=1000),),
+        elements=st.floats(
+            min_value=1.0, max_value=1.0, allow_nan=False, allow_infinity=False
+        ),
+    ),
+)
+def test_smooth_mult_trajectory(alpha, series):
+    alpha1 = alpha.draw(
+        st.floats(min_value=0.1, max_value=1.0, allow_nan=False, allow_infinity=False)
+    )
+    alpha2 = alpha.draw(
+        st.floats(
+            min_value=alpha1, max_value=1.0, allow_nan=False, allow_infinity=False
+        )
+    )
+
+    series *= +np.random.normal(0, 1, len(series))
+
+    smoothed1 = smooth_mult_trajectory(series, alpha1)
+    smoothed2 = smooth_mult_trajectory(series, alpha2)
+
+    def autocorr(x, t=1):
+        return np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1]
+
+    assert autocorr(smoothed1) >= autocorr(series)
+    assert autocorr(smoothed2) >= autocorr(series)
+    assert autocorr(smoothed2) <= autocorr(smoothed1)

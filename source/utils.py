@@ -23,11 +23,21 @@ from tqdm import tqdm_notebook as tqdm
 # QUALITY CONTROL AND PREPROCESSING #
 
 
-def likelihood_qc(dframe, threshold=0.9):
-    """Returns only rows where all lilelihoods are above a specified threshold"""
+def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
+    """Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
+
+        Parameters:
+            - dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihhod
+            - threshold (float): minimum acceptable confidence
+
+        Returns:
+            - filt_mask (np.array): mask on the rows of dframe"""
+
     Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
     Likes = np.nan_to_num(Likes, nan=1.0)
-    return np.all(Likes > threshold, axis=0)
+    filt_mask = np.all(Likes > threshold, axis=0)
+
+    return filt_mask
 
 
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
@@ -244,10 +254,9 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
 def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
     """Returns a smooths a trajectory using exponentially weighted averages
 
-        Parameters:
-            - series (np.array): 2D trajectory array with N (instances) * m (features)
-            - alpha (float): 0 <= alpha <= 1; indicates the weight assigned to the current observation.
-            higher (alpha~1) indicates less smoothing; lower indicates more (alpha~0)
+        Parameters: - series (numpyp.array): 1D trajectory array with N (instances) - alpha (float): 0 <= alpha <= 1;
+        indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing; lower
+        indicates more (alpha~0)
 
         Returns:
             - smoothed_series (np.array): smoothed version of the input, with equal shape"""
@@ -260,7 +269,8 @@ def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
 
     return smoothed_series
 
-    ##### IMAGE/VIDEO PROCESSING FUNCTIONS #####
+
+# IMAGE/VIDEO PROCESSING FUNCTIONS #
 
 
 def index_frames(video_list, sample=False, index=0, pkl=False):
@@ -286,7 +296,8 @@ def index_frames(video_list, sample=False, index=0, pkl=False):
 
     return True
 
-    ##### BEHAVIOUR RECOGNITION FUNCTIONS #####
+
+# BEHAVIOUR RECOGNITION FUNCTIONS #
 
 
 # Nose to Nose contact
