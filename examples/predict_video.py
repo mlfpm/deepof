@@ -5,8 +5,8 @@ import sys
 
 sys.path.insert(1, "../")
 
-from source.preprocess import *
-from source.models import *
+from deepof.preprocess import *
+from deepof.models import *
 import argparse
 import cv2
 import os, pickle

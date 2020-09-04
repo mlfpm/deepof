@@ -1,8 +1,8 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-from source.preprocess import *
-from source.models import *
+from deepof.preprocess import *
+from deepof.models import *
 from tensorflow import keras
 import argparse
 import os, pickle

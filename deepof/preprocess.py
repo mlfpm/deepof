@@ -11,7 +11,7 @@ import os
 import warnings
 import networkx as nx
 
-from source.utils import *
+from deepof.utils import *
 
 
 class project:

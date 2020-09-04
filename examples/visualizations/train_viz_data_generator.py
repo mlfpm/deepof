@@ -10,8 +10,8 @@ from datetime import datetime
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.manifold import TSNE
 from sklearn.metrics import mean_absolute_error
-from source.preprocess import *
-from source.models import *
+from deepof.preprocess import *
+from deepof.models import *
 from tqdm import tqdm
 import argparse
 import numpy as np

@@ -1,8 +1,8 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-from source.preprocess import *
-from source.hypermodels import *
+from deepof.preprocess import *
+from deepof.hypermodels import *
 from kerastuner import BayesianOptimization
 from tensorflow import keras
 import argparse

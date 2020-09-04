@@ -7,8 +7,8 @@ test_a:
   stage: test
   script:
     - echo "Installing dependencies"
-    - pip install -r ./source/requirements.txt
-    - pip install -e ./source/
+    - pip install -r ./deepof/requirements.txt
+    - pip install -e deepof/
     - echo "Dependencies installed"
     - echo "Testing all functions in deepof.utils"
     - pytest
