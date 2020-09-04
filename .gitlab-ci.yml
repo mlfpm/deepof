@@ -1,7 +1,7 @@
 stages:
   - test
 
-image: continuumio/anaconda
+image: continuumio/anaconda3
 
 test_a:
   stage: test
