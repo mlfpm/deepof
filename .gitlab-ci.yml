@@ -1,0 +1,10 @@
+stages:
+  - test
+
+image: deepof
+
+test_a:
+  stage: test
+  script:
+    - echo "This job tests all functions in deepof.utils"
+    - pytest ./test_deepof/test_utils.py
