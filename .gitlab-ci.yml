@@ -4,7 +4,7 @@ stages:
 
 image: continuumio/anaconda3
 
-buila_a:
+buila:
   stage: build
   script:
     - echo "Installing dependencies"
@@ -12,7 +12,7 @@ buila_a:
     - pip install -e deepof/
     - echo "Dependencies installed"
 
-test_a:
+test_utils:
   stage: test
   script:
     - echo "Testing all functions in deepof.utils"
