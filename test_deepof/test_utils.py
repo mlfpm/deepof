@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
-from source.utils import *
+from deepof.utils import *
 
 
 @given(

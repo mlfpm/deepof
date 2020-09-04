@@ -8,6 +8,7 @@ test_a:
   script:
     - echo "Installing dependencies"
     - pip install -r ./source/requirements.txt
+    - pip install -e ./source/
     - echo "Dependencies installed"
     - echo "Testing all functions in deepof.utils"
     - pytest ./test_deepof/test_utils.py
