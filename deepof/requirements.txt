@@ -15,5 +15,4 @@ tensorflow~=2.2.0
 hypothesis~=5.29.0
 dash~=1.11.0
 plotly~=4.5.0
-deepof~=0.0.1
 setuptools~=49.6.0
