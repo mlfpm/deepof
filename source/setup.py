@@ -8,7 +8,8 @@ setuptools.setup(
     version="0.0.1",
     author="Lucas Miranda",
     author_email="lucas_miranda@psych.mpg.de",
-    description="Unsupervised animal pose classification using Gaussian Mixture Variational Autoencoders",
+    description="deepof (Deep Open Field): Unsupervised Open Field animal pose classification "
+    "using Gaussian Mixture Variational Autoencoders",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/",
