@@ -225,12 +225,12 @@ def smooth_boolean_array(a: np.array) -> np.array:
 def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
     """Returns a 3D numpy.array with a sliding-window extra dimension
 
-            Parameters:
-                - a (2D np.array): N (instances) * m (features) shape
+        Parameters:
+            - a (2D np.array): N (instances) * m (features) shape
 
-            Returns:
-                - rolled_a (3D np.array):
-                N (sliding window instances) * l (sliding window size) * m (features)"""
+        Returns:
+            - rolled_a (3D np.array):
+            N (sliding window instances) * l (sliding window size) * m (features)"""
 
     shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
     strides = (a.strides[0],) + a.strides
@@ -241,14 +241,24 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
 
 
 @jit
-def smooth_mult_trajectory(series, alpha=0.15):
-    """smooths a trajectory using exponentially weighted averages"""
+def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
+    """Returns a smooths a trajectory using exponentially weighted averages
+
+        Parameters:
+            - series (np.array): 2D trajectory array with N (instances) * m (features)
+            - alpha (float): 0 <= alpha <= 1; indicates the weight assigned to the current observation.
+            higher (alpha~1) indicates less smoothing; lower indicates more (alpha~0)
+
+        Returns:
+            - smoothed_series (np.array): smoothed version of the input, with equal shape"""
 
     result = [series[0]]
     for n in range(len(series)):
         result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
 
-    return np.array(result)
+    smoothed_series = np.array(result)
+
+    return smoothed_series
 
     ##### IMAGE/VIDEO PROCESSING FUNCTIONS #####
 

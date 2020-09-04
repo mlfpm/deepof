@@ -220,5 +220,5 @@ def test_rolling_window(a, window):
 
     rolled_shape = rolling_window(a, window_size, window_step).shape
 
-    assert len(rolled_shape) == a.shape + 1
+    assert len(rolled_shape) == len(a.shape) + 1
     assert rolled_shape[1] == window_size
