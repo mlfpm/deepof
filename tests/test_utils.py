@@ -325,7 +325,7 @@ def test_smooth_mult_trajectory(alpha, series):
             st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
         ),
     ),
-    tol=st.floats(min_value=0.01, max_value=4.98, allow_infinity=False),
+    tol=st.floats(min_value=0.01, max_value=4.98),
 )
 def test_close_single_contact(pos_dframe, tol):
 
@@ -334,5 +334,38 @@ def test_close_single_contact(pos_dframe, tol):
     )
     pos_dframe.columns = idx
     close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol)
+    assert close_contact.dtype == bool
+    assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
+
+
+@settings(deadline=None)
+@given(
+    pos_dframe=data_frames(
+        index=range_indexes(min_size=5),
+        columns=columns(["X1", "y1", "X2", "y2", "X3", "y3", "X4", "y4"], dtype=float),
+        rows=st.tuples(
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+        ),
+    ),
+    tol=st.floats(min_value=0.01, max_value=4.98),
+    rev=st.booleans(),
+)
+def test_close_double_contact(pos_dframe, tol, rev):
+
+    idx = pd.MultiIndex.from_product(
+        [["bpart1", "bpart2", "bpart3", "bpart4"], ["X", "y"]],
+        names=["bodyparts", "coords"],
+    )
+    pos_dframe.columns = idx
+    close_contact = close_double_contact(
+        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev
+    )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
