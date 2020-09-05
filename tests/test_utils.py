@@ -9,6 +9,9 @@ from scipy.spatial import distance
 from deepof.utils import *
 
 
+# QUALITY CONTROL AND PREPROCESSING #
+
+
 @settings(deadline=None)
 @given(
     mult=st.integers(min_value=1, max_value=10),
@@ -305,3 +308,31 @@ def test_smooth_mult_trajectory(alpha, series):
     assert autocorr(smoothed1) >= autocorr(series)
     assert autocorr(smoothed2) >= autocorr(series)
     assert autocorr(smoothed2) <= autocorr(smoothed1)
+
+
+# BEHAVIOUR RECOGNITION FUNCTIONS #
+
+
+@settings(deadline=None)
+@given(
+    pos_dframe=data_frames(
+        index=range_indexes(min_size=5),
+        columns=columns(["X1", "y1", "X2", "y2"], dtype=float),
+        rows=st.tuples(
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+        ),
+    ),
+    tol=st.floats(min_value=0.01, max_value=4.98, allow_infinity=False),
+)
+def test_close_single_contact(pos_dframe, tol):
+
+    idx = pd.MultiIndex.from_product(
+        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
+    )
+    pos_dframe.columns = idx
+    close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol)
+    assert close_contact.dtype == bool
+    assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]

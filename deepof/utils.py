@@ -6,8 +6,6 @@ import multiprocessing
 import networkx as nx
 import numpy as np
 import pandas as pd
-import pickle
-import pims
 import regex as re
 import scipy
 import seaborn as sns
@@ -252,9 +250,10 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
 def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
     """Returns a smooths a trajectory using exponentially weighted averages
 
-        Parameters: - series (numpyp.array): 1D trajectory array with N (instances) - alpha (float): 0 <= alpha <= 1;
-        indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing; lower
-        indicates more (alpha~0)
+        Parameters:
+            - series (numpy.array): 1D trajectory array with N (instances) - alpha (float): 0 <= alpha <= 1;
+            indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing; lower
+            indicates more (alpha~0)
 
         Returns:
             - smoothed_series (np.array): smoothed version of the input, with equal shape"""
@@ -268,72 +267,49 @@ def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
     return smoothed_series
 
 
-# IMAGE/VIDEO PROCESSING FUNCTIONS #
-
-
-def index_frames(video_list, sample=False, index=0, pkl=False):
-    """Pickles a 4D numpy array per video in video list, for easy random access afterwards"""
-
-    pbar = tqdm(total=len(video_list))
-
-    for i, vid in enumerate(video_list):
-
-        v = np.array(pims.PyAVReaderIndexed(vid))
-
-        if sample:
-            v = v[np.random.choice(v.shape[0], sample)]
-
-        if type(index) != int:
-            v = v[index]
-
-        if pkl:
-            with open(pkl, "wb") as f:
-                pickle.dump(v, f, protocol=4)
-
-        pbar.update(1)
-
-    return True
-
-
 # BEHAVIOUR RECOGNITION FUNCTIONS #
 
 
-# Nose to Nose contact
-def nose_to_nose(pos_dict, fnum, tol):
-    """Takes DLC dataframe as input. Returns True when distances of both noses are closer to tolerance"""
+def close_single_contact(
+    pos_dframe: pd.DataFrame, left: str, right: str, tol: float
+) -> np.array:
+    """Returns a boolean array that's True if the specified body parts are closer than tol.
 
-    return np.linalg.norm(pos_dict["B_Nose"] - pos_dict["W_Nose"]) < tol
+        Parameters:
+            - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
+            to two-animal experiments.
+            - left (string): First member of the potential contact
+            - right (string): Second member of the potential contact
+            - tol (float)
 
+        Returns:
+            - contact_array (np.array): True if the distance between the two specified points
+            is less than tol, False otherwise"""
 
-# Black nose to white tail contact
-def nose_to_tail(pos_dict, fnum, tol, mouse1="B", mouse2="W"):
-    """Takes DLC dataframe as input. Returns True when the distance of nose1 and tail2 are closer to tolerance"""
+    close_contact = np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) < tol
 
-    return (
-        np.linalg.norm(pos_dict[mouse1 + "_Nose"] - pos_dict[mouse2 + "_Tail_base"])
-        < tol
-    )
+    return close_contact
 
 
 # Side by side (noses and tails close)
-def side_by_side(pos_dict, fnum, tol, rev=False):
-    """Takes DLC dataframe as input. Returns True when mice are side by side"""
-    w_nose = pos_dict["W_Nose"]
-    b_nose = pos_dict["B_Nose"]
-    w_tail = pos_dict["W_Tail_base"]
-    b_tail = pos_dict["B_Tail_base"]
-
-    if rev:
-        return (
-            np.linalg.norm(w_nose - b_tail) < tol
-            and np.linalg.norm(w_tail - b_nose) < tol
-        )
-
-    else:
-        return (
-            np.linalg.norm(w_nose - b_nose) < tol
-            and np.linalg.norm(w_tail - b_tail) < tol
-        )
+# def close_double_contact(pos_dict, left1, right2, left2, right2, tol, rev=False):
+#     """Takes DLC dataframe as input. Returns True when mice are side by side"""
+#     w_nose = pos_dict["W_Nose"]
+#     b_nose = pos_dict["B_Nose"]
+#     w_tail = pos_dict["W_Tail_base"]
+#     b_tail = pos_dict["B_Tail_base"]
+#
+#     if rev:
+#         return (
+#             np.linalg.norm(w_nose - b_tail) < tol
+#             and np.linalg.norm(w_tail - b_nose) < tol
+#         )
+#
+#     else:
+#         return (
+#             np.linalg.norm(w_nose - b_nose) < tol
+#             and np.linalg.norm(w_tail - b_tail) < tol
+#         )
 
 
 def recognize_arena(
