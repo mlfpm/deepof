@@ -1,4 +1,5 @@
 stages:
+  - code_quality
   - test
 
 code_quality:
