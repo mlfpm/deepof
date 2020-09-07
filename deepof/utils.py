@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
 import numpy as np
+import os
 import pandas as pd
 import regex as re
 import scipy
@@ -329,12 +330,30 @@ def close_double_contact(
 
 
 def recognize_arena(
-    video, vid_index, path=".", recoglimit=1, arena_type="circular",
-):
-    cap = cv2.VideoCapture(path + video[vid_index])
+    videos: list,
+    vid_index: int,
+    path: str = ".",
+    recoglimit: int = 1,
+    arena_type: str = "circular",
+) -> np.array:
+    """Returns numpy.array with information about the arena recognised from the first frames
+    of the video. WARNING: estimates won't be reliable if the camera moves along the video.
+
+            Parameters:
+                - videos (list): relative paths of the videos to analise
+                - vid_index (int): element of videos to use
+                - path (string): full path of the directory where the videos are
+                - recoglimit (int): number of frames to use for position estimates
+                - arena_type (string): arena type; must be one of ['circular']
+
+            Returns:
+                - arena (np.array): 3-element-array containing information about the arena.
+                    "circular" -> it returns the radius and x-y position of the center"""
+
+    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     # Loop over the first frames in the video to get resolution and center of the arena
-    fnum, h, w = 0, None, None
+    arena, fnum, h, w = False, 0, None, None
 
     while cap.isOpened() and fnum < recoglimit:
         ret, frame = cap.read()
@@ -347,7 +366,7 @@ def recognize_arena(
 
             # Detect arena and extract positions
             arena = circular_arena_recognition(frame)[0]
-            if h == None and w == None:
+            if h is not None and w is not None:
                 h, w = frame.shape[0], frame.shape[1]
 
         fnum += 1

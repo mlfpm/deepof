@@ -228,7 +228,7 @@ def test_rotate(p):
             min_value=1, max_value=10, allow_nan=False, allow_infinity=False
         ),
     ),
-    mode_idx=st.integers(min_value=0, max_value=1)
+    mode_idx=st.integers(min_value=0, max_value=1),
 )
 def test_align_trajectories(data, mode_idx):
     mode = ["center", "all"][mode_idx]
@@ -370,3 +370,15 @@ def test_close_double_contact(pos_dframe, tol, rev):
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
+
+
+@given(indexes=st.data(), arena_type=st.integers(min_value=0, max_value=0))
+def test_recognize_arena(indexes, arena_type):
+
+    path = "./tests/test_examples/"
+    videos = [i for i in os.listdir(path) if i.endswith("mp4")]
+
+    vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
+    recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
+
+    assert recognize_arena(videos, vid_index, path, recoglimit, arena_type) == 0
