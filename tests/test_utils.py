@@ -372,6 +372,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
 
 
+@settings(deadline=None)
 @given(indexes=st.data())
 def test_recognize_arena_and_subfunctions(indexes):
 
@@ -381,8 +382,5 @@ def test_recognize_arena_and_subfunctions(indexes):
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
-    assert recognize_arena(videos, vid_index, path, recoglimit, 0) == 0
+    assert recognize_arena(videos, vid_index, path, recoglimit, "") == 0
     assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")) == 3
-
-
-
