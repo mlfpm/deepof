@@ -10,7 +10,6 @@ code_quality:
     - docker:stable
   variables:
     DOCKER_DRIVER: overlay2
-    DOCKER_HOST: tcp://localhost:2378
     DOCKER_TLS_CERTDIR: ""
   script:
     - docker run
