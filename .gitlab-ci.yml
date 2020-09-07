@@ -4,7 +4,7 @@ stages:
 
 code_quality:
   stage: test
-  image: docker:stable
+  image: docker:18.09.7-dind
   allow_failure: true
   services:
     - docker:18.09.7-dind
