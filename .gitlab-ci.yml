@@ -1,9 +1,8 @@
 stages:
-  - code_quality
   - test
 
 code_quality:
-  stage: code_quality
+  stage: test
   include:
     - template: Code-Quality.gitlab-ci.yml
 
