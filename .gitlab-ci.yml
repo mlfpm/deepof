@@ -4,11 +4,13 @@ stages:
 
 code_quality:
   stage: test
-  image: docker:19.03.0-dind
+  image: docker:19.03.0
   allow_failure: true
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""
+  services:
+    - docker:19.03.0-dind
   script:
     - docker run
         --env SOURCE_CODE="$PWD"
