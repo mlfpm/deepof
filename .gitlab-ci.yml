@@ -1,13 +1,42 @@
 stages:
+  - code_quality
   - test
 
-include:
-  - template: Code-Quality.gitlab-ci.yml
+# variables:
+#   CODECLIMATE_DEBUG: 1
+#   REPORT_STDOUT: 1
 
-image: continuumio/anaconda3
+code_quality:
+  stage: test
+  image: docker:stable
+  allow_failure: true
+  services:
+    - docker:stable-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker run
+        --env SOURCE_CODE="$PWD"
+        --volume "$PWD":/code
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        "registry.gitlab.com/gitlab-org/security-products/codequality:12-3-stable" /code
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+    expire_in: 1 week
+  dependencies: []
+  only:
+    refs:
+      - branches
+      - tags
+  except:
+    variables:
+      - $CODE_QUALITY_DISABLED
 
 test:
   stage: test
+  image: continuumio/anaconda3
   script:
     - pip install coverage
     - pip install -r ./deepof/requirements.txt
