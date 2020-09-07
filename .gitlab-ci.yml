@@ -7,7 +7,7 @@ code_quality:
   image: docker:stable
   allow_failure: true
   services:
-    - docker:stable
+    - docker:18.09.7-dind
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""
