@@ -1,22 +1,16 @@
 stages:
   - test
 
-variables:
-  DOCKER_TLS_CERTDIR: ""
-
-include:
-    - template: Code-Quality.gitlab-ci.yml
-
-#test:
-#  stage: test
-#  image: continuumio/anaconda3
-#  script:
-#    - pip install coverage
-#    - pip install -r ./deepof/requirements.txt
-#    - pip install -e deepof/
-#    - coverage run -m pytest
-#    - coverage report -m
-#    - coverage xml -o deepof_cov.xml
-#  artifacts:
-#    reports:
-#      cobertura: deepof_cov.xml
+test:
+  stage: test
+  image: continuumio/anaconda3
+  script:
+    - pip install coverage
+    - pip install -r ./deepof/requirements.txt
+    - pip install -e deepof/
+    - coverage run -m pytest
+    - coverage report -m
+    - coverage xml -o deepof_cov.xml
+  artifacts:
+    reports:
+      cobertura: deepof_cov.xml
