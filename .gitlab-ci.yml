@@ -11,5 +11,5 @@ test:
     - coverage run -m pytest
     - coverage xml -o deepof_cobertura.xml
   artifacts:
-    report:
+    reports:
       cobertura: deepof_cobertura.xml
