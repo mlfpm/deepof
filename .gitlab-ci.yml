@@ -2,16 +2,12 @@ stages:
   - code_quality
   - test
 
-# variables:
-#   CODECLIMATE_DEBUG: 1
-#   REPORT_STDOUT: 1
-
 code_quality:
   stage: test
   image: docker:stable
   allow_failure: true
   services:
-    - docker:stable-dind
+    - docker:stable
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://localhost:2378
@@ -35,16 +31,16 @@ code_quality:
     variables:
       - $CODE_QUALITY_DISABLED
 
-test:
-  stage: test
-  image: continuumio/anaconda3
-  script:
-    - pip install coverage
-    - pip install -r ./deepof/requirements.txt
-    - pip install -e deepof/
-    - coverage run -m pytest
-    - coverage report -m
-    - coverage xml -o deepof_cov.xml
-  artifacts:
-    reports:
-      cobertura: deepof_cov.xml
+#test:
+#  stage: test
+#  image: continuumio/anaconda3
+#  script:
+#    - pip install coverage
+#    - pip install -r ./deepof/requirements.txt
+#    - pip install -e deepof/
+#    - coverage run -m pytest
+#    - coverage report -m
+#    - coverage xml -o deepof_cov.xml
+#  artifacts:
+#    reports:
+#      cobertura: deepof_cov.xml
