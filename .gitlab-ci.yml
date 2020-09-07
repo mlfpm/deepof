@@ -8,8 +8,4 @@ test:
   script:
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
-    - coverage run -m pytest
-    - coverage xml -o deepof_cobertura.xml
-  artifacts:
-    reports:
-      cobertura: deepof_cobertura.xml
+    - python -m pytest
