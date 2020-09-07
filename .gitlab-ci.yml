@@ -13,6 +13,7 @@ test:
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
     - coverage run -m pytest
+    - coverage report -m
     - coverage xml -o deepof_cov.xml
   artifacts:
     reports:
