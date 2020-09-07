@@ -4,12 +4,13 @@ stages:
 
 code_quality:
   stage: test
-  image: docker:18.09.7-dind
+  image: docker:stable
   allow_failure: true
   services:
-    - docker:18.09.7-dind
+    - docker:19.03.0-dind
   variables:
     DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://localhost:2375
     DOCKER_TLS_CERTDIR: ""
   script:
     - docker run
