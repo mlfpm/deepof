@@ -1,6 +1,9 @@
 stages:
   - test
 
+variables:
+  DOCKER_HOST: tcp://localhost:2375
+
 include:
     - template: Code-Quality.gitlab-ci.yml
 
