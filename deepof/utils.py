@@ -329,9 +329,9 @@ def close_double_contact(
 
 
 def recognize_arena(
-    Videos, vid_index, path=".", recoglimit=1, arena_type="circular",
+    video, vid_index, path=".", recoglimit=1, arena_type="circular",
 ):
-    cap = cv2.VideoCapture(path + Videos[vid_index])
+    cap = cv2.VideoCapture(path + video[vid_index])
 
     # Loop over the first frames in the video to get resolution and center of the arena
     fnum, h, w = 0, None, None

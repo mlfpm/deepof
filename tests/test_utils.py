@@ -227,10 +227,11 @@ def test_rotate(p):
         elements=st.floats(
             min_value=1, max_value=10, allow_nan=False, allow_infinity=False
         ),
-    )
+    ),
+    mode_idx=st.integers(min_value=0, max_value=1)
 )
-def test_align_trajectories(data):
-    mode = np.random.choice(["center", "all"], 1)
+def test_align_trajectories(data, mode_idx):
+    mode = ["center", "all"][mode_idx]
     aligned = align_trajectories(data, mode)
     assert aligned.shape == data.shape
     if mode == "center":
@@ -303,7 +304,7 @@ def test_smooth_mult_trajectory(alpha, series):
     smoothed2 = smooth_mult_trajectory(series, alpha2)
 
     def autocorr(x, t=1):
-        return np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1]
+        return np.round(np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1], 5)
 
     assert autocorr(smoothed1) >= autocorr(series)
     assert autocorr(smoothed2) >= autocorr(series)

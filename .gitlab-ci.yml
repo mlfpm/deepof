@@ -6,10 +6,10 @@ image: continuumio/anaconda3
 test:
   stage: test
   script:
-    - echo "Installing dependencies"
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
-    - echo "Dependencies installed"
-    - echo "Testing all functions in deepof.utils"
-    - python -m pytest
-    - echo "Testing deepof.utils complete!"
+    - coverage run -m pytest
+    - coverage xml -o deepof_cobertura.xml
+  artifacts:
+    report:
+      cobertura: deepof_cobertura.xml
