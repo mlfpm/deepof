@@ -6,6 +6,7 @@ image: continuumio/anaconda3
 test:
   stage: test
   script:
+    - pip install coverage
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
     - coverage run -m pytest
