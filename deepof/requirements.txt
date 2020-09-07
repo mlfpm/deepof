@@ -15,4 +15,3 @@ hypothesis~=5.29.0
 dash~=1.11.0
 plotly~=4.5.0
 setuptools~=49.6.0
-deepof~=0.0.1
