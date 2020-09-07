@@ -347,8 +347,8 @@ def recognize_arena(
                 - arena_type (string): arena type; must be one of ['circular']
 
             Returns:
-                - arena (np.array): 3-element-array containing information about the arena.
-                    "circular" -> it returns the radius and x-y position of the center"""
+                - arena (np.array): 1D-array containing information about the arena.
+                    "circular" (3-element-array) -> x-y position of the center and the radius"""
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
@@ -374,8 +374,14 @@ def recognize_arena(
     return arena
 
 
-def circular_arena_recognition(frame):
-    """Returns x,y position of the center and the radius of the recognised arena"""
+def circular_arena_recognition(frame: np.array) -> np.array:
+    """Returns x,y position of the center and the radius of the recognised arena
+        Parameters:
+                    - frame (np.array): numpy.array representing an individual frame of a video
+
+                Returns:
+                    - circles (np.array): 3-element-array containing x,y positions of the center
+                    of the arena, and a third value indicating the radius"""
 
     # Convert image to greyscale, threshold it, blur it and detect the biggest best fitting circle
     # using the Hough algorithm
@@ -402,7 +408,7 @@ def circular_arena_recognition(frame):
     return circles[0]
 
 
-def climb_wall(arena, pos_dict, fnum, tol, mouse):
+def climb_wall(arena, pos_dict, tol, mouse):
     """Returns True if the specified mouse is climbing the wall"""
 
     nose = pos_dict[mouse + "_Nose"]
