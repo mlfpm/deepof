@@ -10,6 +10,12 @@ from deepof.utils import *
 import deepof.preprocess
 import pytest
 
+# AUXILIARY FUNCTIONS #
+
+
+def autocorr(x, t=1):
+    return np.round(np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1], 5)
+
 
 # QUALITY CONTROL AND PREPROCESSING #
 
@@ -215,6 +221,7 @@ def test_angle_trio(array):
 def test_rotate(p):
     assert np.allclose(rotate(p, 2 * np.pi), p)
     assert np.allclose(rotate(p, np.pi), -p)
+    assert np.allclose(rotate(p, 0), p)
 
 
 @settings(deadline=None)
@@ -230,16 +237,18 @@ def test_rotate(p):
             min_value=1, max_value=10, allow_nan=False, allow_infinity=False
         ),
     ),
-    mode_idx=st.integers(min_value=0, max_value=1),
+    mode_idx=st.integers(min_value=0, max_value=2),
 )
 def test_align_trajectories(data, mode_idx):
-    mode = ["center", "all"][mode_idx]
+    mode = ["center", "all", "none"][mode_idx]
     aligned = align_trajectories(data, mode)
     assert aligned.shape == data.shape
     if mode == "center":
         assert np.allclose(aligned[:, (data.shape[1] - 1) // 2, 0], 0)
     elif mode == "all":
         assert np.allclose(aligned[:, :, 0], 0)
+    elif mode == "none":
+        assert np.allclose(aligned, data)
 
 
 @settings(deadline=None)
@@ -305,9 +314,6 @@ def test_smooth_mult_trajectory(alpha, series):
     smoothed1 = smooth_mult_trajectory(series, alpha1)
     smoothed2 = smooth_mult_trajectory(series, alpha2)
 
-    def autocorr(x, t=1):
-        return np.round(np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1], 5)
-
     assert autocorr(smoothed1) >= autocorr(series)
     assert autocorr(smoothed2) >= autocorr(series)
     assert autocorr(smoothed2) <= autocorr(smoothed1)
@@ -347,14 +353,14 @@ def test_close_single_contact(pos_dframe, tol):
         index=range_indexes(min_size=5),
         columns=columns(["X1", "y1", "X2", "y2", "X3", "y3", "X4", "y4"], dtype=float),
         rows=st.tuples(
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1, max_value=10, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
         ),
     ),
     tol=st.floats(min_value=0.01, max_value=4.98),
@@ -422,3 +428,43 @@ def test_climb_wall(arena, tol):
 
     with pytest.raises(NotImplementedError):
         climb_wall("", arena, prun["test"], tol1, nose="Nose")
+
+
+@settings(deadline=None)
+@given(
+    dframe=data_frames(
+        index=range_indexes(min_size=50),
+        columns=columns(["X1", "y1", "X2", "y2"], dtype=float),
+        rows=st.tuples(
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+            st.floats(min_value=1, max_value=10),
+        ),
+    ),
+    sampler=st.data(),
+)
+def test_rolling_speed(dframe, sampler):
+
+    dframe *= np.random.uniform(0, 1, dframe.shape)
+
+    order1 = sampler.draw(st.integers(min_value=1, max_value=3))
+    order2 = sampler.draw(st.integers(min_value=order1, max_value=3))
+    window2 = sampler.draw(st.integers(min_value=10, max_value=25))
+
+    idx = pd.MultiIndex.from_product(
+        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
+    )
+    dframe.columns = idx
+
+    speeds1 = rolling_speed(dframe, 5, 10, order1)
+    speeds2 = rolling_speed(dframe, 5, 10, order2)
+    speeds3 = rolling_speed(dframe, window2, 10, order1)
+
+    assert speeds1.shape[0] == dframe.shape[0]
+    assert speeds1.shape[1] == dframe.shape[1] // 2
+    assert np.all(np.std(speeds1) >= np.std(speeds2))
+    for i in range(speeds1.shape[1]):
+        assert autocorr(np.array(speeds1.iloc[:, i])) <= autocorr(
+            np.array(speeds3.iloc[:, i])
+        )

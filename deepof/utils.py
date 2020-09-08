@@ -90,8 +90,10 @@ def compute_dist(
             - result (pd.DataFrame): pandas.DataFrame with the
             absolute distances between a pair of body parts"""
 
-    a, b = pair_array[:, :2], pair_array[:, 2:]
+    lim = 2 if pair_array.shape[1] == 4 else 1
+    a, b = pair_array[:, :lim], pair_array[:, lim:]
     ab = a - b
+
     dist = np.sqrt(np.einsum("...i,...i", ab, ab))
     return pd.DataFrame(dist * arena_abs / arena_rel)
 
@@ -199,18 +201,21 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         center_time = (data.shape[1] - 1) // 2
         angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
     elif mode == "all":
-        data = data.reshape(-1, dshape[-1])
+        data = data.reshape(-1, dshape[-1], order="C")
         angles = np.arctan2(data[:, 0], data[:, 1])
+    elif mode == "none":
+        data = data.reshape(-1, dshape[-1], order="C")
+        angles = np.zeros(data.shape[0])
 
     aligned_trajs = np.zeros(data.shape)
 
     for frame in range(data.shape[0]):
         aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2]), angles[frame],
-        ).reshape(data.shape[1:])
+            data[frame].reshape([-1, 2], order="C"), angles[frame],
+        ).reshape(data.shape[1:], order="C")
 
-    if mode == "all":
-        aligned_trajs = aligned_trajs.reshape(dshape)
+    if mode == "all" or mode == "none":
+        aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
     return aligned_trajs
 
@@ -436,33 +441,52 @@ def climb_wall(
     return climbing
 
 
-def rolling_speed(dframe, typ, pause=10, rounds=5, order=1):
-    """Returns the average speed over 10 frames in pixels per frame"""
+def rolling_speed(
+    dframe: pd.DatetimeIndex, window: int = 10, rounds: int = 10, deriv: int = 1
+) -> pd.DataFrame:
+    """Returns the average speed over n frames in pixels per frame
+        Parameters:
+            - dframe (pandas.DataFrame): position over time dataframe
+            - pause (int):  frame-length of the averaging window
+            - rounds (int): float rounding decimals
+            - deriv (int): position derivative order; 1 for speed,
+            2 for acceleration, 3 for jerk, etc
 
-    s = dframe.shape[0]
+        Returns:
+            - speeds (pd.DataFrame): containing 2D speeds for each body part
+            in the original data or their consequent derivatives"""
 
-    if typ == "coords":
-        bp = dframe.shape[1] / 2 if order == 1 else dframe.shape[1]
-        d = 2 if order == 1 else 1
+    original_shape = dframe.shape
+    body_parts = dframe.columns.levels[0]
+    speeds = pd.DataFrame
 
-    else:
-        bp = dframe.shape[1]
-        d = 1
+    for der in range(deriv):
+        distances = np.concatenate(
+            [
+                np.array(dframe).reshape([-1, (2 if der == 0 else 1)], order="F"),
+                np.array(dframe.shift()).reshape(
+                    [-1, (2 if der == 0 else 1)], order="F"
+                ),
+            ],
+            axis=1,
+        )
 
-    distances = np.linalg.norm(
-        np.array(dframe).reshape(s, int(bp), d)
-        - np.array(dframe.shift()).reshape(s, int(bp), d),
-        axis=2,
-    )
+        distances = np.array(compute_dist(distances))
+        distances = distances.reshape(
+            [original_shape[0], original_shape[1] // 2], order="F"
+        )
+        distances = pd.DataFrame(distances, index=dframe.index)
+        speeds = np.round(distances.rolling(window).mean(), rounds)
+        speeds[np.isnan(speeds)] = 0.0
 
-    distances = pd.DataFrame(distances, index=dframe.index)
-    speeds = np.round(distances.rolling(pause).mean(), rounds)
-    speeds[np.isnan(speeds)] = 0.0
+        dframe = speeds
+
+    speeds.columns = body_parts
 
     return speeds
 
 
-def huddle(pos_dict, fnum, tol, tol2, mouse="B"):
+def huddle(pos_dict, tol, tol2, mouse="B"):
     """Returns true when the specified mouse is huddling"""
 
     return (
@@ -700,8 +724,8 @@ def Tag_video(
     )
 
     # Compute speed on a rolling window
-    tagdict["bspeed"] = rolling_speed(dframe["B_Center"], pause=speedpause)
-    tagdict["wspeed"] = rolling_speed(dframe["W_Center"], pause=speedpause)
+    tagdict["bspeed"] = rolling_speed(dframe["B_Center"], window=speedpause)
+    tagdict["wspeed"] = rolling_speed(dframe["W_Center"], window=speedpause)
 
     if any([show, save]):
         # Loop over the frames in the video
