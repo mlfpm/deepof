@@ -339,16 +339,16 @@ def recognize_arena(
     """Returns numpy.array with information about the arena recognised from the first frames
     of the video. WARNING: estimates won't be reliable if the camera moves along the video.
 
-            Parameters:
-                - videos (list): relative paths of the videos to analise
-                - vid_index (int): element of videos to use
-                - path (string): full path of the directory where the videos are
-                - recoglimit (int): number of frames to use for position estimates
-                - arena_type (string): arena type; must be one of ['circular']
+        Parameters:
+            - videos (list): relative paths of the videos to analise
+            - vid_index (int): element of videos to use
+            - path (string): full path of the directory where the videos are
+            - recoglimit (int): number of frames to use for position estimates
+            - arena_type (string): arena type; must be one of ['circular']
 
-            Returns:
-                - arena (np.array): 1D-array containing information about the arena.
-                    "circular" (3-element-array) -> x-y position of the center and the radius"""
+        Returns:
+            - arena (np.array): 1D-array containing information about the arena.
+                "circular" (3-element-array) -> x-y position of the center and the radius"""
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
@@ -377,11 +377,11 @@ def recognize_arena(
 def circular_arena_recognition(frame: np.array) -> np.array:
     """Returns x,y position of the center and the radius of the recognised arena
         Parameters:
-                    - frame (np.array): numpy.array representing an individual frame of a video
+            - frame (np.array): numpy.array representing an individual frame of a video
 
-                Returns:
-                    - circles (np.array): 3-element-array containing x,y positions of the center
-                    of the arena, and a third value indicating the radius"""
+        Returns:
+            - circles (np.array): 3-element-array containing x,y positions of the center
+            of the arena, and a third value indicating the radius"""
 
     # Convert image to greyscale, threshold it, blur it and detect the biggest best fitting circle
     # using the Hough algorithm
@@ -408,13 +408,32 @@ def circular_arena_recognition(frame: np.array) -> np.array:
     return circles[0]
 
 
-def climb_wall(arena, pos_dict, tol, mouse):
-    """Returns True if the specified mouse is climbing the wall"""
+def climb_wall(
+    arena_type: str, arena: np.array, pos_dict: pd.DataFrame, tol: float, nose: str
+) -> np.array:
+    """Returns True if the specified mouse is climbing the wall
+        Parameters:
+            - arena_type (str): arena type; must be one of ['circular']
+            - arena (np.array): contains arena location and shape details
+            - pos_dict (table_dict): position over time for all videos in a project
+            - tol (float): minimum tolerance to report a hit
+            - nose (str): indicates the name of the body part representing the nose of
+            the selected animal
 
-    nose = pos_dict[mouse + "_Nose"]
-    center = np.array(arena[:2])
+        Returns:
+            - climbing (np.array): boolean array. True if selected animal
+            is climbing the walls of the arena"""
 
-    return np.linalg.norm(nose - center) > arena[2] + tol
+    nose = pos_dict[nose]
+
+    if arena_type == "circular":
+        center = np.array(arena[:2])
+        climbing = np.linalg.norm(nose - center, axis=1) > (arena[2] + tol)
+
+    else:
+        raise NotImplementedError("Supported values for arena_type are ['circular']")
+
+    return climbing
 
 
 def rolling_speed(dframe, typ, pause=10, rounds=5, order=1):

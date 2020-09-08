@@ -7,6 +7,8 @@ from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
 from deepof.utils import *
+import deepof.preprocess
+import pytest
 
 
 # QUALITY CONTROL AND PREPROCESSING #
@@ -376,7 +378,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
 @given(indexes=st.data())
 def test_recognize_arena_and_subfunctions(indexes):
 
-    path = "./tests/test_examples/"
+    path = "./tests/test_examples/Videos/"
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
@@ -384,3 +386,39 @@ def test_recognize_arena_and_subfunctions(indexes):
 
     assert recognize_arena(videos, vid_index, path, recoglimit, "") == 0
     assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")) == 3
+
+
+@settings(deadline=None)
+@given(
+    arena=st.lists(
+        min_size=3, max_size=3, elements=st.integers(min_value=300, max_value=500)
+    ),
+    tol=st.data(),
+)
+def test_climb_wall(arena, tol):
+
+    tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
+    tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
+
+    prun = (
+        deepof.preprocess.project(
+            path="./tests/test_examples",
+            arena="circular",
+            arena_dims=[arena[0]],
+            angles=False,
+            video_format=".mp4",
+            table_format=".h5",
+        )
+        .run(verbose=False)
+        .get_coords()
+    )
+
+    climb1 = climb_wall("circular", arena, prun["test"], tol1, nose="Nose")
+    climb2 = climb_wall("circular", arena, prun["test"], tol2, nose="Nose")
+
+    assert climb1.dtype == bool
+    assert climb2.dtype == bool
+    assert np.sum(climb1) >= np.sum(climb2)
+
+    with pytest.raises(NotImplementedError):
+        climb_wall("", arena, prun["test"], tol1, nose="Nose")
