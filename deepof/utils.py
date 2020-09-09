@@ -8,12 +8,12 @@ import numpy as np
 import os
 import pandas as pd
 import regex as re
-import scipy
 import seaborn as sns
 from copy import deepcopy
 from itertools import cycle, combinations, product
 from joblib import Parallel, delayed
 from scipy import spatial
+from scipy import stats
 from sklearn import mixture
 from tqdm import tqdm_notebook as tqdm
 
@@ -586,16 +586,29 @@ def following_path(
 
 
 def single_behaviour_analysis(
-    behaviour_name,
-    treatment_dict,
-    behavioural_dict,
-    plot=False,
-    stats=False,
-    save=False,
-    ylim=False,
-):
+    behaviour_name: str,
+    treatment_dict: dict,
+    behavioural_dict: dict,
+    plot: int = 0,
+    stat_tests: bool = True,
+    save: str = None,
+    ylim: float = None,
+) -> list:
     """Given the name of the behaviour, a dictionary with the names of the groups to compare, and a dictionary
-       with the actual taggings, outputs a box plot and a series of significance tests amongst the groups"""
+       with the actual tags, outputs a box plot and a series of significance tests amongst the groups
+
+        Parameters:
+            - behaviour_name (str): name of the behavioural trait to analize
+            - treatment_dict (dict): dictionary containing video names as keys and experimental conditions as values
+            - behavioural_dict (dict): tagged dictionary containing video names as keys and annotations as values
+            - plot (int): Silent if 0; otherwise, indicates the dpi of the figure to plot
+            - stat_tests (bool): performs FDR corrected Mann-U non-parametric tests among all groups if True
+            - save (str): Saves the produced figure to the specified file
+            - ylim (float): y-limit for the boxplot. Ignored if plot == False
+
+        Returns:
+            - beh_dict (dict): dictionary containing experimental conditions as keys and video names as values
+            - stat_dict (dict): dictionary containing condition pairs as keys and stat results as values"""
 
     beh_dict = {condition: [] for condition in treatment_dict.keys()}
 
@@ -606,34 +619,40 @@ def single_behaviour_analysis(
                 / len(behavioural_dict[ind][behaviour_name])
             )
 
-    if plot:
-        sns.boxplot(list(beh_dict.keys()), list(beh_dict.values()), orient="vertical")
+    return_list = [beh_dict]
 
-        plt.title("{} across groups".format(behaviour_name))
-        plt.ylabel("Proportion of frames")
+    if plot > 0:
 
-        if ylim != False:
-            plt.ylim(*ylim)
+        fig, ax = plt.subplots(dpi=plot)
 
-        plt.tight_layout()
-        plt.savefig("Exploration_heatmaps.pdf")
+        sns.boxplot(
+            list(beh_dict.keys()), list(beh_dict.values()), orient="vertical", ax=ax
+        )
 
-        if save != False:
+        ax.set_title("{} across groups".format(behaviour_name))
+        ax.set_ylabel("Proportion of frames")
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        if save is not None:
             plt.savefig(save)
 
-        plt.show()
+        return_list.append(ax)
 
-    if stats:
+    if stat_tests:
+        stat_dict = {}
         for i in combinations(treatment_dict.keys(), 2):
-            print(i)
-            print(scipy.stats.mannwhitneyu(beh_dict[i[0]], beh_dict[i[1]]))
+            stat_dict[i] = stats.mannwhitneyu(beh_dict[i[0]], beh_dict[i[1]])
+        return_list.append(stat_dict)
 
-    return beh_dict
-
-    ##### MAIN BEHAVIOUR TAGGING FUNCTION #####
+    return return_list
 
 
-def Tag_video(
+# MAIN BEHAVIOUR TAGGING FUNCTION #
+
+
+def tag_video(
     Tracks,
     Videos,
     Track_dict,
@@ -1140,3 +1159,7 @@ def model_comparison_plot(
         plt.savefig(save)
 
     plt.show()
+
+
+# TODO:
+#    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)

@@ -1,6 +1,7 @@
 # @author lucasmiranda42
 
 from hypothesis import given
+from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -450,7 +451,6 @@ def test_rolling_speed(dframe, sampler):
 
     order1 = sampler.draw(st.integers(min_value=1, max_value=3))
     order2 = sampler.draw(st.integers(min_value=order1, max_value=3))
-    window2 = sampler.draw(st.integers(min_value=10, max_value=25))
 
     idx = pd.MultiIndex.from_product(
         [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
@@ -459,7 +459,6 @@ def test_rolling_speed(dframe, sampler):
 
     speeds1 = rolling_speed(dframe, 5, 10, order1)
     speeds2 = rolling_speed(dframe, 5, 10, order2)
-    speeds3 = rolling_speed(dframe, window2, 10, order1)
 
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
@@ -527,7 +526,7 @@ def test_huddle(pos_dframe, tol_forward, tol_spine):
     distance_dframe=data_frames(
         index=range_indexes(min_size=20, max_size=20),
         columns=columns(
-            ["d1", "d2", "d3", "d4",],
+            ["d1", "d2", "d3", "d4"],
             dtype=float,
             elements=st.floats(min_value=-20, max_value=20),
         ),
@@ -535,7 +534,7 @@ def test_huddle(pos_dframe, tol_forward, tol_spine):
     position_dframe=data_frames(
         index=range_indexes(min_size=20, max_size=20),
         columns=columns(
-            ["X1", "y1", "X2", "y2", "X3", "y3", "X4", "y4",],
+            ["X1", "y1", "X2", "y2", "X3", "y3", "X4", "y4"],
             dtype=float,
             elements=st.floats(min_value=-20, max_value=20),
         ),
@@ -553,7 +552,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     ]
 
     pos_idx = pd.MultiIndex.from_product(
-        [bparts, ["X", "y"],], names=["bodyparts", "coords"],
+        [bparts, ["X", "y"]], names=["bodyparts", "coords"],
     )
 
     position_dframe.columns = pos_idx
@@ -573,3 +572,52 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     assert len(follow) == distance_dframe.shape[0]
     assert np.sum(follow) <= position_dframe.shape[0]
     assert np.sum(follow) <= distance_dframe.shape[0]
+
+
+@settings(
+    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+)
+@given(sampler=st.data())
+def test_single_behaviour_analysis(sampler):
+    behaviours = sampler.draw(
+        st.lists(min_size=2, elements=st.text(min_size=5), unique=True)
+    )
+    treatments = sampler.draw(
+        st.lists(min_size=2, max_size=4, elements=st.text(min_size=5), unique=True)
+    )
+
+    behavioural_dict = sampler.draw(
+        st.dictionaries(
+            min_size=2,
+            keys=st.text(min_size=5),
+            values=data_frames(
+                index=range_indexes(min_size=50, max_size=50),
+                columns=columns(behaviours, dtype=bool),
+            ).map(
+                lambda x: 0 * x + np.array(np.random.randint(0, 2, x.shape), dtype=bool)
+            ),
+        )
+    )
+
+    ind_dict = {vid: np.random.choice(treatments) for vid in behavioural_dict.keys()}
+    treatment_dict = {treat: [] for treat in set(ind_dict.values())}
+    for vid, treat in ind_dict.items():
+        treatment_dict[treat].append(vid)
+
+    ylim = sampler.draw(st.floats(min_value=0, max_value=10))
+    stat_tests = sampler.draw(st.booleans())
+
+    out = single_behaviour_analysis(
+        behaviours[0],
+        treatment_dict,
+        behavioural_dict,
+        plot=0,
+        stat_tests=stat_tests,
+        save=None,
+        ylim=ylim,
+    )
+
+    assert len(out) == 1 if stat_tests == 0 else len(out) == 2
+    assert type(out[0]) == dict
+    if stat_tests:
+        assert type(out[0]) == dict
