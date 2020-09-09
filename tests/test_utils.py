@@ -464,7 +464,61 @@ def test_rolling_speed(dframe, sampler):
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
     assert np.all(np.std(speeds1) >= np.std(speeds2))
-    for i in range(speeds1.shape[1]):
-        assert autocorr(np.array(speeds1.iloc[:, i])) <= autocorr(
-            np.array(speeds3.iloc[:, i])
-        )
+
+
+@settings(deadline=None)
+@given(
+    pos_dframe=data_frames(
+        index=range_indexes(min_size=5),
+        columns=columns(
+            [
+                "X1",
+                "y1",
+                "X2",
+                "y2",
+                "X3",
+                "y3",
+                "X4",
+                "y4",
+                "X5",
+                "y5",
+                "X6",
+                "y6",
+                "X7",
+                "y7",
+                "X8",
+                "y8",
+            ],
+            dtype=float,
+            elements=st.floats(min_value=-20, max_value=20),
+        ),
+    ),
+    tol_forward=st.floats(min_value=0.01, max_value=4.98),
+    tol_spine=st.floats(min_value=0.01, max_value=4.98),
+)
+def test_huddle(pos_dframe, tol_forward, tol_spine):
+
+    idx = pd.MultiIndex.from_product(
+        [
+            [
+                "Left_ear",
+                "Right_ear",
+                "Left_fhip",
+                "Right_fhip",
+                "Spine1",
+                "Center",
+                "Spine2",
+                "Tail_base",
+            ],
+            ["X", "y"],
+        ],
+        names=["bodyparts", "coords"],
+    )
+    pos_dframe.columns = idx
+    hudd = huddle(pos_dframe, tol_forward, tol_spine)
+
+    print(hudd)
+
+    assert hudd.dtype == bool
+    assert np.array(hudd).shape[0] == pos_dframe.shape[0]
+    assert np.sum(np.array(hudd)) <= pos_dframe.shape[0]

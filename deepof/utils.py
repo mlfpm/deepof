@@ -381,6 +381,7 @@ def recognize_arena(
 
 def circular_arena_recognition(frame: np.array) -> np.array:
     """Returns x,y position of the center and the radius of the recognised arena
+
         Parameters:
             - frame (np.array): numpy.array representing an individual frame of a video
 
@@ -417,6 +418,7 @@ def climb_wall(
     arena_type: str, arena: np.array, pos_dict: pd.DataFrame, tol: float, nose: str
 ) -> np.array:
     """Returns True if the specified mouse is climbing the wall
+
         Parameters:
             - arena_type (str): arena type; must be one of ['circular']
             - arena (np.array): contains arena location and shape details
@@ -445,6 +447,7 @@ def rolling_speed(
     dframe: pd.DatetimeIndex, window: int = 10, rounds: int = 10, deriv: int = 1
 ) -> pd.DataFrame:
     """Returns the average speed over n frames in pixels per frame
+
         Parameters:
             - dframe (pandas.DataFrame): position over time dataframe
             - pause (int):  frame-length of the averaging window
@@ -486,19 +489,41 @@ def rolling_speed(
     return speeds
 
 
-def huddle(pos_dict, tol, tol2, mouse="B"):
-    """Returns true when the specified mouse is huddling"""
+def huddle(pos_dframe: pd.DataFrame, tol_forward: float, tol_spine: float) -> np.array:
+    """Returns true when the mouse is huddling using simple rules. (!!!) Designed to
+    work with deepof's default DLC mice models; not guaranteed to work otherwise.
 
-    return (
-        np.linalg.norm(pos_dict[mouse + "_Left_ear"] - pos_dict[mouse + "_Left_flank"])
-        < tol
-        and np.linalg.norm(
-            pos_dict[mouse + "_Right_ear"] - pos_dict[mouse + "_Right_flank"]
-        )
-        < tol
-        and np.linalg.norm(pos_dict[mouse + "_Center"] - pos_dict[mouse + "_Tail_base"])
-        < tol2
+        Parameters:
+            - pos_dframe (pandas.DataFrame):
+            - tol_forward (float): Maximum tolerated distance between ears and
+            forward limbs
+            - tol_rear (float): Maximum tolerated average distance between spine
+            body parts
+        Returns:
+            hudd (np.array): True if the animal is huddling, False otherwise
+        """
+
+    forward = (
+        np.linalg.norm(pos_dframe["Left_ear"] - pos_dframe["Left_fhip"], axis=1)
+        < tol_forward
+    ) & (
+        np.linalg.norm(pos_dframe["Right_ear"] - pos_dframe["Right_fhip"], axis=1)
+        < tol_forward
     )
+
+    spine = ["Spine1", "Center", "Spine2", "Tail_base"]
+    spine_dists = []
+    for comb in range(2):
+        spine_dists.append(
+            np.linalg.norm(
+                pos_dframe[spine[comb]] - pos_dframe[spine[comb + 1]], axis=1
+            )
+        )
+    spine = np.mean(spine_dists) < tol_spine
+
+    hudd = forward & spine
+
+    return hudd
 
 
 def following_path(distancedf, dframe, follower="B", followed="W", frames=20, tol=0):
@@ -534,7 +559,7 @@ def following_path(distancedf, dframe, follower="B", followed="W", frames=20, to
     )
 
 
-def Single_behaviour_analysis(
+def single_behaviour_analysis(
     behaviour_name,
     treatment_dict,
     behavioural_dict,
