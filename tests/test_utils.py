@@ -517,8 +517,59 @@ def test_huddle(pos_dframe, tol_forward, tol_spine):
     pos_dframe.columns = idx
     hudd = huddle(pos_dframe, tol_forward, tol_spine)
 
-    print(hudd)
-
     assert hudd.dtype == bool
     assert np.array(hudd).shape[0] == pos_dframe.shape[0]
     assert np.sum(np.array(hudd)) <= pos_dframe.shape[0]
+
+
+@settings(deadline=None)
+@given(
+    distance_dframe=data_frames(
+        index=range_indexes(min_size=20, max_size=20),
+        columns=columns(
+            ["d1", "d2", "d3", "d4",],
+            dtype=float,
+            elements=st.floats(min_value=-20, max_value=20),
+        ),
+    ),
+    position_dframe=data_frames(
+        index=range_indexes(min_size=20, max_size=20),
+        columns=columns(
+            ["X1", "y1", "X2", "y2", "X3", "y3", "X4", "y4",],
+            dtype=float,
+            elements=st.floats(min_value=-20, max_value=20),
+        ),
+    ),
+    frames=st.integers(min_value=1, max_value=20),
+    tol=st.floats(min_value=0.01, max_value=4.98),
+)
+def test_following_path(distance_dframe, position_dframe, frames, tol):
+
+    bparts = [
+        "A_Nose",
+        "B_Nose",
+        "A_Tail_base",
+        "B_Tail_base",
+    ]
+
+    pos_idx = pd.MultiIndex.from_product(
+        [bparts, ["X", "y"],], names=["bodyparts", "coords"],
+    )
+
+    position_dframe.columns = pos_idx
+    distance_dframe.columns = [c for c in combinations(bparts, 2) if c[0][0] != c[1][0]]
+
+    follow = following_path(
+        distance_dframe,
+        position_dframe,
+        follower="A",
+        followed="B",
+        frames=frames,
+        tol=tol,
+    )
+
+    assert follow.dtype == bool
+    assert len(follow) == position_dframe.shape[0]
+    assert len(follow) == distance_dframe.shape[0]
+    assert np.sum(follow) <= position_dframe.shape[0]
+    assert np.sum(follow) <= distance_dframe.shape[0]
