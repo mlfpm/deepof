@@ -643,7 +643,17 @@ def single_behaviour_analysis(
     if stat_tests:
         stat_dict = {}
         for i in combinations(treatment_dict.keys(), 2):
-            stat_dict[i] = stats.mannwhitneyu(beh_dict[i[0]], beh_dict[i[1]])
+            # Solves issue with automatically generated examples
+            if (
+                beh_dict[i[0]] == beh_dict[i[1]]
+                or np.var(beh_dict[i[0]]) == 0
+                or np.var(beh_dict[i[1]]) == 0
+            ):
+                stat_dict[i] = "Identical sources. Couldn't run"
+            else:
+                stat_dict[i] = stats.mannwhitneyu(
+                    beh_dict[i[0]], beh_dict[i[1]], alternative="two-sided"
+                )
         return_list.append(stat_dict)
 
     return return_list

@@ -593,8 +593,6 @@ def test_single_behaviour_analysis(sampler):
             values=data_frames(
                 index=range_indexes(min_size=50, max_size=50),
                 columns=columns(behaviours, dtype=bool),
-            ).map(
-                lambda x: 0 * x + np.array(np.random.randint(0, 2, x.shape), dtype=bool)
             ),
         )
     )
