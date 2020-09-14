@@ -1021,7 +1021,7 @@ def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
 
 
 def gmm_model_selection(
-    x: np.array,
+    x: pd.DataFrame,
     n_components_range: range,
     part_size: int,
     n_runs: int = 100,
@@ -1032,7 +1032,7 @@ def gmm_model_selection(
        a vector with the median BICs and an object with the overall best model
 
         Parameters:
-            - x (numpy.array): data matrix to train the models
+            - x (pandas.DataFrame): data matrix to train the models
             - n_components_range (range): generator with numbers of components to evaluate
             - n_runs (int): number of bootstraps for each model
             - part_size (int): size of bootstrap samples for each model
@@ -1083,10 +1083,22 @@ def gmm_model_selection(
 
 
 def cluster_transition_matrix(
-    cluster_sequence, nclusts, autocorrelation=True, return_graph=False
-):
-    """
-    Computes the transition matrix between clusters and the autocorrelation in the sequence.
+    cluster_sequence: np.array,
+    nclusts: int,
+    autocorrelation: bool = True,
+    return_graph: bool = False,
+) -> Tuple[Union[nx.Graph, Any], np.ndarray]:
+    """Computes the transition matrix between clusters and the autocorrelation in the sequence.
+
+        Parameters:
+            - cluster_sequence (numpy.array):
+            - nclusts (int):
+            - autocorrelation (bool):
+            - return_graph (bool):
+
+        Returns:
+            - trans_normed (numpy.array / networkx.Graph:
+            - autocorr (numpy.array):
     """
 
     # Stores all possible transitions between clusters
@@ -1118,7 +1130,8 @@ def cluster_transition_matrix(
 
     if autocorrelation:
         cluster_sequence = list(map(int, cluster_sequence))
-        return trans_normed, np.corrcoef(cluster_sequence[:-1], cluster_sequence[1:])
+        autocorr = np.corrcoef(cluster_sequence[:-1], cluster_sequence[1:])
+        return trans_normed, autocorr
 
     return trans_normed
 

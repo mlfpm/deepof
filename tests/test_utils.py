@@ -696,3 +696,37 @@ def test_gmm_model_selection(x, sampler):
         )
         == 3
     )
+
+
+@settings(deadline=None)
+@given(sampler=st.data(), autocorrelation=st.booleans(), return_graph=st.booleans())
+def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
+
+    nclusts = sampler.draw(st.integers(min_value=1, max_value=10))
+    cluster_sequence = sampler.draw(
+        arrays(
+            dtype=int,
+            shape=st.tuples(st.integers(min_value=10, max_value=1000)),
+            elements=st.integers(min_value=1, max_value=nclusts),
+        ).filter(lambda x: len(set(x)) != 1)
+    )
+
+    trans = cluster_transition_matrix(
+        cluster_sequence, nclusts, autocorrelation, return_graph
+    )
+
+    if autocorrelation:
+        assert len(trans) == 2
+
+        if return_graph:
+            assert type(trans[0]) == nx.Graph
+        else:
+            assert type(trans[0]) == np.ndarray
+
+        assert type(trans[1]) == np.ndarray
+
+    else:
+        if return_graph:
+            assert type(trans) == nx.Graph
+        else:
+            assert type(trans) == np.ndarray
