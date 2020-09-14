@@ -619,3 +619,31 @@ def test_single_behaviour_analysis(sampler):
     assert type(out[0]) == dict
     if stat_tests:
         assert type(out[0]) == dict
+
+
+@settings(
+    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+)
+@given(
+    behaviour_dframe=data_frames(
+        index=range_indexes(min_size=100, max_size=1000),
+        columns=columns(
+            ["d1", "d2", "d3", "d4", "speed1"], dtype=bool, elements=st.booleans(),
+        ),
+    ),
+    window_size=st.data(),
+)
+def test_max_behaviour(behaviour_dframe, window_size):
+    wsize1 = window_size.draw(st.integers(min_value=5, max_value=50))
+    wsize2 = window_size.draw(st.integers(min_value=wsize1, max_value=50))
+
+    maxbe1 = max_behaviour(behaviour_dframe, wsize1)
+    maxbe2 = max_behaviour(behaviour_dframe, wsize2)
+
+    assert type(maxbe1) == np.ndarray
+    assert type(maxbe2) == np.ndarray
+    assert type(maxbe1[wsize1 // 2 + 1]) == str
+    assert type(maxbe1[wsize2 // 2 + 1]) == str
+    assert maxbe1[wsize1 // 2 + 1] in behaviour_dframe.columns
+    assert maxbe2[wsize2 // 2 + 1] in behaviour_dframe.columns
+    assert len(maxbe1) >= len(maxbe2)

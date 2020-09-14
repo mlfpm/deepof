@@ -965,14 +965,34 @@ def tag_video(
     return tagdf, arena
 
 
-def max_behaviour(array, window_size=50):
-    """Returns the most frequent behaviour in a window of window_size frames"""
-    array = array.drop(["bspeed", "wspeed"], axis=1).astype("float")
-    win_array = array.rolling(window_size, center=True).sum()[::50]
-    max_array = win_array[1:].idxmax(axis=1)
-    return list(max_array)
+def max_behaviour(
+    behaviour_dframe: pd.DataFrame, window_size: int = 10, stepped: bool = False
+) -> np.array:
+    """Returns the most frequent behaviour in a window of window_size frames
 
-    ##### MACHINE LEARNING FUNCTIONS #####
+        Parameters:
+                - behaviour_dframe (pd.DataFrame): boolean matrix containing occurrence
+                of tagged behaviours per frame in the video
+                - window_size (int): size of the window to use when computing
+                the maximum behaviour per time slot
+                - stepped (bool): sliding windows don't overlap if True. False by default
+
+            Returns:
+                - max_array (np.array): string array with the most common behaviour per instance
+                of the sliding window"""
+
+    speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
+
+    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype("float")
+    win_array = behaviour_dframe.rolling(window_size, center=True).sum()
+    if stepped:
+        win_array = win_array[::window_size]
+    max_array = win_array[1:].idxmax(axis=1)
+
+    return np.array(max_array)
+
+
+# MACHINE LEARNING FUNCTIONS #
 
 
 def gmm_compute(x, n_components, cv_type):
