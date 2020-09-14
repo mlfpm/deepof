@@ -632,18 +632,67 @@ def test_single_behaviour_analysis(sampler):
         ),
     ),
     window_size=st.data(),
+    stepped=st.booleans(),
 )
-def test_max_behaviour(behaviour_dframe, window_size):
+def test_max_behaviour(behaviour_dframe, window_size, stepped):
     wsize1 = window_size.draw(st.integers(min_value=5, max_value=50))
     wsize2 = window_size.draw(st.integers(min_value=wsize1, max_value=50))
 
-    maxbe1 = max_behaviour(behaviour_dframe, wsize1)
-    maxbe2 = max_behaviour(behaviour_dframe, wsize2)
+    maxbe1 = max_behaviour(behaviour_dframe, wsize1, stepped)
+    maxbe2 = max_behaviour(behaviour_dframe, wsize2, stepped)
 
     assert type(maxbe1) == np.ndarray
     assert type(maxbe2) == np.ndarray
-    assert type(maxbe1[wsize1 // 2 + 1]) == str
-    assert type(maxbe1[wsize2 // 2 + 1]) == str
-    assert maxbe1[wsize1 // 2 + 1] in behaviour_dframe.columns
-    assert maxbe2[wsize2 // 2 + 1] in behaviour_dframe.columns
-    assert len(maxbe1) >= len(maxbe2)
+    if not stepped:
+        assert type(maxbe1[wsize1 // 2 + 1]) == str
+        assert type(maxbe1[wsize2 // 2 + 1]) == str
+        assert maxbe1[wsize1 // 2 + 1] in behaviour_dframe.columns
+        assert maxbe2[wsize2 // 2 + 1] in behaviour_dframe.columns
+        assert len(maxbe1) >= len(maxbe2)
+
+
+@settings(
+    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+)
+@given(
+    x=arrays(
+        dtype=float,
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=1000),
+            st.integers(min_value=10, max_value=1000),
+        ),
+        elements=st.floats(min_value=1.0, max_value=1.0,),
+    ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
+    n_components=st.integers(min_value=1, max_value=10),
+    cv_type=st.integers(min_value=0, max_value=3),
+)
+def test_gmm_compute(x, n_components, cv_type):
+    cv_type = ["spherical", "tied", "diag", "full"][cv_type]
+    assert len(gmm_compute(x, n_components, cv_type)) == 2
+
+
+@settings(
+    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+)
+@given(
+    x=arrays(
+        dtype=float,
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=1000),
+            st.integers(min_value=10, max_value=1000),
+        ),
+        elements=st.floats(min_value=1.0, max_value=1.0,),
+    ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
+    sampler=st.data(),
+)
+def test_gmm_model_selection(x, sampler):
+    n_component_range = range(1, sampler.draw(st.integers(min_value=2, max_value=5)))
+    part_size = sampler.draw(
+        st.integers(min_value=x.shape[0] // 2, max_value=x.shape[0] * 2)
+    )
+    assert (
+        len(
+            gmm_model_selection(pd.DataFrame(x), n_component_range, part_size, n_runs=1)
+        )
+        == 3
+    )
