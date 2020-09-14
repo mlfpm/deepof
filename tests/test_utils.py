@@ -763,5 +763,7 @@ def test_rule_based_tagging(sampler):
         path=os.path.join(".", "tests", "test_examples", "Videos"),
     )
 
+    print(hardcoded_tags)
+
     assert type(hardcoded_tags) == pd.DataFrame
-    assert hardcoded_tags.shape[1] == 4
+    assert hardcoded_tags.shape[1] == 3

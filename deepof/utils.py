@@ -895,22 +895,7 @@ def rule_based_tagging(
 
     # Dictionary with motives per frame
     behavioural_tags = []
-    if animal_ids:
-        behavioural_tags.append(["nose2nose", "sidebyside", "sidereside"])
-        for _id in animal_ids:
-            for behaviour in [
-                "_nose2tail",
-                "_climbing",
-                "_huddle",
-                "_following",
-                "_speed",
-            ]:
-                behavioural_tags.append(_id + behaviour)
-
-    else:
-        behavioural_tags += ["huddle", "climbing", "speed"]
-
-    tag_dict = {tag: np.zeros(distances.shape[0]) for tag in behavioural_tags}
+    tag_dict = {}
 
     if animal_ids:
         # Define behaviours that can be computed on the fly from the distance matrix
@@ -981,7 +966,7 @@ def rule_based_tagging(
                     tol=20,
                 )
             )
-            tag_dict[_id + "_climbwall"] = smooth_boolean_array(
+            tag_dict[_id + "_climbing"] = smooth_boolean_array(
                 pd.Series(
                     (
                         spatial.distance.cdist(
@@ -990,13 +975,13 @@ def rule_based_tagging(
                         > (w / 200 + arena[2])
                     ).reshape(distances.shape[0]),
                     index=distances.index,
-                )
+                ).astype(bool)
             )
             tag_dict[_id + "_speed"] = speeds[_id + "_speed"]
 
     else:
         print(w)
-        tag_dict["climbwall"] = smooth_boolean_array(
+        tag_dict["climbing"] = smooth_boolean_array(
             pd.Series(
                 (
                     spatial.distance.cdist(
@@ -1005,7 +990,7 @@ def rule_based_tagging(
                     > (w / 200 + arena[2])
                 ).reshape(distances.shape[0]),
                 index=distances.index,
-            )
+            ).astype(bool)
         )
         tag_dict["speed"] = speeds["Center"]
 
