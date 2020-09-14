@@ -12,6 +12,7 @@ import warnings
 import networkx as nx
 
 from deepof.utils import *
+from deepof.visuals import *
 
 
 class project:

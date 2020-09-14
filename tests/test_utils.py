@@ -11,6 +11,7 @@ from deepof.utils import *
 import deepof.preprocess
 import pytest
 
+
 # AUXILIARY FUNCTIONS #
 
 
@@ -343,7 +344,7 @@ def test_close_single_contact(pos_dframe, tol):
         [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol)
+    close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol, 1, 1)
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
 
@@ -375,7 +376,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
     )
     pos_dframe.columns = idx
     close_contact = close_double_contact(
-        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev
+        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev, 1, 1
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -730,3 +731,9 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
             assert type(trans) == nx.Graph
         else:
             assert type(trans) == np.ndarray
+
+
+@settings(deadline=None)
+@given()
+def test_rule_based_tagging():
+    pass

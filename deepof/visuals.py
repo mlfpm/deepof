@@ -11,7 +11,9 @@ from typing import List, Dict
 # PLOTTING FUNCTIONS #
 
 
-def plot_speed(behaviour_dict: dict, treatments: Dict[List]) -> plt.figure:
+def plot_speed(
+    behaviour_dict: Dict[str, pd.DataFrame], treatments: Dict[str, List]
+) -> plt.figure:
     """Plots a histogram with the speed of the specified mouse.
        Treatments is expected to be a list of lists with mice keys per treatment"""
 
