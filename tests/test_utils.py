@@ -376,7 +376,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
     )
     pos_dframe.columns = idx
     close_contact = close_double_contact(
-        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev, 1, 1
+        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -386,14 +386,21 @@ def test_close_double_contact(pos_dframe, tol, rev):
 @given(indexes=st.data())
 def test_recognize_arena_and_subfunctions(indexes):
 
-    path = "./tests/test_examples/Videos/"
+    path = os.path.join(".", "tests", "test_examples", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
-    assert recognize_arena(videos, vid_index, path, recoglimit, "") == 0
+    assert recognize_arena(videos, vid_index, path, recoglimit, "")[0] == 0
     assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")) == 3
+    assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")[0]) == 3
+    assert (
+        type(recognize_arena(videos, vid_index, path, recoglimit, "circular")[1]) == int
+    )
+    assert (
+        type(recognize_arena(videos, vid_index, path, recoglimit, "circular")[2]) == int
+    )
 
 
 @settings(deadline=None)
@@ -410,9 +417,9 @@ def test_climb_wall(arena, tol):
 
     prun = (
         deepof.preprocess.project(
-            path="./tests/test_examples",
+            path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
-            arena_dims=[arena[0]],
+            arena_dims=[arena[2]],
             angles=False,
             video_format=".mp4",
             table_format=".h5",
@@ -495,8 +502,9 @@ def test_rolling_speed(dframe, sampler):
     ),
     tol_forward=st.floats(min_value=0.01, max_value=4.98),
     tol_spine=st.floats(min_value=0.01, max_value=4.98),
+    tol_speed=st.floats(min_value=0.01, max_value=4.98),
 )
-def test_huddle(pos_dframe, tol_forward, tol_spine):
+def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed):
 
     idx = pd.MultiIndex.from_product(
         [
@@ -505,9 +513,9 @@ def test_huddle(pos_dframe, tol_forward, tol_spine):
                 "Right_ear",
                 "Left_fhip",
                 "Right_fhip",
-                "Spine1",
+                "Spine_1",
                 "Center",
-                "Spine2",
+                "Spine_2",
                 "Tail_base",
             ],
             ["X", "y"],
@@ -515,7 +523,7 @@ def test_huddle(pos_dframe, tol_forward, tol_spine):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    hudd = huddle(pos_dframe, tol_forward, tol_spine)
+    hudd = huddle(pos_dframe, tol_forward, tol_spine, tol_speed)
 
     assert hudd.dtype == bool
     assert np.array(hudd).shape[0] == pos_dframe.shape[0]
@@ -734,6 +742,26 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
 
 
 @settings(deadline=None)
-@given()
-def test_rule_based_tagging():
-    pass
+@given(sampler=st.data())
+def test_rule_based_tagging(sampler):
+
+    prun = deepof.preprocess.project(
+        path=os.path.join(".", "tests", "test_examples"),
+        arena="circular",
+        arena_dims=[380],
+        angles=False,
+        video_format=".mp4",
+        table_format=".h5",
+    ).run(verbose=False)
+
+    hardcoded_tags = rule_based_tagging(
+        list([i + "_" for i in prun.get_coords().keys()]),
+        ["test_video_circular_arena.mp4"],
+        prun,
+        vid_index=0,
+        arena_abs=380,
+        path=os.path.join(".", "tests", "test_examples", "Videos"),
+    )
+
+    assert type(hardcoded_tags) == pd.DataFrame
+    assert hardcoded_tags.shape[1] == 4

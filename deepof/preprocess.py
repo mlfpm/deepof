@@ -163,7 +163,7 @@ class project:
                             vid_index,
                             path=self.video_path,
                             arena_type=self.arena,
-                        )
+                        )[0]
                         * 2
                     )
                     + self.arena_dims
@@ -376,7 +376,7 @@ class coordinates:
                         cols = tab.columns.levels[0]
                     except AttributeError:
                         cols = tab.columns
-                    vel = rolling_speed(tab, typ="coords", order=order + 1)
+                    vel = rolling_speed(tab, deriv=order + 1)
                     vel.columns = cols
                     tabs[key] = vel
 
@@ -422,7 +422,7 @@ class coordinates:
                             cols = tab.columns.levels[0]
                         except AttributeError:
                             cols = tab.columns
-                        vel = rolling_speed(tab, typ="dists", order=order + 1)
+                        vel = rolling_speed(tab, deriv=order + 1)
                         vel.columns = cols
                         tabs[key] = vel
 
@@ -453,7 +453,7 @@ class coordinates:
                             cols = tab.columns.levels[0]
                         except AttributeError:
                             cols = tab.columns
-                        vel = rolling_speed(tab, typ="dists", order=order + 1)
+                        vel = rolling_speed(tab, deriv=order + 1)
                         vel.columns = cols
                         tabs[key] = vel
 
