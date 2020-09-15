@@ -906,7 +906,6 @@ def rule_based_tagging(
     recog_limit: int = 1,
     path: str = os.path.join("./"),
     arena_type: str = "circular",
-    classifiers: Dict = None,
     close_contact_tol: int = 15,
     side_contact_tol: int = 15,
     follow_frames: int = 20,
@@ -1000,7 +999,7 @@ def rule_based_tagging(
                 pd.Series(
                     (
                         spatial.distance.cdist(
-                            np.array(coords[_id + "_Nose"]), np.zeros([1,2])
+                            np.array(coords[_id + "_Nose"]), np.zeros([1, 2])
                         )
                         > (w / 200 + arena[2])
                     ).reshape(coords.shape[0]),
@@ -1016,7 +1015,7 @@ def rule_based_tagging(
         tag_dict["climbing"] = smooth_boolean_array(
             pd.Series(
                 (
-                    spatial.distance.cdist(np.array(coords["Nose"]), np.zeros([1,2]))
+                    spatial.distance.cdist(np.array(coords["Nose"]), np.zeros([1, 2]))
                     > (w / 200 + arena[2])
                 ).reshape(coords.shape[0]),
                 index=coords.index,
