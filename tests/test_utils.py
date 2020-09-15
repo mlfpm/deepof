@@ -754,9 +754,7 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
             assert type(trans) == np.ndarray
 
 
-@settings(deadline=None)
-@given(sampler=st.data())
-def test_rule_based_tagging(sampler):
+def test_rule_based_tagging():
 
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
@@ -772,8 +770,9 @@ def test_rule_based_tagging(sampler):
         ["test_video_circular_arena.mp4"],
         prun,
         vid_index=0,
-        arena_abs=380,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
+        save=True,
+        frame_limit=100,
     )
 
     assert type(hardcoded_tags) == pd.DataFrame
