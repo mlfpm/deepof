@@ -31,7 +31,7 @@ class project:
         subset_condition=None,
         arena="circular",
         smooth_alpha=0.1,
-        arena_dims=[1],
+        arena_dims=(1,),
         distances="All",
         ego=False,
         angles=True,
@@ -60,10 +60,6 @@ class project:
         self.connectivity = connectivity
         self.scales = self.get_scale
 
-        # assert [re.findall("(.*)_", vid)[0] for vid in self.videos] == [
-        #     re.findall("(.*)\.", tab)[0] for tab in self.tables
-        # ], "Video files should match table files"
-
     def __str__(self):
         if self.exp_conditions:
             return "DLC analysis of {} videos across {} conditions".format(
@@ -72,7 +68,7 @@ class project:
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
 
-    def load_tables(self, verbose):
+    def load_tables(self, verbose=False):
         """Loads videos and tables into dictionaries"""
 
         if self.table_format not in [".h5", ".csv"]:
@@ -86,17 +82,29 @@ class project:
         if self.table_format == ".h5":
             table_dict = {
                 re.findall("(.*?)_", tab)[0]: pd.read_hdf(
-                    self.table_path + tab, dtype=float
+                    os.path.join(self.table_path, tab), dtype=float
                 )
                 for tab in self.tables
             }
         elif self.table_format == ".csv":
-            table_dict = {
-                re.findall("(.*?)_", tab)[0]: pd.read_csv(
-                    self.table_path + tab, dtype=float
+            table_dict = {}
+            for tab in self.tables:
+                head = pd.read_csv(os.path.join(self.table_path, tab), nrows=2)
+                data = pd.read_csv(
+                    os.path.join(self.table_path, tab),
+                    skiprows=2,
+                    index_col="coords",
+                    dtype={"coords": int},
+                ).drop("1", axis=1)
+                data.columns = pd.MultiIndex.from_product(
+                    [
+                        [head.columns[2]],
+                        set(list(head.iloc[0])[2:]),
+                        ["x", "y", "likelihood"],
+                    ],
+                    names=["scorer", "bodyparts", "coords"],
                 )
-                for tab in self.tables
-            }
+                table_dict[re.findall("(.*?)_", tab)[0]] = data
 
         lik_dict = defaultdict()
 
