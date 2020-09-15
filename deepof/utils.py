@@ -527,31 +527,52 @@ def rolling_speed(
 
 
 def huddle(
-    pos_dframe: pd.DataFrame, tol_forward: float, tol_spine: float, tol_speed: float
+    pos_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
+    tol_forward: float,
+    tol_spine: float,
+    tol_speed: float,
+    animal_id: str = "",
 ) -> np.array:
     """Returns true when the mouse is huddling using simple rules. (!!!) Designed to
     work with deepof's default DLC mice models; not guaranteed to work otherwise.
 
         Parameters:
-            - pos_dframe (pandas.DataFrame):
+            - pos_dframe (pandas.DataFrame): position of body parts over time
+            - speed_dframe (pandas.DataFrame): speed of body parts over time
             - tol_forward (float): Maximum tolerated distance between ears and
             forward limbs
             - tol_rear (float): Maximum tolerated average distance between spine
             body parts
+            - tol_speed (float): Maximum tolerated speed for the center of the mouse
 
         Returns:
             hudd (np.array): True if the animal is huddling, False otherwise
         """
 
+    if animal_id != "":
+        animal_id += "_"
+
     forward = (
-        np.linalg.norm(pos_dframe["Left_ear"] - pos_dframe["Left_fhip"], axis=1)
+        np.linalg.norm(
+            pos_dframe[animal_id + "Left_ear"] - pos_dframe[animal_id + "Left_fhip"],
+            axis=1,
+        )
         < tol_forward
     ) & (
-        np.linalg.norm(pos_dframe["Right_ear"] - pos_dframe["Right_fhip"], axis=1)
+        np.linalg.norm(
+            pos_dframe[animal_id + "Right_ear"] - pos_dframe[animal_id + "Right_fhip"],
+            axis=1,
+        )
         < tol_forward
     )
 
-    spine = ["Spine_1", "Center", "Spine_2", "Tail_base"]
+    spine = [
+        animal_id + "Spine_1",
+        animal_id + "Center",
+        animal_id + "Spine_2",
+        animal_id + "Tail_base",
+    ]
     spine_dists = []
     for comb in range(2):
         spine_dists.append(
@@ -560,8 +581,8 @@ def huddle(
             )
         )
     spine = np.mean(spine_dists) < tol_spine
-
-    hudd = forward & spine
+    speed = speed_dframe[animal_id + "Center"] < tol_speed
+    hudd = forward & spine & speed
 
     return hudd
 
@@ -884,59 +905,65 @@ def rule_based_tagging(
     path: str = os.path.join("./"),
     arena_type: str = "circular",
     classifiers: Dict = None,
+    close_contact_tol: int = 15,
+    side_contact_tol: int = 15,
+    follow_frames: int = 20,
+    follow_tol: int = 20,
+    huddle_forward: int = 15,
+    huddle_spine: int = 10,
+    huddle_speed: int = 5,
 ) -> pd.DataFrame:
     """Outputs a dataframe with the motives registered per frame."""
 
     vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
 
-    distances = coordinates.get_coords()[vid_name]
+    coords = coordinates.get_coords()[vid_name]
     speeds = coordinates.get_coords(speed=1)[vid_name]
     arena, h, w = recognize_arena(videos, vid_index, path, recog_limit, arena_type)
 
     # Dictionary with motives per frame
-    behavioural_tags = []
     tag_dict = {}
 
     if animal_ids:
         # Define behaviours that can be computed on the fly from the distance matrix
         tag_dict["nose2nose"] = smooth_boolean_array(
             close_single_contact(
-                distances,
+                coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[1] + "_Nose",
-                15.0,
+                close_contact_tol,
                 arena_abs,
                 arena[2],
             )
         )
         tag_dict[animal_ids[0] + "_nose2tail"] = smooth_boolean_array(
             close_single_contact(
-                distances,
+                coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                15.0,
+                close_contact_tol,
                 arena_abs,
                 arena[2],
             )
         )
         tag_dict[animal_ids[1] + "_nose2tail"] = smooth_boolean_array(
             close_single_contact(
-                distances,
+                coords,
                 animal_ids[1] + "_Nose",
                 animal_ids[0] + "_Tail_base",
-                15.0,
+                close_contact_tol,
                 arena_abs,
                 arena[2],
             )
         )
         tag_dict["sidebyside"] = smooth_boolean_array(
             close_double_contact(
-                distances,
+                coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[0] + "_Tail_base",
                 animal_ids[1] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                15.0,
+                side_contact_tol,
                 rev=False,
                 arena_abs=arena_abs,
                 arena_rel=arena[2],
@@ -944,12 +971,12 @@ def rule_based_tagging(
         )
         tag_dict["sidereside"] = smooth_boolean_array(
             close_double_contact(
-                distances,
+                coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[0] + "_Tail_base",
                 animal_ids[1] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                15.0,
+                side_contact_tol,
                 rev=True,
                 arena_abs=arena_abs,
                 arena_rel=arena[2],
@@ -958,38 +985,37 @@ def rule_based_tagging(
         for _id in animal_ids:
             tag_dict[_id + "_following"] = smooth_boolean_array(
                 following_path(
-                    distances[vid_name],
-                    distances,
+                    coords[vid_name],
+                    coords,
                     follower=_id,
                     followed=[i for i in animal_ids if i != _id][0],
-                    frames=20,
-                    tol=20,
+                    frames=follow_frames,
+                    tol=follow_tol,
                 )
             )
             tag_dict[_id + "_climbing"] = smooth_boolean_array(
                 pd.Series(
                     (
                         spatial.distance.cdist(
-                            np.array(distances[_id + "_Nose"]), np.array([arena[:2]])
+                            np.array(coords[_id + "_Nose"]), np.array([arena[:2]])
                         )
                         > (w / 200 + arena[2])
-                    ).reshape(distances.shape[0]),
-                    index=distances.index,
+                    ).reshape(coords.shape[0]),
+                    index=coords.index,
                 ).astype(bool)
             )
             tag_dict[_id + "_speed"] = speeds[_id + "_speed"]
 
     else:
-        print(w)
         tag_dict["climbing"] = smooth_boolean_array(
             pd.Series(
                 (
                     spatial.distance.cdist(
-                        np.array(distances["Nose"]), np.array([arena[:2]])
+                        np.array(coords["Nose"]), np.array([arena[:2]])
                     )
                     > (w / 200 + arena[2])
-                ).reshape(distances.shape[0]),
-                index=distances.index,
+                ).reshape(coords.shape[0]),
+                index=coords.index,
             ).astype(bool)
         )
         tag_dict["speed"] = speeds["Center"]
@@ -997,10 +1023,10 @@ def rule_based_tagging(
     if classifiers and "huddle" in classifiers:
         mouse_X = {
             _id: np.array(
-                distances[vid_name][
+                coords[vid_name][
                     [
                         j
-                        for j in distances[vid_name].keys()
+                        for j in coords[vid_name].keys()
                         if (len(j) == 2 and _id in j[0] and _id in j[1])
                     ]
                 ]
@@ -1015,21 +1041,23 @@ def rule_based_tagging(
         try:
             for _id in animal_ids:
                 tag_dict[_id + "_huddle"] = smooth_boolean_array(
-                    huddle(distances, 25, 25, 5)
+                    huddle(coords, speeds, huddle_forward, huddle_spine, huddle_speed)
                 )
         except TypeError:
-            tag_dict["huddle"] = smooth_boolean_array(huddle(distances, 25, 25, 5))
+            tag_dict["huddle"] = smooth_boolean_array(
+                huddle(coords, speeds, huddle_forward, huddle_spine, huddle_speed)
+            )
 
     # if any([show, save]):
     #     cap = cv2.VideoCapture(path + videos[vid_index])
-
-    # # Keep track of the frame number, to align with the tracking data
-    # fnum = 0
-    # if save:
-    #     writer = None
-
+    #
+    #     # Keep track of the frame number, to align with the tracking data
+    #     fnum = 0
+    #     if save:
+    #         writer = None
+    #
     #     # Loop over the frames in the video
-    #     pbar = tqdm(total=min(dframe.shape[0] - recog_limit, frame_limit))
+    #     pbar = tqdm(total=min(coords.shape[0] - recog_limit, frame_limit))
     #     while cap.isOpened() and fnum < frame_limit:
     #
     #         ret, frame = cap.read()
@@ -1044,8 +1072,8 @@ def rule_based_tagging(
     #
     #             # Extract positions
     #             pos_dict = {
-    #                 i: np.array([dframe[i]["x"][fnum], dframe[i]["y"][fnum]])
-    #                 for i in dframe.columns.levels[0]
+    #                 i: np.array([coords[i]["x"][fnum], coords[i]["y"][fnum]])
+    #                 for i in coords.columns.levels[0]
     #                 if i != "Like_QC"
     #             }
     #
@@ -1176,7 +1204,7 @@ def rule_based_tagging(
     #
     #         pbar.update(1)
     #         fnum += 1
-
+    #
     # cap.release()
     # cv2.destroyAllWindows()
 

@@ -10,6 +10,7 @@ from scipy.spatial import distance
 from deepof.utils import *
 import deepof.preprocess
 import pytest
+import string
 
 
 # AUXILIARY FUNCTIONS #
@@ -424,7 +425,7 @@ def test_climb_wall(arena, tol):
             video_format=".mp4",
             table_format=".h5",
         )
-        .run(verbose=False)
+        .run(verbose=True)
         .get_coords()
     )
 
@@ -503,27 +504,39 @@ def test_rolling_speed(dframe, sampler):
     tol_forward=st.floats(min_value=0.01, max_value=4.98),
     tol_spine=st.floats(min_value=0.01, max_value=4.98),
     tol_speed=st.floats(min_value=0.01, max_value=4.98),
+    animal_id=st.text(min_size=0, max_size=15, alphabet=string.ascii_lowercase),
 )
-def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed):
+def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed, animal_id):
+
+    _id = animal_id
+    if animal_id != "":
+        _id += "_"
 
     idx = pd.MultiIndex.from_product(
         [
             [
-                "Left_ear",
-                "Right_ear",
-                "Left_fhip",
-                "Right_fhip",
-                "Spine_1",
-                "Center",
-                "Spine_2",
-                "Tail_base",
+                _id + "Left_ear",
+                _id + "Right_ear",
+                _id + "Left_fhip",
+                _id + "Right_fhip",
+                _id + "Spine_1",
+                _id + "Center",
+                _id + "Spine_2",
+                _id + "Tail_base",
             ],
             ["X", "y"],
         ],
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    hudd = huddle(pos_dframe, tol_forward, tol_spine, tol_speed)
+    hudd = huddle(
+        pos_dframe,
+        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
+        tol_forward,
+        tol_spine,
+        tol_speed,
+        animal_id,
+    )
 
     assert hudd.dtype == bool
     assert np.array(hudd).shape[0] == pos_dframe.shape[0]
@@ -752,7 +765,7 @@ def test_rule_based_tagging(sampler):
         angles=False,
         video_format=".mp4",
         table_format=".h5",
-    ).run(verbose=False)
+    ).run(verbose=True)
 
     hardcoded_tags = rule_based_tagging(
         list([i + "_" for i in prun.get_coords().keys()]),
@@ -762,8 +775,6 @@ def test_rule_based_tagging(sampler):
         arena_abs=380,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
     )
-
-    print(hardcoded_tags)
 
     assert type(hardcoded_tags) == pd.DataFrame
     assert hardcoded_tags.shape[1] == 3

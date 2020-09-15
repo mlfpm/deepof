@@ -84,7 +84,7 @@ def model_comparison_plot(
         bars.append(
             spl.bar(
                 xpos,
-                m_bic[i * len(n_components_range): (i + 1) * len(n_components_range)],
+                m_bic[i * len(n_components_range) : (i + 1) * len(n_components_range)],
                 color=color,
                 width=0.2,
             )

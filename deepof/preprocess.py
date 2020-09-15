@@ -705,3 +705,8 @@ def merge_tables(*args):
     )
 
     return merged_tables
+
+
+# TODO:
+#   - Generate ragged training array using a metric (acceleration, maybe?)
+#   - Use something like Dynamic Time Warping to put all instances in the same length
