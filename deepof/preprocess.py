@@ -248,7 +248,7 @@ class project:
             dats = []
             for clique in cliques:
                 dat = pd.DataFrame(
-                    angle_trio(np.array(tab[clique]).reshape(3, tab.shape[0], 2))
+                    angle_trio(np.array(tab[clique]).reshape([3, tab.shape[0], 2]))
                 ).T
 
                 orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
@@ -383,15 +383,9 @@ class coordinates:
                 ]
 
         if speed:
-            for order in range(speed):
-                for key, tab in tabs.items():
-                    try:
-                        cols = tab.columns.levels[0]
-                    except AttributeError:
-                        cols = tab.columns
-                    vel = rolling_speed(tab, deriv=order + 1)
-                    vel.columns = cols
-                    tabs[key] = vel
+            for key, tab in tabs.items():
+                vel = rolling_speed(tab, deriv=speed + 1, center=center)
+                tabs[key] = vel
 
         if length:
             for key, tab in tabs.items():
@@ -429,15 +423,9 @@ class coordinates:
         if self.distances is not None:
 
             if speed:
-                for order in range(speed):
-                    for key, tab in tabs.items():
-                        try:
-                            cols = tab.columns.levels[0]
-                        except AttributeError:
-                            cols = tab.columns
-                        vel = rolling_speed(tab, deriv=order + 1)
-                        vel.columns = cols
-                        tabs[key] = vel
+                for key, tab in tabs.items():
+                    vel = rolling_speed(tab, deriv=speed + 1, typ="dists")
+                    tabs[key] = vel
 
             if length:
                 for key, tab in tabs.items():
@@ -460,15 +448,9 @@ class coordinates:
                 tabs = {key: np.degrees(tab) for key, tab in tabs.items()}
 
             if speed:
-                for order in range(speed):
-                    for key, tab in tabs.items():
-                        try:
-                            cols = tab.columns.levels[0]
-                        except AttributeError:
-                            cols = tab.columns
-                        vel = rolling_speed(tab, deriv=order + 1)
-                        vel.columns = cols
-                        tabs[key] = vel
+                for key, tab in tabs.items():
+                    vel = rolling_speed(tab, deriv=speed + 1, typ="angles")
+                    tabs[key] = vel
 
             if length:
                 for key, tab in tabs.items():

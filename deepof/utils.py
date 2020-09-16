@@ -484,7 +484,12 @@ def climb_wall(
 
 
 def rolling_speed(
-    dframe: pd.DatetimeIndex, window: int = 5, rounds: int = 10, deriv: int = 1
+    dframe: pd.DatetimeIndex,
+    window: int = 5,
+    rounds: int = 10,
+    deriv: int = 1,
+    center: str = None,
+    typ: str = "coords",
 ) -> pd.DataFrame:
     """Returns the average speed over n frames in pixels per frame
 
@@ -494,29 +499,44 @@ def rolling_speed(
             - rounds (int): float rounding decimals
             - deriv (int): position derivative order; 1 for speed,
             2 for acceleration, 3 for jerk, etc
+            - center (str): for internal usage only; solves an issue
+            with pandas.MultiIndex that arises when centering frames
+            to a specific body part
 
         Returns:
             - speeds (pd.DataFrame): containing 2D speeds for each body part
             in the original data or their consequent derivatives"""
 
     original_shape = dframe.shape
-    body_parts = dframe.columns.levels[0]
+    if center:
+        body_parts = [bp for bp in dframe.columns.levels[0] if bp != center]
+    else:
+        try:
+            body_parts = dframe.columns.levels[0]
+        except AttributeError:
+            body_parts = dframe.columns
+
     speeds = pd.DataFrame
 
     for der in range(deriv):
+
+        features = 2 if der == 0 and typ == "coords" else 1
+
         distances = np.concatenate(
             [
-                np.array(dframe).reshape([-1, (2 if der == 0 else 1)], order="F"),
-                np.array(dframe.shift()).reshape(
-                    [-1, (2 if der == 0 else 1)], order="F"
-                ),
+                np.array(dframe).reshape([-1, features], order="F"),
+                np.array(dframe.shift()).reshape([-1, features], order="F"),
             ],
             axis=1,
         )
 
         distances = np.array(compute_dist(distances))
         distances = distances.reshape(
-            [original_shape[0], original_shape[1] // 2], order="F"
+            [
+                original_shape[0],
+                (original_shape[1] // 2 if typ == "coords" else original_shape[1]),
+            ],
+            order="F",
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)
