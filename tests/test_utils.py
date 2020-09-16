@@ -260,6 +260,7 @@ def test_smooth_boolean_array(a):
     smooth = smooth_boolean_array(a)
 
     def trans(x):
+        """In situ function for computing boolean transitions"""
         return sum([i + 1 != i for i in range(x.shape[0] - 1)])
 
     assert trans(a) >= trans(smooth)

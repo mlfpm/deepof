@@ -506,6 +506,7 @@ class table_dict(dict):
             {k: value for k, value in self.items() if k in keys}, self._type
         )
 
+    # noinspection PyTypeChecker
     def plot_heatmaps(self, bodyparts, save=False, i=0):
 
         if self._type != "coords" or self._polar:
@@ -549,6 +550,7 @@ class table_dict(dict):
 
         return X_train, X_test
 
+    # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
         window_size=1,
@@ -565,6 +567,7 @@ class table_dict(dict):
         """Builds a sliding window. If specified, splits train and test and
            Z-scores the data using sklearn's standard scaler"""
 
+        global g
         X_train, X_test = self.get_training_set(test_videos)
 
         if scale:
@@ -616,7 +619,7 @@ class table_dict(dict):
                 ]
             )
             g /= np.max(g)
-            X_train = X_train * g.reshape(1, window_size, 1)
+            X_train = X_train * g.reshape([1, window_size, 1])
 
         if test_videos:
 
@@ -629,7 +632,7 @@ class table_dict(dict):
                 X_test = align_trajectories(X_test, align)
 
             if conv_filter == "gaussian":
-                X_test = X_test * g.reshape(1, window_size, 1)
+                X_test = X_test * g.reshape([1, window_size, 1])
 
             if shuffle:
                 X_train = X_train[
@@ -650,7 +653,7 @@ class table_dict(dict):
 
     def random_projection(self, n_components=None, sample=1000):
 
-        X = self.get_training_set()
+        X = self.get_training_set()[0]
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         rproj = random_projection.GaussianRandomProjection(n_components=n_components)
@@ -660,7 +663,7 @@ class table_dict(dict):
 
     def pca(self, n_components=None, sample=1000, kernel="linear"):
 
-        X = self.get_training_set()
+        X = self.get_training_set()[0]
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         pca = KernelPCA(n_components=n_components, kernel=kernel)
@@ -670,7 +673,7 @@ class table_dict(dict):
 
     def tsne(self, n_components=None, sample=1000, perplexity=30):
 
-        X = self.get_training_set()
+        X = self.get_training_set()[0]
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         tsne = TSNE(n_components=n_components, perplexity=perplexity)

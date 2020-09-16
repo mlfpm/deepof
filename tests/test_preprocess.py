@@ -206,7 +206,7 @@ def test_get_table_dicts(nodes, ego, sampler):
     else:
         align = False
 
-    table.preprocess(
+    prep = table.preprocess(
         window_size=11,
         window_step=1,
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
@@ -218,3 +218,14 @@ def test_get_table_dicts(nodes, ego, sampler):
         shuffle=sampler.draw(st.booleans()),
         align=align,
     )
+
+    assert (type(prep) == np.ndarray or type(prep) == tuple)
+
+    if type(prep) == tuple:
+        assert type(prep[0]) == np.ndarray
+
+    # deepof dimensionality reduction testing
+
+    assert type(table.random_projection(n_components=2, sample=50)) == tuple
+    assert type(table.pca(n_components=2, sample=50)) == tuple
+    assert type(table.tsne(n_components=2, sample=50)) == tuple

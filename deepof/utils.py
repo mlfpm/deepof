@@ -16,7 +16,7 @@ from scipy import spatial
 from scipy import stats
 from sklearn import mixture
 from tqdm import tqdm
-from typing import Tuple, Any, List, Union, Dict, NewType
+from typing import Tuple, Any, List, Union, NewType
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 
@@ -936,7 +936,34 @@ def rule_based_tagging(
     huddle_spine: int = 10,
     huddle_speed: int = 1,
 ) -> pd.DataFrame:
-    """Outputs a dataframe with the motives registered per frame."""
+    """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
+    video displaying the information in real time
+
+    Parameters:
+        - tracks (list):
+        - videos (list):
+        - coordinates (deepof.preprocessing.coordinates):
+        - vid_index (int):
+        - animal_ids (list):
+        - show (bool):
+        - save (bool):
+        - fps (float):
+        - speed_pause (int):
+        - frame_limit (float):
+        - recog_limit (int):
+        - path (str):
+        - arena_type (str):
+        - close_contact_tol (int):
+        - side_contact_tol (int):
+        - follow_frames (int):
+        - follow_tol (int):
+        - huddle_forward (int):
+        - huddle_spine (int):
+        - huddle_speed (int):
+
+    Returns:
+        - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
+        value is a boolean indicating trait detection at a given time"""
 
     vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
 
