@@ -144,13 +144,15 @@ def test_get_table_dicts(nodes, ego, sampler):
         table_format=".h5",
         distances=nodes,
         ego=ego,
-    ).run(verbose=True)
+    ).run(verbose=False)
+
+    algn = sampler.draw(st.one_of(st.just(False), st.just("Nose")))
 
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
-        align=sampler.draw(st.one_of(st.just(False), st.just("Nose"))),
+        align=algn
     )
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
@@ -182,7 +184,32 @@ def test_get_table_dicts(nodes, ego, sampler):
     # deepof.table_dict testing
 
     table = sampler.draw(
-        st.one_of(st.just(coords), st.just(speeds), st.just(distances), st.just(angles))
+        st.one_of(
+            st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
+        ),
+        st.just(deepof.preprocess.merge_tables(coords, speeds, distances, angles)),
     )
 
-    #table.filter()
+    assert table.filter(["test"]) == table
+    tset = table.get_training_set(
+        test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1))
+    )
+    assert len(tset) == 2
+    assert type(tset[0]) == np.ndarray
+
+    table.preprocess(
+        window_size=11,
+        window_step=1,
+        scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
+        test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1)),
+        verbose=True,
+        conv_filter=sampler.draw(st.one_of(st.just(None), st.just("gaussian"))),
+        sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
+        shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
+        shuffle=sampler.draw(st.booleans()),
+        align=(
+            sampler.draw(st.one_of(st.just(False), st.just("all"), st.just("center")))
+            if (table._type == "coords" and algn == "Nose")
+            else False
+        ),
+    )

@@ -170,43 +170,43 @@ coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
 
 input_dict_train = {
     "coords": coords1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
     "dists": distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
     "angles": angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+dist": coords_distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+angle": coords_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
     ),
 }
 
 input_dict_val = {
     "coords": coords2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
     "dists": distances2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
     "angles": angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+dist": coords_distances2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+angle": coords_angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
     "coords+dist+angle": coords_dist_angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, filter="gauss"
+        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
     ),
 }
 

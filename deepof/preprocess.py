@@ -556,9 +556,9 @@ class table_dict(dict):
         scale="standard",
         test_videos=0,
         verbose=False,
-        filter=None,
-        sigma=None,
-        shift=0,
+        conv_filter=None,
+        sigma=1.0,
+        shift=0.0,
         shuffle=False,
         align=False,
     ):
@@ -586,7 +586,7 @@ class table_dict(dict):
 
             if scale == "standard":
                 assert np.allclose(np.mean(X_train), 0)
-                assert np.allclose(np.std(X_train, ddof=1), 1)
+                assert np.allclose(np.std(X_train), 1)
 
             if test_videos:
                 X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
@@ -604,7 +604,7 @@ class table_dict(dict):
         if align == "center":
             X_train = align_trajectories(X_train, align)
 
-        if filter == "gaussian":
+        if conv_filter == "gaussian":
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
             r = [i - shift for i in r]
             g = np.array(
@@ -628,7 +628,7 @@ class table_dict(dict):
             if align == "center":
                 X_test = align_trajectories(X_test, align)
 
-            if filter == "gaussian":
+            if conv_filter == "gaussian":
                 X_test = X_test * g.reshape(1, window_size, 1)
 
             if shuffle:
