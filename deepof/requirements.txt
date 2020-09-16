@@ -12,6 +12,7 @@ sklearn~=0.0
 scikit-learn~=0.23.2
 tqdm~=4.42.0
 tensorflow~=2.2.0
+tensorflow-probability~=0.10.0
 hypothesis~=5.29.0
 dash~=1.11.0
 plotly~=4.5.0
