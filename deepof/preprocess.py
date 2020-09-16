@@ -13,6 +13,7 @@ import networkx as nx
 
 from deepof.utils import *
 from deepof.visuals import *
+from deepof.model_utils import connect_mouse_topview
 
 
 class project:
@@ -27,7 +28,7 @@ class project:
         video_format=".mp4",
         table_format=".h5",
         path=".",
-        exp_conditions=False,
+        exp_conditions=None,
         subset_condition=None,
         arena="circular",
         smooth_alpha=0.1,
@@ -35,7 +36,7 @@ class project:
         distances="All",
         ego=False,
         angles=True,
-        connectivity=None,
+        model="mouse_topview",
     ):
 
         self.path = path
@@ -57,8 +58,10 @@ class project:
         self.distances = distances
         self.ego = ego
         self.angles = angles
-        self.connectivity = connectivity
         self.scales = self.get_scale
+
+        model_dict = {"mouse_topview": connect_mouse_topview()}
+        self.connectivity = model_dict[model]
 
     def __str__(self):
         if self.exp_conditions:
@@ -79,15 +82,18 @@ class project:
         if verbose:
             print("Loading trajectories...")
 
+        tab_dict = {}
+
         if self.table_format == ".h5":
-            table_dict = {
+
+            tab_dict = {
                 re.findall("(.*?)_", tab)[0]: pd.read_hdf(
                     os.path.join(self.table_path, tab), dtype=float
                 )
                 for tab in self.tables
             }
         elif self.table_format == ".csv":
-            table_dict = {}
+
             for tab in self.tables:
                 head = pd.read_csv(os.path.join(self.table_path, tab), nrows=2)
                 data = pd.read_csv(
@@ -104,18 +110,18 @@ class project:
                     ],
                     names=["scorer", "bodyparts", "coords"],
                 )
-                table_dict[re.findall("(.*?)_", tab)[0]] = data
+                tab_dict[re.findall("(.*?)_", tab)[0]] = data
 
         lik_dict = defaultdict()
 
-        for key, value in table_dict.items():
+        for key, value in tab_dict.items():
             x = value.xs("x", level="coords", axis=1, drop_level=False)
             y = value.xs("y", level="coords", axis=1, drop_level=False)
             lik: pd.DataFrame = value.xs(
                 "likelihood", level="coords", axis=1, drop_level=True
             )
 
-            table_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
+            tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
             lik_dict[key] = lik
 
         if self.smooth_alpha:
@@ -123,19 +129,19 @@ class project:
             if verbose:
                 print("Smoothing trajectories...")
 
-            for key, tab in table_dict.items():
+            for key, tab in tab_dict.items():
                 cols = tab.columns
                 smooth = pd.DataFrame(
                     smooth_mult_trajectory(np.array(tab), alpha=self.smooth_alpha)
                 )
                 smooth.columns = cols
-                table_dict[key] = smooth
+                tab_dict[key] = smooth
 
-        for key, tab in table_dict.items():
-            table_dict[key] = tab[tab.columns.levels[0][0]]
+        for key, tab in tab_dict.items():
+            tab_dict[key] = tab[tab.columns.levels[0][0]]
 
         if self.subset_condition:
-            for key, value in table_dict.items():
+            for key, value in tab_dict.items():
                 lablist = [
                     b
                     for b in value.columns.levels[0]
@@ -152,9 +158,9 @@ class project:
 
                 tab.columns = tabcols
 
-                table_dict[key] = tab
+                tab_dict[key] = tab
 
-        return table_dict, lik_dict
+        return tab_dict, lik_dict
 
     @property
     def get_scale(self):
@@ -182,7 +188,7 @@ class project:
 
         return np.array(scales)
 
-    def get_distances(self, table_dict, verbose):
+    def get_distances(self, tab_dict, verbose=False):
         """Computes the distances between all selected bodyparts over time.
            If ego is provided, it only returns distances to a specified bodypart"""
 
@@ -191,17 +197,17 @@ class project:
 
         nodes = self.distances
         if nodes == "All":
-            nodes = table_dict[list(table_dict.keys())[0]].columns.levels[0]
+            nodes = tab_dict[list(tab_dict.keys())[0]].columns.levels[0]
 
         assert [
-            i in list(table_dict.values())[0].columns.levels[0] for i in nodes
+            i in list(tab_dict.values())[0].columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
         scales = self.scales[:, 2:]
 
         distance_dict = {
             key: bpart_distance(tab, scales[i, 1], scales[i, 0],)
-            for i, (key, tab) in enumerate(table_dict.items())
+            for i, (key, tab) in enumerate(tab_dict.items())
         }
 
         for key in distance_dict.keys():
@@ -217,7 +223,7 @@ class project:
 
         return distance_dict
 
-    def get_angles(self, table_dict, verbose):
+    def get_angles(self, tab_dict, verbose):
         """
 
         Computes all the angles between adjacent bodypart trios per video and per frame in the data.
@@ -233,12 +239,11 @@ class project:
         if verbose:
             print("Computing angles...")
 
-        bp_net = nx.Graph(self.connectivity)
-        cliques = nx.enumerate_all_cliques(bp_net)
+        cliques = nx.enumerate_all_cliques(self.connectivity)
         cliques = [i for i in cliques if len(i) == 3]
 
         angle_dict = {}
-        for key, tab in table_dict.items():
+        for key, tab in tab_dict.items():
 
             dats = []
             for clique in cliques:

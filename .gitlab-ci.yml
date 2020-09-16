@@ -8,8 +8,8 @@ test:
     - pip install coverage
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
-    - coverage run -m pytest
-    - coverage report -m
+    - coverage run --source deepof -m pytest
+    - coverage report -m --omit deepof/setup.py
     - coverage xml -o deepof_cov.xml
   artifacts:
     reports:
