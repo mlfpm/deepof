@@ -202,6 +202,8 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         Returns:
             - aligned_trajs (2D np.array): aligned positions over time"""
 
+    print(data.shape, mode)
+
     angles = np.zeros(data.shape[0])
     data = deepcopy(data)
     dshape = data.shape

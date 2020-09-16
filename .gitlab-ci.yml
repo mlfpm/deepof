@@ -9,7 +9,7 @@ test:
     - pip install -r ./deepof/requirements.txt
     - pip install -e deepof/
     - coverage run --source deepof -m pytest
-    - coverage report -m --omit deepof/setup.py
+    - coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/visuals.py
     - coverage xml -o deepof_cov.xml
   artifacts:
     reports:

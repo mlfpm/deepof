@@ -147,18 +147,20 @@ def test_get_table_dicts(nodes, ego, sampler):
     ).run(verbose=False)
 
     algn = sampler.draw(st.one_of(st.just(False), st.just("Nose")))
+    polar = sampler.draw(st.booleans())
+    speed = sampler.draw(st.integers(min_value=0, max_value=5))
 
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
-        polar=sampler.draw(st.booleans()),
+        polar=polar,
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
-        align=algn
+        align=algn,
     )
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
-        speed=sampler.draw(st.integers(min_value=0, max_value=5)),
+        speed=speed,
     )
     distances = prun.get_distances(
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
@@ -197,6 +199,13 @@ def test_get_table_dicts(nodes, ego, sampler):
     assert len(tset) == 2
     assert type(tset[0]) == np.ndarray
 
+    if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
+        align = sampler.draw(
+            st.one_of(st.just(False), st.just("all"), st.just("center"))
+        )
+    else:
+        align = False
+
     table.preprocess(
         window_size=11,
         window_step=1,
@@ -207,9 +216,5 @@ def test_get_table_dicts(nodes, ego, sampler):
         sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
         shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
         shuffle=sampler.draw(st.booleans()),
-        align=(
-            sampler.draw(st.one_of(st.just(False), st.just("all"), st.just("center")))
-            if (table._type == "coords" and algn == "Nose")
-            else False
-        ),
+        align=align,
     )
