@@ -21,9 +21,24 @@ tfpl = tfp.layers
 
 # Helper functions
 @tf.function
-def far_away_uniform_initialiser(shape, minval=0, maxval=15, iters=100000):
+def far_away_uniform_initialiser(
+    shape: tuple, minval: int = 0, maxval: int = 15, iters: int = 100000
+) -> tf.Tensor:
     """
     Returns a uniformly initialised matrix in which the columns are as far as possible
+
+        Parameters:
+            - shape (tuple): shape of the object to generate.
+            - minval (int): Minimum value of the uniform distribution from which to sample
+            - maxval (int): Maximum value of the uniform distribution from which to sample
+            - iters (int): the algorithm generates values at random and keeps those runs that
+            are the farthest apart. Increasing this parameter will lead to more accurate,
+            results while making the function run slowlier.
+
+        Returns:
+            - init (tf.Tensor): tensor of the specified shape in which the column vectors
+             are as far as possible
+
     """
 
     init = tf.random.uniform(shape, minval, maxval)
