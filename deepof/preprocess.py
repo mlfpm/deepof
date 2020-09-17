@@ -708,3 +708,4 @@ def merge_tables(*args):
 # TODO:
 #   - Generate ragged training array using a metric (acceleration, maybe?)
 #   - Use something like Dynamic Time Warping to put all instances in the same length
+#   - add rule_based_annotation method to coordinates class!!

@@ -219,7 +219,7 @@ def test_get_table_dicts(nodes, ego, sampler):
         align=align,
     )
 
-    assert (type(prep) == np.ndarray or type(prep) == tuple)
+    assert type(prep) == np.ndarray or type(prep) == tuple
 
     if type(prep) == tuple:
         assert type(prep[0]) == np.ndarray
