@@ -118,15 +118,23 @@ def compute_mmd(tensors: tuple) -> tf.Tensor:
 
 
 # Custom auxiliary classes
-class OneCycleScheduler(tf.keras.callbacks.Callback):
+class one_cycle_scheduler(tf.keras.callbacks.Callback):
+    """
+
+    One cycle learning rate scheduler.
+    Based on https://arxiv.org/pdf/1506.01186.pdf
+
+    """
+
     def __init__(
         self,
-        iterations,
-        max_rate,
-        start_rate=None,
-        last_iterations=None,
-        last_rate=None,
+        iterations: int,
+        max_rate: float,
+        start_rate: float = None,
+        last_iterations: int = None,
+        last_rate: float = None,
     ):
+        super().__init__()
         self.iterations = iterations
         self.max_rate = max_rate
         self.start_rate = start_rate or max_rate / 10
@@ -135,10 +143,12 @@ class OneCycleScheduler(tf.keras.callbacks.Callback):
         self.last_rate = last_rate or self.start_rate / 1000
         self.iteration = 0
 
-    def _interpolate(self, iter1, iter2, rate1, rate2):
+    def _interpolate(self, iter1: int, iter2: int, rate1: float, rate2: float) -> float:
         return (rate2 - rate1) * (self.iteration - iter1) / (iter2 - iter1) + rate1
 
-    def on_batch_begin(self, batch, logs):
+    # noinspection PyMethodOverriding,PyTypeChecker
+    def on_batch_begin(self, batch: int, logs):
+        """ Defines computations to perform for each batch """
         if self.iteration < self.half_iteration:
             rate = self._interpolate(
                 0, self.half_iteration, self.start_rate, self.max_rate

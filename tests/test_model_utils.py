@@ -16,6 +16,11 @@ import deepof.model_utils
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
+# For coverage.py to work with @tf.function decorated functions and methods,
+# graph execution is disabled when running this script with pytest
+
+tf.config.experimental_run_functions_eagerly(True)
+
 
 @settings(deadline=None)
 @given(
@@ -35,11 +40,11 @@ def test_far_away_uniform_initialiser(shape):
 @settings(deadline=None)
 @given(
     tensor=arrays(
-            shape=(10, 10),
-            dtype=float,
-            unique=True,
-            elements=st.floats(min_value=-300, max_value=300),
-        ),
+        shape=(10, 10),
+        dtype=float,
+        unique=True,
+        elements=st.floats(min_value=-300, max_value=300),
+    ),
 )
 def test_compute_mmd(tensor):
 
@@ -53,12 +58,14 @@ def test_compute_mmd(tensor):
     assert null_kernel == 0
 
 
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_onecyclescheduler():
-#     pass
+def test_one_cycle_scheduler():
+
+    cycle1 = deepof.model_utils.one_cycle_scheduler(
+        iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
+    )
+    assert type(cycle1._interpolate(1, 2, 0.2, 0.5)) == float
+
+
 #
 #
 # @settings(deadline=None)
