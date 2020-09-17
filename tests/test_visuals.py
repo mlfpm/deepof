@@ -8,14 +8,18 @@ Testing module for deepof.visuals
 
 """
 
-
+from hypothesis import given
+from hypothesis import settings
+from hypothesis import strategies as st
 from deepof.utils import *
 import deepof.preprocess
 import deepof.visuals
 import matplotlib.figure
 
 
-def test_plot_heatmap():
+@settings(deadline=None)
+@given(bparts=st.one_of(st.just(["Center"]), st.just(["Center", "Nose"])))
+def test_plot_heatmap(bparts):
     prun = (
         deepof.preprocess.project(
             path=os.path.join(".", "tests", "test_examples"),
@@ -33,7 +37,7 @@ def test_plot_heatmap():
         type(
             deepof.visuals.plot_heatmap(
                 prun["test"],
-                ["Center"],
+                bparts,
                 tuple([-100, 100]),
                 tuple([-100, 100]),
                 dpi=200,

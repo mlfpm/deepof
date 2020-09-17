@@ -17,6 +17,7 @@ from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
 from deepof.utils import *
 import deepof.preprocess
+import matplotlib.figure
 import pytest
 import string
 
@@ -25,6 +26,7 @@ import string
 
 
 def autocorr(x, t=1):
+    """Computes autocorrelation of the given array with a lag of t"""
     return np.round(np.corrcoef(np.array([x[:-t], x[t:]]))[0, 1], 5)
 
 
@@ -429,7 +431,7 @@ def test_climb_wall(arena, tol):
         deepof.preprocess.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
-            arena_dims=[arena[2]],
+            arena_dims=tuple([arena[2]]),
             angles=False,
             video_format=".mp4",
             table_format=".h5",
@@ -636,18 +638,22 @@ def test_single_behaviour_analysis(sampler):
     ylim = sampler.draw(st.floats(min_value=0, max_value=10))
     stat_tests = sampler.draw(st.booleans())
 
+    plot = sampler.draw(st.integers(min_value=0, max_value=200))
+
     out = single_behaviour_analysis(
         behaviours[0],
         treatment_dict,
         behavioural_dict,
-        plot=0,
+        plot=plot,
         stat_tests=stat_tests,
         save=None,
         ylim=ylim,
     )
 
-    assert len(out) == 1 if stat_tests == 0 else len(out) == 2
+    assert len(out) == 1 if (stat_tests == 0 and plot == 0) else len(out) >= 2
     assert type(out[0]) == dict
+    if plot:
+        assert np.any(np.array([type(i) for i in out]) == matplotlib.figure.Figure)
     if stat_tests:
         assert type(out[0]) == dict
 
@@ -768,7 +774,7 @@ def test_rule_based_tagging():
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
-        arena_dims=[380],
+        arena_dims=tuple([380]),
         angles=False,
         video_format=".mp4",
         table_format=".h5",

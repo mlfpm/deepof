@@ -617,7 +617,8 @@ class table_dict(dict):
 
         if self._type != "coords" or self._polar:
             raise NotImplementedError(
-                "Heatmaps only available for cartesian coordinates. Set polar to False in get_coordinates and try again"
+                "Heatmaps only available for cartesian coordinates. "
+                "Set polar to False in get_coordinates and try again"
             )
 
         if not self._center:

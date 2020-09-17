@@ -765,7 +765,7 @@ def single_behaviour_analysis(
         if save is not None:
             plt.savefig(save)
 
-        return_list.append(ax)
+        return_list.append(fig)
 
     if stat_tests:
         stat_dict = {}

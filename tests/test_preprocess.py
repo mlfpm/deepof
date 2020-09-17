@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 from collections import defaultdict
 from deepof.utils import *
 import deepof.preprocess
+import matplotlib.figure
 import pytest
 
 
@@ -208,9 +209,13 @@ def test_get_table_dicts(nodes, ego, sampler):
     assert type(tset[0]) == np.ndarray
 
     if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
+
+        assert type(table.plot_heatmaps(bodyparts=["Spine_1"])) == matplotlib.figure.Figure
+
         align = sampler.draw(
             st.one_of(st.just(False), st.just("all"), st.just("center"))
         )
+
     else:
         align = False
 
