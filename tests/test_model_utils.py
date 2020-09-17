@@ -24,7 +24,7 @@ from tensorflow.python.framework.ops import EagerTensor
     )
 )
 def test_far_away_uniform_initialiser(shape):
-    far = deepof.model_utils.far_away_uniform_initialiser(shape, 0, 15, 100)
+    far = deepof.model_utils.far_away_uniform_initialiser(shape, 0, 15, 1000)
     random = tf.random.uniform(shape, 0, 15)
     assert far.shape == shape
     assert tf.abs(tf.norm(tf.math.subtract(far[1:], far[:1]))) > tf.abs(
