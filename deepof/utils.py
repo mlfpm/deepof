@@ -1,4 +1,12 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
+"""
+
+Functions and general utilities for the deepof package. See documentation for details
+
+"""
 
 import cv2
 import matplotlib.pyplot as plt
@@ -22,6 +30,43 @@ from typing import Tuple, Any, List, Union, NewType
 
 
 Coordinates = NewType("Coordinates", Any)
+
+
+# CONNECTIVITY FOR DLC MODELS
+
+
+def connect_mouse_topview(animal_id=None) -> nx.Graph:
+    """Creates a nx.Graph object with the connectivity of the bodyparts in the
+    DLC topview model for a single mouse. Used later for angle computing, among others
+
+        Parameters:
+            - animal_id (str): if more than one animal is tagged,
+            specify the animal identyfier as a string
+
+        Returns:
+            - connectivity (nx.Graph)"""
+
+    connectivity = {
+        "Nose": ["Left_ear", "Right_ear", "Spine_1"],
+        "Left_ear": ["Right_ear", "Spine_1"],
+        "Right_ear": ["Spine_1"],
+        "Spine_1": ["Center", "Left_fhip", "Right_fhip"],
+        "Center": ["Left_fhip", "Right_fhip", "Spine_2", "Left_bhip", "Right_bhip"],
+        "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
+        "Tail_base": ["Tail_1", "Left_bhip", "Right_bhip"],
+        "Tail_1": ["Tail_2"],
+        "Tail_2": ["Tail_tip"],
+    }
+
+    connectivity = nx.Graph(connectivity)
+
+    if animal_id:
+        mapping = {
+            node: "{}_{}".format(animal_id, node) for node in connectivity.nodes()
+        }
+        nx.relabel_nodes(connectivity, mapping, copy=False)
+
+    return connectivity
 
 
 # QUALITY CONTROL AND PREPROCESSING #
