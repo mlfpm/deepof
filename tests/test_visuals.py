@@ -36,11 +36,7 @@ def test_plot_heatmap(bparts):
     assert (
         type(
             deepof.visuals.plot_heatmap(
-                prun["test"],
-                bparts,
-                tuple([-100, 100]),
-                tuple([-100, 100]),
-                dpi=200,
+                prun["test"], bparts, tuple([-100, 100]), tuple([-100, 100]), dpi=200,
             )
         )
         == matplotlib.figure.Figure
