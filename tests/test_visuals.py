@@ -1,4 +1,12 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
+"""
+
+Testing module for deepof.visuals
+
+"""
 
 from hypothesis import given
 from hypothesis import settings

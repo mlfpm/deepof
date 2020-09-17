@@ -1,4 +1,12 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
+"""
+
+deep autoencoder models for unsupervised pose detection
+
+"""
 
 from tensorflow.keras import backend as K
 from tensorflow.keras import Input, Model, Sequential

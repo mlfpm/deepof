@@ -1,4 +1,12 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
+"""
+
+keras hypermodels for hyperparameter tuning of deep autoencoders
+
+"""
 
 from kerastuner import HyperModel
 from tensorflow.keras import backend as K

@@ -1,4 +1,12 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
+"""
+
+General plotting functions for the deepof package
+
+"""
 
 import matplotlib.pyplot as plt
 import numpy as np
