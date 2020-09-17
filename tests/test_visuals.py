@@ -8,9 +8,7 @@ Testing module for deepof.visuals
 
 """
 
-from hypothesis import given
-from hypothesis import settings
-from hypothesis import strategies as st
+
 from deepof.utils import *
 import deepof.preprocess
 import deepof.visuals

@@ -8,6 +8,7 @@ General plotting functions for the deepof package
 
 """
 
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
