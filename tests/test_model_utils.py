@@ -66,20 +66,12 @@ def test_one_cycle_scheduler():
     assert type(cycle1._interpolate(1, 2, 0.2, 0.5)) == float
 
 
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_far_away_uniform_initialiser():
-#     pass
-#
-#
 # @settings(deadline=None)
 # @given()
 # def test_uncorrelated_features_constraint():
 #     pass
-#
-#
+
+
 # @settings(deadline=None)
 # @given()
 # def test_mcdropout():
