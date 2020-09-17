@@ -13,42 +13,36 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from itertools import cycle
-from typing import List, Dict
+from typing import List
 
 
 # PLOTTING FUNCTIONS #
 
 
-def plot_speed(
-    behaviour_dict: Dict[str, pd.DataFrame], treatments: Dict[str, List]
-) -> plt.figure:
-    """Plots a histogram with the speed of the specified mouse.
-       Treatments is expected to be a list of lists with mice keys per treatment"""
-
-    fig, [ax1, ax2] = plt.subplots(1, 2, figsize=(20, 10))
-
-    for Treatment, Mice_list in treatments.items():
-        hist = pd.concat([behaviour_dict[mouse] for mouse in Mice_list])
-        sns.kdeplot(hist["bspeed"], shade=True, label=Treatment, ax=ax1)
-        sns.kdeplot(hist["wspeed"], shade=True, label=Treatment, ax=ax2)
-
-    ax1.set_xlim(0, 7)
-    ax2.set_xlim(0, 7)
-    ax1.set_title("Average speed density for black mouse")
-    ax2.set_title("Average speed density for white mouse")
-    plt.xlabel("Average speed")
-    plt.ylabel("Density")
-    plt.show()
-
-
 def plot_heatmap(
-    dframe: pd.DataFrame, bodyparts: List, xlim: float, ylim: float, save: str = False
+    dframe: pd.DataFrame,
+    bodyparts: List,
+    xlim: tuple,
+    ylim: tuple,
+    save: str = False,
+    dpi: int = 200,
 ) -> plt.figure:
     """Returns a heatmap of the movement of a specific bodypart in the arena.
-       If more than one bodypart is passed, it returns one subplot for each"""
+       If more than one bodypart is passed, it returns one subplot for each
+
+        Parameters:
+            - dframe (pandas.DataFrame): table_dict value with info to plot
+            - bodyparts (List): bodyparts to represent (at least 1)
+            - xlim (float): limits of the x-axis
+            - ylim (float): limits of the y-axis
+            - save (str): name of the file to which the figure should be saved
+            - dpi (int): dots per inch of the returned image
+
+        Returns:
+            - heatmaps (plt.figure): figure with the specified characteristics"""
 
     # noinspection PyTypeChecker
-    fig, ax = plt.subplots(1, len(bodyparts), sharex=True, sharey=True)
+    heatmaps, ax = plt.subplots(1, len(bodyparts), sharex=True, sharey=True, dpi=dpi)
 
     for i, bpart in enumerate(bodyparts):
         heatmap = dframe[bpart]
@@ -65,7 +59,7 @@ def plot_heatmap(
     if save:
         plt.savefig(save)
 
-    plt.show()
+    return heatmaps
 
 
 def model_comparison_plot(
@@ -73,17 +67,40 @@ def model_comparison_plot(
     m_bic: list,
     n_components_range: range,
     cov_plot: str,
-    save: str,
+    save: str = False,
     cv_types: tuple = ("spherical", "tied", "diag", "full"),
+    dpi: int = 200,
 ) -> plt.figure:
-    """Plots model comparison statistics over all tests"""
+    """
+
+    Plots model comparison statistics for Gaussian Mixture Model analysis.
+    Similar to https://scikit-learn.org/stable/modules/mixture.html, it shows
+    an upper panel with BIC per number of components and covariance matrix type
+    in a bar plot, and a lower panel with box plots showing bootstrap runs of the
+    models corresponding to one of the covariance types.
+
+        Parameters:
+            - bic (list): list with BIC for all used models
+            - m_bic (list): list with minimum bic across cov matrices
+            for all used models
+            - n_components_range (range): range of components to evaluate
+            - cov_plot (str): covariance matrix to use in the lower panel
+            - save (str): name of the file to which the figure should be saved
+            - cv_types (tuple): tuple indicating which covariance matrix types
+            to use. All (spherical, tied, diag and full) used by default.
+            - dpi (int): dots per inch of the returned image
+
+        Returns:
+            - modelcomp (plt.figure): figure with all specified characteristics
+
+        """
 
     m_bic = np.array(m_bic)
     color_iter = cycle(["navy", "turquoise", "cornflowerblue", "darkorange"])
     bars = []
 
     # Plot the BIC scores
-    plt.figure(figsize=(12, 8))
+    modelcomp = plt.figure(dpi=dpi)
     spl = plt.subplot(2, 1, 1)
     covplot = np.repeat(cv_types, len(m_bic) / 4)
 
@@ -115,9 +132,7 @@ def model_comparison_plot(
     spl2.set_xlabel("Number of components")
     spl2.set_ylabel("BIC value")
 
-    plt.tight_layout()
-
     if save:
         plt.savefig(save)
 
-    plt.show()
+    return modelcomp

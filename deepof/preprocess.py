@@ -440,7 +440,7 @@ class coordinates:
             for key, tab in tabs.items():
                 tabs[key].index = pd.timedelta_range(
                     "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                ).astype('timedelta64[s]')
+                ).astype("timedelta64[s]")
 
         if align:
             assert (
@@ -492,7 +492,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype('timedelta64[s]')
+                    ).astype("timedelta64[s]")
 
             return table_dict(tabs, typ="dists")
 
@@ -532,7 +532,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype('timedelta64[s]')
+                    ).astype("timedelta64[s]")
 
             return table_dict(tabs, typ="angles")
 
@@ -571,6 +571,7 @@ class coordinates:
         return self._arena, self._arena_dims, self._scales
 
     def rule_based_annotation(self):
+        """Annotates coordinates using a simple rule-based pipeline"""
         pass
 
 
@@ -634,9 +635,11 @@ class table_dict(dict):
                 else [0, self._arena_dims[i][1]]
             )
 
-            plot_heatmap(
+            heatmaps = plot_heatmap(
                 list(self.values())[i], bodyparts, xlim=x_lim, ylim=y_lim, save=save,
             )
+
+            return heatmaps
 
     def get_training_set(self, test_videos: int = 0) -> Tuple[np.ndarray, np.ndarray]:
         """Generates training and test sets as numpy.array objects for model training"""

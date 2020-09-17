@@ -32,7 +32,7 @@ def test_project_init(table_type, arena_type):
             prun = deepof.preprocess.project(
                 path=os.path.join(".", "tests", "test_examples"),
                 arena=arena_type,
-                arena_dims=[380],
+                arena_dims=tuple([380]),
                 angles=False,
                 video_format=".mp4",
                 table_format=table_type,
@@ -41,7 +41,7 @@ def test_project_init(table_type, arena_type):
         prun = deepof.preprocess.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena=arena_type,
-            arena_dims=[380],
+            arena_dims=tuple([380]),
             angles=False,
             video_format=".mp4",
             table_format=table_type,
@@ -72,7 +72,7 @@ def test_get_distances(nodes, ego):
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
-        arena_dims=[380],
+        arena_dims=tuple([380]),
         angles=False,
         video_format=".mp4",
         table_format=".h5",
@@ -98,7 +98,7 @@ def test_get_angles(nodes, ego):
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
-        arena_dims=[380],
+        arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
         distances=nodes,
@@ -123,7 +123,7 @@ def test_run(nodes, ego):
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
-        arena_dims=[380],
+        arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
         distances=nodes,
@@ -147,7 +147,7 @@ def test_get_table_dicts(nodes, ego, sampler):
     prun = deepof.preprocess.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
-        arena_dims=[380],
+        arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
         distances=nodes,
