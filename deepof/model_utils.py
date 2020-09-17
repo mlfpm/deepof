@@ -12,12 +12,12 @@ from itertools import combinations
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
-import networkx as nx
 import tensorflow as tf
 import tensorflow_probability as tfp
 
 tfd = tfp.distributions
 tfpl = tfp.layers
+
 
 # Helper functions
 @tf.function
@@ -58,7 +58,21 @@ def far_away_uniform_initialiser(
     return init
 
 
-def compute_kernel(x, y):
+def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
+    """
+
+    Computes the MMD between the two specified vectors using a gaussian kernel.
+
+        Parameters:
+            - x (tf.Tensor): left tensor
+            - y (tf.Tensor): right tensor
+
+        Returns
+            - kernel (tf.Tensor): returns the result of applying the kernel, for
+            each training instance
+
+    """
+
     x_size = tf.shape(x)[0]
     y_size = tf.shape(y)[0]
     dim = tf.shape(x)[1]
@@ -68,13 +82,26 @@ def compute_kernel(x, y):
     tiled_y = tf.tile(
         tf.reshape(y, tf.stack([1, y_size, dim])), tf.stack([x_size, 1, 1])
     )
-    return tf.exp(
+    kernel = tf.exp(
         -tf.reduce_mean(tf.square(tiled_x - tiled_y), axis=2) / tf.cast(dim, tf.float32)
     )
+    return kernel
 
 
 @tf.function
-def compute_mmd(tensors):
+def compute_mmd(tensors: tuple) -> tf.Tensor:
+    """
+
+        Computes the MMD between the two specified vectors using a gaussian kernel.
+
+            Parameters:
+                - tensors (tuple): tuple containing two tf.Tensor objects
+
+            Returns
+                - mmd (tf.Tensor): returns the maximum mean discrepancy for each
+                training instance
+
+        """
 
     x = tensors[0]
     y = tensors[1]
@@ -82,11 +109,12 @@ def compute_mmd(tensors):
     x_kernel = compute_kernel(x, x)
     y_kernel = compute_kernel(y, y)
     xy_kernel = compute_kernel(x, y)
-    return (
+    mmd = (
         tf.reduce_mean(x_kernel)
         + tf.reduce_mean(y_kernel)
         - 2 * tf.reduce_mean(xy_kernel)
     )
+    return mmd
 
 
 # Custom auxiliary classes
