@@ -172,7 +172,14 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
         K.set_value(self.model.optimizer.lr, rate)
 
 
-class UncorrelatedFeaturesConstraint(Constraint):
+class uncorrelated_features_constraint(Constraint):
+    """
+
+    Tensorflow Constraint subclass that forces a layer to have uncorrelated features.
+    Useful, among others, for auto encoder bottleneck layers
+
+    """
+
     def __init__(self, encoding_dim, weightage=1.0):
         self.encoding_dim = encoding_dim
         self.weightage = weightage

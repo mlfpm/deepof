@@ -92,7 +92,7 @@ class SEQ_2_SEQ_AE:
             self.ENCODING,
             activation="elu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=UncorrelatedFeaturesConstraint(2, weightage=1.0),
+            activity_regularizer=uncorrelated_features_constraint(2, weightage=1.0),
             kernel_initializer=Orthogonal(),
         )
 

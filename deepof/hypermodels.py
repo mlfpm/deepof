@@ -92,7 +92,7 @@ class SEQ_2_SEQ_AE(HyperModel):
             ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            activity_regularizer=uncorrelated_features_constraint(3, weightage=1.0),
             kernel_initializer=Orthogonal(),
         )
 
@@ -340,7 +340,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                     for k in range(self.number_of_components)
                 ],
             ),
-            activity_regularizer=UncorrelatedFeaturesConstraint(3, weightage=1.0),
+            activity_regularizer=uncorrelated_features_constraint(3, weightage=1.0),
         )([z_cat, z_gauss])
 
         if "ELBO" in self.loss:
