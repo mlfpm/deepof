@@ -27,7 +27,7 @@ tf.config.experimental_run_functions_eagerly(True)
     )
 )
 def test_SEQ_2_SEQ_AE_build(input_shape):
-    deepof.models.SEQ_2_SEQ_AE(input_shape=input_shape)
+    deepof.models.SEQ_2_SEQ_AE(input_shape=input_shape).build()
 
 
 @settings(deadline=None)
@@ -52,7 +52,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
     init_iters,
 ):
     deepof.models.SEQ_2_SEQ_GMVAE(
-        input_shape=(15, 10,),
+        input_shape=(100, 15, 10,),
         loss=loss,
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,
@@ -61,4 +61,4 @@ def test_SEQ_2_SEQ_GMVAE_build(
         overlap_loss=overlap_loss,
         entropy_reg_weight=entropy_reg_weight,
         initialiser_iters=init_iters,
-    )
+    ).build()

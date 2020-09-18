@@ -8,6 +8,7 @@ deep autoencoder models for unsupervised pose detection
 
 """
 
+from typing import Any, Tuple
 from tensorflow.keras import backend as K
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
@@ -30,14 +31,15 @@ tfpl = tfp.layers
 class SEQ_2_SEQ_AE:
     def __init__(
         self,
-        input_shape,
-        units_conv=256,
-        units_lstm=256,
-        units_dense2=64,
-        dropout_rate=0.25,
-        encoding=16,
-        learning_rate=1e-5,
+        input_shape: tuple,
+        units_conv: int = 256,
+        units_lstm: int = 256,
+        units_dense2: int = 64,
+        dropout_rate: float = 0.25,
+        encoding: int = 16,
+        learning_rate: float = 1e-5,
     ):
+
         self.input_shape = input_shape
         self.CONV_filters = units_conv
         self.LSTM_units_1 = units_lstm
@@ -48,7 +50,7 @@ class SEQ_2_SEQ_AE:
         self.ENCODING = encoding
         self.learn_rate = learning_rate
 
-    def build(self):
+    def build(self) -> Tuple[Any, Any, Any]:
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
