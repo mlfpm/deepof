@@ -13,6 +13,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 import deepof.model_utils
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -65,11 +66,30 @@ def test_one_cycle_scheduler():
     )
     assert type(cycle1._interpolate(1, 2, 0.2, 0.5)) == float
 
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    onecycle = deepof.model_utils.one_cycle_scheduler(
+        X.shape[0] // 100 * 10, max_rate=0.005,
+    )
+
+    fit = test_model.fit(X, y, callbacks=[onecycle], epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+    assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
+    assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
+
 
 # @settings(deadline=None)
 # @given()
-# def test_uncorrelated_features_constraint():
-#     pass
+def test_uncorrelated_features_constraint():
+    pass
 
 
 # @settings(deadline=None)

@@ -142,6 +142,7 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
         self.half_iteration = (iterations - self.last_iterations) // 2
         self.last_rate = last_rate or self.start_rate / 1000
         self.iteration = 0
+        self.history = {}
 
     def _interpolate(self, iter1: int, iter2: int, rate1: float, rate2: float) -> float:
         return (rate2 - rate1) * (self.iteration - iter1) / (iter2 - iter1) + rate1
@@ -149,6 +150,9 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_batch_begin(self, batch: int, logs):
         """ Defines computations to perform for each batch """
+
+        self.history.setdefault("lr", []).append(K.get_value(self.model.optimizer.lr))
+
         if self.iteration < self.half_iteration:
             rate = self._interpolate(
                 0, self.half_iteration, self.start_rate, self.max_rate
@@ -175,7 +179,7 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
 class uncorrelated_features_constraint(Constraint):
     """
 
-    Tensorflow Constraint subclass that forces a layer to have uncorrelated features.
+    tf.keras.constraints.Constraint subclass that forces a layer to have uncorrelated features.
     Useful, among others, for auto encoder bottleneck layers
 
     """
