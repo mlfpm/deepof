@@ -15,12 +15,15 @@ from hypothesis.extra.numpy import arrays
 import deepof.model_utils
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 from tensorflow.python.framework.ops import EagerTensor
 
 # For coverage.py to work with @tf.function decorated functions and methods,
 # graph execution is disabled when running this script with pytest
 
 tf.config.experimental_run_functions_eagerly(True)
+tfpl = tfp.layers
+tfd = tfp.distributions
 
 
 @settings(deadline=None)
@@ -150,14 +153,66 @@ def test_dense_transpose():
     assert type(fit) == tf.python.keras.callbacks.History
 
 
-# def test_KLDivergenceLayer():
-#     pass
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_mmdiscrepancy_layer():
-#     pass
+def test_KLDivergenceLayer():
+    X = tf.random.uniform([1500, 10], 0, 10)
+    y = np.random.randint(0, 2, [1500, 1])
+
+    prior = tfd.Independent(
+        tfd.Normal(loc=tf.zeros(10), scale=1,), reinterpreted_batch_ndims=1,
+    )
+
+    dense_1 = tf.keras.layers.Dense(10)
+
+    i = tf.keras.layers.Input(shape=(10,))
+    d = dense_1(i)
+    x = tfpl.DistributionLambda(
+        lambda dense: tfd.Independent(
+            tfd.Normal(loc=dense, scale=1,), reinterpreted_batch_ndims=1,
+        )
+    )(d)
+    x = deepof.model_utils.KLDivergenceLayer(
+        prior, weight=tf.keras.backend.variable(1.0, name="kl_beta")
+    )(x)
+    test_model = tf.keras.Model(i, x)
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+
+
+def test_MMDiscrepancyLayer():
+    X = tf.random.uniform([1500, 10], 0, 10)
+    y = np.random.randint(0, 2, [1500, 1])
+
+    prior = tfd.Independent(
+        tfd.Normal(loc=tf.zeros(10), scale=1, ), reinterpreted_batch_ndims=1,
+    )
+
+    dense_1 = tf.keras.layers.Dense(10)
+
+    i = tf.keras.layers.Input(shape=(10,))
+    d = dense_1(i)
+    x = tfpl.DistributionLambda(
+        lambda dense: tfd.Independent(
+            tfd.Normal(loc=dense, scale=1, ), reinterpreted_batch_ndims=1,
+        )
+    )(d)
+    x = deepof.model_utils.MMDiscrepancyLayer(
+        100, prior, beta=tf.keras.backend.variable(1.0, name="kl_beta")
+    )(x)
+    test_model = tf.keras.Model(i, x)
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+
+
 #
 #
 # @settings(deadline=None)

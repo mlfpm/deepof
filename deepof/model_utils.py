@@ -287,23 +287,31 @@ class DenseTranspose(Layer):
 
 
 class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
+    """
+        Identity transform layer that adds KL Divergence
+        to the final model loss.
+    """
+
     def __init__(self, *args, **kwargs):
         self.is_placeholder = True
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
 
     def get_config(self):
+        """Updates Constraint metadata"""
+
         config = super().get_config().copy()
-        config.update(
-            {"is_placeholder": self.is_placeholder,}
-        )
+        config.update({"is_placeholder": self.is_placeholder})
         return config
 
     def call(self, distribution_a):
+        """Updates Layer's call method"""
+
         kl_batch = self._regularizer(distribution_a)
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
             kl_batch, aggregation="mean", name="kl_divergence",
         )
+        # noinspection PyProtectedMember
         self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")
 
         return distribution_a
@@ -323,6 +331,8 @@ class MMDiscrepancyLayer(Layer):
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
 
     def get_config(self):
+        """Updates Constraint metadata"""
+
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
         config.update({"beta": self.beta})
@@ -330,8 +340,10 @@ class MMDiscrepancyLayer(Layer):
         return config
 
     def call(self, z, **kwargs):
+        """Updates Layer's call method"""
+
         true_samples = self.prior.sample(self.batch_size)
-        mmd_batch = self.beta * compute_mmd([true_samples, z])
+        mmd_batch = self.beta * compute_mmd((true_samples, z))
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
         self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
