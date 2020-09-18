@@ -351,7 +351,7 @@ class MMDiscrepancyLayer(Layer):
         return z
 
 
-class Gaussian_mixture_overlap(Layer):  # pragma: no cover
+class Gaussian_mixture_overlap(Layer):
     """
     Identity layer that measures the overlap between the components of the latent Gaussian Mixture
     using a specified metric (MMD, Wasserstein, Fischer-Rao)
@@ -381,7 +381,7 @@ class Gaussian_mixture_overlap(Layer):  # pragma: no cover
         dists = []
         for k in range(self.n_components):
             locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims:, k])
+            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
