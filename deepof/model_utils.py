@@ -351,7 +351,7 @@ class MMDiscrepancyLayer(Layer):
         return z
 
 
-class Gaussian_mixture_overlap(Layer):
+class Gaussian_mixture_overlap(Layer):  # pragma: no cover
     """
     Identity layer that measures the overlap between the components of the latent Gaussian Mixture
     using a specified metric (MMD, Wasserstein, Fischer-Rao)
@@ -365,6 +365,8 @@ class Gaussian_mixture_overlap(Layer):
         super(Gaussian_mixture_overlap, self).__init__(*args, **kwargs)
 
     def get_config(self):
+        """Updates Constraint metadata"""
+
         config = super().get_config().copy()
         config.update({"lat_dims": self.lat_dims})
         config.update({"n_components": self.n_components})
@@ -372,12 +374,14 @@ class Gaussian_mixture_overlap(Layer):
         config.update({"samples": self.samples})
         return config
 
-    def call(self, target, loss=False):
+    @tf.function
+    def call(self, target, **kwargs):
+        """Updates Layer's call method"""
 
         dists = []
         for k in range(self.n_components):
             locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
+            scales = tf.keras.activations.softplus(target[..., self.lat_dims:, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
@@ -385,7 +389,7 @@ class Gaussian_mixture_overlap(Layer):
 
         dists = [tf.transpose(gauss.sample(self.samples), [1, 0, 2]) for gauss in dists]
 
-        ### MMD-based overlap ###
+        # MMD-based overlap #
         intercomponent_mmd = K.mean(
             tf.convert_to_tensor(
                 [
@@ -415,13 +419,15 @@ class Dead_neuron_control(Layer):
     def __init__(self, *args, **kwargs):
         super(Dead_neuron_control, self).__init__(*args, **kwargs)
 
-    def call(self, z, z_gauss, z_cat, **kwargs):
+    # noinspection PyMethodOverriding
+    def call(self, target, **kwargs):
+        """Updates Layer's call method"""
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(
-            tf.math.zero_fraction(z_gauss), aggregation="mean", name="dead_neurons"
+            tf.math.zero_fraction(target), aggregation="mean", name="dead_neurons"
         )
 
-        return z
+        return target
 
 
 class Entropy_regulariser(Layer):
@@ -429,18 +435,24 @@ class Entropy_regulariser(Layer):
     Identity layer that adds cluster weight entropy to the loss function
     """
 
-    def __init__(self, weight=1.0, *args, **kwargs):
+    def __init__(self, weight=1.0, axis=1, *args, **kwargs):
         self.weight = weight
+        self.axis = axis
         super(Entropy_regulariser, self).__init__(*args, **kwargs)
 
     def get_config(self):
+        """Updates Constraint metadata"""
+
         config = super().get_config().copy()
         config.update({"weight": self.weight})
+        config.update({"axis": self.axis})
 
     def call(self, z, **kwargs):
+        """Updates Layer's call method"""
+
         # axis=1 increases the entropy of a cluster across instances
         # axis=0 increases the entropy of the assignment for a given instance
-        entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=1)
+        entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=self.axis)
 
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(entropy, aggregation="mean", name="-weight_entropy")

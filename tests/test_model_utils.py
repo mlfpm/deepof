@@ -188,7 +188,7 @@ def test_MMDiscrepancyLayer():
     y = np.random.randint(0, 2, [1500, 1])
 
     prior = tfd.Independent(
-        tfd.Normal(loc=tf.zeros(10), scale=1, ), reinterpreted_batch_ndims=1,
+        tfd.Normal(loc=tf.zeros(10), scale=1,), reinterpreted_batch_ndims=1,
     )
 
     dense_1 = tf.keras.layers.Dense(10)
@@ -197,9 +197,10 @@ def test_MMDiscrepancyLayer():
     d = dense_1(i)
     x = tfpl.DistributionLambda(
         lambda dense: tfd.Independent(
-            tfd.Normal(loc=dense, scale=1, ), reinterpreted_batch_ndims=1,
+            tfd.Normal(loc=dense, scale=1,), reinterpreted_batch_ndims=1,
         )
     )(d)
+
     x = deepof.model_utils.MMDiscrepancyLayer(
         100, prior, beta=tf.keras.backend.variable(1.0, name="kl_beta")
     )(x)
@@ -213,21 +214,21 @@ def test_MMDiscrepancyLayer():
     assert type(fit) == tf.python.keras.callbacks.History
 
 
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_gaussian_mixture_overlap():
-#     pass
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_dead_neuron_control():
-#     pass
-#
-#
-# @settings(deadline=None)
-# @given()
+def test_dead_neuron_control():
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+    test_model.add(deepof.model_utils.Dead_neuron_control())
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+
+
 # def test_entropy_regulariser():
 #     pass

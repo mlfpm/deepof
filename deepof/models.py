@@ -335,6 +335,9 @@ class SEQ_2_SEQ_GMVAE:
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
 
+        # Identity layer controlling for dead neurons in the Gaussian Mixture posterior
+        z_gauss = Dead_neuron_control()(z_gauss)
+
         if self.overlap_loss:
             z_gauss = Gaussian_mixture_overlap(
                 self.ENCODING, self.number_of_components, loss=self.overlap_loss,
@@ -386,9 +389,6 @@ class SEQ_2_SEQ_GMVAE:
             z = MMDiscrepancyLayer(
                 batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
             )(z)
-
-        # Identity layer controlling clustering and latent space statistics
-        z = Dead_neuron_control()(z, z_gauss, z_cat)
 
         # Define and instantiate generator
         generator = Model_D1(z)
