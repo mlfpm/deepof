@@ -26,7 +26,7 @@ tf.config.experimental_run_functions_eagerly(True)
 @settings(deadline=None)
 @given(
     shape=st.tuples(
-        st.integers(min_value=2, max_value=10), st.integers(min_value=2, max_value=10)
+        st.integers(min_value=5, max_value=10), st.integers(min_value=5, max_value=10)
     )
 )
 def test_far_away_uniform_initialiser(shape):
@@ -48,7 +48,6 @@ def test_far_away_uniform_initialiser(shape):
     ),
 )
 def test_compute_mmd(tensor):
-
     tensor1 = tf.cast(tf.convert_to_tensor(tensor), dtype=tf.float32)
     tensor2 = tf.random.uniform(tensor1.shape, -300, 300, dtype=tf.float32)
 
@@ -60,7 +59,6 @@ def test_compute_mmd(tensor):
 
 
 def test_one_cycle_scheduler():
-
     cycle1 = deepof.model_utils.one_cycle_scheduler(
         iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
     )
@@ -86,27 +84,73 @@ def test_one_cycle_scheduler():
     assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
 
 
-# @settings(deadline=None)
-# @given()
 def test_uncorrelated_features_constraint():
-    pass
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    correlations = []
+
+    for w in range(2):
+        test_model = tf.keras.Sequential()
+        test_model.add(
+            tf.keras.layers.Dense(
+                10,
+                kernel_constraint=tf.keras.constraints.UnitNorm(axis=1),
+                activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(
+                    2, weightage=w
+                ),
+            )
+        )
+
+        test_model.compile(
+            loss=tf.keras.losses.binary_crossentropy,
+            optimizer=tf.keras.optimizers.SGD(),
+        )
+
+        fit = test_model.fit(X, y, epochs=10, batch_size=100)
+        assert type(fit) == tf.python.keras.callbacks.History
+
+        correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
+
+    assert correlations[0] > correlations[1]
 
 
-# @settings(deadline=None)
-# @given()
-# def test_mcdropout():
-#     pass
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_kldivergence_layer():
-#     pass
-#
-#
-# @settings(deadline=None)
-# @given()
-# def test_dense_transpose():
+def test_MCDropout():
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(10))
+    test_model.add(deepof.model_utils.MCDropout(0.5))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+
+
+def test_dense_transpose():
+    X = np.random.uniform(0, 10, [1500, 10])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    dense_1 = tf.keras.layers.Dense(10)
+
+    dense_input = tf.keras.layers.Input(shape=(10,))
+    dense_test = dense_1(dense_input)
+    dense_tran = deepof.model_utils.DenseTranspose(dense_1, output_dim=10)(dense_test)
+    test_model = tf.keras.Model(dense_input, dense_tran)
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    assert type(fit) == tf.python.keras.callbacks.History
+
+
+# def test_KLDivergenceLayer():
 #     pass
 #
 #

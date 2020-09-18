@@ -189,14 +189,15 @@ class uncorrelated_features_constraint(Constraint):
         self.weightage = weightage
 
     def get_config(self):
+        """Updates Constraint metadata"""
 
         config = super().get_config().copy()
-        config.update(
-            {"encoding_dim": self.encoding_dim, "weightage": self.weightage,}
-        )
+        config.update({"encoding_dim": self.encoding_dim, "weightage": self.weightage})
         return config
 
     def get_covariance(self, x):
+        """Computes the covariance of the elements of the passed layer"""
+
         x_centered_list = []
 
         for i in range(self.encoding_dim):
@@ -210,7 +211,10 @@ class uncorrelated_features_constraint(Constraint):
         return covariance
 
     # Constraint penalty
+    # noinspection PyUnusedLocal
     def uncorrelated_feature(self, x):
+        """Adds a penalty on feature correlation, forcing more independent sets of weights"""
+
         if self.encoding_dim <= 1:
             return 0.0
         else:
@@ -229,8 +233,57 @@ class uncorrelated_features_constraint(Constraint):
 
 # Custom Layers
 class MCDropout(tf.keras.layers.Dropout):
+    """Equivalent to tf.keras.layers.Dropout, but with training mode enabled at prediction time.
+    Useful for Montecarlo predictions"""
+
     def call(self, inputs, **kwargs):
+        """Overrides the call method of the subclassed function"""
         return super().call(inputs, training=True)
+
+
+class DenseTranspose(Layer):
+    """Mirrors a tf.keras.layers.Dense instance with transposed weights.
+    Useful for decoder layers in autoencoders, to force structure and
+    decrease the effective number of parameters to train"""
+
+    def __init__(self, dense, output_dim, activation=None, **kwargs):
+        self.dense = dense
+        self.output_dim = output_dim
+        self.activation = tf.keras.activations.get(activation)
+        super().__init__(**kwargs)
+
+    def get_config(self):
+        """Updates Constraint metadata"""
+
+        config = super().get_config().copy()
+        config.update(
+            {
+                "dense": self.dense,
+                "output_dim": self.output_dim,
+                "activation": self.activation,
+            }
+        )
+        return config
+
+    # noinspection PyAttributeOutsideInit
+    def build(self, batch_input_shape):
+        """Updates Layer's build method"""
+
+        self.biases = self.add_weight(
+            name="bias", shape=[self.dense.input_shape[-1]], initializer="zeros"
+        )
+        super().build(batch_input_shape)
+
+    def call(self, inputs, **kwargs):
+        """Updates Layer's call method"""
+
+        z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
+        return self.activation(z + self.biases)
+
+    def compute_output_shape(self, input_shape):
+        """Outputs the transposed shape"""
+
+        return input_shape[0], self.output_dim
 
 
 class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
@@ -254,38 +307,6 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")
 
         return distribution_a
-
-
-class DenseTranspose(Layer):
-    def __init__(self, dense, output_dim, activation=None, **kwargs):
-        self.dense = dense
-        self.output_dim = output_dim
-        self.activation = tf.keras.activations.get(activation)
-        super().__init__(**kwargs)
-
-    def get_config(self):
-        config = super().get_config().copy()
-        config.update(
-            {
-                "dense": self.dense,
-                "output_dim": self.output_dim,
-                "activation": self.activation,
-            }
-        )
-        return config
-
-    def build(self, batch_input_shape):
-        self.biases = self.add_weight(
-            name="bias", shape=[self.dense.input_shape[-1]], initializer="zeros"
-        )
-        super().build(batch_input_shape)
-
-    def call(self, inputs, **kwargs):
-        z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
-        return self.activation(z + self.biases)
-
-    def compute_output_shape(self, input_shape):
-        return input_shape[0], self.output_dim
 
 
 class MMDiscrepancyLayer(Layer):
@@ -383,7 +404,6 @@ class Dead_neuron_control(Layer):
         super(Dead_neuron_control, self).__init__(*args, **kwargs)
 
     def call(self, z, z_gauss, z_cat, **kwargs):
-
         # Adds metric that monitors dead neurons in the latent space
         self.add_metric(
             tf.math.zero_fraction(z_gauss), aggregation="mean", name="dead_neurons"
@@ -406,7 +426,6 @@ class Entropy_regulariser(Layer):
         config.update({"weight": self.weight})
 
     def call(self, z, **kwargs):
-
         # axis=1 increases the entropy of a cluster across instances
         # axis=0 increases the entropy of the assignment for a given instance
         entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=1)
