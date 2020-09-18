@@ -180,6 +180,7 @@ class SEQ_2_SEQ_GMVAE:
         predictor=True,
         overlap_loss=False,
         entropy_reg_weight=0.0,
+        initialiser_iters=int(1e5),
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -199,10 +200,14 @@ class SEQ_2_SEQ_GMVAE:
         self.predictor = predictor
         self.overlap_loss = overlap_loss
         self.entropy_reg_weight = entropy_reg_weight
+        self.initialiser_iters = initialiser_iters
 
         if self.prior == "standard_normal":
             init_means = far_away_uniform_initialiser(
-                shape=(self.number_of_components, self.ENCODING), minval=0, maxval=5
+                shape=(self.number_of_components, self.ENCODING),
+                minval=0,
+                maxval=5,
+                iters=self.initialiser_iters,
             )
 
             self.prior = tfd.mixture.Mixture(
