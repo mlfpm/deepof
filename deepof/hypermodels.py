@@ -14,7 +14,7 @@ from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform, Orthogonal, RandomNormal
+from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
@@ -29,11 +29,15 @@ tfpl = tfp.layers
 
 
 class SEQ_2_SEQ_AE(HyperModel):
+    """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_AE"""
+
     def __init__(self, input_shape):
         super().__init__()
         self.input_shape = input_shape
 
     def build(self, hp):
+        """Overrides Hypermodel's build method"""
+
         # Hyperparameters to tune
         CONV_filters = hp.Int(
             "units_conv", min_value=32, max_value=256, step=32, default=256
@@ -169,9 +173,12 @@ class SEQ_2_SEQ_AE(HyperModel):
 
 
 class SEQ_2_SEQ_GMVAE(HyperModel):
+    """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE"""
+
     def __init__(
         self,
         input_shape,
+        batch_size,
         CONV_filters=256,
         LSTM_units_1=256,
         LSTM_units_2=128,
@@ -184,7 +191,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         number_of_components=1,
         predictor=True,
     ):
+        super().__init__()
         self.input_shape = input_shape
+        self.batch_size = batch_size
         self.CONV_filters = CONV_filters
         self.LSTM_units_1 = LSTM_units_1
         self.LSTM_units_2 = LSTM_units_2
@@ -203,6 +212,8 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     def build(self, hp):
+        """Overrides Hypermodel's build method"""
+
         # Hyperparameters to tune
         DROPOUT_RATE = hp.Float(
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
@@ -358,7 +369,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                     )
                 )
 
-            z = MMDiscrepancyLayer(prior=self.prior, beta=mmd_beta)(z)
+            z = MMDiscrepancyLayer(
+                batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
+            )(z)
 
         # Define and instantiate generator
         generator = Model_D1(z)

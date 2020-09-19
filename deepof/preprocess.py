@@ -498,7 +498,7 @@ class coordinates:
 
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
-        )  #pragma: no cover
+        )  # pragma: no cover
 
     def get_angles(
         self, degrees: bool = False, speed: int = 0, length: str = None
@@ -536,12 +536,14 @@ class coordinates:
 
             return table_dict(tabs, typ="angles")
 
-        raise ValueError("Angles not computed. Read the documentation for more details")  #pragma: no cover
+        raise ValueError(
+            "Angles not computed. Read the documentation for more details"
+        )  # pragma: no cover
 
     def get_videos(self, play: bool = False):
         """Retuens the videos associated with the dataset as a list."""
 
-        if play:  #pragma: no cover
+        if play:  # pragma: no cover
             raise NotImplementedError
 
         return self._videos
@@ -555,7 +557,7 @@ class coordinates:
     def get_quality(self, report: bool = False):
         """Retrieves a dictionary with the tagging quality per video, as reported by DLC"""
 
-        if report:  #pragma: no cover
+        if report:  # pragma: no cover
             profile = ProfileReport(
                 self._quality[report],
                 title="Quality Report, {}".format(report),
@@ -619,9 +621,9 @@ class table_dict(dict):
             raise NotImplementedError(
                 "Heatmaps only available for cartesian coordinates. "
                 "Set polar to False in get_coordinates and try again"
-            )  #pragma: no cover
+            )  # pragma: no cover
 
-        if not self._center:  #pragma: no cover
+        if not self._center:  # pragma: no cover
             warnings.warn("Heatmaps look better if you center the data")
 
         if self._arena == "circular":
@@ -721,7 +723,7 @@ class table_dict(dict):
             else:
                 raise ValueError(
                     "Invalid scaler. Select one of standard, minmax or None"
-                )  #pragma: no cover
+                )  # pragma: no cover
 
             X_train = scaler.fit_transform(
                 X_train.reshape(-1, X_train.shape[-1])
