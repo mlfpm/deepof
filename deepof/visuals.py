@@ -57,7 +57,7 @@ def plot_heatmap(
     [x.set_ylim(ylim) for x in ax]
     [x.set_title(bp) for x, bp in zip(ax, bodyparts)]
 
-    if save:
+    if save:  # pragma: no cover
         plt.savefig(save)
 
     return heatmaps
@@ -133,7 +133,7 @@ def model_comparison_plot(
     spl2.set_xlabel("Number of components")
     spl2.set_ylabel("BIC value")
 
-    if save:
+    if save:  # pragma: no cover
         plt.savefig(save)
 
     return modelcomp

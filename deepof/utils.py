@@ -447,7 +447,7 @@ def recognize_arena(
     while cap.isOpened() and fnum < recoglimit:
         ret, frame = cap.read()
         # if frame is read correctly ret is True
-        if not ret:
+        if not ret:  #pragma: no cover
             print("Can't receive frame (stream end?). Exiting ...")
             break
 
@@ -762,7 +762,7 @@ def single_behaviour_analysis(
         if ylim is not None:
             ax.set_ylim(ylim)
 
-        if save is not None:
+        if save is not None:  #pragma: no cover
             plt.savefig(save)
 
         return_list.append(fig)
@@ -1135,7 +1135,7 @@ def rule_based_tagging(
 
             ret, frame = cap.read()
             # if frame is read correctly ret is True
-            if not ret:
+            if not ret:  #pragma: no cover
                 print("Can't receive frame (stream end?). Exiting ...")
                 break
 
@@ -1281,7 +1281,7 @@ def rule_based_tagging(
                     2,
                 )
 
-            if show:
+            if show:  #pragma: no cover
                 cv2.imshow("frame", frame)
 
                 if cv2.waitKey(1) == ord("q"):

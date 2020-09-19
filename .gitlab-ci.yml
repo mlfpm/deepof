@@ -1,6 +1,9 @@
 stages:
   - test
 
+include:
+  - template: Code-Quality.gitlab-ci.yml
+
 test:
   stage: test
   image: continuumio/anaconda3

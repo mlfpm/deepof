@@ -188,7 +188,7 @@ class uncorrelated_features_constraint(Constraint):
         self.encoding_dim = encoding_dim
         self.weightage = weightage
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
@@ -215,7 +215,7 @@ class uncorrelated_features_constraint(Constraint):
     def uncorrelated_feature(self, x):
         """Adds a penalty on feature correlation, forcing more independent sets of weights"""
 
-        if self.encoding_dim <= 1:
+        if self.encoding_dim <= 1:  # pragma: no cover
             return 0.0
         else:
             output = K.sum(
@@ -252,7 +252,7 @@ class DenseTranspose(Layer):
         self.activation = tf.keras.activations.get(activation)
         super().__init__(**kwargs)
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
@@ -280,7 +280,7 @@ class DenseTranspose(Layer):
         z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
         return self.activation(z + self.biases)
 
-    def compute_output_shape(self, input_shape):
+    def compute_output_shape(self, input_shape):  # pragma: no cover
         """Outputs the transposed shape"""
 
         return input_shape[0], self.output_dim
@@ -296,7 +296,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self.is_placeholder = True
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
@@ -330,7 +330,7 @@ class MMDiscrepancyLayer(Layer):
         self.prior = prior
         super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
@@ -364,7 +364,7 @@ class Gaussian_mixture_overlap(Layer):
         self.samples = samples
         super(Gaussian_mixture_overlap, self).__init__(*args, **kwargs)
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
@@ -440,7 +440,7 @@ class Entropy_regulariser(Layer):
         self.axis = axis
         super(Entropy_regulariser, self).__init__(*args, **kwargs)
 
-    def get_config(self):
+    def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()

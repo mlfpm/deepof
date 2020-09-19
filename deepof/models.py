@@ -38,8 +38,8 @@ class SEQ_2_SEQ_AE:
         dropout_rate: float = 0.25,
         encoding: int = 16,
         learning_rate: float = 1e-5,
+        huber_delta: float = 100.0,
     ):
-
         self.input_shape = input_shape
         self.CONV_filters = units_conv
         self.LSTM_units_1 = units_lstm
@@ -49,6 +49,7 @@ class SEQ_2_SEQ_AE:
         self.DROPOUT_RATE = dropout_rate
         self.ENCODING = encoding
         self.learn_rate = learning_rate
+        self.delta = huber_delta
 
     def build(self) -> Tuple[Any, Any, Any]:
         # Encoder Layers
@@ -155,7 +156,7 @@ class SEQ_2_SEQ_AE:
         model = Sequential([encoder, decoder], name="SEQ_2_SEQ_AE")
 
         model.compile(
-            loss=Huber(reduction="sum", delta=100.0),
+            loss=Huber(reduction="sum", delta=self.delta),
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
         )
@@ -183,6 +184,7 @@ class SEQ_2_SEQ_GMVAE:
         overlap_loss=False,
         entropy_reg_weight=0.0,
         initialiser_iters=int(1e5),
+        huber_delta: float = 100.0,
     ):
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -203,6 +205,7 @@ class SEQ_2_SEQ_GMVAE:
         self.overlap_loss = overlap_loss
         self.entropy_reg_weight = entropy_reg_weight
         self.initialiser_iters = initialiser_iters
+        self.delta = huber_delta
 
         if self.prior == "standard_normal":
             init_means = far_away_uniform_initialiser(
@@ -454,6 +457,7 @@ class SEQ_2_SEQ_GMVAE:
         # end-to-end autoencoder
         encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         grouper = Model(x, z_cat, name="Deep_Gaussian_Mixture_clustering")
+        # noinspection PyUnboundLocalVariable
         gmvaep = Model(
             inputs=x,
             outputs=(
@@ -478,8 +482,10 @@ class SEQ_2_SEQ_GMVAE:
         _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
-        def huber_loss(x_, x_decoded_mean_):
-            huber = Huber(reduction="sum", delta=100.0)
+        def huber_loss(x_, x_decoded_mean_):  # pragma: no cover
+            """Computes huber loss with a fixed delta"""
+
+            huber = Huber(reduction="sum", delta=self.delta)
             return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
         gmvaep.compile(
