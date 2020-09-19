@@ -16,3 +16,4 @@ dash~=1.11.0
 plotly~=4.5.0
 setuptools~=49.6.0
 pytest~=5.3.5
+pandas-profiling~=2.5.0
