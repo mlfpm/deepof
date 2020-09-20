@@ -429,7 +429,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             name="SEQ_2_SEQ_VAE",
         )
 
-        def huber_loss(x_, x_decoded_mean_):
+        def huber_loss(x_, x_decoded_mean_):  # pragma: no cover
             huber = Huber(reduction="sum", delta=100.0)
             return self.input_shape[1:] * huber(x_, x_decoded_mean_)
 
