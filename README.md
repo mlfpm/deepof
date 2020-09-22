@@ -9,7 +9,3 @@ Includes:
 5. Supervised learning of known behavioural traits
 6. Unsupervised behavioural exploration
 7. Dimensionality reduction
-* PCA / kernel PCA
-* t-SNE
-* CNN / LSTM autoencoders
-* Variational Autoencoders
