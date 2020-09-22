@@ -1,0 +1,5 @@
+setup.py
+deepof.egg-info/PKG-INFO
+deepof.egg-info/SOURCES.txt
+deepof.egg-info/dependency_links.txt
+deepof.egg-info/top_level.txt

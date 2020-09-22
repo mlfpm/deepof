@@ -1,0 +1,32 @@
+Metadata-Version: 2.1
+Name: deepof
+Version: 0.0.1
+Summary: deepof (Deep Open Field): Unsupervised Open Field animal pose classification using Gaussian Mixture Variational Autoencoders
+Home-page: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/
+Author: Lucas Miranda
+Author-email: lucas_miranda@psych.mpg.de
+License: UNKNOWN
+Description: # DeepOF
+        ### DeepLabCut postprocessing package
+        
+        Includes:
+        1. Loading and parsing of data
+        2. Trajectory smoothing
+        3. Distance and angle computation
+        4. Velocity and acceleration computation
+        5. Supervised learning of known behavioural traits
+        6. Unsupervised behavioural exploration
+        7. Dimensionality reduction
+        * PCA / kernel PCA
+        * t-SNE
+        * CNN / LSTM autoencoders
+        * Variational Autoencoders
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Machine Learning :: Unsupervised Deep Learning
+Classifier: Google :: Tensorflow
+Classifier: Neuroscience :: Animal behaviour
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
