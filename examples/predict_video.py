@@ -5,22 +5,12 @@ import sys
 
 sys.path.insert(1, "../")
 
-from deepof.preprocess import *
-from deepof.models import *
+import deepof.preprocess
 import argparse
 import cv2
-import os, pickle
-
-
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ("yes", "true", "t", "y", "1"):
-        return True
-    elif v.lower() in ("no", "false", "f", "n", "0"):
-        return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected.")
+import os
+import pickle
+from deepof.models import *
 
 
 parser = argparse.ArgumentParser(
@@ -49,14 +39,14 @@ parser.add_argument(
     "-pred",
     help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
     default=True,
-    type=str2bool,
+    type=deepof.preprocess.str2bool,
 )
 parser.add_argument(
     "--variational",
     "-v",
     help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
     default=True,
-    type=str2bool,
+    type=deepof.preprocess.str2bool,
 )
 parser.add_argument(
     "--loss",
@@ -161,7 +151,7 @@ bp_dict = {
     "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
 }
 
-DLC_social = project(
+DLC_social = deepof.preprocess.project(
     path=os.path.join(data_path),  # Path where to find the required files
     smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
     distances=[
@@ -183,20 +173,19 @@ DLC_social = project(
     table_format=".h5",
 )
 
-
 DLC_social_coords = DLC_social.run(verbose=True)
 
 # Coordinates for training data
 coords1 = DLC_social_coords.get_coords(center="B_Center", align="B_Nose")
 distances1 = DLC_social_coords.get_distances()
 angles1 = DLC_social_coords.get_angles()
-coords_distances1 = merge_tables(coords1, distances1)
-coords_angles1 = merge_tables(coords1, angles1)
-dists_angles1 = merge_tables(distances1, angles1)
-coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
+coords_distances1 = deepof.preprocess.merge_tables(coords1, distances1)
+coords_angles1 = deepof.preprocess.merge_tables(coords1, angles1)
+dists_angles1 = deepof.preprocess.merge_tables(distances1, angles1)
+coords_dist_angles1 = deepof.preprocess.merge_tables(coords1, distances1, angles1)
 
 input_dict = {
-    "coords": table_dict(
+    "coords": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -207,7 +196,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "dists": table_dict(
+    "dists": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -218,7 +207,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "angles": table_dict(
+    "angles": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -229,7 +218,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "coords+dist": table_dict(
+    "coords+dist": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -240,7 +229,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "coords+angle": table_dict(
+    "coords+angle": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -251,7 +240,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "dists+angle": table_dict(
+    "dists+angle": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -262,7 +251,7 @@ input_dict = {
         shuffle=False,
         align="center",
     ),
-    "coords+dist+angle": table_dict(
+    "coords+dist+angle": deepof.preprocess.table_dict(
         ((k, coords1[k]) for k in [video_name]), typ="coords"
     ).preprocess(
         window_size=13,
@@ -290,7 +279,9 @@ ae.build(input_dict[input_type].shape)
 ae.load_weights(model_path)
 
 # Predict cluster labels per frame
-frame_labels = np.argmax(grouper.predict(input_dict[input_type]), axis=1)
+frame_labels = deepof.preprocess.np.argmax(
+    grouper.predict(input_dict[input_type]), axis=1
+)
 
 print(frame_labels)
 print(frame_labels.shape)
@@ -308,7 +299,7 @@ cap = cv2.VideoCapture(
 
 # Loop over the first frames in the video to get resolution and center of the arena
 if frame_limit == -1:
-    frame_limit = np.inf
+    frame_limit = deepof.preprocess.np.inf
 
 fnum, h, w = 0, 0, 0
 if action == "save":

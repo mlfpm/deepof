@@ -8,6 +8,7 @@ Functions and general utilities for the deepof package. See documentation for de
 
 """
 
+import argparse
 import cv2
 import matplotlib.pyplot as plt
 import multiprocessing
@@ -70,6 +71,26 @@ def connect_mouse_topview(animal_id=None) -> nx.Graph:
 
 
 # QUALITY CONTROL AND PREPROCESSING #
+
+
+def str2bool(v: str) -> bool:
+    """Returns the passed string as a boolean
+
+    Parameters:
+        v (str): string to transform to boolean value
+
+    Returns:
+        boolean value. If conversion is not possible, it raises an error
+    """
+
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean compatible value expected.")
 
 
 def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:

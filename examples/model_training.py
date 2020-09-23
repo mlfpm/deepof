@@ -1,22 +1,11 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-from deepof.preprocess import *
+import deepof.preprocess
 from deepof.models import *
 from tensorflow import keras
 import argparse
 import os, pickle
-
-
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ("yes", "true", "t", "y", "1"):
-        return True
-    elif v.lower() in ("no", "false", "f", "n", "0"):
-        return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 parser = argparse.ArgumentParser(
@@ -60,7 +49,7 @@ parser.add_argument(
     "-v",
     help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
     default=True,
-    type=str2bool,
+    type=deepof.preprocess.str2bool,
 )
 parser.add_argument(
     "--loss",
@@ -102,7 +91,7 @@ parser.add_argument(
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
     default=False,
-    type=str2bool,
+    type=deepof.preprocess.str2bool,
 )
 parser.add_argument(
     "--batch-size",
@@ -201,7 +190,7 @@ bp_dict = {
     "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
 }
 
-DLC_social_1_coords = project(
+DLC_social_1_coords = deepof.preprocess.project(
     path=train_path,  # Path where to find the required files
     smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
     distances=[
@@ -228,10 +217,10 @@ DLC_social_1_coords = project(
 coords1 = DLC_social_1_coords.get_coords(center="B_Center", align="B_Nose")
 distances1 = DLC_social_1_coords.get_distances()
 angles1 = DLC_social_1_coords.get_angles()
-coords_distances1 = merge_tables(coords1, distances1)
-coords_angles1 = merge_tables(coords1, angles1)
-dists_angles1 = merge_tables(distances1, angles1)
-coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
+coords_distances1 = deepof.preprocess.merge_tables(coords1, distances1)
+coords_angles1 = deepof.preprocess.merge_tables(coords1, angles1)
+dists_angles1 = deepof.preprocess.merge_tables(distances1, angles1)
+coords_dist_angles1 = deepof.preprocess.merge_tables(coords1, distances1, angles1)
 
 
 input_dict_train = {
@@ -302,7 +291,7 @@ input_dict_train = {
 # If a validation path is specified, use it to build a validation set
 if val_path:
 
-    DLC_social_2_coords = project(
+    DLC_social_2_coords = deepof.preprocess.project(
         path=val_path,  # Path where to find the required files
         smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
         distances=[
@@ -328,10 +317,10 @@ if val_path:
     coords2 = DLC_social_2_coords.get_coords(center="B_Center", align="B_Nose")
     distances2 = DLC_social_2_coords.get_distances()
     angles2 = DLC_social_2_coords.get_angles()
-    coords_distances2 = merge_tables(coords2, distances2)
-    coords_angles2 = merge_tables(coords2, angles2)
-    dists_angles2 = merge_tables(distances2, angles2)
-    coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
+    coords_distances2 = deepof.preprocess.merge_tables(coords2, distances2)
+    coords_angles2 = deepof.preprocess.merge_tables(coords2, angles2)
+    dists_angles2 = deepof.preprocess.merge_tables(distances2, angles2)
+    coords_dist_angles2 = deepof.preprocess.merge_tables(coords2, distances2, angles2)
 
     input_dict_val = {
         "coords": coords2.preprocess(

@@ -35,6 +35,25 @@ def autocorr(x, t=1):
 
 @settings(deadline=None)
 @given(
+    v=st.one_of(
+        st.just("yes"),
+        st.just("true"),
+        st.just("t"),
+        st.just("y"),
+        st.just("1"),
+        st.just("no"),
+        st.just("false"),
+        st.just("f"),
+        st.just("n"),
+        st.just("0"),
+    )
+)
+def test_str2bool(v):
+    assert type(str2bool(v)) == bool
+
+
+@settings(deadline=None)
+@given(
     mult=st.integers(min_value=1, max_value=10),
     dframe=data_frames(
         index=range_indexes(min_size=1),
