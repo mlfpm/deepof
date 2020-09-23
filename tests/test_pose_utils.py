@@ -317,6 +317,29 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
         assert len(maxbe1) >= len(maxbe2)
 
 
+def test_get_hparameters():
+    assert get_hparameters() == {
+        "speed_pause": 10,
+        "close_contact_tol": 15,
+        "side_contact_tol": 15,
+        "follow_frames": 20,
+        "follow_tol": 20,
+        "huddle_forward": 15,
+        "huddle_spine": 10,
+        "huddle_speed": 1,
+    }
+    assert get_hparameters({"speed_pause": 20}) == {
+        "speed_pause": 20,
+        "close_contact_tol": 15,
+        "side_contact_tol": 15,
+        "follow_frames": 20,
+        "follow_tol": 20,
+        "huddle_forward": 15,
+        "huddle_spine": 10,
+        "huddle_speed": 1,
+    }
+
+
 def test_rule_based_tagging():
 
     prun = deepof.preprocess.project(

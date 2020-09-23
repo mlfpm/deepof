@@ -18,8 +18,7 @@ import tensorflow as tf
 tf.config.experimental_run_functions_eagerly(True)
 
 
-@settings(deadline=None,
-          max_examples=10)
+@settings(deadline=None, max_examples=10)
 @given(
     input_shape=st.tuples(
         st.integers(min_value=100, max_value=1000),
@@ -31,8 +30,7 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     deepof.models.SEQ_2_SEQ_AE(input_shape=input_shape).build()
 
 
-@settings(deadline=None,
-          max_examples=10)
+@settings(deadline=None, max_examples=10)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     kl_warmup_epochs=st.integers(min_value=0, max_value=5),
@@ -41,11 +39,7 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     entropy_reg_weight=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_SEQ_2_SEQ_GMVAE_build(
-    loss,
-    kl_warmup_epochs,
-    mmd_warmup_epochs,
-    number_of_components,
-    entropy_reg_weight,
+    loss, kl_warmup_epochs, mmd_warmup_epochs, number_of_components, entropy_reg_weight,
 ):
     deepof.models.SEQ_2_SEQ_GMVAE(
         input_shape=(100, 15, 10,),

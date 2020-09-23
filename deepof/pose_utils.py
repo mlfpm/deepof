@@ -22,13 +22,8 @@ from scipy import stats
 from tqdm import tqdm
 from typing import Any, List, NewType
 
-# DEFINE CUSTOM ANNOTATED TYPES #
-
 
 Coordinates = NewType("Coordinates", Any)
-
-
-# BEHAVIOUR RECOGNITION FUNCTIONS #
 
 
 def close_single_contact(
@@ -361,9 +356,34 @@ def max_behaviour(
     return np.array(max_array)
 
 
-# MAIN BEHAVIOUR TAGGING FUNCTION #
+def get_hparameters(hparams: dict = {}) -> dict:
+    """Returns the most frequent behaviour in a window of window_size frames
+
+            Parameters:
+                    - hparams (dict): dictionary containing hyperparameters to overwrite
+
+            Returns:
+                - defaults (dict): dictionary with overwriten parameters. Those not
+                specified in the input retain their default values"""
+
+    defaults = {
+        "speed_pause": 10,
+        "close_contact_tol": 15,
+        "side_contact_tol": 15,
+        "follow_frames": 20,
+        "follow_tol": 20,
+        "huddle_forward": 15,
+        "huddle_spine": 10,
+        "huddle_speed": 1,
+    }
+
+    for k, v in hparams.items():
+        defaults[k] = v
+
+    return defaults
 
 
+# noinspection PyDefaultArgument
 def rule_based_tagging(
     tracks: List,
     videos: List,
@@ -373,18 +393,11 @@ def rule_based_tagging(
     show: bool = False,
     save: bool = False,
     fps: float = 0.0,
-    speed_pause: int = 10,
+    path: str = os.path.join("./"),
+    hparams: dict = {},
+    arena_type: str = "circular",
     frame_limit: float = np.inf,
     recog_limit: int = 1,
-    path: str = os.path.join("./"),
-    arena_type: str = "circular",
-    close_contact_tol: int = 15,
-    side_contact_tol: int = 15,
-    follow_frames: int = 20,
-    follow_tol: int = 20,
-    huddle_forward: int = 15,
-    huddle_spine: int = 10,
-    huddle_speed: int = 1,
 ) -> pd.DataFrame:
     """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
     video displaying the information in real time
@@ -398,23 +411,27 @@ def rule_based_tagging(
         - show (bool): if True, enables the display of the annotated video in a separate window
         - save (bool): if True, saves the annotated video to an mp4 file
         - fps (float): frames per second of the analysed video. Same as input by default
-        - speed_pause (int): size of the rolling window to use when computing speeds
+        - path (str): directory in which the experimental data is stored
         - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
         - recog_limit (int): number of frames to use for arena recognition (1 by default)
-        - path (str): directory in which the experimental data is stored
         - arena_type (str): type of the arena used in the experiments. Must be one of 'circular'"
-        - close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
-        - side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
-        - follow_frames (int): number of frames during which the following trait is tracked
-        - follow_tol (int): maximum distance between follower and followed's path during the last follow_frames,
-        in order to report a detection
-        - huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
-        - huddle_spine (int): maximum average distance between spine body parts to report a huddle detection
-        - huddle_speed (int): maximum speed to report a huddle detection
+        - hparams (dict): dictionary to overwrite the default values of the hyperparameters of the functions
+        that the rule-based pose estimation utilizes. Values can be:
+            - speed_pause (int): size of the rolling window to use when computing speeds
+            - close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
+            - side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
+            - follow_frames (int): number of frames during which the following trait is tracked
+            - follow_tol (int): maximum distance between follower and followed's path during the last follow_frames,
+            in order to report a detection
+            - huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
+            - huddle_spine (int): maximum average distance between spine body parts to report a huddle detection
+            - huddle_speed (int): maximum speed to report a huddle detection
 
     Returns:
         - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
         value is a boolean indicating trait detection at a given time"""
+
+    hparams = get_hparameters(hparams)
 
     vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
 
@@ -435,7 +452,7 @@ def rule_based_tagging(
                 coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[1] + "_Nose",
-                close_contact_tol,
+                hparams["close_contact_tol"],
                 arena_abs,
                 arena[2],
             )
@@ -445,7 +462,7 @@ def rule_based_tagging(
                 coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                close_contact_tol,
+                hparams["close_contact_tol"],
                 arena_abs,
                 arena[2],
             )
@@ -455,7 +472,7 @@ def rule_based_tagging(
                 coords,
                 animal_ids[1] + "_Nose",
                 animal_ids[0] + "_Tail_base",
-                close_contact_tol,
+                hparams["close_contact_tol"],
                 arena_abs,
                 arena[2],
             )
@@ -467,7 +484,7 @@ def rule_based_tagging(
                 animal_ids[0] + "_Tail_base",
                 animal_ids[1] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                side_contact_tol,
+                hparams["side_contact_tol"],
                 rev=False,
                 arena_abs=arena_abs,
                 arena_rel=arena[2],
@@ -480,7 +497,7 @@ def rule_based_tagging(
                 animal_ids[0] + "_Tail_base",
                 animal_ids[1] + "_Nose",
                 animal_ids[1] + "_Tail_base",
-                side_contact_tol,
+                hparams["side_contact_tol"],
                 rev=True,
                 arena_abs=arena_abs,
                 arena_rel=arena[2],
@@ -493,8 +510,8 @@ def rule_based_tagging(
                     coords,
                     follower=_id,
                     followed=[i for i in animal_ids if i != _id][0],
-                    frames=follow_frames,
-                    tol=follow_tol,
+                    frames=hparams["follow_frames"],
+                    tol=hparams["follow_tol"],
                 )
             )
             tag_dict[_id + "_climbing"] = deepof.utils.smooth_boolean_array(
@@ -510,7 +527,13 @@ def rule_based_tagging(
             )
             tag_dict[_id + "_speed"] = speeds[_id + "_speed"]
             tag_dict[_id + "_huddle"] = deepof.utils.smooth_boolean_array(
-                huddle(coords, speeds, huddle_forward, huddle_spine, huddle_speed)
+                huddle(
+                    coords,
+                    speeds,
+                    hparams["huddle_forward"],
+                    hparams["huddle_spine"],
+                    hparams["huddle_speed"],
+                )
             )
 
     else:
@@ -525,7 +548,13 @@ def rule_based_tagging(
         )
         tag_dict["speed"] = speeds["Center"]
         tag_dict["huddle"] = deepof.utils.smooth_boolean_array(
-            huddle(coords, speeds, huddle_forward, huddle_spine, huddle_speed)
+            huddle(
+                coords,
+                speeds,
+                hparams["huddle_forward"],
+                hparams["huddle_spine"],
+                hparams["huddle_speed"],
+            )
         )
 
     if any([show, save]):
@@ -556,11 +585,14 @@ def rule_based_tagging(
 
             # Capture speeds
             try:
-                if list(frame_speeds.values())[0] == -np.inf or fnum % speed_pause == 0:
+                if (
+                    list(frame_speeds.values())[0] == -np.inf
+                    or fnum % hparams["speed_pause"] == 0
+                ):
                     for _id in animal_ids:
                         frame_speeds[_id] = speeds[_id + "_Center"][fnum]
             except AttributeError:
-                if frame_speeds == -np.inf or fnum % speed_pause == 0:
+                if frame_speeds == -np.inf or fnum % hparams["speed_pause"] == 0:
                     frame_speeds = speeds["Center"][fnum]
 
             # Display all annotations in the output video
@@ -682,7 +714,7 @@ def rule_based_tagging(
                     1,
                     (
                         (150, 150, 255)
-                        if huddle_speed > frame_speeds
+                        if hparams["huddle_speed"] > frame_speeds
                         else (150, 255, 150)
                     ),
                     2,
