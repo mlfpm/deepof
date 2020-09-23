@@ -2,3 +2,4 @@
 /.idea/
 /tests/.hypothesis/
 /tests/.pytest_cache/
+/.coverage
