@@ -19,7 +19,8 @@ import tensorflow as tf
 tf.config.experimental_run_functions_eagerly(True)
 
 
-@settings(deadline=None)
+@settings(deadline=None,
+          max_examples=10)
 @given(
     input_shape=st.tuples(
         st.integers(min_value=100, max_value=1000),
@@ -31,7 +32,8 @@ def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
     deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=input_shape).build(hp=HyperParameters())
 
 
-@settings(deadline=None)
+@settings(deadline=None,
+          max_examples=10)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     kl_warmup_epochs=st.integers(min_value=0, max_value=5),
