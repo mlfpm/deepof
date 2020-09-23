@@ -356,6 +356,7 @@ def max_behaviour(
     return np.array(max_array)
 
 
+# noinspection PyDefaultArgument
 def get_hparameters(hparams: dict = {}) -> dict:
     """Returns the most frequent behaviour in a window of window_size frames
 
@@ -383,21 +384,18 @@ def get_hparameters(hparams: dict = {}) -> dict:
     return defaults
 
 
-# noinspection PyDefaultArgument
+# noinspection PyDefaultArgument,PyProtectedMember
 def rule_based_tagging(
     tracks: List,
     videos: List,
     coordinates: Coordinates,
     vid_index: int,
-    animal_ids: List = None,
-    show: bool = False,
-    save: bool = False,
-    fps: float = 0.0,
-    path: str = os.path.join("./"),
-    hparams: dict = {},
-    arena_type: str = "circular",
     frame_limit: float = np.inf,
     recog_limit: int = 1,
+    mode: str = None,
+    fps: float = 0.0,
+    path: str = os.path.join("."),
+    hparams: dict = {},
 ) -> pd.DataFrame:
     """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
     video displaying the information in real time
@@ -432,6 +430,7 @@ def rule_based_tagging(
         value is a boolean indicating trait detection at a given time"""
 
     hparams = get_hparameters(hparams)
+    animal_ids = coordinates._animal_ids
 
     vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
 
@@ -439,7 +438,7 @@ def rule_based_tagging(
     speeds = coordinates.get_coords(speed=1)[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
     arena, h, w = deepof.utils.recognize_arena(
-        videos, vid_index, path, recog_limit, arena_type
+        videos, vid_index, path, recog_limit, coordinates._arena
     )
 
     # Dictionary with motives per frame
@@ -557,7 +556,7 @@ def rule_based_tagging(
             )
         )
 
-    if any([show, save]):
+    if mode in ["show", "save"]:
 
         cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
         # Keep track of the frame number, to align with the tracking data
@@ -720,13 +719,13 @@ def rule_based_tagging(
                     2,
                 )
 
-            if show:  # pragma: no cover
+            if mode == "show":  # pragma: no cover
                 cv2.imshow("frame", frame)
 
                 if cv2.waitKey(1) == ord("q"):
                     break
 
-            if save:
+            if mode == "save":
 
                 if writer is None:
                     # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.

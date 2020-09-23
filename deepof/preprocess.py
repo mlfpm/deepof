@@ -45,7 +45,7 @@ class project:
         self,
         video_format: str = ".mp4",
         table_format: str = ".h5",
-        path: str = ".",
+        path: str = os.path.join("."),
         exp_conditions: dict = None,
         subset_condition: list = None,
         arena: str = "circular",
@@ -55,6 +55,7 @@ class project:
         ego: str = False,
         angles: bool = True,
         model: str = "mouse_topview",
+        animal_ids: List = None,
     ):
 
         self.path = path
@@ -77,6 +78,7 @@ class project:
         self.ego = ego
         self.angles = angles
         self.scales = self.get_scale
+        self.animal_ids = animal_ids
 
         model_dict = {"mouse_topview": connect_mouse_topview()}
         self.connectivity = model_dict[model]
@@ -306,6 +308,7 @@ class project:
             exp_conditions=self.exp_conditions,
             distances=distances,
             angles=angles,
+            animal_ids=self.animal_ids,
         )
 
 
@@ -328,6 +331,7 @@ class coordinates:
         exp_conditions: dict = None,
         distances: dict = None,
         angles: dict = None,
+        animal_ids: List = None,
     ):
         self._tables = tables
         self.distances = distances
@@ -338,6 +342,7 @@ class coordinates:
         self._arena_dims = arena_dims
         self._scales = scales
         self._quality = quality
+        self._animal_ids = animal_ids
 
     def __str__(self):
         if self._exp_conditions:

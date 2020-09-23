@@ -349,6 +349,7 @@ def test_rule_based_tagging():
         angles=False,
         video_format=".mp4",
         table_format=".h5",
+        animal_ids=None,
     ).run(verbose=True)
 
     hardcoded_tags = rule_based_tagging(
@@ -357,7 +358,7 @@ def test_rule_based_tagging():
         prun,
         vid_index=0,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
-        save=True,
+        mode="save",
         frame_limit=100,
     )
 
