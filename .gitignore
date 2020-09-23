@@ -1,2 +1,4 @@
 /examples/.ipynb_checkpoints/
 /.idea/
+/tests/.hypothesis/
+/tests/.pytest_cache/
