@@ -95,7 +95,6 @@ def test_climb_wall(arena, tol):
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([arena[2]]),
-            angles=False,
             video_format=".mp4",
             table_format=".h5",
         )
@@ -346,7 +345,6 @@ def test_rule_based_tagging():
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
-        angles=False,
         video_format=".mp4",
         table_format=".h5",
         animal_ids=None,
