@@ -25,7 +25,6 @@ def test_plot_heatmap(bparts):
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([380]),
-            angles=False,
             video_format=".mp4",
             table_format=".h5",
         )
@@ -49,7 +48,6 @@ def test_model_comparison_plot():
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([380]),
-            angles=False,
             video_format=".mp4",
             table_format=".h5",
         )
