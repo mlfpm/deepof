@@ -47,13 +47,9 @@ class project:
         table_format: str = ".h5",
         path: str = os.path.join("."),
         exp_conditions: dict = None,
-        subset_condition: list = None,
         arena: str = "circular",
         smooth_alpha: float = 0.1,
         arena_dims: tuple = (1,),
-        distances: str = "All",
-        ego: str = False,
-        angles: bool = True,
         model: str = "mouse_topview",
         animal_ids: List = None,
     ):
@@ -68,17 +64,18 @@ class project:
             [tab for tab in os.listdir(self.table_path) if tab.endswith(table_format)]
         )
         self.exp_conditions = exp_conditions
-        self.subset_condition = subset_condition
         self.table_format = table_format
         self.video_format = video_format
         self.arena = arena
         self.arena_dims = arena_dims
         self.smooth_alpha = smooth_alpha
-        self.distances = distances
-        self.ego = ego
-        self.angles = angles
         self.scales = self.get_scale
         self.animal_ids = animal_ids
+
+        self.subset_condition = None
+        self.distances = "All"
+        self.ego = False
+        self.angles = True
 
         model_dict = {"mouse_topview": connect_mouse_topview()}
         self.connectivity = model_dict[model]
@@ -90,6 +87,56 @@ class project:
             )
         else:
             return "DLC analysis of {} videos".format(len(self.videos))
+
+    @property
+    def subset_condition(self):
+        """Sets a subset condition for the videos to load. If set,
+        only the videos with the included pattern will be loaded"""
+        return self._subset_condition
+
+    @property
+    def distances(self):
+        """List. If not 'All', sets the body parts among which the
+        distances will be computed"""
+        return self._distances
+
+    @property
+    def ego(self):
+        """String, name of a body part. If True, computes only the distances
+        between the specified body part and the rest"""
+        return self._ego
+
+    @property
+    def angles(self):
+        """Bool. Toggles angle computation. True by default. If turned off,
+         enhances performance for big datasets"""
+        return self._angles
+
+    @property
+    def get_scale(self) -> np.array:
+        """Returns the arena as recognised from the videos"""
+
+        if self.arena in ["circular"]:
+
+            scales = []
+            for vid_index, _ in enumerate(self.videos):
+                scales.append(
+                    list(
+                        recognize_arena(
+                            self.videos,
+                            vid_index,
+                            path=self.video_path,
+                            arena_type=self.arena,
+                        )[0]
+                        * 2
+                    )
+                    + list(self.arena_dims)
+                )
+
+        else:
+            raise NotImplementedError("arenas must be set to one of: 'circular'")
+
+        return np.array(scales)
 
     def load_tables(self, verbose: bool = False) -> Tuple:
         """Loads videos and tables into dictionaries"""
@@ -181,32 +228,6 @@ class project:
                 tab_dict[key] = tab
 
         return tab_dict, lik_dict
-
-    @property
-    def get_scale(self) -> np.array:
-        """Returns the arena as recognised from the videos"""
-
-        if self.arena in ["circular"]:
-
-            scales = []
-            for vid_index, _ in enumerate(self.videos):
-                scales.append(
-                    list(
-                        recognize_arena(
-                            self.videos,
-                            vid_index,
-                            path=self.video_path,
-                            arena_type=self.arena,
-                        )[0]
-                        * 2
-                    )
-                    + list(self.arena_dims)
-                )
-
-        else:
-            raise NotImplementedError("arenas must be set to one of: 'circular'")
-
-        return np.array(scales)
 
     def get_distances(self, tab_dict: dict, verbose: bool = False) -> dict:
         """Computes the distances between all selected body parts over time.
@@ -310,6 +331,22 @@ class project:
             angles=angles,
             animal_ids=self.animal_ids,
         )
+
+    @subset_condition.setter
+    def subset_condition(self, value):
+        self._subset_condition = value
+
+    @distances.setter
+    def distances(self, value):
+        self._distances = value
+
+    @ego.setter
+    def ego(self, value):
+        self._ego = value
+
+    @angles.setter
+    def angles(self, value):
+        self._angles = value
 
 
 class coordinates:

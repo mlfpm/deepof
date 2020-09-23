@@ -34,7 +34,6 @@ def test_project_init(table_type, arena_type):
                 path=os.path.join(".", "tests", "test_examples"),
                 arena=arena_type,
                 arena_dims=tuple([380]),
-                angles=False,
                 video_format=".mp4",
                 table_format=table_type,
             )
@@ -43,7 +42,6 @@ def test_project_init(table_type, arena_type):
             path=os.path.join(".", "tests", "test_examples"),
             arena=arena_type,
             arena_dims=tuple([380]),
-            angles=False,
             video_format=".mp4",
             table_format=table_type,
         )
@@ -60,6 +58,33 @@ def test_project_init(table_type, arena_type):
             prun.load_tables(verbose=True)
 
 
+def test_project_properties():
+
+    prun = deepof.preprocess.project(
+        path=os.path.join(".", "tests", "test_examples"),
+        arena="circular",
+        arena_dims=tuple([380]),
+        video_format=".mp4",
+        table_format=".h5",
+    )
+
+    assert prun.subset_condition is None
+    prun.subset_condition = "testing"
+    assert prun.subset_condition == "testing"
+
+    assert prun.distances == "All"
+    prun.distances = "testing"
+    assert prun.distances == "testing"
+
+    assert not prun.ego
+    prun.ego = "testing"
+    assert prun.ego == "testing"
+
+    assert prun.angles
+    prun.angles = False
+    assert not prun.angles
+
+
 @settings(deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
@@ -74,13 +99,11 @@ def test_get_distances(nodes, ego):
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
-        angles=False,
         video_format=".mp4",
         table_format=".h5",
-        distances=nodes,
-        ego=ego,
     )
-
+    prun.distances = nodes
+    prun.ego = ego
     prun = prun.get_distances(prun.load_tables()[0], verbose=True)
 
     assert type(prun) == dict
@@ -102,10 +125,10 @@ def test_get_angles(nodes, ego):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
-        distances=nodes,
-        ego=ego,
     )
 
+    prun.distances = nodes
+    prun.ego = ego
     prun = prun.get_angles(prun.load_tables()[0], verbose=True)
 
     assert type(prun) == dict
@@ -127,9 +150,11 @@ def test_run(nodes, ego):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
-        distances=nodes,
-        ego=ego,
-    ).run(verbose=True)
+    )
+
+    prun.distances = nodes
+    prun.ego = ego
+    prun = prun.run(verbose=True)
 
     assert type(prun) == deepof.preprocess.coordinates
 
@@ -151,9 +176,11 @@ def test_get_table_dicts(nodes, ego, sampler):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
-        distances=nodes,
-        ego=ego,
-    ).run(verbose=False)
+    )
+
+    prun.distances = nodes
+    prun.ego = ego
+    prun = prun.run(verbose=False)
 
     algn = sampler.draw(st.one_of(st.just(False), st.just("Nose")))
     polar = sampler.draw(st.booleans())
