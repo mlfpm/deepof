@@ -376,6 +376,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "huddle_forward": 15,
         "huddle_spine": 10,
         "huddle_speed": 1,
+        "fps": 0,
     }
 
     for k, v in hparams.items():
@@ -555,7 +556,6 @@ def rule_based_video(
     tag_dict,
     mode,
     path,
-    fps,
     frame_limit,
     recog_limit,
     hparams,
@@ -802,7 +802,7 @@ def rule_based_video(
                     writer.open(
                         re.findall("(.*?)_", tracks[vid_index])[0] + "_tagged.avi",
                         cv2.VideoWriter_fourcc(*"MJPG"),
-                        (fps if fps != 0 else cv2.CAP_PROP_FPS),
+                        (hparams["fps"] if hparams["fps"] != 0 else cv2.CAP_PROP_FPS),
                         (frame.shape[1], frame.shape[0]),
                         True,
                     )
