@@ -442,19 +442,25 @@ def rule_based_tagging(
     # Dictionary with motives per frame
     tag_dict = {}
 
-    if animal_ids:
-        # Define behaviours that can be computed on the fly from the distance matrix
-        tag_dict["nose2nose"] = deepof.utils.smooth_boolean_array(
+    def onebyone_contact(bparts: List):
+        """Returns a smooth boolean array with 1to1 contacts between two mice"""
+        nonlocal coords, animal_ids, hparams, arena_abs, arena
+        return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 coords,
-                animal_ids[0] + "_Nose",
-                animal_ids[1] + "_Nose",
+                animal_ids[0] + bparts[0],
+                animal_ids[1] + bparts[-1],
                 hparams["close_contact_tol"],
                 arena_abs,
                 arena[2],
             )
         )
-        tag_dict["sidebyside"] = deepof.utils.smooth_boolean_array(
+
+    def twobytwo_contact(rev):
+        """Returns a smooth boolean array with side by side contacts between two mice"""
+
+        nonlocal coords, animal_ids, hparams, arena_abs, arena
+        return deepof.utils.smooth_boolean_array(
             close_double_contact(
                 coords,
                 animal_ids[0] + "_Nose",
@@ -462,35 +468,24 @@ def rule_based_tagging(
                 animal_ids[1] + "_Nose",
                 animal_ids[1] + "_Tail_base",
                 hparams["side_contact_tol"],
-                rev=False,
+                rev=rev,
                 arena_abs=arena_abs,
                 arena_rel=arena[2],
             )
         )
-        tag_dict["sidereside"] = deepof.utils.smooth_boolean_array(
-            close_double_contact(
-                coords,
-                animal_ids[0] + "_Nose",
-                animal_ids[0] + "_Tail_base",
-                animal_ids[1] + "_Nose",
-                animal_ids[1] + "_Tail_base",
-                hparams["side_contact_tol"],
-                rev=True,
-                arena_abs=arena_abs,
-                arena_rel=arena[2],
-            )
-        )
-        for _id in animal_ids:
-            tag_dict[_id + "_nose2tail"] = deepof.utils.smooth_boolean_array(
-                close_single_contact(
-                    coords,
-                    _id + "_Nose",
-                    [i for i in animal_ids if i != _id][0] + "_Tail_base",
-                    hparams["close_contact_tol"],
-                    arena_abs,
-                    arena[2],
-                )
-            )
+
+    if animal_ids:
+        # Define behaviours that can be computed on the fly from the distance matrix
+        tag_dict["nose2nose"] = onebyone_contact(bparts=["_Nose"])
+
+        tag_dict["sidebyside"] = twobytwo_contact(rev=False)
+
+        tag_dict["sidereside"] = twobytwo_contact(rev=True)
+
+        for i, _id in enumerate(animal_ids):
+            bps = [["_Nose", "_Tail_base"], ["_Tail_base", "_Nose"]]
+            tag_dict[_id + "_nose2tail"] = onebyone_contact(bparts=bps)
+
         for _id in animal_ids:
             tag_dict[_id + "_following"] = deepof.utils.smooth_boolean_array(
                 following_path(
