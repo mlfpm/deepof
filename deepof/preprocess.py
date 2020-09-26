@@ -51,7 +51,7 @@ class project:
         smooth_alpha: float = 0.1,
         arena_dims: tuple = (1,),
         model: str = "mouse_topview",
-        animal_ids: List = None,
+        animal_ids: List = (""),
     ):
 
         self.path = path
@@ -368,7 +368,7 @@ class coordinates:
         exp_conditions: dict = None,
         distances: dict = None,
         angles: dict = None,
-        animal_ids: List = None,
+        animal_ids: List = (""),
     ):
         self._tables = tables
         self.distances = distances
