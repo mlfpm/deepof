@@ -390,10 +390,7 @@ def rule_based_tagging(
     videos: List,
     coordinates: Coordinates,
     vid_index: int,
-    frame_limit: float = np.inf,
     recog_limit: int = 1,
-    mode: str = None,
-    fps: float = 0.0,
     path: str = os.path.join("."),
     hparams: dict = {},
 ) -> pd.DataFrame:
@@ -405,11 +402,7 @@ def rule_based_tagging(
         - videos (list): list of videos to load, in the same order as tracks
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
         - vid_index (int): index in videos of the experiment to annotate
-        - mode (str): if show, enables the display of the annotated video in a separate window, saves to mp4 file
-        if save
-        - fps (float): frames per second of the analysed video. Same as input by default
         - path (str): directory in which the experimental data is stored
-        - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
         - recog_limit (int): number of frames to use for arena recognition (1 by default)
         - hparams (dict): dictionary to overwrite the default values of the hyperparameters of the functions
         that the rule-based pose estimation utilizes. Values can be:
@@ -429,6 +422,7 @@ def rule_based_tagging(
 
     hparams = get_hparameters(hparams)
     animal_ids = coordinates._animal_ids
+    undercond = "_" if len(animal_ids) > 1 else ""
 
     vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
 
@@ -474,7 +468,7 @@ def rule_based_tagging(
             )
         )
 
-    if animal_ids:
+    if len(animal_ids) == 2:
         # Define behaviours that can be computed on the fly from the distance matrix
         tag_dict["nose2nose"] = onebyone_contact(bparts=["_Nose"])
 
@@ -497,40 +491,21 @@ def rule_based_tagging(
                     tol=hparams["follow_tol"],
                 )
             )
-            tag_dict[_id + "_climbing"] = deepof.utils.smooth_boolean_array(
-                pd.Series(
-                    (
-                        spatial.distance.cdist(
-                            np.array(coords[_id + "_Nose"]), np.zeros([1, 2])
-                        )
-                        > (w / 200 + arena[2])
-                    ).reshape(coords.shape[0]),
-                    index=coords.index,
-                ).astype(bool)
-            )
-            tag_dict[_id + "_speed"] = speeds[_id + "_speed"]
-            tag_dict[_id + "_huddle"] = deepof.utils.smooth_boolean_array(
-                huddle(
-                    coords,
-                    speeds,
-                    hparams["huddle_forward"],
-                    hparams["huddle_spine"],
-                    hparams["huddle_speed"],
-                )
-            )
 
-    else:
-        tag_dict["climbing"] = deepof.utils.smooth_boolean_array(
+    for _id in animal_ids:
+        tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
             pd.Series(
                 (
-                    spatial.distance.cdist(np.array(coords["Nose"]), np.zeros([1, 2]))
+                    spatial.distance.cdist(
+                        np.array(coords[_id + undercond + "Nose"]), np.zeros([1, 2])
+                    )
                     > (w / 200 + arena[2])
                 ).reshape(coords.shape[0]),
                 index=coords.index,
             ).astype(bool)
         )
-        tag_dict["speed"] = speeds["Center"]
-        tag_dict["huddle"] = deepof.utils.smooth_boolean_array(
+        tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
+        tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
                 coords,
                 speeds,
@@ -539,6 +514,65 @@ def rule_based_tagging(
                 hparams["huddle_speed"],
             )
         )
+
+    tag_df = pd.DataFrame(tag_dict)
+
+    return tag_df
+
+
+def rule_based_video(
+    coordinates,
+    tracks,
+    videos,
+    vid_index,
+    tag_dict,
+    mode,
+    path,
+    fps,
+    frame_limit,
+    recog_limit,
+    hparams,
+):
+    """Renders a version of the input video with all rule-based taggings in place.
+
+    Parameters:
+        - tracks (list): list containing experiment IDs as strings
+        - videos (list): list of videos to load, in the same order as tracks
+        - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
+        - vid_index (int): index in videos of the experiment to annotate
+        - mode (str): if show, enables the display of the annotated video in a separate window, saves to mp4 file
+        if save
+        - fps (float): frames per second of the analysed video. Same as input by default
+        - path (str): directory in which the experimental data is stored
+        - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
+        - recog_limit (int): number of frames to use for arena recognition (1 by default)
+        - hparams (dict): dictionary to overwrite the default values of the hyperparameters of the functions
+        that the rule-based pose estimation utilizes. Values can be:
+            - speed_pause (int): size of the rolling window to use when computing speeds
+            - close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
+            - side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
+            - follow_frames (int): number of frames during which the following trait is tracked
+            - follow_tol (int): maximum distance between follower and followed's path during the last follow_frames,
+            in order to report a detection
+            - huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
+            - huddle_spine (int): maximum average distance between spine body parts to report a huddle detection
+            - huddle_speed (int): maximum speed to report a huddle detection
+
+    Returns:
+        True
+
+    """
+
+    animal_ids = coordinates._animal_ids
+    # undercond = "_" if len(animal_ids) > 1 else ""
+
+    vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
+
+    coords = coordinates.get_coords()[vid_name]
+    speeds = coordinates.get_coords(speed=1)[vid_name]
+    arena, h, w = deepof.utils.recognize_arena(
+        videos, vid_index, path, recog_limit, coordinates._arena
+    )
 
     if mode in ["show", "save"]:
 
@@ -732,7 +766,3 @@ def rule_based_tagging(
 
         cap.release()
         cv2.destroyAllWindows()
-
-    tag_df = pd.DataFrame(tag_dict)
-
-    return tag_df
