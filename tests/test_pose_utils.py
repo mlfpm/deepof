@@ -326,6 +326,7 @@ def test_get_hparameters():
         "huddle_forward": 15,
         "huddle_spine": 10,
         "huddle_speed": 1,
+        "fps": 0,
     }
     assert get_hparameters({"speed_pause": 20}) == {
         "speed_pause": 20,
@@ -336,6 +337,7 @@ def test_get_hparameters():
         "huddle_forward": 15,
         "huddle_spine": 10,
         "huddle_speed": 1,
+        "fps": 0,
     }
 
 
