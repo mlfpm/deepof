@@ -339,6 +339,16 @@ def test_get_hparameters():
     }
 
 
+@settings(deadline=None)
+@given(
+    w=st.integers(min_value=300, max_value=500),
+    h=st.integers(min_value=300, max_value=500),
+)
+def test_frame_corners(w, h):
+    assert len(frame_corners(w, h)) == 4
+    assert frame_corners(w, h, {"downright": "test"})["downright"] == "test"
+
+
 def test_rule_based_tagging():
 
     prun = deepof.preprocess.project(
