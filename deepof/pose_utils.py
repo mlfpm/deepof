@@ -550,6 +550,98 @@ def rule_based_tagging(
     return tag_df
 
 
+def tag_rulebased_frames(
+    frame,
+    font,
+    frame_speeds,
+    animal_ids,
+    corners,
+    tag_dict,
+    fnum,
+    w,
+    h,
+    undercond,
+    hparams,
+):
+    def write_on_frame(text, pos, col=(255, 255, 255)):
+        """Partial closure over cv2.putText to avoid code repetition"""
+        return cv2.putText(frame, text, pos, font, 1, col, 2)
+
+    def conditional_pos():
+        """Returns a position depending on a condition"""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return corners["downleft"]
+        else:
+            return corners["downright"]
+
+    def conditional_col(cond=None):
+        """Returns a colour depending on a condition"""
+        if cond is None:
+            cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
+        if cond:
+            return 150, 150, 255
+        else:
+            return 150, 255, 150
+
+    zipped_pos = zip(
+        animal_ids,
+        [corners["downleft"], corners["downright"]],
+        [corners["upleft"], corners["upright"]],
+    )
+
+    if len(animal_ids) > 1:
+        if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
+            write_on_frame("Nose-Nose", conditional_pos())
+        if (
+            tag_dict[animal_ids[0] + "_nose2tail"][fnum]
+            and not tag_dict["sidereside"][fnum]
+        ):
+            write_on_frame("Nose-Tail", corners["downleft"])
+        if (
+            tag_dict[animal_ids[1] + "_nose2tail"][fnum]
+            and not tag_dict["sidereside"][fnum]
+        ):
+            write_on_frame("Nose-Tail", corners["downright"])
+        if tag_dict["sidebyside"][fnum]:
+            write_on_frame(
+                "Side-side", conditional_pos(),
+            )
+        if tag_dict["sidereside"][fnum]:
+            write_on_frame(
+                "Side-Rside", conditional_pos(),
+            )
+        for _id, down_pos, up_pos in zipped_pos:
+            if (
+                tag_dict[_id + "_following"][fnum]
+                and not tag_dict[_id + "_climbing"][fnum]
+            ):
+                write_on_frame(
+                    "*f", (int(w * 0.3 / 10), int(h / 10)), conditional_col(),
+                )
+
+    for _id, down_pos, up_pos in zipped_pos:
+
+        if tag_dict[_id + undercond + "climbing"][fnum]:
+            write_on_frame("Climbing", down_pos)
+        if (
+            tag_dict[_id + undercond + "huddle"][fnum]
+            and not tag_dict[_id + undercond + "climbing"][fnum]
+        ):
+            write_on_frame("huddle", down_pos)
+
+        # Define the condition controlling the colour of the speed display
+        if len(animal_ids) > 1:
+            colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
+        else:
+            colcond = hparams["huddle_speed"] > frame_speeds
+
+        write_on_frame(
+            str(np.round(frame_speeds, 2)) + " mmpf",
+            up_pos,
+            conditional_col(cond=colcond),
+        )
+
+
 # noinspection PyProtectedMember,PyDefaultArgument
 def rule_based_video(
     coordinates: Coordinates,
@@ -637,84 +729,19 @@ def rule_based_video(
                 frame_speeds = speeds["Center"][fnum]
 
         # Display all annotations in the output video
-
-        def write_on_frame(text, pos, col=(255, 255, 255)):
-            """Partial closure over cv2.putText to avoid code repetition"""
-            return cv2.putText(frame, text, pos, font, 1, col, 2)
-
-        def conditional_pos():
-            """Returns a position depending on a condition"""
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                return corners["downleft"]
-            else:
-                return corners["downright"]
-
-        def conditional_col(cond=None):
-            """Returns a colour depending on a condition"""
-            if cond is None:
-                cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-            if cond:
-                return 150, 150, 255
-            else:
-                return 150, 255, 150
-
-        zipped_pos = zip(
+        tag_rulebased_frames(
+            frame,
+            font,
+            frame_speeds,
             animal_ids,
-            [corners["downleft"], corners["downright"]],
-            [corners["upleft"], corners["upright"]],
+            corners,
+            tag_dict,
+            fnum,
+            w,
+            h,
+            undercond,
+            hparams,
         )
-
-        if len(animal_ids) > 1:
-            if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
-                write_on_frame("Nose-Nose", conditional_pos())
-            if (
-                tag_dict[animal_ids[0] + "_nose2tail"][fnum]
-                and not tag_dict["sidereside"][fnum]
-            ):
-                write_on_frame("Nose-Tail", corners["downleft"])
-            if (
-                tag_dict[animal_ids[1] + "_nose2tail"][fnum]
-                and not tag_dict["sidereside"][fnum]
-            ):
-                write_on_frame("Nose-Tail", corners["downright"])
-            if tag_dict["sidebyside"][fnum]:
-                write_on_frame(
-                    "Side-side", conditional_pos(),
-                )
-            if tag_dict["sidereside"][fnum]:
-                write_on_frame(
-                    "Side-Rside", conditional_pos(),
-                )
-            for _id, down_pos, up_pos in zipped_pos:
-                if (
-                    tag_dict[_id + "_following"][fnum]
-                    and not tag_dict[_id + "_climbing"][fnum]
-                ):
-                    write_on_frame(
-                        "*f", (int(w * 0.3 / 10), int(h / 10)), conditional_col(),
-                    )
-
-        for _id, down_pos, up_pos in zipped_pos:
-
-            if tag_dict[_id + undercond + "climbing"][fnum]:
-                write_on_frame("Climbing", down_pos)
-            if (
-                tag_dict[_id + undercond + "huddle"][fnum]
-                and not tag_dict[_id + undercond + "climbing"][fnum]
-            ):
-                write_on_frame("huddle", down_pos)
-
-            # Define the condition controlling the colour of the speed display
-            if len(animal_ids) > 1:
-                colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
-            else:
-                colcond = hparams["huddle_speed"] > frame_speeds
-
-            write_on_frame(
-                str(np.round(frame_speeds, 2)) + " mmpf",
-                up_pos,
-                conditional_col(cond=colcond),
-            )
 
         if writer is None:
             # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
