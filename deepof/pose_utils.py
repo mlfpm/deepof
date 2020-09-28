@@ -648,11 +648,18 @@ def rule_based_video(
             return cv2.putText(frame, text, pos, font, 1, col, 2)
 
         def conditional_pos():
-            """Return a position depending on a condition"""
+            """Returns a position depending on a condition"""
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 return corners["downleft"]
             else:
                 return corners["downright"]
+
+        def conditional_col():
+            """Returns a colour depending on a condition"""
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                return 150, 150, 255
+            else:
+                return 150, 255, 150
 
         if len(animal_ids) > 1:
             if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
@@ -694,11 +701,7 @@ def rule_based_video(
                     write_on_frame(
                         "*f",
                         (int(w * 0.3 / 10), int(h / 10)),
-                        (
-                            (150, 150, 255)
-                            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-                            else (150, 255, 150)
-                        ),
+                        conditional_col(),
                     )
                 write_on_frame(
                     _id + ": " + str(np.round(frame_speeds[_id], 2)) + " mmpf",
@@ -752,3 +755,5 @@ def rule_based_video(
 
     cap.release()
     cv2.destroyAllWindows()
+
+    return True
