@@ -313,10 +313,14 @@ def single_behaviour_analysis(
         stat_dict = {}
         for i in combinations(treatment_dict.keys(), 2):
             # Solves issue with automatically generated examples
-            if (
-                beh_dict[i[0]] == beh_dict[i[1]]
-                or np.var(beh_dict[i[0]]) == 0
-                or np.var(beh_dict[i[1]]) == 0
+            if np.any(
+                np.array(
+                    [
+                        beh_dict[i[0]] == beh_dict[i[1]],
+                        np.var(beh_dict[i[0]]) == 0,
+                        np.var(beh_dict[i[1]]) == 0,
+                    ]
+                )
             ):
                 stat_dict[i] = "Identical sources. Couldn't run"
             else:
