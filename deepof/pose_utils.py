@@ -558,11 +558,15 @@ def tag_rulebased_frames(
     corners,
     tag_dict,
     fnum,
-    w,
-    h,
+    dims,
     undercond,
     hparams,
 ):
+    """Helper function for rule_based_video. Annotates a fiven frame with on-screen information
+    about the recognised patterns"""
+
+    w, h = dims
+
     def write_on_frame(text, pos, col=(255, 255, 255)):
         """Partial closure over cv2.putText to avoid code repetition"""
         return cv2.putText(frame, text, pos, font, 1, col, 2)
@@ -737,8 +741,7 @@ def rule_based_video(
             corners,
             tag_dict,
             fnum,
-            w,
-            h,
+            (w, h),
             undercond,
             hparams,
         )
