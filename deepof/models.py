@@ -8,7 +8,7 @@ deep autoencoder models for unsupervised pose detection
 
 """
 
-from typing import Any, Tuple
+from typing import Any, Dict, Tuple
 from tensorflow.keras import backend as K
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
@@ -29,9 +29,20 @@ tfpl = tfp.layers
 
 
 class SEQ_2_SEQ_AE:
+    """
+
+        Simple sequence to sequence autoencoder implemented with tf.keras
+
+            Parameters:
+                -
+
+            Returns:
+                -
+
+        """
+
     def __init__(
         self,
-        input_shape: tuple,
         units_conv: int = 256,
         units_lstm: int = 256,
         units_dense2: int = 64,
@@ -40,7 +51,6 @@ class SEQ_2_SEQ_AE:
         learning_rate: float = 1e-5,
         huber_delta: float = 100.0,
     ):
-        self.input_shape = input_shape
         self.CONV_filters = units_conv
         self.LSTM_units_1 = units_lstm
         self.LSTM_units_2 = int(units_lstm / 2)
@@ -51,7 +61,9 @@ class SEQ_2_SEQ_AE:
         self.learn_rate = learning_rate
         self.delta = huber_delta
 
-    def build(self) -> Tuple[Any, Any, Any]:
+    def build(self, input_shape: tuple,) -> Tuple[Any, Any, Any]:
+        """Builds the tf.keras model"""
+
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
@@ -103,7 +115,7 @@ class SEQ_2_SEQ_AE:
         Model_D0 = DenseTranspose(Model_E5, activation="elu", output_dim=self.ENCODING,)
         Model_D1 = DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2,)
         Model_D2 = DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1,)
-        Model_D3 = RepeatVector(self.input_shape[1])
+        Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
                 self.LSTM_units_1,
@@ -125,7 +137,7 @@ class SEQ_2_SEQ_AE:
 
         # Define and instantiate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
-        encoder.add(Input(shape=self.input_shape[1:]))
+        encoder.add(Input(shape=input_shape[1:]))
         encoder.add(Model_E0)
         encoder.add(BatchNormalization())
         encoder.add(Model_E1)
@@ -151,7 +163,7 @@ class SEQ_2_SEQ_AE:
         decoder.add(Model_D4)
         decoder.add(BatchNormalization())
         decoder.add(Model_D5)
-        decoder.add(TimeDistributed(Dense(self.input_shape[2])))
+        decoder.add(TimeDistributed(Dense(input_shape[2])))
 
         model = Sequential([encoder, decoder], name="SEQ_2_SEQ_AE")
 
@@ -164,40 +176,45 @@ class SEQ_2_SEQ_AE:
         return encoder, decoder, model
 
 
+# noinspection PyDefaultArgument
 class SEQ_2_SEQ_GMVAE:
+    """
+
+    Gaussian Mixture Variational Autoencoder for pose motif elucidation.
+
+        Parameters:
+            -
+
+        Returns:
+            -
+
+    """
+
     def __init__(
         self,
-        input_shape,
-        batch_size=512,
-        units_conv=256,
-        units_lstm=256,
-        units_dense2=64,
-        dropout_rate=0.25,
-        encoding=16,
-        learning_rate=1e-3,
-        loss="ELBO+MMD",
-        kl_warmup_epochs=0,
-        mmd_warmup_epochs=0,
-        prior="standard_normal",
-        number_of_components=1,
-        predictor=True,
-        overlap_loss=False,
-        entropy_reg_weight=0.0,
-        initialiser_iters=int(1e5),
+        architecture_hparams: dict = {},
+        loss: str = "ELBO+MMD",
+        kl_warmup_epochs: int = 0,
+        mmd_warmup_epochs: int = 0,
+        number_of_components: int = 1,
+        predictor: bool = True,
+        overlap_loss: bool = False,
+        entropy_reg_weight: float = 0.0,
+        initialiser_iters: int = int(1e5),
         huber_delta: float = 100.0,
     ):
-        self.input_shape = input_shape
-        self.batch_size = batch_size
-        self.CONV_filters = units_conv
-        self.LSTM_units_1 = units_lstm
-        self.LSTM_units_2 = int(units_lstm / 2)
-        self.DENSE_1 = int(units_lstm / 2)
-        self.DENSE_2 = units_dense2
-        self.DROPOUT_RATE = dropout_rate
-        self.ENCODING = encoding
-        self.learn_rate = learning_rate
+        self.hparams = self.get_hparams(architecture_hparams)
+        self.batch_size = self.hparams["batch_size"]
+        self.CONV_filters = self.hparams["units_conv"]
+        self.LSTM_units_1 = self.hparams["units_lstm"]
+        self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
+        self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
+        self.DENSE_2 = self.hparams["units_dense2"]
+        self.DROPOUT_RATE = self.hparams["dropout_rate"]
+        self.ENCODING = self.hparams["encoding"]
+        self.learn_rate = self.hparams["learning_rate"]
         self.loss = loss
-        self.prior = prior
+        self.prior = "standard_normal"
         self.kl_warmup = kl_warmup_epochs
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
@@ -206,6 +223,17 @@ class SEQ_2_SEQ_GMVAE:
         self.entropy_reg_weight = entropy_reg_weight
         self.initialiser_iters = initialiser_iters
         self.delta = huber_delta
+
+        assert (
+            "ELBO" in self.loss or "MMD" in self.loss
+        ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
+
+    @property
+    def prior(self):
+        return self._prior
+
+    def get_prior(self):
+        """Sets the Variational Autoencoder prior distribution"""
 
         if self.prior == "standard_normal":
             init_means = far_away_uniform_initialiser(
@@ -228,11 +256,33 @@ class SEQ_2_SEQ_GMVAE:
                 ],
             )
 
-        assert (
-            "ELBO" in self.loss or "MMD" in self.loss
-        ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
+        else:
+            raise NotImplementedError(
+                "Gaussian Mixtures are currently the only supported prior"
+            )
 
-    def build(self):
+    @staticmethod
+    def get_hparams(params: Dict) -> Dict:
+        """Sets the default parameters for the model. Overwritable with a dictionary"""
+
+        defaults = {
+            "batch_size": 512,
+            "units_conv": 256,
+            "units_lstm": 256,
+            "units_dense2": 64,
+            "dropout_rate": 0.25,
+            "encoding": 16,
+            "learning_rate": 1e-3,
+        }
+
+        for k, v in params.items():
+            defaults[k] = v
+
+        return defaults
+
+    def get_layers(self, input_shape):
+        """Instanciate all layers in the model"""
+
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
@@ -295,7 +345,7 @@ class SEQ_2_SEQ_GMVAE:
             kernel_initializer=he_uniform(),
             use_bias=False,
         )
-        Model_D3 = RepeatVector(self.input_shape[1])
+        Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
                 self.LSTM_units_2,
@@ -317,8 +367,48 @@ class SEQ_2_SEQ_GMVAE:
             )
         )
 
+        return (
+            Model_E0,
+            Model_E1,
+            Model_E2,
+            Model_E3,
+            Model_E4,
+            Model_B1,
+            Model_B2,
+            Model_B3,
+            Model_B4,
+            Model_D1,
+            Model_D2,
+            Model_D3,
+            Model_D4,
+            Model_D5,
+        )
+
+    def build(self, input_shape: Tuple):
+
+        # Instanciate prior
+        self.get_prior()
+
+        # Get model layers
+        (
+            Model_E0,
+            Model_E1,
+            Model_E2,
+            Model_E3,
+            Model_E4,
+            Model_B1,
+            Model_B2,
+            Model_B3,
+            Model_B4,
+            Model_D1,
+            Model_D2,
+            Model_D3,
+            Model_D4,
+            Model_D5,
+        ) = self.get_layers(input_shape)
+
         # Define and instantiate encoder
-        x = Input(shape=self.input_shape[1:])
+        x = Input(shape=input_shape[1:])
         encoder = Model_E0(x)
         encoder = BatchNormalization()(encoder)
         encoder = Model_E1(encoder)
@@ -411,7 +501,7 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model_D5(generator)
         generator = Model_B4(generator)
         x_decoded_mean = TimeDistributed(
-            Dense(self.input_shape[2]), name="vaep_reconstruction"
+            Dense(input_shape[2]), name="vaep_reconstruction"
         )(generator)
 
         if self.predictor > 0:
@@ -427,7 +517,7 @@ class SEQ_2_SEQ_GMVAE:
                 use_bias=False,
             )(predictor)
             predictor = BatchNormalization()(predictor)
-            predictor = RepeatVector(self.input_shape[1])(predictor)
+            predictor = RepeatVector(input_shape[1])(predictor)
             predictor = Bidirectional(
                 LSTM(
                     self.LSTM_units_1,
@@ -451,7 +541,7 @@ class SEQ_2_SEQ_GMVAE:
             )(predictor)
             predictor = BatchNormalization()(predictor)
             x_predicted_mean = TimeDistributed(
-                Dense(self.input_shape[2]), name="vaep_prediction"
+                Dense(input_shape[2]), name="vaep_prediction"
             )(predictor)
 
         # end-to-end autoencoder
@@ -479,14 +569,14 @@ class SEQ_2_SEQ_GMVAE:
         _generator = Model_B3(_generator)
         _generator = Model_D5(_generator)
         _generator = Model_B4(_generator)
-        _x_decoded_mean = TimeDistributed(Dense(self.input_shape[2]))(_generator)
+        _x_decoded_mean = TimeDistributed(Dense(input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         def huber_loss(x_, x_decoded_mean_):  # pragma: no cover
             """Computes huber loss with a fixed delta"""
 
             huber = Huber(reduction="sum", delta=self.delta)
-            return self.input_shape[1:] * huber(x_, x_decoded_mean_)
+            return input_shape[1:] * huber(x_, x_decoded_mean_)
 
         gmvaep.compile(
             loss=huber_loss,
@@ -503,6 +593,10 @@ class SEQ_2_SEQ_GMVAE:
             kl_warmup_callback,
             mmd_warmup_callback,
         )
+
+    @prior.setter
+    def prior(self, value):
+        self._prior = value
 
 
 # TODO:
