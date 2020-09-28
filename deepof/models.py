@@ -366,6 +366,32 @@ class SEQ_2_SEQ_GMVAE:
                 use_bias=False,
             )
         )
+        Model_P1 = Dense(
+            self.DENSE_1,
+            activation="elu",
+            kernel_initializer=he_uniform(),
+            use_bias=False,
+        )
+        Model_P2 = Bidirectional(
+            LSTM(
+                self.LSTM_units_1,
+                activation="tanh",
+                recurrent_activation="sigmoid",
+                return_sequences=True,
+                kernel_constraint=UnitNorm(axis=1),
+                use_bias=False,
+            )
+        )
+        Model_P3 = Bidirectional(
+            LSTM(
+                self.LSTM_units_1,
+                activation="tanh",
+                recurrent_activation="sigmoid",
+                return_sequences=True,
+                kernel_constraint=UnitNorm(axis=1),
+                use_bias=False,
+            )
+        )
 
         return (
             Model_E0,
@@ -382,6 +408,9 @@ class SEQ_2_SEQ_GMVAE:
             Model_D3,
             Model_D4,
             Model_D5,
+            Model_P1,
+            Model_P2,
+            Model_P3,
         )
 
     def build(self, input_shape: Tuple):
@@ -405,6 +434,9 @@ class SEQ_2_SEQ_GMVAE:
             Model_D3,
             Model_D4,
             Model_D5,
+            Model_P1,
+            Model_P2,
+            Model_P3,
         ) = self.get_layers(input_shape)
 
         # Define and instantiate encoder
@@ -510,35 +542,12 @@ class SEQ_2_SEQ_GMVAE:
                 self.DENSE_2, activation="elu", kernel_initializer=he_uniform()
             )(z)
             predictor = BatchNormalization()(predictor)
-            predictor = Dense(
-                self.DENSE_1,
-                activation="elu",
-                kernel_initializer=he_uniform(),
-                use_bias=False,
-            )(predictor)
+            predictor = Model_P1(predictor)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(input_shape[1])(predictor)
-            predictor = Bidirectional(
-                LSTM(
-                    self.LSTM_units_1,
-                    activation="tanh",
-                    recurrent_activation="sigmoid",
-                    return_sequences=True,
-                    kernel_constraint=UnitNorm(axis=1),
-                    use_bias=False,
-                )
-            )(predictor)
+            predictor = Model_P2(predictor)
             predictor = BatchNormalization()(predictor)
-            predictor = Bidirectional(
-                LSTM(
-                    self.LSTM_units_1,
-                    activation="tanh",
-                    recurrent_activation="sigmoid",
-                    return_sequences=True,
-                    kernel_constraint=UnitNorm(axis=1),
-                    use_bias=False,
-                )
-            )(predictor)
+            predictor = Model_P3(predictor)
             predictor = BatchNormalization()(predictor)
             x_predicted_mean = TimeDistributed(
                 Dense(input_shape[2]), name="vaep_prediction"
