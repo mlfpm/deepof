@@ -28,6 +28,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
+# noinspection PyDefaultArgument
 class SEQ_2_SEQ_AE:
     """
 
@@ -42,27 +43,39 @@ class SEQ_2_SEQ_AE:
         """
 
     def __init__(
-        self,
-        units_conv: int = 256,
-        units_lstm: int = 256,
-        units_dense2: int = 64,
-        dropout_rate: float = 0.25,
-        encoding: int = 16,
-        learning_rate: float = 1e-5,
-        huber_delta: float = 100.0,
+        self, architecture_hparams: Dict = {}, huber_delta: float = 100.0,
     ):
-        self.CONV_filters = units_conv
-        self.LSTM_units_1 = units_lstm
-        self.LSTM_units_2 = int(units_lstm / 2)
-        self.DENSE_1 = int(units_lstm / 2)
-        self.DENSE_2 = units_dense2
-        self.DROPOUT_RATE = dropout_rate
-        self.ENCODING = encoding
-        self.learn_rate = learning_rate
+        self.hparams = self.get_hparams(architecture_hparams)
+        self.CONV_filters = self.hparams["units_conv"]
+        self.LSTM_units_1 = self.hparams["units_lstm"]
+        self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
+        self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
+        self.DENSE_2 = self.hparams["units_dense2"]
+        self.DROPOUT_RATE = self.hparams["dropout_rate"]
+        self.ENCODING = self.hparams["encoding"]
+        self.learn_rate = self.hparams["learning_rate"]
         self.delta = huber_delta
 
-    def build(self, input_shape: tuple,) -> Tuple[Any, Any, Any]:
-        """Builds the tf.keras model"""
+    @staticmethod
+    def get_hparams(hparams):
+        """Sets the default parameters for the model. Overwritable with a dictionary"""
+
+        defaults = {
+            "units_conv": 256,
+            "units_lstm": 256,
+            "units_dense2": 64,
+            "dropout_rate": 0.25,
+            "encoding": 16,
+            "learning_rate": 1e-5,
+        }
+
+        for k, v in hparams.items():
+            defaults[k] = v
+
+        return defaults
+
+    def get_layers(self, input_shape):
+        """Instanciate all layers in the model"""
 
         # Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
@@ -134,6 +147,39 @@ class SEQ_2_SEQ_AE:
                 kernel_constraint=UnitNorm(axis=1),
             )
         )
+
+        return (
+            Model_E0,
+            Model_E1,
+            Model_E2,
+            Model_E3,
+            Model_E4,
+            Model_E5,
+            Model_D0,
+            Model_D1,
+            Model_D2,
+            Model_D3,
+            Model_D4,
+            Model_D5,
+        )
+
+    def build(self, input_shape: tuple,) -> Tuple[Any, Any, Any]:
+        """Builds the tf.keras model"""
+
+        (
+            Model_E0,
+            Model_E1,
+            Model_E2,
+            Model_E3,
+            Model_E4,
+            Model_E5,
+            Model_D0,
+            Model_D1,
+            Model_D2,
+            Model_D3,
+            Model_D4,
+            Model_D5,
+        ) = self.get_layers(input_shape)
 
         # Define and instantiate encoder
         encoder = Sequential(name="SEQ_2_SEQ_Encoder")
