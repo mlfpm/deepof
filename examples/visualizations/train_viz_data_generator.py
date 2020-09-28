@@ -5,10 +5,8 @@ import sys
 
 sys.path.insert(1, "../")
 
-from copy import deepcopy
 from datetime import datetime
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.manifold import TSNE
 from sklearn.metrics import mean_absolute_error
 from deepof.preprocess import *
 from deepof.models import *
@@ -18,17 +16,6 @@ import numpy as np
 import os, pickle, re
 import pandas as pd
 import umap
-
-
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ("yes", "true", "t", "y", "1"):
-        return True
-    elif v.lower() in ("no", "false", "f", "n", "0"):
-        return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def flip_axes(projections):
@@ -199,21 +186,8 @@ bp_dict = {
 DLC_social = project(
     path=data_path,  # Path where to find the required files
     smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
-    distances=[
-        "B_Center",
-        "B_Nose",
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    ego="B_Center",
-    subset_condition="B",
-    angles=True,
-    connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
-    arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
+    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
     # exp_conditions=Treatment_dict,
@@ -328,14 +302,13 @@ if not variational:
 
 else:
     (encoder, generator, grouper, gmvaep, _, _,) = SEQ_2_SEQ_GMVAE(
-        pttest.shape,
         loss=loss,
         number_of_components=k,
         predictor=predictor,
         kl_warmup_epochs=10,
         mmd_warmup_epochs=10,
         **hparams
-    ).build()
+    ).build(pttest.shape)
     gmvaep.build(pttest.shape)
 
     predictions.append(encoder.predict(pttest))

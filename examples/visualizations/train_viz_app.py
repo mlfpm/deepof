@@ -136,7 +136,7 @@ app.layout = html.Div(
             className="row",
         ),
         html.Div(
-            [html.Div([dcc.Graph(figure=fig5)], className="twelve columns"),],
+            [html.Div([dcc.Graph(figure=fig5)], className="twelve columns")],
             className="row",
         ),
     ]
