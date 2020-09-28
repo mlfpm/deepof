@@ -325,8 +325,8 @@ def test_get_hparameters():
         "follow_tol": 20,
         "huddle_forward": 15,
         "huddle_spine": 10,
-        "huddle_speed": 1,
-        "fps": 0,
+        "huddle_speed": 0.1,
+        "fps": 24,
     }
     assert get_hparameters({"speed_pause": 20}) == {
         "speed_pause": 20,
@@ -336,8 +336,8 @@ def test_get_hparameters():
         "follow_tol": 20,
         "huddle_forward": 15,
         "huddle_spine": 10,
-        "huddle_speed": 1,
-        "fps": 0,
+        "huddle_speed": 0.1,
+        "fps": 24,
     }
 
 
@@ -400,6 +400,5 @@ def test_rule_based_video():
         vid_index=0,
         frame_limit=100,
         tag_dict=hardcoded_tags,
-        mode="save",
         path=os.path.join(".", "tests", "test_examples", "Videos"),
     )
