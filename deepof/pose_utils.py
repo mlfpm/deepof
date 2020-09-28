@@ -376,7 +376,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "huddle_forward": 15,
         "huddle_spine": 10,
         "huddle_speed": 1,
-        "fps": 0,
+        "fps": 24,
     }
 
     for k, v in hparams.items():
@@ -547,19 +547,19 @@ def rule_based_tagging(
     return tag_df
 
 
-# noinspection PyProtectedMember
+# noinspection PyProtectedMember,PyDefaultArgument
 def rule_based_video(
-    coordinates,
-    tracks,
-    videos,
-    vid_index,
-    tag_dict,
-    mode,
-    path,
-    frame_limit,
-    recog_limit,
-    hparams,
-):
+    coordinates: Coordinates,
+    tracks: List,
+    videos: List,
+    vid_index: int,
+    tag_dict: pd.DataFrame,
+    mode: str,
+    frame_limit: int = np.inf,
+    recog_limit: int = 1,
+    path: str = os.path.join("."),
+    hparams: dict = {},
+) -> True:
     """Renders a version of the input video with all rule-based taggings in place.
 
     Parameters:
@@ -596,6 +596,7 @@ def rule_based_video(
         "show",
     ], "Parameter 'mode' should be one of 'save' and 'show'. See docs for details"
 
+    hparams = get_hparameters(hparams)
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
@@ -612,7 +613,9 @@ def rule_based_video(
     # Keep track of the frame number, to align with the tracking data
     fnum = 0
     writer = None
-    frame_speeds = {_id: -np.inf for _id in animal_ids} if animal_ids else -np.inf
+    frame_speeds = (
+        {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
+    )
 
     # Loop over the frames in the video
     pbar = tqdm(total=min(coords.shape[0] - recog_limit, frame_limit))
@@ -633,7 +636,7 @@ def rule_based_video(
                 or fnum % hparams["speed_pause"] == 0
             ):
                 for _id in animal_ids:
-                    frame_speeds[_id] = speeds[_id + "_Center"][fnum]
+                    frame_speeds[_id] = speeds[_id + undercond + "Center"][fnum]
         except AttributeError:
             if frame_speeds == -np.inf or fnum % hparams["speed_pause"] == 0:
                 frame_speeds = speeds["Center"][fnum]
@@ -644,16 +647,16 @@ def rule_based_video(
             """Partial closure over cv2.putText to avoid code repetition"""
             return cv2.putText(frame, text, pos, font, 1, col, 2)
 
+        def conditional_pos():
+            """Return a position depending on a condition"""
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                return corners["downleft"]
+            else:
+                return corners["downright"]
+
         if len(animal_ids) > 1:
             if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
-                write_on_frame(
-                    "Nose-Nose",
-                    (
-                        corners["downleft"]
-                        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-                        else corners["downright"]
-                    ),
-                )
+                write_on_frame("Nose-Nose", conditional_pos())
             if (
                 tag_dict[animal_ids[0] + "_nose2tail"][fnum]
                 and not tag_dict["sidereside"][fnum]
@@ -666,21 +669,11 @@ def rule_based_video(
                 write_on_frame("Nose-Tail", corners["downright"])
             if tag_dict["sidebyside"][fnum]:
                 write_on_frame(
-                    "Side-side",
-                    (
-                        corners["downleft"]
-                        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-                        else corners["downright"]
-                    ),
+                    "Side-side", conditional_pos(),
                 )
             if tag_dict["sidereside"][fnum]:
                 write_on_frame(
-                    "Side-Rside",
-                    (
-                        corners["downleft"]
-                        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-                        else corners["downright"]
-                    ),
+                    "Side-Rside", conditional_pos(),
                 )
             for _id, down_pos, up_pos in zip(
                 animal_ids,
@@ -747,12 +740,10 @@ def rule_based_video(
                 writer.open(
                     re.findall("(.*?)_", tracks[vid_index])[0] + "_tagged.avi",
                     cv2.VideoWriter_fourcc(*"MJPG"),
-                    (hparams["fps"] if hparams["fps"] != 0 else cv2.CAP_PROP_FPS),
+                    hparams["fps"],
                     (frame.shape[1], frame.shape[0]),
                     True,
                 )
-
-            print(cv2.CAP_PROP_FPS)
 
             writer.write(frame)
 

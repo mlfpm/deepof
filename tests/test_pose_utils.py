@@ -372,3 +372,34 @@ def test_rule_based_tagging():
 
     assert type(hardcoded_tags) == pd.DataFrame
     assert hardcoded_tags.shape[1] == 3
+
+
+def test_rule_based_video():
+
+    prun = deepof.preprocess.project(
+        path=os.path.join(".", "tests", "test_examples"),
+        arena="circular",
+        arena_dims=tuple([380]),
+        video_format=".mp4",
+        table_format=".h5",
+        animal_ids=[""],
+    ).run(verbose=True)
+
+    hardcoded_tags = rule_based_tagging(
+        list([i + "_" for i in prun.get_coords().keys()]),
+        ["test_video_circular_arena.mp4"],
+        prun,
+        vid_index=0,
+        path=os.path.join(".", "tests", "test_examples", "Videos"),
+    )
+
+    rule_based_video(
+        coordinates=prun,
+        tracks=list([i + "_" for i in prun.get_coords().keys()]),
+        videos=["test_video_circular_arena.mp4"],
+        vid_index=0,
+        frame_limit=100,
+        tag_dict=hardcoded_tags,
+        mode="save",
+        path=os.path.join(".", "tests", "test_examples", "Videos"),
+    )
