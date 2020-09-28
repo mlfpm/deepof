@@ -9,13 +9,13 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 """
 
 import cv2
+import deepof.utils
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
 import regex as re
 import seaborn as sns
-import deepof.utils
 from itertools import combinations
 from scipy import spatial
 from scipy import stats
