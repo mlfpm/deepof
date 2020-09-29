@@ -20,7 +20,7 @@ from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Nadam
-from deepof.model_utils import *
+import deepof.model_utils
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -120,14 +120,14 @@ class SEQ_2_SEQ_AE:
             self.ENCODING,
             activation="elu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=uncorrelated_features_constraint(2, weightage=1.0),
+            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(2, weightage=1.0),
             kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(Model_E5, activation="elu", output_dim=self.ENCODING,)
-        Model_D1 = DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2,)
-        Model_D2 = DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1,)
+        Model_D0 = deepof.model_utils.DenseTranspose(Model_E5, activation="elu", output_dim=self.ENCODING, )
+        Model_D1 = deepof.model_utils.DenseTranspose(Model_E4, activation="elu", output_dim=self.DENSE_2, )
+        Model_D2 = deepof.model_utils.DenseTranspose(Model_E3, activation="elu", output_dim=self.DENSE_1, )
         Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -276,26 +276,29 @@ class SEQ_2_SEQ_GMVAE:
 
     @property
     def prior(self):
+        """Property to set the value of the prior
+        once the class is instanciated"""
+
         return self._prior
 
     def get_prior(self):
         """Sets the Variational Autoencoder prior distribution"""
 
         if self.prior == "standard_normal":
-            init_means = far_away_uniform_initialiser(
+            init_means = deepof.model_utils.far_away_uniform_initialiser(
                 shape=(self.number_of_components, self.ENCODING),
                 minval=0,
                 maxval=5,
                 iters=self.initialiser_iters,
             )
 
-            self.prior = tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(
+            self.prior = deepof.model_utils.tfd.mixture.Mixture(
+                cat=deepof.model_utils.tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
                 components=[
-                    tfd.Independent(
-                        tfd.Normal(loc=init_means[k], scale=1,),
+                    deepof.model_utils.tfd.Independent(
+                        deepof.model_utils.tfd.Normal(loc=init_means[k], scale=1, ),
                         reinterpreted_batch_ndims=1,
                     )
                     for k in range(self.number_of_components)
@@ -460,6 +463,7 @@ class SEQ_2_SEQ_GMVAE:
         )
 
     def build(self, input_shape: Tuple):
+        """Builds the tf.keras model"""
 
         # Instanciate prior
         self.get_prior()
@@ -499,13 +503,13 @@ class SEQ_2_SEQ_GMVAE:
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
 
-        encoding_shuffle = MCDropout(self.DROPOUT_RATE)(encoder)
+        encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(self.number_of_components, activation="softmax",)(
             encoding_shuffle
         )
-        z_cat = Entropy_regulariser(self.entropy_reg_weight)(z_cat)
+        z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
-            tfpl.IndependentNormal.params_size(
+            deepof.model_utils.tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
             ),
             activation=None,
@@ -514,21 +518,21 @@ class SEQ_2_SEQ_GMVAE:
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
 
         # Identity layer controlling for dead neurons in the Gaussian Mixture posterior
-        z_gauss = Dead_neuron_control()(z_gauss)
+        z_gauss = deepof.model_utils.Dead_neuron_control()(z_gauss)
 
         if self.overlap_loss:
-            z_gauss = Gaussian_mixture_overlap(
+            z_gauss = deepof.model_utils.Gaussian_mixture_overlap(
                 self.ENCODING, self.number_of_components, loss=self.overlap_loss,
             )(z_gauss)
 
-        z = tfpl.DistributionLambda(
-            lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(probs=gauss[0],),
+        z = deepof.model_utils.tfpl.DistributionLambda(
+            lambda gauss: deepof.model_utils.tfd.mixture.Mixture(
+                cat=deepof.model_utils.tfd.categorical.Categorical(probs=gauss[0], ),
                 components=[
-                    tfd.Independent(
-                        tfd.Normal(
+                    deepof.model_utils.tfd.Independent(
+                        deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -541,30 +545,30 @@ class SEQ_2_SEQ_GMVAE:
         kl_warmup_callback = False
         if "ELBO" in self.loss:
 
-            kl_beta = K.variable(1.0, name="kl_beta")
+            kl_beta = deepof.model_utils.K.variable(1.0, name="kl_beta")
             kl_beta._trainable = False
             if self.kl_warmup:
                 kl_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: K.set_value(
-                        kl_beta, K.min([epoch / self.kl_warmup, 1])
+                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
+                        kl_beta, deepof.model_utils.K.min([epoch / self.kl_warmup, 1])
                     )
                 )
 
-            z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
+            z = deepof.model_utils.KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:
 
-            mmd_beta = K.variable(1.0, name="mmd_beta")
+            mmd_beta = deepof.model_utils.K.variable(1.0, name="mmd_beta")
             mmd_beta._trainable = False
             if self.mmd_warmup:
                 mmd_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: K.set_value(
-                        mmd_beta, K.min([epoch / self.mmd_warmup, 1])
+                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
+                        mmd_beta, deepof.model_utils.K.min([epoch / self.mmd_warmup, 1])
                     )
                 )
 
-            z = MMDiscrepancyLayer(
+            z = deepof.model_utils.MMDiscrepancyLayer(
                 batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
             )(z)
 

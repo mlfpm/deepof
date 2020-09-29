@@ -20,7 +20,7 @@ from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
-from deepof.model_utils import *
+import deepof.model_utils
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -96,14 +96,14 @@ class SEQ_2_SEQ_AE(HyperModel):
             ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=uncorrelated_features_constraint(3, weightage=1.0),
+            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(3, weightage=1.0),
             kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
-        Model_D0 = DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING,)
-        Model_D1 = DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2,)
-        Model_D2 = DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1,)
+        Model_D0 = deepof.model_utils.DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING, )
+        Model_D1 = deepof.model_utils.DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2, )
+        Model_D2 = deepof.model_utils.DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1, )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -223,13 +223,13 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         )
 
         if self.prior == "standard_normal":
-            self.prior = tfd.mixture.Mixture(
-                tfd.categorical.Categorical(
+            self.prior = deepof.model_utils.tfd.mixture.Mixture(
+                deepof.model_utils.tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
                 [
-                    tfd.Independent(
-                        tfd.Normal(loc=tf.zeros(ENCODING), scale=1),
+                    deepof.model_utils.tfd.Independent(
+                        deepof.model_utils.tfd.Normal(loc=tf.zeros(ENCODING), scale=1),
                         reinterpreted_batch_ndims=1,
                     )
                     for _ in range(self.number_of_components)
@@ -319,7 +319,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
         z_gauss = Dense(
-            tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
+            deepof.model_utils.tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
             activation=None,
         )(encoder)
 
@@ -327,22 +327,22 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         kl_warmup_callback = False
         if "ELBO" in self.loss:
 
-            kl_beta = K.variable(1.0, name="kl_beta")
+            kl_beta = deepof.model_utils.K.variable(1.0, name="kl_beta")
             kl_beta._trainable = False
             if self.kl_warmup:
                 kl_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: K.set_value(
-                        kl_beta, K.min([epoch / self.kl_warmup, 1])
+                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
+                        kl_beta, deepof.model_utils.K.min([epoch / self.kl_warmup, 1])
                     )
                 )
 
         z_gauss = Reshape([2 * ENCODING, self.number_of_components])(z_gauss)
-        z = tfpl.DistributionLambda(
-            lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(probs=gauss[0],),
+        z = deepof.model_utils.tfpl.DistributionLambda(
+            lambda gauss: deepof.model_utils.tfd.mixture.Mixture(
+                cat=deepof.model_utils.tfd.categorical.Categorical(probs=gauss[0], ),
                 components=[
-                    tfd.Independent(
-                        tfd.Normal(
+                    deepof.model_utils.tfd.Independent(
+                        deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., :ENCODING, k],
                             scale=softplus(gauss[1][..., ENCODING:, k]),
                         ),
@@ -351,25 +351,25 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                     for k in range(self.number_of_components)
                 ],
             ),
-            activity_regularizer=uncorrelated_features_constraint(3, weightage=1.0),
+            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(3, weightage=1.0),
         )([z_cat, z_gauss])
 
         if "ELBO" in self.loss:
-            z = KLDivergenceLayer(self.prior, weight=kl_beta)(z)
+            z = deepof.model_utils.KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:
 
-            mmd_beta = K.variable(1.0, name="mmd_beta")
+            mmd_beta = deepof.model_utils.K.variable(1.0, name="mmd_beta")
             mmd_beta._trainable = False
             if self.mmd_warmup:
                 mmd_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: K.set_value(
-                        mmd_beta, K.min([epoch / self.mmd_warmup, 1])
+                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
+                        mmd_beta, deepof.model_utils.K.min([epoch / self.mmd_warmup, 1])
                     )
                 )
 
-            z = MMDiscrepancyLayer(
+            z = deepof.model_utils.MMDiscrepancyLayer(
                 batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
             )(z)
 

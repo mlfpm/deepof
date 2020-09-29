@@ -12,9 +12,11 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from collections import defaultdict
-from deepof.utils import *
+import deepof.utils
 import deepof.preprocess
 import matplotlib.figure
+import numpy as np
+import os
 import pytest
 
 
