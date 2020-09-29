@@ -348,6 +348,7 @@ class project:
             distances=distances,
             angles=angles,
             animal_ids=self.animal_ids,
+            path=self.path,
         )
 
     @subset_condition.setter
@@ -383,6 +384,7 @@ class coordinates:
         arena_dims: np.array,
         scales: np.array,
         quality: dict,
+        path: str,
         exp_conditions: dict = None,
         distances: dict = None,
         angles: dict = None,
@@ -398,6 +400,7 @@ class coordinates:
         self._scales = scales
         self._quality = quality
         self._animal_ids = animal_ids
+        self._path = path
 
     def __str__(self):
         if self._exp_conditions:
@@ -644,7 +647,7 @@ class coordinates:
                 self._tables,
                 idx,
                 recog_limit=1,
-                path=0,
+                path=self._path,
                 hparams=hparams,
             )
         return table_dict(
