@@ -96,14 +96,22 @@ class SEQ_2_SEQ_AE(HyperModel):
             ENCODING,
             activation="relu",
             kernel_constraint=UnitNorm(axis=1),
-            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(3, weightage=1.0),
+            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(
+                3, weightage=1.0
+            ),
             kernel_initializer=Orthogonal(),
         )
 
         # Decoder layers
-        Model_D0 = deepof.model_utils.DenseTranspose(Model_E5, activation="relu", output_dim=ENCODING, )
-        Model_D1 = deepof.model_utils.DenseTranspose(Model_E4, activation="relu", output_dim=DENSE_2, )
-        Model_D2 = deepof.model_utils.DenseTranspose(Model_E3, activation="relu", output_dim=DENSE_1, )
+        Model_D0 = deepof.model_utils.DenseTranspose(
+            Model_E5, activation="relu", output_dim=ENCODING,
+        )
+        Model_D1 = deepof.model_utils.DenseTranspose(
+            Model_E4, activation="relu", output_dim=DENSE_2,
+        )
+        Model_D2 = deepof.model_utils.DenseTranspose(
+            Model_E3, activation="relu", output_dim=DENSE_1,
+        )
         Model_D3 = RepeatVector(self.input_shape[1])
         Model_D4 = Bidirectional(
             LSTM(
@@ -319,7 +327,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
         z_gauss = Dense(
-            deepof.model_utils.tfpl.IndependentNormal.params_size(ENCODING * self.number_of_components),
+            deepof.model_utils.tfpl.IndependentNormal.params_size(
+                ENCODING * self.number_of_components
+            ),
             activation=None,
         )(encoder)
 
@@ -339,7 +349,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         z_gauss = Reshape([2 * ENCODING, self.number_of_components])(z_gauss)
         z = deepof.model_utils.tfpl.DistributionLambda(
             lambda gauss: deepof.model_utils.tfd.mixture.Mixture(
-                cat=deepof.model_utils.tfd.categorical.Categorical(probs=gauss[0], ),
+                cat=deepof.model_utils.tfd.categorical.Categorical(probs=gauss[0],),
                 components=[
                     deepof.model_utils.tfd.Independent(
                         deepof.model_utils.tfd.Normal(
@@ -351,7 +361,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                     for k in range(self.number_of_components)
                 ],
             ),
-            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(3, weightage=1.0),
+            activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(
+                3, weightage=1.0
+            ),
         )([z_cat, z_gauss])
 
         if "ELBO" in self.loss:

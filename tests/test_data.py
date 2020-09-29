@@ -161,6 +161,22 @@ def test_run(nodes, ego):
     assert type(prun) == deepof.data.coordinates
 
 
+def test_get_rule_based_annotation():
+
+    prun = deepof.data.project(
+        path=os.path.join(".", "tests", "test_examples"),
+        arena="circular",
+        arena_dims=tuple([380]),
+        video_format=".mp4",
+        table_format=".h5",
+    ).run()
+
+    prun = prun.rule_based_annotation()
+
+    assert type(prun) == deepof.data.table_dict
+    assert prun._type == "rule-based"
+
+
 @settings(deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),

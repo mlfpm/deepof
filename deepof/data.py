@@ -637,7 +637,9 @@ class coordinates:
         return self._arena, self._arena_dims, self._scales
 
     # noinspection PyDefaultArgument
-    def rule_based_annotation(self, hparams: Dict = {}) -> Table_dict:
+    def rule_based_annotation(
+        self, hparams: Dict = {}, video_output: bool = False, frame_limit: int = np.inf
+    ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
@@ -648,9 +650,33 @@ class coordinates:
                 self,
                 idx,
                 recog_limit=1,
-                path=os.path.join(self._path,"Videos"),
+                path=os.path.join(self._path, "Videos"),
                 hparams=hparams,
             )
+
+        if video_output:  # pragma: no cover
+            if type(video_output) == list:
+                vid_idxs = video_output
+            elif video_output == "all":
+                vid_idxs = list(self._tables.keys())
+            else:
+                raise AttributeError(
+                    "Video output must be either 'all' or a list with the names of the videos to render"
+                )
+
+            for idx in vid_idxs:
+                deepof.pose_utils.rule_based_video(
+                    self,
+                    list(self._tables.keys()),
+                    self._videos,
+                    list(self._tables.keys()).index(idx),
+                    tag_dict[idx],
+                    frame_limit=frame_limit,
+                    recog_limit=1,
+                    path=os.path.join(self._path, "Videos"),
+                    hparams=hparams,
+                )
+
         return table_dict(
             tag_dict, typ="rule-based", arena=self._arena, arena_dims=self._arena_dims
         )
@@ -666,7 +692,7 @@ class table_dict(dict):
 
     def __init__(
         self,
-        tabs: Coordinates,
+        tabs: Dict,
         typ: str,
         arena: str = None,
         arena_dims: np.array = None,
