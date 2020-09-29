@@ -14,21 +14,25 @@ Contains methods for generating training and test sets ready for model training.
 
 """
 
-import warnings
 from collections import defaultdict
-
-from deepof.utils import *
-from deepof.visuals import *
+from typing import Dict, List
 from pandas_profiling import ProfileReport
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import deepof.pose_utils
+import deepof.utils
+import deepof.visuals
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import warnings
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 
-Coordinates = NewType("Coordinates", Any)
-Table_dict = NewType("Table_dict", Any)
+Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
+Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
@@ -45,7 +49,7 @@ class project:
         self,
         video_format: str = ".mp4",
         table_format: str = ".h5",
-        path: str = os.path.join("."),
+        path: str = deepof.utils.os.path.join("."),
         exp_conditions: dict = None,
         arena: str = "circular",
         smooth_alpha: float = 0.1,
@@ -58,10 +62,18 @@ class project:
         self.video_path = self.path + "/Videos/"
         self.table_path = self.path + "/Tables/"
         self.videos = sorted(
-            [vid for vid in os.listdir(self.video_path) if vid.endswith(video_format)]
+            [
+                vid
+                for vid in deepof.utils.os.listdir(self.video_path)
+                if vid.endswith(video_format)
+            ]
         )
         self.tables = sorted(
-            [tab for tab in os.listdir(self.table_path) if tab.endswith(table_format)]
+            [
+                tab
+                for tab in deepof.utils.os.listdir(self.table_path)
+                if tab.endswith(table_format)
+            ]
         )
         self.exp_conditions = exp_conditions
         self.table_format = table_format
@@ -77,7 +89,7 @@ class project:
         self.ego = False
         self.angles = True
 
-        model_dict = {"mouse_topview": connect_mouse_topview()}
+        model_dict = {"mouse_topview": deepof.utils.connect_mouse_topview()}
         self.connectivity = model_dict[model]
 
     def __str__(self):
@@ -122,7 +134,7 @@ class project:
             for vid_index, _ in enumerate(self.videos):
                 scales.append(
                     list(
-                        recognize_arena(
+                        deepof.utils.recognize_arena(
                             self.videos,
                             vid_index,
                             path=self.video_path,
@@ -138,7 +150,7 @@ class project:
 
         return np.array(scales)
 
-    def load_tables(self, verbose: bool = False) -> Tuple:
+    def load_tables(self, verbose: bool = False) -> deepof.utils.Tuple:
         """Loads videos and tables into dictionaries"""
 
         if self.table_format not in [".h5", ".csv"]:
@@ -154,17 +166,19 @@ class project:
         if self.table_format == ".h5":
 
             tab_dict = {
-                re.findall("(.*?)_", tab)[0]: pd.read_hdf(
-                    os.path.join(self.table_path, tab), dtype=float
+                deepof.utils.re.findall("(.*?)_", tab)[0]: pd.read_hdf(
+                    deepof.utils.os.path.join(self.table_path, tab), dtype=float
                 )
                 for tab in self.tables
             }
         elif self.table_format == ".csv":
 
             for tab in self.tables:
-                head = pd.read_csv(os.path.join(self.table_path, tab), nrows=2)
+                head = pd.read_csv(
+                    deepof.utils.os.path.join(self.table_path, tab), nrows=2
+                )
                 data = pd.read_csv(
-                    os.path.join(self.table_path, tab),
+                    deepof.utils.os.path.join(self.table_path, tab),
                     skiprows=2,
                     index_col="coords",
                     dtype={"coords": int},
@@ -177,7 +191,7 @@ class project:
                     ],
                     names=["scorer", "bodyparts", "coords"],
                 )
-                tab_dict[re.findall("(.*?)_", tab)[0]] = data
+                tab_dict[deepof.utils.re.findall("(.*?)_", tab)[0]] = data
 
         lik_dict = defaultdict()
 
@@ -199,7 +213,9 @@ class project:
             for key, tab in tab_dict.items():
                 cols = tab.columns
                 smooth = pd.DataFrame(
-                    smooth_mult_trajectory(np.array(tab), alpha=self.smooth_alpha)
+                    deepof.utils.smooth_mult_trajectory(
+                        np.array(tab), alpha=self.smooth_alpha
+                    )
                 )
                 smooth.columns = cols
                 tab_dict[key] = smooth
@@ -247,7 +263,7 @@ class project:
         scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: bpart_distance(tab, scales[i, 1], scales[i, 0],)
+            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0],)
             for i, (key, tab) in enumerate(tab_dict.items())
         }
 
@@ -280,7 +296,7 @@ class project:
         if verbose:
             print("Computing angles...")
 
-        cliques = nx.enumerate_all_cliques(self.connectivity)
+        cliques = deepof.utils.nx.enumerate_all_cliques(self.connectivity)
         cliques = [i for i in cliques if len(i) == 3]
 
         angle_dict = {}
@@ -289,7 +305,9 @@ class project:
             dats = []
             for clique in cliques:
                 dat = pd.DataFrame(
-                    angle_trio(np.array(tab[clique]).reshape([3, tab.shape[0], 2]))
+                    deepof.utils.angle_trio(
+                        np.array(tab[clique]).reshape([3, tab.shape[0], 2])
+                    )
                 ).T
 
                 orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
@@ -416,11 +434,11 @@ class coordinates:
                 tab_dict (Table_dict): table_dict object containing all the computed information
         """
 
-        tabs = deepcopy(self._tables)
+        tabs = deepof.utils.deepcopy(self._tables)
 
         if polar:
             for key, tab in tabs.items():
-                tabs[key] = tab2polar(tab)
+                tabs[key] = deepof.utils.tab2polar(tab)
 
         if center == "arena":
             if self._arena == "circular":
@@ -475,7 +493,7 @@ class coordinates:
 
         if speed:
             for key, tab in tabs.items():
-                vel = rolling_speed(tab, deriv=speed + 1, center=center)
+                vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, center=center)
                 tabs[key] = vel
 
         if length:
@@ -521,13 +539,13 @@ class coordinates:
                 tab_dict (Table_dict): table_dict object containing all the computed information
         """
 
-        tabs = deepcopy(self.distances)
+        tabs = deepof.utils.deepcopy(self.distances)
 
         if self.distances is not None:
 
             if speed:
                 for key, tab in tabs.items():
-                    vel = rolling_speed(tab, deriv=speed + 1, typ="dists")
+                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
                     tabs[key] = vel
 
             if length:
@@ -559,7 +577,7 @@ class coordinates:
                 tab_dict (Table_dict): table_dict object containing all the computed information
         """
 
-        tabs = deepcopy(self.angles)
+        tabs = deepof.utils.deepcopy(self.angles)
 
         if self.angles is not None:
             if degrees:
@@ -567,7 +585,7 @@ class coordinates:
 
             if speed:
                 for key, tab in tabs.items():
-                    vel = rolling_speed(tab, deriv=speed + 1, typ="angles")
+                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
                     tabs[key] = vel
 
             if length:
@@ -614,9 +632,24 @@ class coordinates:
 
         return self._arena, self._arena_dims, self._scales
 
-    # def rule_based_annotation(self):
-    #     """Annotates coordinates using a simple rule-based pipeline"""
-    #     pass
+    # noinspection PyDefaultArgument
+    def rule_based_annotation(self, hparams: Dict = {}) -> Table_dict:
+        """Annotates coordinates using a simple rule-based pipeline"""
+
+        tag_dict = {}
+        for idx, key in enumerate(self._tables.keys()):
+            tag_dict[key] = deepof.pose_utils.rule_based_tagging(
+                list(self._tables.keys()),
+                self._videos,
+                self._tables,
+                idx,
+                recog_limit=1,
+                path=0,
+                hparams=hparams,
+            )
+        return table_dict(
+            tag_dict, typ="rule-based", arena=self._arena, arena_dims=self._arena_dims
+        )
 
 
 class table_dict(dict):
@@ -680,13 +713,15 @@ class table_dict(dict):
                 else [0, self._arena_dims[i][1]]
             )
 
-            heatmaps = plot_heatmap(
+            heatmaps = deepof.visuals.plot_heatmap(
                 list(self.values())[i], bodyparts, xlim=x_lim, ylim=y_lim, save=save,
             )
 
             return heatmaps
 
-    def get_training_set(self, test_videos: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+    def get_training_set(
+        self, test_videos: int = 0
+    ) -> deepof.utils.Tuple[np.ndarray, np.ndarray]:
         """Generates training and test sets as numpy.array objects for model training"""
 
         rmax = max([i.shape[0] for i in self.values()])
@@ -784,12 +819,12 @@ class table_dict(dict):
                 print("Done!")
 
         if align == "all":
-            X_train = align_trajectories(X_train, align)
+            X_train = deepof.utils.align_trajectories(X_train, align)
 
-        X_train = rolling_window(X_train, window_size, window_step)
+        X_train = deepof.utils.rolling_window(X_train, window_size, window_step)
 
         if align == "center":
-            X_train = align_trajectories(X_train, align)
+            X_train = deepof.utils.align_trajectories(X_train, align)
 
         if conv_filter == "gaussian":
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
@@ -808,12 +843,12 @@ class table_dict(dict):
         if test_videos:
 
             if align == "all":
-                X_test = align_trajectories(X_test, align)
+                X_test = deepof.utils.align_trajectories(X_test, align)
 
-            X_test = rolling_window(X_test, window_size, window_step)
+            X_test = deepof.utils.rolling_window(X_test, window_size, window_step)
 
             if align == "center":
-                X_test = align_trajectories(X_test, align)
+                X_test = deepof.utils.align_trajectories(X_test, align)
 
             if conv_filter == "gaussian":
                 X_test = X_test * g.reshape([1, window_size, 1])
@@ -837,7 +872,7 @@ class table_dict(dict):
 
     def random_projection(
         self, n_components: int = None, sample: int = 1000
-    ) -> Tuple[Any, Any]:
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a random projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
@@ -852,7 +887,7 @@ class table_dict(dict):
 
     def pca(
         self, n_components: int = None, sample: int = 1000, kernel: str = "linear"
-    ) -> Tuple[Any, Any]:
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
@@ -867,7 +902,7 @@ class table_dict(dict):
 
     def tsne(
         self, n_components: int = None, sample: int = 1000, perplexity: int = 30
-    ) -> Tuple[Any, Any]:
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
