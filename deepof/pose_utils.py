@@ -454,7 +454,10 @@ def rule_based_tagging(
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
-    vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
+    try:
+        vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
+    except IndexError:
+        vid_name = tracks[vid_index]
 
     coords = coordinates.get_coords()[vid_name]
     speeds = coordinates.get_coords(speed=1)[vid_name]

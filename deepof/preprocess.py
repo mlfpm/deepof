@@ -26,6 +26,7 @@ import deepof.utils
 import deepof.visuals
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pandas as pd
 import warnings
 
@@ -644,10 +645,10 @@ class coordinates:
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
                 list(self._tables.keys()),
                 self._videos,
-                self._tables,
+                self,
                 idx,
                 recog_limit=1,
-                path=self._path,
+                path=os.path.join(self._path,"Videos"),
                 hparams=hparams,
             )
         return table_dict(
