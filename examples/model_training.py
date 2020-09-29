@@ -1,7 +1,7 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-import deepof.preprocess
+import deepof.data
 from deepof.models import *
 from tensorflow import keras
 import argparse

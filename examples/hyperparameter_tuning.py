@@ -1,7 +1,7 @@
 # @author lucasmiranda42
 
 from datetime import datetime
-from deepof.preprocess import *
+from deepof.data import *
 from deepof.hypermodels import *
 from kerastuner import BayesianOptimization
 from tensorflow import keras

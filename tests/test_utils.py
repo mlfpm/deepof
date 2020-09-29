@@ -16,7 +16,7 @@ from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
 from deepof.utils import *
-import deepof.preprocess
+import deepof.data
 import matplotlib.figure
 import pytest
 import string

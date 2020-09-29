@@ -14,7 +14,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from deepof.pose_utils import *
-import deepof.preprocess
+import deepof.data
 import matplotlib.figure
 import pytest
 import string
@@ -91,7 +91,7 @@ def test_climb_wall(arena, tol):
     tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
 
     prun = (
-        deepof.preprocess.project(
+        deepof.data.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([arena[2]]),
@@ -353,7 +353,7 @@ def test_frame_corners(w, h):
 
 def test_rule_based_tagging():
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -376,7 +376,7 @@ def test_rule_based_tagging():
 
 def test_rule_based_video():
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),

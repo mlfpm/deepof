@@ -8,7 +8,7 @@ sys.path.insert(1, "../")
 from datetime import datetime
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import mean_absolute_error
-from deepof.preprocess import *
+from deepof.data import *
 from deepof.models import *
 from tqdm import tqdm
 import argparse

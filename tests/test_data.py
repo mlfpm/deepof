@@ -13,7 +13,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from collections import defaultdict
 import deepof.utils
-import deepof.preprocess
+import deepof.data
 import matplotlib.figure
 import numpy as np
 import os
@@ -32,7 +32,7 @@ def test_project_init(table_type, arena_type):
 
     if arena_type == "foo":
         with pytest.raises(NotImplementedError):
-            prun = deepof.preprocess.project(
+            prun = deepof.data.project(
                 path=os.path.join(".", "tests", "test_examples"),
                 arena=arena_type,
                 arena_dims=tuple([380]),
@@ -40,7 +40,7 @@ def test_project_init(table_type, arena_type):
                 table_format=table_type,
             )
     else:
-        prun = deepof.preprocess.project(
+        prun = deepof.data.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena=arena_type,
             arena_dims=tuple([380]),
@@ -50,7 +50,7 @@ def test_project_init(table_type, arena_type):
 
     if table_type != ".foo" and arena_type != "foo":
 
-        assert type(prun) == deepof.preprocess.project
+        assert type(prun) == deepof.data.project
         assert type(prun.load_tables(verbose=True)) == tuple
         assert type(prun.get_scale) == np.ndarray
         print(prun)
@@ -62,7 +62,7 @@ def test_project_init(table_type, arena_type):
 
 def test_project_properties():
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -97,7 +97,7 @@ def test_get_distances(nodes, ego):
     nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -121,7 +121,7 @@ def test_get_angles(nodes, ego):
     nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -146,7 +146,7 @@ def test_run(nodes, ego):
     nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -158,7 +158,7 @@ def test_run(nodes, ego):
     prun.ego = ego
     prun = prun.run(verbose=True)
 
-    assert type(prun) == deepof.preprocess.coordinates
+    assert type(prun) == deepof.data.coordinates
 
 
 @settings(deadline=None)
@@ -172,7 +172,7 @@ def test_get_table_dicts(nodes, ego, sampler):
     nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.preprocess.project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -212,10 +212,10 @@ def test_get_table_dicts(nodes, ego, sampler):
 
     # deepof.coordinates testing
 
-    assert type(coords) == deepof.preprocess.table_dict
-    assert type(speeds) == deepof.preprocess.table_dict
-    assert type(distances) == deepof.preprocess.table_dict
-    assert type(angles) == deepof.preprocess.table_dict
+    assert type(coords) == deepof.data.table_dict
+    assert type(speeds) == deepof.data.table_dict
+    assert type(distances) == deepof.data.table_dict
+    assert type(angles) == deepof.data.table_dict
     assert type(prun.get_videos()) == list
     assert prun.get_exp_conditions is None
     assert type(prun.get_quality()) == defaultdict
@@ -227,7 +227,7 @@ def test_get_table_dicts(nodes, ego, sampler):
         st.one_of(
             st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
         ),
-        st.just(deepof.preprocess.merge_tables(coords, speeds, distances, angles)),
+        st.just(deepof.data.merge_tables(coords, speeds, distances, angles)),
     )
 
     assert table.filter(["test"]) == table

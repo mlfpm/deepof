@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(1, "../")
 
-import deepof.preprocess
+import deepof.data
 import argparse
 import cv2
 import os

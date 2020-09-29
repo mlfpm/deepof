@@ -12,7 +12,7 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from deepof.utils import *
-import deepof.preprocess
+import deepof.data
 import deepof.visuals
 import matplotlib.figure
 
@@ -21,7 +21,7 @@ import matplotlib.figure
 @given(bparts=st.one_of(st.just(["Center"]), st.just(["Center", "Nose"])))
 def test_plot_heatmap(bparts):
     prun = (
-        deepof.preprocess.project(
+        deepof.data.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([380]),
@@ -44,7 +44,7 @@ def test_plot_heatmap(bparts):
 
 def test_model_comparison_plot():
     prun = (
-        deepof.preprocess.project(
+        deepof.data.project(
             path=os.path.join(".", "tests", "test_examples"),
             arena="circular",
             arena_dims=tuple([380]),
