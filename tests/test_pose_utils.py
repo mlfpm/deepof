@@ -363,9 +363,11 @@ def test_rule_based_tagging():
     ).run(verbose=True)
 
     hardcoded_tags = rule_based_tagging(
-        list([i + "_" for i in prun.get_coords().keys()]),
-        ["test_video_circular_arena.mp4"],
+        list([i for i in prun.get_coords().keys()]),
+        ["testDLC_video_circular_arena.mp4"],
         prun,
+        prun.get_coords(),
+        prun.get_coords(speed=1),
         arena_type="circular",
         vid_index=0,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
@@ -387,9 +389,11 @@ def test_rule_based_video():
     ).run(verbose=True)
 
     hardcoded_tags = rule_based_tagging(
-        list([i + "_" for i in prun.get_coords().keys()]),
-        ["test_video_circular_arena.mp4"],
+        list([i for i in prun.get_coords().keys()]),
+        ["testDLC_video_circular_arena.mp4"],
         prun,
+        prun.get_coords(),
+        prun.get_coords(speed=1),
         arena_type="circular",
         vid_index=0,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
@@ -398,7 +402,7 @@ def test_rule_based_video():
     rule_based_video(
         coordinates=prun,
         tracks=list([i + "_" for i in prun.get_coords().keys()]),
-        videos=["test_video_circular_arena.mp4"],
+        videos=["testDLC_video_circular_arena.mp4"],
         vid_index=0,
         frame_limit=100,
         tag_dict=hardcoded_tags,
