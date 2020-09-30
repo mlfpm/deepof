@@ -699,8 +699,6 @@ def rule_based_video(
     except IndexError:
         vid_name = tracks[vid_index]
 
-    coords = coordinates.get_coords()[vid_name]
-    speeds = coordinates.get_coords(speed=1)[vid_name]
     arena, h, w = deepof.utils.recognize_arena(
         videos, vid_index, path, recog_limit, coordinates._arena
     )
@@ -732,10 +730,10 @@ def rule_based_video(
                 or fnum % hparams["speed_pause"] == 0
             ):
                 for _id in animal_ids:
-                    frame_speeds[_id] = speeds[_id + undercond + "Center"][fnum]
+                    frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
         except AttributeError:
             if frame_speeds == -np.inf or fnum % hparams["speed_pause"] == 0:
-                frame_speeds = speeds["Center"][fnum]
+                frame_speeds = tag_dict["speed"][fnum]
 
         # Display all annotations in the output video
         tag_rulebased_frames(
