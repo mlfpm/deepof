@@ -680,6 +680,7 @@ class coordinates:
                     path=os.path.join(self._path, "Videos"),
                     hparams=hparams,
                 )
+                pbar.update(1)
 
             if type(video_output) == list:
                 vid_idxs = video_output
@@ -690,9 +691,11 @@ class coordinates:
                     "Video output must be either 'all' or a list with the names of the videos to render"
                 )
 
-            njobs = cpu_count(logical=True)
+            njobs = cpu_count(logical=False)
+            pbar = tqdm(total=len(vid_idxs))
             with parallel_backend("threading", n_jobs=njobs):
                 Parallel()(delayed(output_video)(key) for key in vid_idxs)
+            pbar.close()
 
         return table_dict(
             tag_dict, typ="rule-based", arena=self._arena, arena_dims=self._arena_dims

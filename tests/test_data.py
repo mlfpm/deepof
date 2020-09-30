@@ -74,7 +74,7 @@ def test_project_properties():
     prun.subset_condition = "testing"
     assert prun.subset_condition == "testing"
 
-    assert prun.distances == "All"
+    assert prun.distances == "all"
     prun.distances = "testing"
     assert prun.distances == "testing"
 
@@ -94,7 +94,7 @@ def test_project_properties():
 )
 def test_get_distances(nodes, ego):
 
-    nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
+    nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
@@ -118,7 +118,7 @@ def test_get_distances(nodes, ego):
 )
 def test_get_angles(nodes, ego):
 
-    nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
+    nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
@@ -143,7 +143,7 @@ def test_get_angles(nodes, ego):
 )
 def test_run(nodes, ego):
 
-    nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
+    nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
@@ -185,7 +185,7 @@ def test_get_rule_based_annotation():
 )
 def test_get_table_dicts(nodes, ego, sampler):
 
-    nodes = ["All", ["Center", "Nose", "Tail_base"]][nodes]
+    nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(

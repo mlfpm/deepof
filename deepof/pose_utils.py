@@ -18,7 +18,6 @@ import regex as re
 import seaborn as sns
 from itertools import combinations
 from scipy import stats
-from tqdm import tqdm
 from typing import Any, List, NewType
 
 Coordinates = NewType("Coordinates", Any)
@@ -716,7 +715,6 @@ def rule_based_video(
     )
 
     # Loop over the frames in the video
-    pbar = tqdm(total=min(coords.shape[0] - recog_limit, frame_limit))
     while cap.isOpened() and fnum < frame_limit:
 
         ret, frame = cap.read()
@@ -766,8 +764,6 @@ def rule_based_video(
             )
 
         writer.write(frame)
-
-        pbar.update(1)
         fnum += 1
 
     cap.release()
