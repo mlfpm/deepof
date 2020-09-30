@@ -366,6 +366,7 @@ def test_rule_based_tagging():
         list([i + "_" for i in prun.get_coords().keys()]),
         ["test_video_circular_arena.mp4"],
         prun,
+        arena_type="circular",
         vid_index=0,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
     )
@@ -389,6 +390,7 @@ def test_rule_based_video():
         list([i + "_" for i in prun.get_coords().keys()]),
         ["test_video_circular_arena.mp4"],
         prun,
+        arena_type="circular",
         vid_index=0,
         path=os.path.join(".", "tests", "test_examples", "Videos"),
     )

@@ -17,7 +17,6 @@ import pandas as pd
 import regex as re
 import seaborn as sns
 from itertools import combinations
-from scipy import spatial
 from scipy import stats
 from tqdm import tqdm
 from typing import Any, List, NewType
@@ -110,7 +109,12 @@ def close_double_contact(
 
 
 def climb_wall(
-    arena_type: str, arena: np.array, pos_dict: pd.DataFrame, tol: float, nose: str
+    arena_type: str,
+    arena: np.array,
+    pos_dict: pd.DataFrame,
+    tol: float,
+    nose: str,
+    centered_data: bool = True,
 ) -> np.array:
     """Returns True if the specified mouse is climbing the wall
 
@@ -129,7 +133,7 @@ def climb_wall(
     nose = pos_dict[nose]
 
     if arena_type == "circular":
-        center = np.array(arena[:2])
+        center = np.zeros(2) if centered_data else np.array(arena[:2])
         climbing = np.linalg.norm(nose - center, axis=1) > (arena[2] + tol)
 
     else:
@@ -420,6 +424,7 @@ def rule_based_tagging(
     videos: List,
     coordinates: Coordinates,
     vid_index: int,
+    arena_type: str,
     recog_limit: int = 1,
     path: str = os.path.join("."),
     hparams: dict = {},
@@ -455,7 +460,7 @@ def rule_based_tagging(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
-        vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
+        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
     except IndexError:
         vid_name = tracks[vid_index]
 
@@ -527,15 +532,7 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            pd.Series(
-                (
-                    spatial.distance.cdist(
-                        np.array(coords[_id + undercond + "Nose"]), np.zeros([1, 2])
-                    )
-                    > (w / 200 + arena[2])
-                ).reshape(coords.shape[0]),
-                index=coords.index,
-            ).astype(bool)
+            climb_wall(arena_type, arena, coords, w / 200, _id + undercond + "Nose")
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
@@ -695,7 +692,7 @@ def rule_based_video(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
-        vid_name = re.findall("(.*?)_", tracks[vid_index])[0]
+        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
     except IndexError:
         vid_name = tracks[vid_index]
 

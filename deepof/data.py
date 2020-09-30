@@ -21,6 +21,7 @@ from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from tqdm import tqdm
 import deepof.pose_utils
 import deepof.utils
 import deepof.visuals
@@ -95,11 +96,11 @@ class project:
 
     def __str__(self):
         if self.exp_conditions:
-            return "DLC analysis of {} videos across {} conditions".format(
+            return "deepof analysis of {} videos across {} conditions".format(
                 len(self.videos), len(self.exp_conditions)
             )
         else:
-            return "DLC analysis of {} videos".format(len(self.videos))
+            return "deepof analysis of {} videos".format(len(self.videos))
 
     @property
     def subset_condition(self):
@@ -167,7 +168,7 @@ class project:
         if self.table_format == ".h5":
 
             tab_dict = {
-                deepof.utils.re.findall("(.*?)_", tab)[0]: pd.read_hdf(
+                deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_hdf(
                     deepof.utils.os.path.join(self.table_path, tab), dtype=float
                 )
                 for tab in self.tables
@@ -192,7 +193,7 @@ class project:
                     ],
                     names=["scorer", "bodyparts", "coords"],
                 )
-                tab_dict[deepof.utils.re.findall("(.*?)_", tab)[0]] = data
+                tab_dict[deepof.utils.re.findall("(.*)DLC", tab)[0]] = data
 
         lik_dict = defaultdict()
 
@@ -409,7 +410,7 @@ class coordinates:
                 len(self._videos), len(self._exp_conditions)
             )
         else:
-            return "DLC analysis of {} videos".format(len(self._videos))
+            return "deepof analysis of {} videos".format(len(self._videos))
 
     def get_coords(
         self,
@@ -643,12 +644,13 @@ class coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
-        for idx, key in enumerate(self._tables.keys()):
+        for idx, key in tqdm(enumerate(self._tables.keys()), total=len(self._videos)):
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
                 list(self._tables.keys()),
                 self._videos,
                 self,
                 idx,
+                arena_type=self._arena,
                 recog_limit=1,
                 path=os.path.join(self._path, "Videos"),
                 hparams=hparams,
@@ -972,7 +974,6 @@ def merge_tables(*args):
 # TODO:
 #   - Generate ragged training array using a metric (acceleration, maybe?)
 #   - Use something like Dynamic Time Warping to put all instances in the same length
-#   - add rule_based_annotation method to coordinates class!!
 #   - with the current implementation, preprocess can't fully work on merged table_dict instances.
 #   While some operations (mainly alignment) should be carried out before merging, others require
 #   the whole dataset to function properly.
