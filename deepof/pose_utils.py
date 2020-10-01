@@ -113,7 +113,7 @@ def climb_wall(
     pos_dict: pd.DataFrame,
     tol: float,
     nose: str,
-    centered_data: bool = True,
+    centered_data: bool = False,
 ) -> np.array:
     """Returns True if the specified mouse is climbing the wall
 
@@ -124,6 +124,8 @@ def climb_wall(
             - tol (float): minimum tolerance to report a hit
             - nose (str): indicates the name of the body part representing the nose of
             the selected animal
+            - arena_dims (int): indicates radius of the real arena in mm
+            - centered_data (bool): indicates whether the input data is centered
 
         Returns:
             - climbing (np.array): boolean array. True if selected animal
@@ -133,7 +135,9 @@ def climb_wall(
 
     if arena_type == "circular":
         center = np.zeros(2) if centered_data else np.array(arena[:2])
-        climbing = np.linalg.norm(nose - center, axis=1) > (arena[2] + tol)
+        radius = arena[2]
+        print(radius)
+        climbing = np.linalg.norm(nose - center, axis=1) > (radius + tol)
 
     else:
         raise NotImplementedError("Supported values for arena_type are ['circular']")
@@ -535,7 +539,7 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(arena_type, arena, coords, 0.05, _id + undercond + "Nose")
+            climb_wall(arena_type, arena, coords, 1e-4, _id + undercond + "Nose")
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(

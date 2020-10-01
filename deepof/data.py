@@ -646,7 +646,8 @@ class coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
-        coords = self.get_coords()
+        # noinspection PyTypeChecker
+        coords = self.get_coords(center=False)
         speeds = self.get_coords(speed=1)
         for key in tqdm(self._tables.keys()):
 
