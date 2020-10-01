@@ -377,7 +377,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
             specified in the input retain their default values"""
 
     defaults = {
-        "speed_pause": 10,
+        "speed_pause": 3,
         "close_contact_tol": 15,
         "side_contact_tol": 15,
         "follow_frames": 20,
@@ -538,7 +538,7 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(arena_type, arena, coords, 1e-4, _id + undercond + "Nose")
+            climb_wall(arena_type, arena, coords, 0, _id + undercond + "Nose")
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
