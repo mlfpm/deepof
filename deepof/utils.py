@@ -264,8 +264,6 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         Returns:
             - aligned_trajs (2D np.array): aligned positions over time"""
 
-    print(data.shape, mode)
-
     angles = np.zeros(data.shape[0])
     data = deepcopy(data)
     dshape = data.shape
@@ -326,7 +324,7 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
     return rolled_a
 
 
-def smooth_mult_trajectory(series: np.array, alpha: float = 0.15) -> np.array:
+def smooth_mult_trajectory(series: np.array, alpha: float = 0.99) -> np.array:
     """Returns a smooths a trajectory using exponentially weighted averages
 
         Parameters:
@@ -386,7 +384,7 @@ def recognize_arena(
             # Detect arena and extract positions
             arena = circular_arena_recognition(frame)[0]
             if h is None and w is None:
-                h, w = frame.shape[0], frame.shape[1]
+                w, h = frame.shape[0], frame.shape[1]
 
         fnum += 1
 

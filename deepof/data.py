@@ -56,7 +56,7 @@ class project:
         path: str = deepof.utils.os.path.join("."),
         exp_conditions: dict = None,
         arena: str = "circular",
-        smooth_alpha: float = 0.1,
+        smooth_alpha: float = 1.0,
         arena_dims: tuple = (1,),
         model: str = "mouse_topview",
         animal_ids: List = tuple([""]),
@@ -84,7 +84,7 @@ class project:
         self.video_format = video_format
         self.arena = arena
         self.arena_dims = arena_dims
-        self.smooth_alpha = smooth_alpha
+        self.smooth_alpha = 0.99
         self.scales = self.get_scale
         self.animal_ids = animal_ids
 
@@ -652,7 +652,6 @@ class coordinates:
         for key in tqdm(self._tables.keys()):
 
             video = [vid for vid in self._videos if key + "DLC" in vid][0]
-            print(key, video)
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
                 list(self._tables.keys()),
                 self._videos,
