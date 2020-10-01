@@ -318,7 +318,7 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 def test_get_hparameters():
     assert get_hparameters() == {
-        "speed_pause": 10,
+        "speed_pause": 3,
         "close_contact_tol": 15,
         "side_contact_tol": 15,
         "follow_frames": 20,
