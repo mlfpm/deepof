@@ -651,7 +651,8 @@ class coordinates:
         speeds = self.get_coords(speed=1)
         for key in tqdm(self._tables.keys()):
 
-            video = [vid for vid in self._videos if key in vid][0]
+            video = [vid for vid in self._videos if key + "DLC" in vid][0]
+            print(key, video)
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
                 list(self._tables.keys()),
                 self._videos,

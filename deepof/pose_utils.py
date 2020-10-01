@@ -136,7 +136,6 @@ def climb_wall(
     if arena_type == "circular":
         center = np.zeros(2) if centered_data else np.array(arena[:2])
         radius = arena[2]
-        print(radius)
         climbing = np.linalg.norm(nose - center, axis=1) > (radius + tol)
 
     else:
