@@ -49,7 +49,7 @@ parser.add_argument(
     "-v",
     help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
     default=True,
-    type=deepof.preprocess.str2bool,
+    type=deepof.data.str2bool,
 )
 parser.add_argument(
     "--loss",

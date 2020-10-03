@@ -12,6 +12,7 @@ from itertools import combinations
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
+import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -20,6 +21,52 @@ tfpl = tfp.layers
 
 
 # Helper functions
+class exponential_learning_rate(tf.keras.callbacks.Callback):
+    """Simple class that allows to grow learning rate exponentially during training"""
+
+    def __init__(self, factor):
+        super().__init__()
+        self.factor = factor
+        self.rates = []
+        self.losses = []
+
+    # noinspection PyMethodOverriding
+    def on_batch_end(self, batch, logs):
+        """This callback acts after processing each batch"""
+
+        self.rates.append(K.get_value(self.model.optimizer.lr))
+        self.losses.append(logs["loss"])
+        K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
+
+
+def find_learning_rate(
+    model, X, y, epochs=1, batch_size=32, min_rate=10 ** -5, max_rate=10
+):
+    """Trains the provided model for an epoch with an exponentially increasing learning rate"""
+
+    init_weights = model.get_weights()
+    iterations = len(X) // batch_size * epochs
+    factor = K.exp(K.log(max_rate / min_rate) / iterations)
+    init_lr = K.get_value(model.optimizer.lr)
+    K.set_value(model.optimizer.lr, min_rate)
+    exp_lr = exponential_learning_rate(factor)
+    model.fit(X, y, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
+    K.set_value(model.optimizer.lr, init_lr)
+    model.set_weights(init_weights)
+    return exp_lr.rates, exp_lr.losses
+
+
+def plot_lr_vs_loss(rates, losses):  # pragma: no cover
+    """Plots learing rate versus the loss function of the model"""
+
+    plt.plot(rates, losses)
+    plt.gca().set_xscale("log")
+    plt.hlines(min(losses), min(rates), max(rates))
+    plt.axis([min(rates), max(rates), min(losses), (losses[0] + min(losses)) / 2])
+    plt.xlabel("Learning rate")
+    plt.ylabel("Loss")
+
+
 @tf.function
 def far_away_uniform_initialiser(
     shape: tuple, minval: int = 0, maxval: int = 15, iters: int = 100000

@@ -227,6 +227,8 @@ class SEQ_2_SEQ_AE:
             metrics=["mae"],
         )
 
+        model.build(input_shape)
+
         return encoder, decoder, model
 
 
@@ -651,6 +653,8 @@ class SEQ_2_SEQ_GMVAE:
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
         )
+
+        gmvaep.build(input_shape)
 
         return (
             encoder,

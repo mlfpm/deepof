@@ -201,6 +201,7 @@ def test_get_table_dicts(nodes, ego, sampler):
     prun = prun.run(verbose=False)
 
     algn = sampler.draw(st.one_of(st.just(False), st.just("Nose")))
+    inplace = sampler.draw(st.booleans())
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=0, max_value=5))
 
@@ -209,6 +210,7 @@ def test_get_table_dicts(nodes, ego, sampler):
         polar=polar,
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         align=algn,
+        align_inplace=inplace,
     )
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
