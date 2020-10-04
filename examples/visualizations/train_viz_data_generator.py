@@ -6,10 +6,12 @@ import sys
 sys.path.insert(1, "../")
 
 from datetime import datetime
+from ..example_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import mean_absolute_error
 from deepof.data import *
 from deepof.models import *
+from deepof.utils import *
 from tqdm import tqdm
 import argparse
 import numpy as np
@@ -144,19 +146,7 @@ assert input_type in [
 ], "Invalid input type. Type python train_viz_app.py -h for help."
 
 # Loads hyperparameters, most likely obtained from hyperparameter_tuning.py
-if hparams is not None:
-    with open(hparams, "rb") as handle:
-        hparams = pickle.load(handle)
-    hparams["encoding"] = encoding
-else:
-    hparams = {
-        "units_conv": 256,
-        "units_lstm": 256,
-        "units_dense2": 64,
-        "dropout_rate": 0.25,
-        "encoding": encoding,
-        "learning_rate": 1e-3,
-    }
+hparams = load_hparams(hparams, encoding)
 
 # with open(
 #     os.path.join(

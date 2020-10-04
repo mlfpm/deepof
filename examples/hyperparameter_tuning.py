@@ -3,6 +3,7 @@
 from datetime import datetime
 from deepof.data import *
 from deepof.hypermodels import *
+from .example_utils import *
 from kerastuner import BayesianOptimization
 from tensorflow import keras
 import argparse
@@ -80,13 +81,7 @@ log_dir = os.path.abspath(
 )
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-with open(
-    os.path.join(
-        train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
-    ),
-    "rb",
-) as handle:
-    Treatment_dict = pickle.load(handle)
+treatment_dict = load_treatments(train_path)
 
 # Which angles to compute?
 bp_dict = {
@@ -108,42 +103,18 @@ bp_dict = {
 DLC_social_1 = project(
     path=train_path,  # Path where to find the required files
     smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
-    distances=[
-        "B_Center",
-        "B_Nose",
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    ego=False,
-    angles=True,
-    connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
-    arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
+    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
-    exp_conditions=Treatment_dict,
+    exp_conditions=treatment_dict,
 )
 
 DLC_social_2 = project(
     path=val_path,  # Path where to find the required files
     smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
-    distances=[
-        "B_Center",
-        "B_Nose",
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    ego=False,
-    angles=True,
-    connectivity=bp_dict,
     arena="circular",  # Type of arena used in the experiments
-    arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
+    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
 )
@@ -226,7 +197,7 @@ def tune_search(train, test, project_name, hyp):
             loss="ELBO+MMD",
             predictor=False,
             number_of_components=k,
-        )
+        ).build()
     elif hyp == "S2SVAE-MMD":
         hypermodel = SEQ_2_SEQ_GMVAE(
             input_shape=train.shape, loss="MMD", predictor=False, number_of_components=k

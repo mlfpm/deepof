@@ -9,11 +9,11 @@ usage: python -m examples.model_training -h
 
 """
 
-import pickle
 from datetime import datetime
 from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
+from .example_utils import *
 from tensorflow import keras
 
 parser = argparse.ArgumentParser(
@@ -31,7 +31,7 @@ parser.add_argument(
 parser.add_argument(
     "--components",
     "-k",
-    help="set the number of components for the MMVAE(P) model. Defaults to 1",
+    help="set the number of components for the GMVAE(P) model. Defaults to 1",
     type=int,
     default=1,
 )
@@ -136,6 +136,14 @@ parser.add_argument(
     type=int,
     default=5,
 )
+parser.add_argument(
+    "--smooth-alpha",
+    "-sa",
+    help="Sets the exponential smoothing factor to apply to the input data. "
+    "Float between 0 and 1 (lower is more smooting)",
+    type=float,
+    default=0.99,
+)
 
 args = parser.parse_args()
 batch_size = args.batch_size
@@ -150,6 +158,7 @@ mmd_wu = args.mmd_warmup
 overlap_loss = args.overlap_loss
 predictor = float(args.predictor)
 runs = args.stability_check
+smooth_alpha = args.smooth_alpha
 train_path = os.path.abspath(args.train_path)
 val_num = args.val_num
 variational = bool(args.variational)
@@ -173,40 +182,18 @@ assert input_type in [
     "coords+dist+angle",
 ], "Invalid input type. Type python model_training.py -h for help."
 
-# Loads hyperparameters, most likely obtained from hyperparameter_tuning.py
-if hparams is not None:
-    with open(hparams, "rb") as handle:
-        hparams = pickle.load(handle)
-    hparams["encoding"] = encoding
-else:
-    hparams = {
-        "units_conv": 256,
-        "units_lstm": 256,
-        "units_dense2": 64,
-        "dropout_rate": 0.25,
-        "encoding": encoding,
-        "learning_rate": 1e-3,
-    }
-
-try:
-    with open(
-        os.path.join(
-            train_path, [i for i in os.listdir(train_path) if i.endswith(".pickle")][0]
-        ),
-        "rb",
-    ) as handle:
-        Treatment_dict = pickle.load(handle)
-except IndexError:
-    Treatment_dict = None
+# Loads model hyperparameters and treatment conditions, if available
+hparams = load_hparams(hparams, encoding)
+treatment_dict = load_treatments(train_path)
 
 project_coords = project(
     path=train_path,  # Path where to find the required files
-    smooth_alpha=0.99,  # Alpha value for exponentially weighted smoothing
+    smooth_alpha=smooth_alpha,  # Alpha value for exponentially weighted smoothing
     arena="circular",  # Type of arena used in the experiments
     arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
-    exp_conditions=Treatment_dict,
+    exp_conditions=treatment_dict,
 ).run(verbose=True)
 
 # Coordinates for training data
