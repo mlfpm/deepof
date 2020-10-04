@@ -2,7 +2,7 @@ version: "2"         # required to adjust maintainability checks
 checks:
   argument-count:
     config:
-      threshold: 10
+      threshold: 15
   complex-logic:
     config:
       threshold: 4
@@ -11,7 +11,7 @@ checks:
       threshold: 1000
   method-complexity:
     config:
-      threshold: 15
+      threshold: 20
   method-count:
     config:
       threshold: 20
