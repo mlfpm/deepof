@@ -253,7 +253,7 @@ class SEQ_2_SEQ_GMVAE:
         kl_warmup_epochs: int = 0,
         mmd_warmup_epochs: int = 0,
         number_of_components: int = 1,
-        predictor: bool = True,
+        predictor: float = True,
         overlap_loss: bool = False,
         entropy_reg_weight: float = 0.0,
         initialiser_iters: int = int(1e5),
@@ -624,7 +624,7 @@ class SEQ_2_SEQ_GMVAE:
                 if self.predictor > 0
                 else x_decoded_mean
             ),
-            name="SEQ_2_SEQ_VAE",
+            name="SEQ_2_SEQ_GMVAE",
         )
 
         # Build generator as a separate entity

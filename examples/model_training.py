@@ -1,12 +1,20 @@
 # @author lucasmiranda42
+# encoding: utf-8
+# module deepof
 
+"""
+
+Model training command line tool for the deepof package.
+usage: python -m examples.model_training -h
+
+"""
+
+import pickle
 from datetime import datetime
-import deepof.data
+from deepof.data import *
 from deepof.models import *
+from deepof.utils import *
 from tensorflow import keras
-import argparse
-import os, pickle
-
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -18,9 +26,8 @@ parser.add_argument(
     "-vn",
     help="set number of videos of the training" "set to use for validation",
     type=int,
-    default=0,
+    default=1,
 )
-parser.add_argument("--val-path", "-vp", help="set validation set path", type=str)
 parser.add_argument(
     "--components",
     "-k",
@@ -49,7 +56,7 @@ parser.add_argument(
     "-v",
     help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
     default=True,
-    type=deepof.data.str2bool,
+    type=str2bool,
 )
 parser.add_argument(
     "--loss",
@@ -91,7 +98,7 @@ parser.add_argument(
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
     default=False,
-    type=deepof.preprocess.str2bool,
+    type=str2bool,
 )
 parser.add_argument(
     "--batch-size",
@@ -108,34 +115,54 @@ parser.add_argument(
     type=int,
     default=1,
 )
+parser.add_argument(
+    "--gaussian-filter",
+    "-gf",
+    help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
+    type=str2bool,
+    default=False,
+)
+parser.add_argument(
+    "--window-size",
+    "-ws",
+    help="Sets the sliding window size to be used when building both training and validation sets. Defaults to 15",
+    type=int,
+    default=15,
+)
+parser.add_argument(
+    "--window-step",
+    "-wt",
+    help="Sets the sliding window step to be used when building both training and validation sets. Defaults to 5",
+    type=int,
+    default=5,
+)
 
 args = parser.parse_args()
-train_path = os.path.abspath(args.train_path)
-val_num = args.val_num
-val_path = os.path.abspath(args.val_path) if args.val_path else None
+batch_size = args.batch_size
+encoding = args.encoding_size
+gaussian_filter = args.gaussian_filter
+hparams = args.hyperparameters
 input_type = args.input_type
 k = args.components
-predictor = float(args.predictor)
-variational = bool(args.variational)
-loss = args.loss
 kl_wu = args.kl_warmup
+loss = args.loss
 mmd_wu = args.mmd_warmup
-hparams = args.hyperparameters
-encoding = args.encoding_size
-batch_size = args.batch_size
 overlap_loss = args.overlap_loss
+predictor = float(args.predictor)
 runs = args.stability_check
+train_path = os.path.abspath(args.train_path)
+val_num = args.val_num
+variational = bool(args.variational)
+window_size = args.window_size
+window_step = args.window_step
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
-if not val_path and not val_num:
+if not val_num:
     raise ValueError(
         "Set a valid data path / validation number for the validation to run"
     )
-if val_path and val_num:
-    raise ValueError(
-        "Set only one of valid data path / validation number for the validation to run"
-    )
+
 assert input_type in [
     "coords",
     "dists",
@@ -172,229 +199,59 @@ try:
 except IndexError:
     Treatment_dict = None
 
-
-# Which angles to compute?
-bp_dict = {
-    "B_Nose": ["B_Left_ear", "B_Right_ear"],
-    "B_Left_ear": ["B_Nose", "B_Right_ear", "B_Center", "B_Left_flank"],
-    "B_Right_ear": ["B_Nose", "B_Left_ear", "B_Center", "B_Right_flank"],
-    "B_Center": [
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    "B_Left_flank": ["B_Left_ear", "B_Center", "B_Tail_base"],
-    "B_Right_flank": ["B_Right_ear", "B_Center", "B_Tail_base"],
-    "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
-}
-
-DLC_social_1_coords = deepof.preprocess.project(
+project_coords = project(
     path=train_path,  # Path where to find the required files
-    smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
-    distances=[
-        "B_Center",
-        "B_Nose",
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    ego="B_Center",
-    subset_condition="B",
-    angles=True,
-    connectivity=bp_dict,
+    smooth_alpha=0.99,  # Alpha value for exponentially weighted smoothing
     arena="circular",  # Type of arena used in the experiments
-    arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
+    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
     video_format=".mp4",
     table_format=".h5",
     exp_conditions=Treatment_dict,
 ).run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_1_coords.get_coords(center="B_Center", align="B_Nose")
-distances1 = DLC_social_1_coords.get_distances()
-angles1 = DLC_social_1_coords.get_angles()
-coords_distances1 = deepof.preprocess.merge_tables(coords1, distances1)
-coords_angles1 = deepof.preprocess.merge_tables(coords1, angles1)
-dists_angles1 = deepof.preprocess.merge_tables(distances1, angles1)
-coords_dist_angles1 = deepof.preprocess.merge_tables(coords1, distances1, angles1)
+coords = project_coords.get_coords(center="Center", align="Spine_1", align_inplace=True)
+distances = project_coords.get_distances()
+angles = project_coords.get_angles()
+coords_distances = merge_tables(coords, distances)
+coords_angles = merge_tables(coords, angles)
+dists_angles = merge_tables(distances, angles)
+coords_dist_angles = merge_tables(coords, distances, angles)
+
+
+def batch_preprocess(tab_dict):
+    """Returns a preprocessed instance of the input table_dict object"""
+
+    return tab_dict.preprocess(
+        window_size=window_size,
+        window_step=window_step,
+        scale="standard",
+        conv_filter=gaussian_filter,
+        sigma=55,
+        test_videos=val_num,
+    )
 
 
 input_dict_train = {
-    "coords": coords1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "dists": distances1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "angles": angles1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "coords+dist": coords_distances1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "coords+angle": coords_angles1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "dists+angle": dists_angles1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
-    "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=13,
-        window_step=5,
-        scale="standard",
-        # filter="gaussian",
-        sigma=55,
-        align="center",
-        test_videos=val_num,
-    ),
+    "coords": coords,
+    "dists": distances,
+    "angles": angles,
+    "coords+dist": coords_distances,
+    "coords+angle": coords_angles,
+    "dists+angle": dists_angles,
+    "coords+dist+angle": coords_dist_angles,
 }
-# If a validation path is specified, use it to build a validation set
-if val_path:
 
-    DLC_social_2_coords = deepof.preprocess.project(
-        path=val_path,  # Path where to find the required files
-        smooth_alpha=0.50,  # Alpha value for exponentially weighted smoothing
-        distances=[
-            "B_Center",
-            "B_Nose",
-            "B_Left_ear",
-            "B_Right_ear",
-            "B_Left_flank",
-            "B_Right_flank",
-            "B_Tail_base",
-        ],
-        ego="B_Center",
-        subset_condition="B",
-        angles=True,
-        connectivity=bp_dict,
-        arena="circular",  # Type of arena used in the experiments
-        arena_dims=[380],  # Dimensions of the arena. Just one if it's circular
-        video_format=".mp4",
-        table_format=".h5",
-    ).run(verbose=True)
+print("Preprocessing data...")
+for key, value in input_dict_train.items():
+    input_dict_train[key] = batch_preprocess(value)
+print("Done!")
 
-    # Coordinates for validation data
-    coords2 = DLC_social_2_coords.get_coords(center="B_Center", align="B_Nose")
-    distances2 = DLC_social_2_coords.get_distances()
-    angles2 = DLC_social_2_coords.get_angles()
-    coords_distances2 = deepof.preprocess.merge_tables(coords2, distances2)
-    coords_angles2 = deepof.preprocess.merge_tables(coords2, angles2)
-    dists_angles2 = deepof.preprocess.merge_tables(distances2, angles2)
-    coords_dist_angles2 = deepof.preprocess.merge_tables(coords2, distances2, angles2)
-
-    input_dict_val = {
-        "coords": coords2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "dists": distances2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "angles": angles2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "coords+dist": coords_distances2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "coords+angle": coords_angles2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "dists+angle": dists_angles2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-        "coords+dist+angle": coords_dist_angles2.preprocess(
-            window_size=13,
-            window_step=5,
-            scale="standard",
-            # filter="gaussian",
-            sigma=55,
-            shuffle=True,
-            align="all",
-        ),
-    }
-
-# Select training and validation set
-if val_path:
-    X_train = input_dict_train[input_type]
-    X_val = input_dict_val[input_type]
-elif val_num:
-    X_train = input_dict_train[input_type][0]
-    X_val = input_dict_train[input_type][1]
+print("Creating training and validation sets...")
+# Get training and validation sets
+X_train = input_dict_train[input_type][0]
+X_val = input_dict_train[input_type][1]
+print("Done!")
 
 # Training loop
 for run in range(runs):
@@ -427,15 +284,14 @@ for run in range(runs):
         ),
     )
 
-    onecycle = one_cycle_scheduler(
+    onecycle = deepof.model_utils.one_cycle_scheduler(
         X_train.shape[0] // batch_size * 250, max_rate=0.005,
     )
 
     if not variational:
-        encoder, decoder, ae = SEQ_2_SEQ_AE(X_train.shape, **hparams).build()
-        ae.build(X_train.shape)
-
+        encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
         print(ae.summary())
+
         ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
         # Fit the specified model to the data
         history = ae.fit(
@@ -466,17 +322,16 @@ for run in range(runs):
             kl_warmup_callback,
             mmd_warmup_callback,
         ) = SEQ_2_SEQ_GMVAE(
-            X_train.shape,
             loss=loss,
             number_of_components=k,
             kl_warmup_epochs=kl_wu,
             mmd_warmup_epochs=mmd_wu,
             predictor=predictor,
             overlap_loss=overlap_loss,
-            **hparams
-        ).build()
-        gmvaep.build(X_train.shape)
-
+            architecture_hparams=hparams,
+        ).build(
+            X_train.shape
+        )
         print(gmvaep.summary())
 
         callbacks_ = [
@@ -520,7 +375,6 @@ for run in range(runs):
     tf.keras.backend.clear_session()
 
 # TODO:
-#    - Investigate partial methods for preprocess (lots of calls with the same parameters!)
 #    - Investigate how goussian filters affect reproducibility (in a systematic way)
 #    - Investigate how smoothing affects reproducibility (in a systematic way)
 #    - Check if MCDropout effectively enhances reproducibility or not
