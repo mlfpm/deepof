@@ -542,7 +542,7 @@ class SEQ_2_SEQ_GMVAE:
                     deepof.model_utils.tfd.Independent(
                         deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
