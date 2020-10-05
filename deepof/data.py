@@ -18,7 +18,7 @@ from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
 from typing import Dict, List
 from pandas_profiling import ProfileReport
-from psutil import cpu_count
+from multiprocessing import cpu_count
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
@@ -704,7 +704,7 @@ class coordinates:
                     "Video output must be either 'all' or a list with the names of the videos to render"
                 )
 
-            njobs = cpu_count(logical=False)
+            njobs = cpu_count() // 2
             pbar = tqdm(total=len(vid_idxs))
             with parallel_backend("threading", n_jobs=njobs):
                 Parallel()(delayed(output_video)(key) for key in vid_idxs)
