@@ -181,9 +181,10 @@ def test_get_rule_based_annotation():
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
+    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
 )
-def test_get_table_dicts(nodes, ego, sampler):
+def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
@@ -194,6 +195,7 @@ def test_get_table_dicts(nodes, ego, sampler):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
+        exclude_bodyparts=exclude,
     )
 
     prun.distances = nodes
@@ -248,7 +250,7 @@ def test_get_table_dicts(nodes, ego, sampler):
         st.just(deepof.data.merge_tables(coords, speeds, distances, angles)),
     )
 
-    assert table.filter(["test"]) == table
+    assert table.filter_videos(["test"]) == table
     tset = table.get_training_set(
         test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1))
     )

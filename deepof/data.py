@@ -51,15 +51,16 @@ class project:
 
     def __init__(
         self,
-        video_format: str = ".mp4",
-        table_format: str = ".h5",
-        path: str = deepof.utils.os.path.join("."),
-        exp_conditions: dict = None,
-        arena: str = "circular",
-        smooth_alpha: float = 0.99,
-        arena_dims: tuple = (1,),
-        model: str = "mouse_topview",
         animal_ids: List = tuple([""]),
+        arena: str = "circular",
+        arena_dims: tuple = (1,),
+        exclude_bodyparts: List = tuple([""]),
+        exp_conditions: dict = None,
+        model: str = "mouse_topview",
+        path: str = deepof.utils.os.path.join("."),
+        smooth_alpha: float = 0.99,
+        table_format: str = ".h5",
+        video_format: str = ".mp4",
     ):
 
         self.path = path
@@ -79,22 +80,26 @@ class project:
                 if tab.endswith(table_format)
             ]
         )
-        self.exp_conditions = exp_conditions
-        self.table_format = table_format
-        self.video_format = video_format
+        self.animal_ids = animal_ids
         self.arena = arena
         self.arena_dims = arena_dims
-        self.smooth_alpha = smooth_alpha
+        self.exp_conditions = exp_conditions
         self.scales = self.get_scale
-        self.animal_ids = animal_ids
+        self.smooth_alpha = smooth_alpha
+        self.table_format = table_format
+        self.video_format = video_format
 
-        self.subset_condition = None
+        self.angles = True
         self.distances = "all"
         self.ego = False
-        self.angles = True
+        self.subset_condition = None
 
         model_dict = {"mouse_topview": deepof.utils.connect_mouse_topview()}
         self.connectivity = model_dict[model]
+        self.exclude_bodyparts = exclude_bodyparts
+        if self.exclude_bodyparts != tuple([""]):
+            for bp in exclude_bodyparts:
+                self.connectivity.remove_node(bp)
 
     def __str__(self):
         if self.exp_conditions:
@@ -247,6 +252,16 @@ class project:
 
                 tab_dict[key] = tab
 
+        if self.exclude_bodyparts != tuple([""]):
+
+            for k, value in tab_dict.items():
+                temp = value.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
+                temp.sort_index(axis=1, inplace=True)
+                temp.columns = pd.MultiIndex.from_product(
+                    [sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
+                )
+                tab_dict[k] = temp.sort_index(axis=1)
+
         return tab_dict, lik_dict
 
     def get_distances(self, tab_dict: dict, verbose: bool = False) -> dict:
@@ -342,17 +357,17 @@ class project:
             print("Done!")
 
         return coordinates(
-            tables=tables,
-            videos=self.videos,
-            arena=self.arena,
-            arena_dims=self.arena_dims,
-            scales=self.scales,
-            quality=quality,
-            exp_conditions=self.exp_conditions,
-            distances=distances,
             angles=angles,
             animal_ids=self.animal_ids,
+            arena=self.arena,
+            arena_dims=self.arena_dims,
+            distances=distances,
+            exp_conditions=self.exp_conditions,
             path=self.path,
+            quality=quality,
+            scales=self.scales,
+            tables=tables,
+            videos=self.videos,
         )
 
     @subset_condition.setter
@@ -382,29 +397,29 @@ class coordinates:
 
     def __init__(
         self,
-        tables: dict,
-        videos: list,
         arena: str,
         arena_dims: np.array,
-        scales: np.array,
-        quality: dict,
         path: str,
-        exp_conditions: dict = None,
-        distances: dict = None,
+        quality: dict,
+        scales: np.array,
+        tables: dict,
+        videos: list,
         angles: dict = None,
         animal_ids: List = tuple([""]),
+        distances: dict = None,
+        exp_conditions: dict = None,
     ):
-        self._tables = tables
-        self.distances = distances
-        self.angles = angles
-        self._videos = videos
-        self._exp_conditions = exp_conditions
+        self._animal_ids = animal_ids
         self._arena = arena
         self._arena_dims = arena_dims
-        self._scales = scales
-        self._quality = quality
-        self._animal_ids = animal_ids
+        self._exp_conditions = exp_conditions
         self._path = path
+        self._quality = quality
+        self._scales = scales
+        self._tables = tables
+        self._videos = videos
+        self.angles = angles
+        self.distances = distances
 
     def __str__(self):
         if self._exp_conditions:
@@ -739,7 +754,7 @@ class table_dict(dict):
         self._arena = arena
         self._arena_dims = arena_dims
 
-    def filter(self, keys: list) -> Table_dict:
+    def filter_videos(self, keys: list) -> Table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
          for selecting data coming from videos of a specified condition."""
 

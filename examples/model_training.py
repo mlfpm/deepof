@@ -144,10 +144,28 @@ parser.add_argument(
     type=float,
     default=0.99,
 )
+parser.add_argument(
+    "--exclude-bodyparts",
+    "-exc",
+    help="Excludes the indicated bodyparts from all analyses. "
+    "It should consist of several values separated by commas",
+    type=str,
+    default=None,
+)
+parser.add_argument(
+    "--arena-dims",
+    "-adim",
+    help="diameter in mm of the utilised arena. Used for scaling purposes",
+    type=int,
+    default=380,
+)
 
 args = parser.parse_args()
+
+arena_dims = args.arena_dims
 batch_size = args.batch_size
 encoding = args.encoding_size
+exclude_bodyparts = ",".split(args.exclude_bodyparts)
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
 input_type = args.input_type
@@ -187,13 +205,16 @@ hparams = load_hparams(hparams, encoding)
 treatment_dict = load_treatments(train_path)
 
 project_coords = project(
+    arena="circular",  # Type of arena used in the experiments
+    arena_dims=tuple(
+        [arena_dims]
+    ),  # Dimensions of the arena. Just one if it's circular
+    exclude_bodyparts=exclude_bodyparts,
+    exp_conditions=treatment_dict,
     path=train_path,  # Path where to find the required files
     smooth_alpha=smooth_alpha,  # Alpha value for exponentially weighted smoothing
-    arena="circular",  # Type of arena used in the experiments
-    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
-    video_format=".mp4",
     table_format=".h5",
-    exp_conditions=treatment_dict,
+    video_format=".mp4",
 ).run(verbose=True)
 
 # Coordinates for training data
