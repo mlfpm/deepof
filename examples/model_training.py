@@ -214,8 +214,9 @@ def batch_preprocess(tab_dict):
         window_step=window_step,
         scale="standard",
         conv_filter=gaussian_filter,
-        sigma=55,
+        sigma=1,
         test_videos=val_num,
+        shuffle=True,
     )
 
 
