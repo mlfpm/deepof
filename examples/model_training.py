@@ -150,7 +150,7 @@ parser.add_argument(
     help="Excludes the indicated bodyparts from all analyses. "
     "It should consist of several values separated by commas",
     type=str,
-    default=None,
+    default=[""],
 )
 parser.add_argument(
     "--arena-dims",
@@ -165,7 +165,7 @@ args = parser.parse_args()
 arena_dims = args.arena_dims
 batch_size = args.batch_size
 encoding = args.encoding_size
-exclude_bodyparts = args.exclude_bodyparts
+exclude_bodyparts = args.exclude_bodyparts.split(",")
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
 input_type = args.input_type
@@ -182,9 +182,6 @@ val_num = args.val_num
 variational = bool(args.variational)
 window_size = args.window_size
 window_step = args.window_step
-
-if exclude_bodyparts is not None:
-    exclude_bodyparts = exclude_bodyparts.split(",")
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
