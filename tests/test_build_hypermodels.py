@@ -37,14 +37,12 @@ def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
     kl_warmup_epochs=st.integers(min_value=1, max_value=5),
     mmd_warmup_epochs=st.integers(min_value=1, max_value=5),
     number_of_components=st.integers(min_value=1, max_value=5),
-    entropy_reg_weight=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
-    loss, kl_warmup_epochs, mmd_warmup_epochs, number_of_components, entropy_reg_weight,
+    loss, kl_warmup_epochs, mmd_warmup_epochs, number_of_components,
 ):
     deepof.hypermodels.SEQ_2_SEQ_GMVAE(
         input_shape=(100, 15, 10,),
-        batch_size=10,
         loss=loss,
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,
