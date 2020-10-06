@@ -150,7 +150,7 @@ parser.add_argument(
     help="Excludes the indicated bodyparts from all analyses. "
     "It should consist of several values separated by commas",
     type=str,
-    default=[""],
+    default="",
 )
 parser.add_argument(
     "--arena-dims",
