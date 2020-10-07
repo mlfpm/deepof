@@ -315,7 +315,7 @@ class SEQ_2_SEQ_GMVAE:
                 ],
             )
 
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError(
                 "Gaussian Mixtures are currently the only supported prior"
             )

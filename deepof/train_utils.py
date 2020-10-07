@@ -146,6 +146,7 @@ def tune_search(
 
     """
 
+    print(callbacks)
     tensorboard_callback, cp_callback, onecycle = callbacks
 
     if hypermodel == "S2SAE":
