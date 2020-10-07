@@ -80,12 +80,12 @@ def str2bool(v: str) -> bool:
     """
 
     if isinstance(v, bool):
-        return v
+        return v  # pragma: no cover
     if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
     elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
-    else:
+    else:  # pragma: no cover
         raise argparse.ArgumentTypeError("Boolean compatible value expected.")
 
 

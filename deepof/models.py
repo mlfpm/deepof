@@ -542,7 +542,7 @@ class SEQ_2_SEQ_GMVAE:
                     deepof.model_utils.tfd.Independent(
                         deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -641,14 +641,8 @@ class SEQ_2_SEQ_GMVAE:
         _x_decoded_mean = TimeDistributed(Dense(input_shape[2]))(_generator)
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
-        def huber_loss(x_, x_decoded_mean_):  # pragma: no cover
-            """Computes huber loss with a fixed delta"""
-
-            huber = Huber(reduction="sum", delta=self.delta)
-            return input_shape[1:] * huber(x_, x_decoded_mean_)
-
         gmvaep.compile(
-            loss=huber_loss,
+            loss=Huber(reduction="sum", delta=self.delta),
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
             loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),

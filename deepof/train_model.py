@@ -13,6 +13,7 @@ from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
 from train_utils import *
+from tensorboard.plugins.hparams import api as hp
 from tensorflow import keras
 
 parser = argparse.ArgumentParser(
@@ -60,14 +61,6 @@ parser.add_argument(
     help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
     type=str2bool,
     default=False,
-)
-parser.add_argument(
-    "--hypermodel",
-    "-m",
-    help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO, S2SVAE-MMD, S2SVAEP, "
-    "S2SVAEP-ELBO and S2SVAEP-MMD. Please refer to the documentation for details on each option.",
-    type=str,
-    default="S2SVAE",
 )
 parser.add_argument(
     "--hyperparameter-tuning",
@@ -183,7 +176,6 @@ bayopt_trials = args.bayopt
 exclude_bodyparts = tuple(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
-hyp = args.hypermodel
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
@@ -270,16 +262,11 @@ input_dict_train = {
 }
 
 print("Preprocessing data...")
-for key, value in input_dict_train.items():
-    input_dict_train[key] = batch_preprocess(value)
-print("Done!")
-
-print("Creating training and validation sets...")
+preprocessed = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
-X_train = input_dict_train[input_type][0]
-X_val = input_dict_train[input_type][1]
+X_train = preprocessed[0]
+X_val = preprocessed[1]
 print("Done!")
-
 
 # Proceed with training mode. Fit autoencoder with the same parameters,
 # as many times as specified by runs
@@ -383,6 +370,8 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
+
+    hyp = "S2SGMVAE" if variational else "S2SAE"
 
     run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
         X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu

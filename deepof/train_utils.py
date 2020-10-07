@@ -146,10 +146,9 @@ def tune_search(
 
     """
 
-    print(callbacks)
     tensorboard_callback, cp_callback, onecycle = callbacks
 
-    if hypermodel == "S2SAE":
+    if hypermodel == "S2SAE":  # pragma: no cover
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=train.shape)
 
     elif hypermodel == "S2SGMVAE":
@@ -179,9 +178,9 @@ def tune_search(
 
     tuner.search(
         train,
-        train,
+        train if predictor == 0 else [train[:-1], train[1:]],
         epochs=n_epochs,
-        validation_data=(test, test),
+        validation_data=(test, test if predictor == 0 else [test[:-1], test[1:]]),
         verbose=1,
         batch_size=256,
         callbacks=[

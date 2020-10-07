@@ -80,7 +80,7 @@ def test_get_callbacks(
         elements=st.floats(min_value=0.0, max_value=1,),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
-    hypermodel=st.one_of(st.just("S2SAE"), st.just("S2SGMVAE")),
+    hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
     kl_wu=st.integers(min_value=0, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
