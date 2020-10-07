@@ -5,12 +5,10 @@ import sys
 
 sys.path.insert(1, "../")
 
-import deepof.data
 import argparse
 import cv2
-import os
 from deepof.models import *
-from .train_utils import *
+from train_utils import *
 
 
 parser = argparse.ArgumentParser(

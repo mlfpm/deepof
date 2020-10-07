@@ -12,7 +12,7 @@ usage: python -m examples.model_training -h
 from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
-from .train_utils import *
+from train_utils import *
 from tensorflow import keras
 
 parser = argparse.ArgumentParser(
