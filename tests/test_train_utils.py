@@ -14,7 +14,6 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 import deepof.model_utils
 import deepof.train_utils
-import keras
 import os
 import tensorflow as tf
 
@@ -64,7 +63,7 @@ def test_get_callbacks(
         X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu,
     )
     assert type(runID) == str
-    assert type(tbc) == keras.callbacks.tensorboard_v2.TensorBoard
+    assert type(tbc) == tf.keras.callbacks.TensorBoard
     assert type(cpc) == tf.python.keras.callbacks.ModelCheckpoint
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 

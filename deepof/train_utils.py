@@ -13,7 +13,6 @@ from kerastuner import BayesianOptimization
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
 import deepof.model_utils
-import keras
 import numpy as np
 import os
 import pickle
@@ -84,7 +83,7 @@ def get_callbacks(
     )
 
     log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
-    tensorboard_callback = keras.callbacks.TensorBoard(
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=log_dir, histogram_freq=1, profile_batch=2,
     )
 
