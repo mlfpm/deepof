@@ -10,7 +10,7 @@ Simple utility functions used in deepof example scripts. These are not part of t
 from datetime import datetime
 
 from kerastuner import BayesianOptimization
-from typing import Tuple, Union, Any
+from typing import Tuple, Union, Any, List
 import deepof.hypermodels
 import deepof.model_utils
 import keras
@@ -20,21 +20,20 @@ import pickle
 import tensorflow as tf
 
 
-def load_hparams(hparams, encoding):
+def load_hparams(hparams):
     """Loads hyperparameters from a custom dictionary pickled on disc.
     Thought to be used with the output of hyperparameter_tuning.py"""
 
     if hparams is not None:
         with open(hparams, "rb") as handle:
             hparams = pickle.load(handle)
-        hparams["encoding"] = encoding
     else:
         hparams = {
             "units_conv": 256,
             "units_lstm": 256,
             "units_dense2": 64,
             "dropout_rate": 0.25,
-            "encoding": encoding,
+            "encoding": 16,
             "learning_rate": 1e-3,
         }
     return hparams
@@ -47,7 +46,7 @@ def load_treatments(train_path):
         with open(
             os.path.join(
                 train_path,
-                [i for i in os.listdir(train_path) if i.endswith(".pickle")][0],
+                [i for i in os.listdir(train_path) if i.endswith(".pkl")][0],
             ),
             "rb",
         ) as handle:
@@ -89,14 +88,12 @@ def get_callbacks(
         log_dir=log_dir, histogram_freq=1, profile_batch=2,
     )
 
-    cp_callback = (
-        tf.keras.callbacks.ModelCheckpoint(
-            "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
-            verbose=1,
-            save_best_only=False,
-            save_weights_only=True,
-            save_freq="epoch",
-        ),
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(
+        "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
+        verbose=1,
+        save_best_only=False,
+        save_weights_only=True,
+        save_freq="epoch",
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
@@ -118,9 +115,34 @@ def tune_search(
     overlap_loss: float,
     predictor: float,
     project_name: str,
-    tensorboard_callback: tf.keras.callbacks,
+    callbacks: List,
 ) -> Union[bool, Tuple[Any, Any]]:
-    """Define the search space using keras-tuner and bayesian optimization"""
+    """Define the search space using keras-tuner and bayesian optimization
+
+        Parameters:
+            - train (np.array): dataset to train the model on
+            - test (np.array): dataset to validate the model on
+            - bayopt_trials (int): number of Bayesian optimization iterations to run
+            - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder) or
+            S2SGMVAE (Gaussian Mixture Variational autoencoder).
+            - k (int) number of components of the Gaussian Mixture
+            - kl_wu (int): number of epochs for KL divergence warm up
+            - loss (str): one of [ELBO, MMD, ELBO+MMD]
+            - mmd_wu (int): number of epochs for MMD warm up
+            - overlap_loss (float): assigns as weight to an extra loss term which
+            penalizes overlap between GM components
+            - predictor (float): adds an extra regularizing neural network to the model,
+            which tries to predict the next frame from the current one
+            - project_name (str): ID of the current run
+            - callbacks (list): list of callbacks for the training loop
+
+        Returns:
+            - best_hparams (dict): dictionary with the best retrieved hyperparameters
+            - best_run (tf.keras.Model): trained instance of the best model found
+
+    """
+
+    tensorboard_callback, cp_callback, onecycle = callbacks
 
     if hypermodel == "S2SAE":
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=train.shape)

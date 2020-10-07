@@ -19,13 +19,26 @@ parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
 )
 
-parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
 parser.add_argument(
-    "--val-num",
-    "-vn",
-    help="set number of videos of the training" "set to use for validation",
+    "--arena-dims",
+    "-adim",
+    help="diameter in mm of the utilised arena. Used for scaling purposes",
     type=int,
-    default=1,
+    default=380,
+)
+parser.add_argument(
+    "--batch-size",
+    "-bs",
+    help="set training batch size. Defaults to 512",
+    type=int,
+    default=512,
+)
+parser.add_argument(
+    "--bayopt",
+    "-n",
+    help="sets the number of Bayesian optimization iterations to run. Default is 25",
+    type=int,
+    default=25,
 )
 parser.add_argument(
     "--components",
@@ -35,27 +48,57 @@ parser.add_argument(
     default=1,
 )
 parser.add_argument(
+    "--exclude-bodyparts",
+    "-exc",
+    help="Excludes the indicated bodyparts from all analyses. It should consist of several values separated by commas",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "--gaussian-filter",
+    "-gf",
+    help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
+    type=str2bool,
+    default=False,
+)
+parser.add_argument(
+    "--hypermodel",
+    "-m",
+    help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO, S2SVAE-MMD, S2SVAEP, "
+    "S2SVAEP-ELBO and S2SVAEP-MMD. Please refer to the documentation for details on each option.",
+    type=str,
+    default="S2SVAE",
+)
+parser.add_argument(
+    "--hyperparameter-tuning",
+    "-tune",
+    help="If True, hyperparameter tuning is performed. See documentation for details",
+    type=str2bool,
+    default=False,
+)
+parser.add_argument(
+    "--hyperparameters",
+    "-hp",
+    help="Path pointing to a pickled dictionary of network hyperparameters. "
+    "Thought to be used with the output of hyperparameter tuning",
+    type=str,
+    default=None,
+)
+parser.add_argument(
     "--input-type",
     "-d",
-    help="Select an input type for the autoencoder hypermodels. \
-    It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. \
-    Defaults to coords.",
+    help="Select an input type for the autoencoder hypermodels. "
+    "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle."
+    "Defaults to coords.",
     type=str,
     default="dists",
 )
 parser.add_argument(
-    "--predictor",
-    "-pred",
-    help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
-    default=0,
-    type=float,
-)
-parser.add_argument(
-    "--variational",
-    "-v",
-    help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
-    default=True,
-    type=str2bool,
+    "--kl-warmup",
+    "-klw",
+    help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
+    default=10,
+    type=int,
 )
 parser.add_argument(
     "--loss",
@@ -66,13 +109,6 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
-    "--kl-warmup",
-    "-klw",
-    help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
-    default=10,
-    type=int,
-)
-parser.add_argument(
     "--mmd-warmup",
     "-mmdw",
     help="Number of epochs during which the MMD weight increases linearly from zero to 1. Defaults to 10",
@@ -80,46 +116,49 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--hyperparameters",
-    "-hp",
-    help="Path pointing to a pickled dictionary of network hyperparameters. "
-    "Thought to be used with the output of hyperparameter tuning",
-)
-parser.add_argument(
-    "--encoding-size",
-    "-e",
-    help="Sets the dimensionality of the latent space. Defaults to 16.",
-    default=16,
-    type=int,
-)
-parser.add_argument(
     "--overlap-loss",
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
-    default=False,
     type=str2bool,
+    default=False,
 )
 parser.add_argument(
-    "--batch-size",
-    "-bs",
-    help="set training batch size. Defaults to 512",
-    type=int,
-    default=512,
+    "--predictor",
+    "-pred",
+    help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
+    default=0,
+    type=float,
+)
+parser.add_argument(
+    "--smooth-alpha",
+    "-sa",
+    help="Sets the exponential smoothing factor to apply to the input data. "
+    "Float between 0 and 1 (lower is more smooting)",
+    type=float,
+    default=0.99,
 )
 parser.add_argument(
     "--stability-check",
     "-s",
-    help="Sets the number of times that the model is trained and initialised. If greater than 1 (the default), "
-    "saves the cluster assignments to a dataframe on disk",
+    help="Sets the number of times that the model is trained and initialised. "
+    "If greater than 1 (the default), saves the cluster assignments to a dataframe on disk",
+    type=int,
+    default=1,
+)
+parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
+parser.add_argument(
+    "--val-num",
+    "-vn",
+    help="set number of videos of the training" "set to use for validation",
     type=int,
     default=1,
 )
 parser.add_argument(
-    "--gaussian-filter",
-    "-gf",
-    help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
+    "--variational",
+    "-v",
+    help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
+    default=True,
     type=str2bool,
-    default=False,
 )
 parser.add_argument(
     "--window-size",
@@ -135,58 +174,12 @@ parser.add_argument(
     type=int,
     default=5,
 )
-parser.add_argument(
-    "--smooth-alpha",
-    "-sa",
-    help="Sets the exponential smoothing factor to apply to the input data. "
-    "Float between 0 and 1 (lower is more smooting)",
-    type=float,
-    default=0.99,
-)
-parser.add_argument(
-    "--exclude-bodyparts",
-    "-exc",
-    help="Excludes the indicated bodyparts from all analyses. "
-    "It should consist of several values separated by commas",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--arena-dims",
-    "-adim",
-    help="diameter in mm of the utilised arena. Used for scaling purposes",
-    type=int,
-    default=380,
-)
-parser.add_argument(
-    "--hyperparameter-tuning",
-    "-tune",
-    help="If True, hyperparameter tuning is performed. See documentation for details",
-    type=str2bool,
-    default=False,
-)
-parser.add_argument(
-    "--bayopt",
-    "-n",
-    help="sets the number of Bayesian optimization iterations to run. Default is 25",
-    default=25,
-    type=int,
-)
-parser.add_argument(
-    "--hypermodel",
-    "-m",
-    help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO, S2SVAE-MMD, "
-    "S2SVAEP, S2SVAEP-ELBO and S2SVAEP-MMD. Please refer to the documentation for details on each option.",
-    default="S2SVAE",
-    type=str,
-)
 
 args = parser.parse_args()
 
 arena_dims = args.arena_dims
 batch_size = args.batch_size
 bayopt_trials = args.bayopt
-encoding = args.encoding_size
 exclude_bodyparts = tuple(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
@@ -225,7 +218,7 @@ assert input_type in [
 ], "Invalid input type. Type python model_training.py -h for help."
 
 # Loads model hyperparameters and treatment conditions, if available
-hparams = load_hparams(hparams, encoding)
+hparams = load_hparams(hparams)
 treatment_dict = load_treatments(train_path)
 
 # noinspection PyTypeChecker
@@ -407,7 +400,7 @@ else:
         overlap_loss=overlap_loss,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
-        tensorboard_callback=tensorboard_callback,
+        callbacks=[tensorboard_callback, cp_callback, onecycle],
     )
 
     # Saves a compiled, untrained version of the best model
