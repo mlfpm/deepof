@@ -91,15 +91,7 @@ def test_get_callbacks(
     predictor=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_tune_search(
-    train,
-    batch_size,
-    hypermodel,
-    k,
-    kl_wu,
-    loss,
-    mmd_wu,
-    overlap_loss,
-    predictor,
+    train, batch_size, hypermodel, k, kl_wu, loss, mmd_wu, overlap_loss, predictor,
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
