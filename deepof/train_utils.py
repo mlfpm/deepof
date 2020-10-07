@@ -116,7 +116,7 @@ def tune_search(
     predictor: float,
     project_name: str,
     callbacks: List,
-    n_epochs: int = 30,
+    n_epochs: int = 40,
     n_replicas: int = 1,
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
