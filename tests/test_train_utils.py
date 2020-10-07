@@ -17,15 +17,11 @@ import deepof.train_utils
 import keras
 import os
 import tensorflow as tf
-import tensorflow_probability as tfp
 from tensorflow.python.framework.ops import EagerTensor
 
 # For coverage.py to work with @tf.function decorated functions and methods,
 # graph execution is disabled when running this script with pytest
-
 tf.config.experimental_run_functions_eagerly(True)
-tfpl = tfp.layers
-tfd = tfp.distributions
 
 
 def test_load_hparams():
@@ -76,11 +72,64 @@ def test_get_callbacks(
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 
-def test_tune_search():
+@settings(max_examples=1)
+@given(
+    train=arrays(
+        dtype=float,
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=100),
+            st.integers(min_value=2, max_value=15),
+            st.integers(min_value=2, max_value=10),
+        ),
+    ),
+    test=arrays(
+        dtype=float,
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=100),
+            st.integers(min_value=2, max_value=15),
+            st.integers(min_value=2, max_value=10),
+        ),
+    ),
+    batch_size=st.integers(min_value=128, max_value=512),
+    hypermodel=st.one_of(st.just("S2SAE"), st.just("S2SGMVAE")),
+    k=st.integers(min_value=1, max_value=10),
+    kl_wu=st.integers(min_value=0, max_value=10),
+    loss=st.one_of(st.just("ELBO"), st.just("MMD")),
+    mmd_wu=st.integers(min_value=0, max_value=10),
+    overlap_loss=st.floats(min_value=0.0, max_value=1.0),
+    predictor=st.floats(min_value=0.0, max_value=1.0),
+    project_name=st.text(min_size=5),
+)
+def test_tune_search(
+    train,
+    test,
+    batch_size,
+    hypermodel,
+    k,
+    kl_wu,
+    loss,
+    mmd_wu,
+    overlap_loss,
+    predictor,
+    project_name,
+):
+    callbacks = list(
+        deepof.train_utils.get_callbacks(
+            train,
+            batch_size,
+            hypermodel == "S2SGMVAE",
+            predictor,
+            k,
+            loss,
+            kl_wu,
+            mmd_wu,
+        )
+    )
+
     deepof.train_utils.tune_search(
         train,
         test,
-        bayopt_trials,
+        1,
         hypermodel,
         k,
         kl_wu,
@@ -90,4 +139,5 @@ def test_tune_search():
         predictor,
         project_name,
         callbacks,
+        n_epochs=1,
     )
