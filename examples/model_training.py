@@ -9,11 +9,10 @@ usage: python -m examples.model_training -h
 
 """
 
-from datetime import datetime
 from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
-from .example_utils import *
+from .train_utils import *
 from tensorflow import keras
 
 parser = argparse.ArgumentParser(
@@ -84,7 +83,7 @@ parser.add_argument(
     "--hyperparameters",
     "-hp",
     help="Path pointing to a pickled dictionary of network hyperparameters. "
-    "Thought to be used with the output of hyperparameter_tuning.py",
+    "Thought to be used with the output of hyperparameter tuning",
 )
 parser.add_argument(
     "--encoding-size",
@@ -159,15 +158,39 @@ parser.add_argument(
     type=int,
     default=380,
 )
+parser.add_argument(
+    "--hyperparameter-tuning",
+    "-tune",
+    help="If True, hyperparameter tuning is performed. See documentation for details",
+    type=str2bool,
+    default=False,
+)
+parser.add_argument(
+    "--bayopt",
+    "-n",
+    help="sets the number of Bayesian optimization iterations to run. Default is 25",
+    default=25,
+    type=int,
+)
+parser.add_argument(
+    "--hypermodel",
+    "-m",
+    help="Selects which hypermodel to use. It must be one of S2SAE, S2SVAE, S2SVAE-ELBO, S2SVAE-MMD, "
+    "S2SVAEP, S2SVAEP-ELBO and S2SVAEP-MMD. Please refer to the documentation for details on each option.",
+    default="S2SVAE",
+    type=str,
+)
 
 args = parser.parse_args()
 
 arena_dims = args.arena_dims
 batch_size = args.batch_size
+bayopt_trials = args.bayopt
 encoding = args.encoding_size
 exclude_bodyparts = tuple(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
+hyp = args.hypermodel
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
@@ -178,6 +201,7 @@ predictor = float(args.predictor)
 runs = args.stability_check
 smooth_alpha = args.smooth_alpha
 train_path = os.path.abspath(args.train_path)
+tune = args.hyperparameter_tuning
 val_num = args.val_num
 variational = bool(args.variational)
 window_size = args.window_size
@@ -204,6 +228,7 @@ assert input_type in [
 hparams = load_hparams(hparams, encoding)
 treatment_dict = load_treatments(train_path)
 
+# noinspection PyTypeChecker
 project_coords = project(
     arena="circular",  # Type of arena used in the experiments
     arena_dims=tuple(
@@ -262,126 +287,142 @@ X_train = input_dict_train[input_type][0]
 X_val = input_dict_train[input_type][1]
 print("Done!")
 
-# Training loop
-for run in range(runs):
 
-    # To avoid stability issues
-    tf.keras.backend.clear_session()
+# Proceed with training mode. Fit autoencoder with the same parameters,
+# as many times as specified by runs
+if not tune:
 
-    run_ID = "{}{}{}{}{}{}_{}".format(
-        ("GMVAE" if variational else "AE"),
-        ("P" if predictor > 0 and variational else ""),
-        ("_components={}".format(k) if variational else ""),
-        ("_loss={}".format(loss) if variational else ""),
-        ("_kl_warmup={}".format(kl_wu) if variational else ""),
-        ("_mmd_warmup={}".format(mmd_wu) if variational else ""),
-        datetime.now().strftime("%Y%m%d-%H%M%S"),
-    )
+    # Training loop
+    for run in range(runs):
 
-    log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
-    tensorboard_callback = keras.callbacks.TensorBoard(
-        log_dir=log_dir, histogram_freq=1, profile_batch=2,
-    )
+        # To avoid stability issues
+        tf.keras.backend.clear_session()
 
-    cp_callback = (
-        tf.keras.callbacks.ModelCheckpoint(
-            "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
-            verbose=1,
-            save_best_only=False,
-            save_weights_only=True,
-            save_freq="epoch",
-        ),
-    )
+        run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
+            X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu
+        )
 
-    onecycle = deepof.model_utils.one_cycle_scheduler(
-        X_train.shape[0] // batch_size * 250, max_rate=0.005,
-    )
+        if not variational:
+            encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
+            print(ae.summary())
 
-    if not variational:
-        encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
-        print(ae.summary())
+            ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
+            # Fit the specified model to the data
+            history = ae.fit(
+                x=X_train,
+                y=X_train,
+                epochs=25,
+                batch_size=batch_size,
+                verbose=1,
+                validation_data=(X_val, X_val),
+                callbacks=[
+                    tensorboard_callback,
+                    cp_callback,
+                    onecycle,
+                    tf.keras.callbacks.EarlyStopping(
+                        "val_loss", patience=10, restore_best_weights=True
+                    ),
+                ],
+            )
 
-        ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
-        # Fit the specified model to the data
-        history = ae.fit(
-            x=X_train,
-            y=X_train,
-            epochs=25,
-            batch_size=batch_size,
-            verbose=1,
-            validation_data=(X_val, X_val),
-            callbacks=[
+            ae.save_weights("{}_final_weights.h5".format(run_ID))
+
+        else:
+            (
+                encoder,
+                generator,
+                grouper,
+                gmvaep,
+                kl_warmup_callback,
+                mmd_warmup_callback,
+            ) = SEQ_2_SEQ_GMVAE(
+                loss=loss,
+                number_of_components=k,
+                kl_warmup_epochs=kl_wu,
+                mmd_warmup_epochs=mmd_wu,
+                predictor=predictor,
+                overlap_loss=overlap_loss,
+                architecture_hparams=hparams,
+            ).build(
+                X_train.shape
+            )
+            print(gmvaep.summary())
+
+            callbacks_ = [
                 tensorboard_callback,
                 cp_callback,
                 onecycle,
                 tf.keras.callbacks.EarlyStopping(
                     "val_loss", patience=10, restore_best_weights=True
                 ),
-            ],
+            ]
+
+            if "ELBO" in loss and kl_wu > 0:
+                callbacks_.append(kl_warmup_callback)
+            if "MMD" in loss and mmd_wu > 0:
+                callbacks_.append(mmd_warmup_callback)
+
+            if predictor == 0:
+                history = gmvaep.fit(
+                    x=X_train,
+                    y=X_train,
+                    epochs=250,
+                    batch_size=batch_size,
+                    verbose=1,
+                    validation_data=(X_val, X_val,),
+                    callbacks=callbacks_,
+                )
+            else:
+                history = gmvaep.fit(
+                    x=X_train[:-1],
+                    y=[X_train[:-1], X_train[1:]],
+                    epochs=250,
+                    batch_size=batch_size,
+                    verbose=1,
+                    validation_data=(X_val[:-1], [X_val[:-1], X_val[1:]],),
+                    callbacks=callbacks_,
+                )
+
+            gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
+
+        # To avoid stability issues
+        tf.keras.backend.clear_session()
+
+else:
+    # Runs hyperparameter tuning with the specified parameters and saves the results
+
+    run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
+        X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu
+    )
+
+    best_hyperparameters, best_model = tune_search(
+        X_train,
+        X_val,
+        bayopt_trials=bayopt_trials,
+        hypermodel=hyp,
+        k=k,
+        kl_wu=kl_wu,
+        loss=loss,
+        mmd_wu=mmd_wu,
+        overlap_loss=overlap_loss,
+        predictor=predictor,
+        project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
+        tensorboard_callback=tensorboard_callback,
+    )
+
+    # Saves a compiled, untrained version of the best model
+    best_model.build(input_dict_train[input_type].shape)
+    best_model.save(
+        "{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf"
+    )
+
+    # Saves the best hyperparameters
+    with open(
+        "{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb"
+    ) as handle:
+        pickle.dump(
+            best_hyperparameters.values, handle, protocol=pickle.HIGHEST_PROTOCOL
         )
-
-        ae.save_weights("{}_final_weights.h5".format(run_ID))
-
-    else:
-        (
-            encoder,
-            generator,
-            grouper,
-            gmvaep,
-            kl_warmup_callback,
-            mmd_warmup_callback,
-        ) = SEQ_2_SEQ_GMVAE(
-            loss=loss,
-            number_of_components=k,
-            kl_warmup_epochs=kl_wu,
-            mmd_warmup_epochs=mmd_wu,
-            predictor=predictor,
-            overlap_loss=overlap_loss,
-            architecture_hparams=hparams,
-        ).build(
-            X_train.shape
-        )
-        print(gmvaep.summary())
-
-        callbacks_ = [
-            tensorboard_callback,
-            cp_callback,
-            onecycle,
-            tf.keras.callbacks.EarlyStopping(
-                "val_loss", patience=10, restore_best_weights=True
-            ),
-        ]
-
-        if "ELBO" in loss and kl_wu > 0:
-            callbacks_.append(kl_warmup_callback)
-        if "MMD" in loss and mmd_wu > 0:
-            callbacks_.append(mmd_warmup_callback)
-
-        if predictor == 0:
-            history = gmvaep.fit(
-                x=X_train,
-                y=X_train,
-                epochs=250,
-                batch_size=batch_size,
-                verbose=1,
-                validation_data=(X_val, X_val,),
-                callbacks=callbacks_,
-            )
-        else:
-            history = gmvaep.fit(
-                x=X_train[:-1],
-                y=[X_train[:-1], X_train[1:]],
-                epochs=250,
-                batch_size=batch_size,
-                verbose=1,
-                validation_data=(X_val[:-1], [X_val[:-1], X_val[1:]],),
-                callbacks=callbacks_,
-            )
-
-        gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
-
-    # To avoid stability issues
-    tf.keras.backend.clear_session()
 
 # TODO:
 #    - Investigate how goussian filters affect reproducibility (in a systematic way)

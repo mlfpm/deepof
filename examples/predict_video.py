@@ -10,7 +10,7 @@ import argparse
 import cv2
 import os
 from deepof.models import *
-from .example_utils import *
+from .train_utils import *
 
 
 parser = argparse.ArgumentParser(
