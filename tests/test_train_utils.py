@@ -16,7 +16,6 @@ import deepof.model_utils
 import deepof.train_utils
 import keras
 import os
-import pytest
 import tensorflow as tf
 
 
