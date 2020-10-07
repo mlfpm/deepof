@@ -14,7 +14,6 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("--train_path", "-tp", help="set training set path", type=str)
-parser.add_argument("--val_path", "-vp", help="set validation set path", type=str)
 parser.add_argument(
     "--components",
     "-k",
@@ -68,12 +67,7 @@ assert input_type in [
 ], "Invalid input type. Type python hyperparameter_tuning.py -h for help."
 assert hyp in [
     "S2SAE",
-    "S2SVAE",
-    "S2SVAE-ELBO",
-    "S2SVAE-MMD",
-    "S2SVAEP",
-    "S2SVAEP-ELBO",
-    "S2SVAEP-MMD",
+    "S2SGMVAE",
 ], "Invalid hypermodel. Type python hyperparameter_tuning.py -h for help."
 
 log_dir = os.path.abspath(
@@ -83,24 +77,7 @@ tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_fr
 
 treatment_dict = load_treatments(train_path)
 
-# Which angles to compute?
-bp_dict = {
-    "B_Nose": ["B_Left_ear", "B_Right_ear"],
-    "B_Left_ear": ["B_Nose", "B_Right_ear", "B_Center", "B_Left_flank"],
-    "B_Right_ear": ["B_Nose", "B_Left_ear", "B_Center", "B_Right_flank"],
-    "B_Center": [
-        "B_Left_ear",
-        "B_Right_ear",
-        "B_Left_flank",
-        "B_Right_flank",
-        "B_Tail_base",
-    ],
-    "B_Left_flank": ["B_Left_ear", "B_Center", "B_Tail_base"],
-    "B_Right_flank": ["B_Right_ear", "B_Center", "B_Tail_base"],
-    "B_Tail_base": ["B_Center", "B_Left_flank", "B_Right_flank"],
-}
-
-DLC_social_1 = project(
+project_coords = project(
     path=train_path,  # Path where to find the required files
     smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
     arena="circular",  # Type of arena used in the experiments
@@ -108,122 +85,59 @@ DLC_social_1 = project(
     video_format=".mp4",
     table_format=".h5",
     exp_conditions=treatment_dict,
-)
-
-DLC_social_2 = project(
-    path=val_path,  # Path where to find the required files
-    smooth_alpha=0.85,  # Alpha value for exponentially weighted smoothing
-    arena="circular",  # Type of arena used in the experiments
-    arena_dims=tuple([380]),  # Dimensions of the arena. Just one if it's circular
-    video_format=".mp4",
-    table_format=".h5",
-)
-
-DLC_social_1_coords = DLC_social_1.run(verbose=True)
-DLC_social_2_coords = DLC_social_2.run(verbose=True)
+).run(verbose=True)
 
 # Coordinates for training data
-coords1 = DLC_social_1_coords.get_coords()
-distances1 = DLC_social_1_coords.get_distances()
-angles1 = DLC_social_1_coords.get_angles()
-coords_distances1 = merge_tables(coords1, distances1)
-coords_angles1 = merge_tables(coords1, angles1)
-coords_dist_angles1 = merge_tables(coords1, distances1, angles1)
+coords = project_coords.get_coords(center="Center", align="Spine_1", align_inplace=True)
+distances = project_coords.get_distances()
+angles = project_coords.get_angles()
+coords_distances = merge_tables(coords, distances)
+coords_angles = merge_tables(coords, angles)
+dists_angles = merge_tables(distances, angles)
+coords_dist_angles = merge_tables(coords, distances, angles)
 
-# Coordinates for validation data
-coords2 = DLC_social_2_coords.get_coords()
-distances2 = DLC_social_2_coords.get_distances()
-angles2 = DLC_social_2_coords.get_angles()
-coords_distances2 = merge_tables(coords2, distances2)
-coords_angles2 = merge_tables(coords2, angles2)
-coords_dist_angles2 = merge_tables(coords2, distances2, angles2)
+
+def batch_preprocess(tab_dict):
+    """Returns a preprocessed instance of the input table_dict object"""
+
+    return tab_dict.preprocess(
+        window_size=window_size,
+        window_step=window_step,
+        scale="standard",
+        conv_filter=gaussian_filter,
+        sigma=1,
+        test_videos=val_num,
+        shuffle=True,
+    )
 
 
 input_dict_train = {
-    "coords": coords1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "dists": distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "angles": angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+dist": coords_distances1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+angle": coords_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+dist+angle": coords_dist_angles1.preprocess(
-        window_size=11, window_step=10, scale=True, random_state=42, conv_filter="gauss"
-    ),
+    "coords": coords,
+    "dists": distances,
+    "angles": angles,
+    "coords+dist": coords_distances,
+    "coords+angle": coords_angles,
+    "dists+angle": dists_angles,
+    "coords+dist+angle": coords_dist_angles,
 }
 
-input_dict_val = {
-    "coords": coords2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "dists": distances2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "angles": angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+dist": coords_distances2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+angle": coords_angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-    "coords+dist+angle": coords_dist_angles2.preprocess(
-        window_size=11, window_step=1, scale=True, random_state=42, conv_filter="gauss"
-    ),
-}
-
-for input in input_dict_train.keys():
-    print("{} train shape: {}".format(input, input_dict_train[input].shape))
-    print("{} validation shape: {}".format(input, input_dict_val[input].shape))
-    print()
+print("Preprocessing data...")
+for key, value in input_dict_train.items():
+    input_dict_train[key] = batch_preprocess(value)
+print("Done!")
 
 
 def tune_search(train, test, project_name, hyp):
     """Define the search space using keras-tuner and bayesian optimization"""
     if hyp == "S2SAE":
         hypermodel = SEQ_2_SEQ_AE(input_shape=train.shape)
-    elif hyp == "S2SVAE":
+    elif hyp == "S2SGMVAE":
         hypermodel = SEQ_2_SEQ_GMVAE(
             input_shape=train.shape,
             loss="ELBO+MMD",
             predictor=False,
             number_of_components=k,
         ).build()
-    elif hyp == "S2SVAE-MMD":
-        hypermodel = SEQ_2_SEQ_GMVAE(
-            input_shape=train.shape, loss="MMD", predictor=False, number_of_components=k
-        )
-    elif hyp == "S2SVAE-ELBO":
-        hypermodel = SEQ_2_SEQ_GMVAE(
-            input_shape=train.shape,
-            loss="ELBO",
-            predictor=False,
-            number_of_components=k,
-        )
-    elif hyp == "S2SVAEP":
-        hypermodel = SEQ_2_SEQ_GMVAE(
-            input_shape=train.shape,
-            loss="ELBO+MMD",
-            predictor=True,
-            number_of_components=k,
-        )
-    elif hyp == "S2SVAEP-MMD":
-        hypermodel = SEQ_2_SEQ_GMVAE(
-            input_shape=train.shape, loss="MMD", predictor=True, number_of_components=k
-        )
-    elif hyp == "S2SVAEP-ELBO":
-        hypermodel = SEQ_2_SEQ_GMVAE(
-            input_shape=train.shape, loss="ELBO", predictor=True, number_of_components=k
-        )
     else:
         return False
 
