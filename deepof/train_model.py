@@ -264,8 +264,8 @@ input_dict_train = {
 print("Preprocessing data...")
 preprocessed = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
-X_train = tf.cast(preprocessed[0], tf.float32)
-X_val = tf.cast(preprocessed[1], tf.float32)
+X_train = preprocessed[0]
+X_val = preprocessed[1]
 print("Done!")
 
 # Proceed with training mode. Fit autoencoder with the same parameters,

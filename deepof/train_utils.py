@@ -160,10 +160,10 @@ def tune_search(
             overlap_loss=overlap_loss,
         )
 
-        # if "ELBO" in loss and kl_wu > 0:
-        #     callbacks.append(hypermodel.kl_warmup_callback)
-        # if "MMD" in loss and mmd_wu > 0:
-        #     callbacks.append(hypermodel.mmd_warmup_callback)
+        if "ELBO" in loss and kl_wu > 0:
+            callbacks.append(hypermodel.kl_warmup_callback)
+        if "MMD" in loss and mmd_wu > 0:
+            callbacks.append(hypermodel.mmd_warmup_callback)
 
     else:
         return False

@@ -62,12 +62,8 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
     def __init__(
         self,
         input_shape,
-        CONV_filters=256,
-        DENSE_2=64,
         entropy_reg_weight=0.0,
-        huber_delta=100,
-        LSTM_units_1=256,
-        LSTM_units_2=128,
+        huber_delta=100.0,
         kl_warmup_epochs=0,
         learn_rate=1e-3,
         loss="ELBO+MMD",
@@ -79,13 +75,8 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
     ):
         super().__init__()
         self.input_shape = input_shape
-        self.CONV_filters = CONV_filters
-        self.DENSE_1 = LSTM_units_2
-        self.DENSE_2 = DENSE_2
         self.entropy_reg_weight = entropy_reg_weight
         self.huber_delta = huber_delta
-        self.LSTM_units_1 = LSTM_units_1
-        self.LSTM_units_2 = LSTM_units_2
         self.kl_warmup = kl_warmup_epochs
         self.kl_warmup_callback = None
         self.learn_rate = learn_rate
