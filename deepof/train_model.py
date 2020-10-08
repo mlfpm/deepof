@@ -119,7 +119,7 @@ parser.add_argument(
     "--predictor",
     "-pred",
     help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
-    default=0,
+    default=0.0,
     type=float,
 )
 parser.add_argument(
@@ -264,8 +264,8 @@ input_dict_train = {
 print("Preprocessing data...")
 preprocessed = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
-X_train = preprocessed[0]
-X_val = preprocessed[1]
+X_train = tf.cast(preprocessed[0], tf.float32)
+X_val = tf.cast(preprocessed[1], tf.float32)
 print("Done!")
 
 # Proceed with training mode. Fit autoencoder with the same parameters,
@@ -342,7 +342,7 @@ if not tune:
             if "MMD" in loss and mmd_wu > 0:
                 callbacks_.append(mmd_warmup_callback)
 
-            if predictor == 0:
+            if predictor == 0.0:
                 history = gmvaep.fit(
                     x=X_train,
                     y=X_train,

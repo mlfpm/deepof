@@ -222,7 +222,7 @@ class SEQ_2_SEQ_AE:
         model = Sequential([encoder, decoder], name="SEQ_2_SEQ_AE")
 
         model.compile(
-            loss=Huber(reduction="sum", delta=self.delta),
+            loss=Huber(delta=self.delta),
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
         )
@@ -253,7 +253,7 @@ class SEQ_2_SEQ_GMVAE:
         kl_warmup_epochs: int = 0,
         mmd_warmup_epochs: int = 0,
         number_of_components: int = 1,
-        predictor: float = True,
+        predictor: float = 0.0,
         overlap_loss: bool = False,
         entropy_reg_weight: float = 0.0,
         initialiser_iters: int = int(1e5),
@@ -542,7 +542,7 @@ class SEQ_2_SEQ_GMVAE:
                     deepof.model_utils.tfd.Independent(
                         deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -642,10 +642,10 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         gmvaep.compile(
-            loss=Huber(reduction="sum", delta=self.delta),
+            loss=Huber(delta=self.delta),
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
-            loss_weights=([1, self.predictor] if self.predictor > 0 else [1]),
+            loss_weights=([1.0, self.predictor] if self.predictor > 0 else [1.0]),
         )
 
         gmvaep.build(input_shape)

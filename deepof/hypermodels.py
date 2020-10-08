@@ -74,7 +74,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         mmd_warmup_epochs=0,
         number_of_components=1,
         overlap_loss=False,
-        predictor=True,
+        predictor=0.0,
         prior="standard_normal",
     ):
         super().__init__()
@@ -87,9 +87,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.LSTM_units_1 = LSTM_units_1
         self.LSTM_units_2 = LSTM_units_2
         self.kl_warmup = kl_warmup_epochs
+        self.kl_warmup_callback = None
         self.learn_rate = learn_rate
         self.loss = loss
         self.mmd_warmup = mmd_warmup_epochs
+        self.mmd_warmup_callback = None
         self.number_of_components = number_of_components
         self.overlap_loss = overlap_loss
         self.predictor = predictor
@@ -117,7 +119,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         )
         encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
 
-        gmvaep = deepof.models.SEQ_2_SEQ_GMVAE(
+        gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams={
                 "units_conv": conv_filters,
                 "units_lstm": lstm_units_1,
@@ -133,7 +135,10 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             number_of_components=self.number_of_components,
             overlap_loss=self.overlap_loss,
             predictor=self.predictor,
-        ).build(self.input_shape)[3]
+        ).build(self.input_shape)[3:]
+
+        self.kl_warmup_callback = kl_warmup_callback
+        self.mmd_warmup_callback = mmd_warmup_callback
 
         return gmvaep
 
@@ -141,3 +146,4 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 # TODO:
 #    - We can add as many parameters as we want to the hypermodel!
 #    with this implementation, predictor, warmup, loss and even number of components can be tuned using BayOpt
+#    - Number of dense layers close to the latent space as a hyperparameter (!)

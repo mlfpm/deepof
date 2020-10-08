@@ -146,8 +146,6 @@ def tune_search(
 
     """
 
-    tensorboard_callback, cp_callback, onecycle = callbacks
-
     if hypermodel == "S2SAE":  # pragma: no cover
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=train.shape)
 
@@ -161,6 +159,12 @@ def tune_search(
             predictor=predictor,
             overlap_loss=overlap_loss,
         )
+
+        # if "ELBO" in loss and kl_wu > 0:
+        #     callbacks.append(hypermodel.kl_warmup_callback)
+        # if "MMD" in loss and mmd_wu > 0:
+        #     callbacks.append(hypermodel.mmd_warmup_callback)
+
     else:
         return False
 
@@ -177,25 +181,21 @@ def tune_search(
     print(tuner.search_space_summary())
 
     tuner.search(
-        train,
+        train if predictor == 0 else [train[:-1]],
         train if predictor == 0 else [train[:-1], train[1:]],
         epochs=n_epochs,
-        validation_data=(test, test if predictor == 0 else [test[:-1], test[1:]]),
+        validation_data=(
+            (test, test) if predictor == 0 else (test[:-1], [test[:-1], test[1:]])
+        ),
         verbose=1,
         batch_size=256,
-        callbacks=[
-            tensorboard_callback,
-            tf.keras.callbacks.EarlyStopping(
-                "val_mae", patience=10, restore_best_weights=True
-            ),
-            cp_callback,
-            onecycle,
-        ],
+        callbacks=callbacks,
     )
 
-    print(tuner.results_summary())
     best_hparams = tuner.get_best_hyperparameters(num_trials=1)[0]
     best_run = tuner.hypermodel.build(best_hparams)
+
+    print(tuner.results_summary())
 
     return best_hparams, best_run
 
