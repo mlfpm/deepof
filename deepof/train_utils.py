@@ -10,6 +10,7 @@ Simple utility functions used in deepof example scripts. These are not part of t
 from datetime import datetime
 
 from kerastuner import BayesianOptimization
+from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
@@ -18,6 +19,8 @@ import numpy as np
 import os
 import pickle
 import tensorflow as tf
+
+hp = HyperParameters()
 
 
 def load_hparams(hparams):
@@ -153,31 +156,34 @@ def tune_search(
     elif hypermodel == "S2SGMVAE":
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_GMVAE(
             input_shape=train.shape,
-            loss=loss,
-            number_of_components=k,
             kl_warmup_epochs=kl_wu,
+            loss=loss,
             mmd_warmup_epochs=mmd_wu,
-            predictor=predictor,
+            number_of_components=k,
             overlap_loss=overlap_loss,
+            predictor=predictor,
         )
 
+    try:
         if "ELBO" in loss and kl_wu > 0:
             callbacks.append(hypermodel.kl_warmup_callback)
         if "MMD" in loss and mmd_wu > 0:
             callbacks.append(hypermodel.mmd_warmup_callback)
+    except AttributeError:
+        pass
 
     else:
         return False
 
     tuner = BayesianOptimization(
         hypermodel,
-        max_trials=bayopt_trials,
-        executions_per_trial=n_replicas,
-        objective="val_mae",
-        seed=42,
         directory="BayesianOptx",
-        project_name=project_name,
+        executions_per_trial=n_replicas,
         logger=TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
+        max_trials=bayopt_trials,
+        objective="val_mae",
+        project_name=project_name,
+        seed=42,
     )
 
     print(tuner.search_space_summary())
