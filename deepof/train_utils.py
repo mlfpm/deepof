@@ -10,7 +10,6 @@ Simple utility functions used in deepof example scripts. These are not part of t
 from datetime import datetime
 
 from kerastuner import BayesianOptimization
-from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
@@ -19,8 +18,6 @@ import numpy as np
 import os
 import pickle
 import tensorflow as tf
-
-hp = HyperParameters()
 
 
 def load_hparams(hparams):
@@ -164,13 +161,10 @@ def tune_search(
             predictor=predictor,
         )
 
-    try:
         if "ELBO" in loss and kl_wu > 0:
             callbacks.append(hypermodel.kl_warmup_callback)
         if "MMD" in loss and mmd_wu > 0:
             callbacks.append(hypermodel.mmd_warmup_callback)
-    except AttributeError:
-        pass
 
     else:
         return False
