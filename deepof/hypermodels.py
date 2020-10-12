@@ -24,10 +24,10 @@ class SEQ_2_SEQ_AE(HyperModel):
         super().__init__()
         self.input_shape = input_shape
 
-    def build(self, hp):
-        """Overrides Hypermodel's build method"""
+    @staticmethod
+    def get_hparams(hp):
+        """Retrieve hyperparameters to tune"""
 
-        # HYPERPARAMETERS TO TUNE
         conv_filters = hp.Int(
             "units_conv", min_value=32, max_value=256, step=32, default=256
         )
@@ -41,6 +41,16 @@ class SEQ_2_SEQ_AE(HyperModel):
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
         encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
+
+        return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
+
+    def build(self, hp):
+        """Overrides Hypermodel's build method"""
+
+        # HYPERPARAMETERS TO TUNE
+        conv_filters, lstm_units_1, dense_2, dropout_rate, encoding = self.get_hparams(
+            hp
+        )
 
         # INSTANCIATED MODEL
         model = deepof.models.SEQ_2_SEQ_AE(
@@ -92,10 +102,10 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
-    def build(self, hp):
-        """Overrides Hypermodel's build method"""
+    @staticmethod
+    def get_hparams(hp):
+        """Retrieve hyperparameters to tune"""
 
-        # Hyperparameters to tune
         conv_filters = hp.Int(
             "units_conv", min_value=32, max_value=256, step=32, default=256
         )
@@ -109,6 +119,16 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
         encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
+
+        return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
+
+    def build(self, hp):
+        """Overrides Hypermodel's build method"""
+
+        # Hyperparameters to tune
+        conv_filters, lstm_units_1, dense_2, dropout_rate, encoding = self.get_hparams(
+            hp
+        )
 
         gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams={

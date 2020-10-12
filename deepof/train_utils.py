@@ -10,6 +10,7 @@ Simple utility functions used in deepof example scripts. These are not part of t
 from datetime import datetime
 
 from kerastuner import BayesianOptimization
+from kerastuner_tensorboard_logger import TensorBoardLogger
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
 import deepof.model_utils
@@ -176,6 +177,7 @@ def tune_search(
         seed=42,
         directory="BayesianOptx",
         project_name=project_name,
+        logger=TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
     )
 
     print(tuner.search_space_summary())
