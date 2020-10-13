@@ -78,7 +78,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         learn_rate=1e-3,
         loss="ELBO+MMD",
         mmd_warmup_epochs=0,
-        number_of_components=1,
+        number_of_components=0,
         overlap_loss=False,
         predictor=0.0,
         prior="standard_normal",
@@ -102,10 +102,10 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
-    @staticmethod
-    def get_hparams(hp):
+    def get_hparams(self, hp):
         """Retrieve hyperparameters to tune"""
 
+        # Architectural hyperparameters
         conv_filters = hp.Int(
             "units_conv", min_value=32, max_value=256, step=32, default=256
         )
@@ -118,19 +118,23 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         dropout_rate = hp.Float(
             "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
         )
-        # encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
-        # number_of_components = hp.Int(
-        #    "number_of_components", min_value=1, max_value=15, step=1, default=5
-        # )
-        # kl_warmup = hp.Int("kl_warmup", min_value=0, max_value=20, step=5, default=10)
-        # mmd_warmup = hp.Int("mmd_warmup", min_value=0, max_value=20, step=5, default=10)
+        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
 
-        return (
-            conv_filters,
-            lstm_units_1,
-            dense_2,
-            dropout_rate,
-        )
+        # Conditional hyperparameters
+        if self.number_of_components == 0:
+            self.number_of_components = hp.Int(
+                "number_of_components", min_value=1, max_value=15, step=1, default=5
+            )
+        if self.kl_warmup == -1:
+            self.kl_warmup = hp.Int(
+                "kl_warmup", min_value=0, max_value=20, step=5, default=10
+            )
+        if self.mmd_warmup == -1:
+            self.mmd_warmup = hp.Int(
+                "mmd_warmup", min_value=0, max_value=20, step=5, default=10
+            )
+
+        return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
 
     def build(self, hp):
         """Overrides Hypermodel's build method"""
@@ -157,7 +161,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             kl_warmup_epochs=self.kl_warmup,
             loss=self.loss,
             mmd_warmup_epochs=self.mmd_warmup,
-            number_of_components=number_of_components,
+            number_of_components=self.number_of_components,
             overlap_loss=self.overlap_loss,
             predictor=self.predictor,
         ).build(self.input_shape)[3:]
