@@ -78,7 +78,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         learn_rate=1e-3,
         loss="ELBO+MMD",
         mmd_warmup_epochs=0,
-        number_of_components=0,
+        number_of_components=-1,
         overlap_loss=False,
         predictor=0.0,
         prior="standard_normal",
@@ -121,7 +121,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
 
         # Conditional hyperparameters
-        if self.number_of_components == 0:
+        if self.number_of_components == -1:
             self.number_of_components = hp.Int(
                 "number_of_components", min_value=1, max_value=15, step=1, default=5
             )
