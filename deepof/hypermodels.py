@@ -29,18 +29,18 @@ class SEQ_2_SEQ_AE(HyperModel):
         """Retrieve hyperparameters to tune"""
 
         conv_filters = hp.Int(
-            "units_conv", min_value=32, max_value=256, step=32, default=256
+            "units_conv", min_value=32, max_value=256, step=32, default=256,
         )
         lstm_units_1 = hp.Int(
-            "units_lstm", min_value=128, max_value=512, step=32, default=256
+            "units_lstm", min_value=128, max_value=512, step=32, default=256,
         )
         dense_2 = hp.Int(
-            "units_dense2", min_value=32, max_value=256, step=32, default=64
+            "units_dense2", min_value=32, max_value=256, step=32, default=64,
         )
         dropout_rate = hp.Float(
-            "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
+            "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05,
         )
-        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
+        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24,)
 
         return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
 
@@ -74,10 +74,8 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         input_shape,
         entropy_reg_weight=0.0,
         huber_delta=100.0,
-        kl_warmup_epochs=0,
         learn_rate=1e-3,
         loss="ELBO+MMD",
-        mmd_warmup_epochs=0,
         number_of_components=-1,
         overlap_loss=False,
         predictor=0.0,
@@ -87,12 +85,8 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.input_shape = input_shape
         self.entropy_reg_weight = entropy_reg_weight
         self.huber_delta = huber_delta
-        self.kl_warmup = kl_warmup_epochs
-        self.kl_warmup_callback = None
         self.learn_rate = learn_rate
         self.loss = loss
-        self.mmd_warmup = mmd_warmup_epochs
-        self.mmd_warmup_callback = None
         self.number_of_components = number_of_components
         self.overlap_loss = overlap_loss
         self.predictor = predictor
@@ -107,33 +101,39 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Architectural hyperparameters
         conv_filters = hp.Int(
-            "units_conv", min_value=32, max_value=256, step=32, default=256
+            "units_conv", min_value=32, max_value=256, step=32, default=256,
         )
         lstm_units_1 = hp.Int(
-            "units_lstm", min_value=128, max_value=512, step=32, default=256
+            "units_lstm", min_value=128, max_value=512, step=32, default=256,
         )
         dense_2 = hp.Int(
-            "units_dense2", min_value=32, max_value=256, step=32, default=64
+            "units_dense2", min_value=32, max_value=256, step=32, default=64,
         )
         dropout_rate = hp.Float(
-            "dropout_rate", min_value=0.0, max_value=0.5, default=0.25, step=0.05
+            "dropout_rate",
+            min_value=0.0,
+            max_value=0.5,
+            default=0.25,
+            sampling="linear",
         )
-        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
+        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24,)
+        k = hp.Int(
+            "n_components",
+            min_value=1,
+            max_value=15,
+            step=1,
+            default=self.number_of_components,
+            sampling="linear",
+        )
 
-        # Conditional hyperparameters
-        for placeholder, hparam in zip(
-            ["number_of_components", "kl_warmup", "mmd_warmup"],
-            [
-                hp.Int("n_components", min_value=1, max_value=15, step=1, default=5),
-                hp.Int("kl_warmup", min_value=0, max_value=20, step=5, default=10),
-                hp.Int("mmd_warmup", min_value=0, max_value=20, step=5, default=10),
-            ],
-        ):
-
-            if getattr(self, placeholder) == -1:
-                setattr(self, placeholder, hparam)
-
-        return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
+        return (
+            conv_filters,
+            lstm_units_1,
+            dense_2,
+            dropout_rate,
+            encoding,
+            k,
+        )
 
     def build(self, hp):
         """Overrides Hypermodel's build method"""
@@ -145,6 +145,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             dense_2,
             dropout_rate,
             encoding,
+            k,
         ) = self.get_hparams(hp)
 
         gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
@@ -157,16 +158,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             },
             entropy_reg_weight=self.entropy_reg_weight,
             huber_delta=self.huber_delta,
-            kl_warmup_epochs=self.kl_warmup,
             loss=self.loss,
-            mmd_warmup_epochs=self.mmd_warmup,
-            number_of_components=self.number_of_components,
+            number_of_components=k,
             overlap_loss=self.overlap_loss,
             predictor=self.predictor,
         ).build(self.input_shape)[3:]
-
-        self.kl_warmup_callback = kl_warmup_callback
-        self.mmd_warmup_callback = mmd_warmup_callback
 
         return gmvaep
 

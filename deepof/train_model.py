@@ -278,7 +278,7 @@ if not tune:
         tf.keras.backend.clear_session()
 
         run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
-            X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu
+            X_train, batch_size, variational, predictor, loss,
         )
 
         if not variational:
@@ -373,7 +373,7 @@ else:
     hyp = "S2SGMVAE" if variational else "S2SAE"
 
     run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
-        X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu
+        X_train, batch_size, variational, predictor, loss
     )
 
     best_hyperparameters, best_model = tune_search(
@@ -382,9 +382,7 @@ else:
         bayopt_trials=bayopt_trials,
         hypermodel=hyp,
         k=k,
-        kl_wu=kl_wu,
         loss=loss,
-        mmd_wu=mmd_wu,
         overlap_loss=overlap_loss,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),

@@ -10,6 +10,7 @@ Simple utility functions used in deepof example scripts. These are not part of t
 from datetime import datetime
 
 from kerastuner import BayesianOptimization
+from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
@@ -18,6 +19,8 @@ import numpy as np
 import os
 import pickle
 import tensorflow as tf
+
+hp = HyperParameters()
 
 
 def load_hparams(hparams):
@@ -58,14 +61,7 @@ def load_treatments(train_path):
 
 
 def get_callbacks(
-    X_train: np.array,
-    batch_size: int,
-    variational: bool,
-    predictor: float,
-    k: int,
-    loss: str,
-    kl_wu: int,
-    mmd_wu: int,
+    X_train: np.array, batch_size: int, variational: bool, predictor: float, loss: str,
 ) -> Tuple:
     """Generates callbacks for model training, including:
         - run_ID: run name, with coarse parameter details;
@@ -73,13 +69,10 @@ def get_callbacks(
         - cp_callback: for checkpoint saving,
         - onecycle: for learning rate scheduling"""
 
-    run_ID = "{}{}{}{}{}{}_{}".format(
+    run_ID = "{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
         ("P" if predictor > 0 and variational else ""),
-        ("_components={}".format(k) if variational else ""),
         ("_loss={}".format(loss) if variational else ""),
-        ("_kl_warmup={}".format(kl_wu) if variational else ""),
-        ("_mmd_warmup={}".format(mmd_wu) if variational else ""),
         datetime.now().strftime("%Y%m%d-%H%M%S"),
     )
 
@@ -109,9 +102,7 @@ def tune_search(
     bayopt_trials: int,
     hypermodel: str,
     k: int,
-    kl_wu: int,
     loss: str,
-    mmd_wu: int,
     overlap_loss: float,
     predictor: float,
     project_name: str,
@@ -128,9 +119,7 @@ def tune_search(
             - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder)
             or S2SGMVAE (Gaussian Mixture Variational autoencoder).
             - k (int) number of components of the Gaussian Mixture
-            - kl_wu (int): number of epochs for KL divergence warm up
             - loss (str): one of [ELBO, MMD, ELBO+MMD]
-            - mmd_wu (int): number of epochs for MMD warm up
             - overlap_loss (float): assigns as weight to an extra loss term which
             penalizes overlap between GM components
             - predictor (float): adds an extra regularizing neural network to the model,
@@ -153,18 +142,11 @@ def tune_search(
     elif hypermodel == "S2SGMVAE":
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_GMVAE(
             input_shape=train.shape,
-            kl_warmup_epochs=kl_wu,
             loss=loss,
-            mmd_warmup_epochs=mmd_wu,
             number_of_components=k,
             overlap_loss=overlap_loss,
             predictor=predictor,
         )
-
-        # if "ELBO" in loss and kl_wu > 0:
-        #     callbacks.append(hypermodel.kl_warmup_callback)
-        # if "MMD" in loss and mmd_wu > 0:
-        #     callbacks.append(hypermodel.mmd_warmup_callback)
 
     else:
         return False
@@ -178,6 +160,7 @@ def tune_search(
         objective="val_mae",
         project_name=project_name,
         seed=42,
+        tune_new_entries=True,
     )
 
     print(tuner.search_space_summary())
