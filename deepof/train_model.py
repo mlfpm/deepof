@@ -224,10 +224,12 @@ project_coords = project(
     smooth_alpha=smooth_alpha,  # Alpha value for exponentially weighted smoothing
     table_format=".h5",
     video_format=".mp4",
-).run(verbose=True)
+)
+project_coords.subset_condition = "B_"
+project_coords.run(verbose=True)
 
 # Coordinates for training data
-coords = project_coords.get_coords(center="Center", align="Spine_1", align_inplace=True)
+coords = project_coords.get_coords(center="B_Center", align="B_Nose", align_inplace=True)
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
 coords_distances = merge_tables(coords, distances)
