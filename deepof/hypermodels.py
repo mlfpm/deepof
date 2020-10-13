@@ -121,18 +121,17 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24)
 
         # Conditional hyperparameters
-        if self.number_of_components == -1:
-            self.number_of_components = hp.Int(
-                "number_of_components", min_value=1, max_value=15, step=1, default=5
-            )
-        if self.kl_warmup == -1:
-            self.kl_warmup = hp.Int(
-                "kl_warmup", min_value=0, max_value=20, step=5, default=10
-            )
-        if self.mmd_warmup == -1:
-            self.mmd_warmup = hp.Int(
-                "mmd_warmup", min_value=0, max_value=20, step=5, default=10
-            )
+        for placeholder, hparam in zip(
+            ["number_of_components", "kl_warmup", "mmd_warmup"],
+            [
+                hp.Int("n_components", min_value=1, max_value=15, step=1, default=5),
+                hp.Int("kl_warmup", min_value=0, max_value=20, step=5, default=10),
+                hp.Int("mmd_warmup", min_value=0, max_value=20, step=5, default=10),
+            ],
+        ):
+
+            if getattr(self, placeholder) == -1:
+                setattr(self, placeholder, hparam)
 
         return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
 
