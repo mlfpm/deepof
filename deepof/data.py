@@ -94,7 +94,9 @@ class project:
         self.ego = False
         self.subset_condition = None
 
-        model_dict = {"mouse_topview": deepof.utils.connect_mouse_topview()}
+        model_dict = {
+            "mouse_topview": deepof.utils.connect_mouse_topview(animal_ids[0])
+        }
         self.connectivity = model_dict[model]
         self.exclude_bodyparts = exclude_bodyparts
         if self.exclude_bodyparts != tuple([""]):
