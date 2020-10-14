@@ -73,7 +73,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self,
         input_shape,
         entropy_reg_weight=0.0,
-        huber_delta=100.0,
+        huber_delta=1.0,
         learn_rate=1e-3,
         loss="ELBO+MMD",
         number_of_components=10,

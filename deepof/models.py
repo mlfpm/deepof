@@ -43,7 +43,7 @@ class SEQ_2_SEQ_AE:
         """
 
     def __init__(
-        self, architecture_hparams: Dict = {}, huber_delta: float = 100.0,
+        self, architecture_hparams: Dict = {}, huber_delta: float = 1.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.CONV_filters = self.hparams["units_conv"]
@@ -249,7 +249,7 @@ class SEQ_2_SEQ_GMVAE:
     def __init__(
         self,
         architecture_hparams: dict = {},
-        batch_size = 256,
+        batch_size: int = 256,
         loss: str = "ELBO+MMD",
         kl_warmup_epochs: int = 0,
         mmd_warmup_epochs: int = 0,
@@ -258,7 +258,7 @@ class SEQ_2_SEQ_GMVAE:
         overlap_loss: bool = False,
         entropy_reg_weight: float = 0.0,
         initialiser_iters: int = int(1e4),
-        huber_delta: float = 100.0,
+        huber_delta: float = 1.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.batch_size = batch_size
@@ -542,7 +542,7 @@ class SEQ_2_SEQ_GMVAE:
                     deepof.model_utils.tfd.Independent(
                         deepof.model_utils.tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
