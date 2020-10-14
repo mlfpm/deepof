@@ -88,11 +88,7 @@ def test_tune_search(
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
-            train,
-            batch_size,
-            hypermodel == "S2SGMVAE",
-            predictor,
-            loss,
+            train, batch_size, hypermodel == "S2SGMVAE", predictor, loss,
         )
     )[1:]
 
