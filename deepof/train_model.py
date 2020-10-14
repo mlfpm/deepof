@@ -20,6 +20,13 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument(
+    "--animal-id",
+    "-id",
+    help="Id of the animal to use. Empty string by default",
+    type=str,
+    default="",
+)
+parser.add_argument(
     "--arena-dims",
     "-adim",
     help="diameter in mm of the utilised arena. Used for scaling purposes",
@@ -169,6 +176,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+animal_id = args.animal_id
 arena_dims = args.arena_dims
 batch_size = args.batch_size
 bayopt_trials = args.bayopt
@@ -214,24 +222,31 @@ treatment_dict = load_treatments(train_path)
 
 # noinspection PyTypeChecker
 project_coords = project(
-    arena="circular",  # Type of arena used in the experiments
+    animal_ids=tuple([animal_id]),
+    arena="circular",
     arena_dims=tuple(
         [arena_dims]
     ),  # Dimensions of the arena. Just one if it's circular
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
-    path=train_path,  # Path where to find the required files
-    smooth_alpha=smooth_alpha,  # Alpha value for exponentially weighted smoothing
+    path=train_path,
+    smooth_alpha=smooth_alpha,
     table_format=".h5",
     video_format=".mp4",
-
-    animal_ids=tuple(["B"])
 )
-project_coords.subset_condition = "B_"
-project_coords.run(verbose=True)
+
+if animal_id:
+    project_coords.subset_condition = animal_id
+
+project_coords = project_coords.run(verbose=True)
+undercond = "" if animal_id == "" else "_"
 
 # Coordinates for training data
-coords = project_coords.get_coords(center="B_Center", align="B_Nose", align_inplace=True)
+coords = project_coords.get_coords(
+    center=animal_id + undercond + "Center",
+    align=animal_id + undercond + "Nose",
+    align_inplace=True,
+)
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
 coords_distances = merge_tables(coords, distances)
@@ -269,6 +284,10 @@ preprocessed = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
 X_train = preprocessed[0]
 X_val = preprocessed[1]
+
+print("Training set shape:", X_train.shape)
+print("Validation set shape:", X_val.shape)
+
 print("Done!")
 
 # Proceed with training mode. Fit autoencoder with the same parameters,
