@@ -141,6 +141,8 @@ class project:
 
         if self.arena in ["circular"]:
 
+            print(self.videos)
+
             scales = []
             for vid_index, _ in enumerate(self.videos):
                 scales.append(
