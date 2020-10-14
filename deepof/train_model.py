@@ -237,7 +237,7 @@ project_coords = project(
 )
 
 # TEST LINE > ERASE LATER
-project_coords.angle = False
+project_coords.angles = False
 
 if animal_id:
     project_coords.subset_condition = animal_id
