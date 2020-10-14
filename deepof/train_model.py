@@ -342,13 +342,14 @@ if not tune:
                 kl_warmup_callback,
                 mmd_warmup_callback,
             ) = SEQ_2_SEQ_GMVAE(
-                loss=loss,
-                number_of_components=k,
-                kl_warmup_epochs=kl_wu,
-                mmd_warmup_epochs=mmd_wu,
-                predictor=predictor,
-                overlap_loss=overlap_loss,
                 architecture_hparams=hparams,
+                batch_size=batch_size,
+                kl_warmup_epochs=kl_wu,
+                loss=loss,
+                mmd_warmup_epochs=mmd_wu,
+                number_of_components=k,
+                overlap_loss=overlap_loss,
+                predictor=predictor,
             ).build(
                 X_train.shape
             )

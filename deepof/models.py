@@ -249,6 +249,7 @@ class SEQ_2_SEQ_GMVAE:
     def __init__(
         self,
         architecture_hparams: dict = {},
+        batch_size = 256,
         loss: str = "ELBO+MMD",
         kl_warmup_epochs: int = 0,
         mmd_warmup_epochs: int = 0,
@@ -260,7 +261,7 @@ class SEQ_2_SEQ_GMVAE:
         huber_delta: float = 100.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
-        self.batch_size = self.hparams["batch_size"]
+        self.batch_size = batch_size
         self.CONV_filters = self.hparams["units_conv"]
         self.LSTM_units_1 = self.hparams["units_lstm"]
         self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
@@ -325,7 +326,6 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "batch_size": 512,
             "units_conv": 256,
             "units_lstm": 256,
             "units_dense2": 64,
