@@ -233,7 +233,11 @@ project_coords = project(
     smooth_alpha=smooth_alpha,
     table_format=".h5",
     video_format=".mp4",
+
 )
+
+# TEST LINE > ERASE LATER
+project_coords.angle = False
 
 if animal_id:
     project_coords.subset_condition = animal_id
