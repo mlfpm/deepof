@@ -256,7 +256,7 @@ class SEQ_2_SEQ_GMVAE:
         predictor: float = 0.0,
         overlap_loss: bool = False,
         entropy_reg_weight: float = 0.0,
-        initialiser_iters: int = int(1e5),
+        initialiser_iters: int = int(1e4),
         huber_delta: float = 100.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)

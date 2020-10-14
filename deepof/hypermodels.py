@@ -76,7 +76,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         huber_delta=100.0,
         learn_rate=1e-3,
         loss="ELBO+MMD",
-        number_of_components=-1,
+        number_of_components=10,
         overlap_loss=False,
         predictor=0.0,
         prior="standard_normal",

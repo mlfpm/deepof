@@ -49,18 +49,15 @@ def test_load_treatments():
         elements=st.floats(min_value=0.0, max_value=1,),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
-    k=st.integers(min_value=1, max_value=50),
-    kl_wu=st.integers(min_value=0, max_value=25),
     loss=st.one_of(st.just("test_A"), st.just("test_B")),
-    mmd_wu=st.integers(min_value=0, max_value=25),
     predictor=st.floats(min_value=0.0, max_value=1.0),
     variational=st.booleans(),
 )
 def test_get_callbacks(
-    X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu
+    X_train, batch_size, variational, predictor, loss,
 ):
     runID, tbc, cpc, cycle1c = deepof.train_utils.get_callbacks(
-        X_train, batch_size, variational, predictor, k, loss, kl_wu, mmd_wu,
+        X_train, batch_size, variational, predictor, loss,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
@@ -82,14 +79,12 @@ def test_get_callbacks(
     batch_size=st.integers(min_value=128, max_value=512),
     hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
-    kl_wu=st.integers(min_value=0, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    mmd_wu=st.integers(min_value=0, max_value=10),
     overlap_loss=st.floats(min_value=0.0, max_value=1.0),
     predictor=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_tune_search(
-    train, batch_size, hypermodel, k, kl_wu, loss, mmd_wu, overlap_loss, predictor,
+    train, batch_size, hypermodel, k, loss, overlap_loss, predictor,
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
@@ -97,10 +92,7 @@ def test_tune_search(
             batch_size,
             hypermodel == "S2SGMVAE",
             predictor,
-            k,
             loss,
-            kl_wu,
-            mmd_wu,
         )
     )[1:]
 
@@ -110,9 +102,7 @@ def test_tune_search(
         1,
         hypermodel,
         k,
-        kl_wu,
         loss,
-        mmd_wu,
         overlap_loss,
         predictor,
         "test_run",

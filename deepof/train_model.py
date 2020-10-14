@@ -224,6 +224,8 @@ project_coords = project(
     smooth_alpha=smooth_alpha,  # Alpha value for exponentially weighted smoothing
     table_format=".h5",
     video_format=".mp4",
+
+    animal_ids=tuple(["B"])
 )
 project_coords.subset_condition = "B_"
 project_coords.run(verbose=True)

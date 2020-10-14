@@ -34,18 +34,14 @@ def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
 @settings(deadline=None, max_examples=10)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    kl_warmup_epochs=st.integers(min_value=1, max_value=5),
-    mmd_warmup_epochs=st.integers(min_value=1, max_value=5),
     number_of_components=st.integers(min_value=1, max_value=5),
 )
 def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
-    loss, kl_warmup_epochs, mmd_warmup_epochs, number_of_components,
+    loss, number_of_components,
 ):
     deepof.hypermodels.SEQ_2_SEQ_GMVAE(
         input_shape=(100, 15, 10,),
         loss=loss,
-        kl_warmup_epochs=kl_warmup_epochs,
-        mmd_warmup_epochs=mmd_warmup_epochs,
         number_of_components=number_of_components,
         predictor=True,
     ).build(hp=HyperParameters())
