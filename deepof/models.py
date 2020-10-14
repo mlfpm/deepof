@@ -66,7 +66,7 @@ class SEQ_2_SEQ_AE:
             "units_dense2": 64,
             "dropout_rate": 0.25,
             "encoding": 16,
-            "learning_rate": 1e-5,
+            "learning_rate": 1e-3,
         }
 
         for k, v in hparams.items():
