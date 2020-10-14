@@ -805,16 +805,14 @@ class table_dict(dict):
     ) -> deepof.utils.Tuple[np.ndarray, np.ndarray]:
         """Generates training and test sets as numpy.array objects for model training"""
 
-        rmax = max([i.shape[0] for i in self.values()])
-        raw_data = np.array(
-            [np.pad(v, ((0, rmax - v.shape[0]), (0, 0))) for v in self.values()]
-        )
+        # Padding of videos with slightly different lengths
+        raw_data = np.array([v for v in self.values()], dtype=object)
         test_index = np.random.choice(range(len(raw_data)), test_videos, replace=False)
 
         X_test = []
         if test_videos > 0:
-            X_test = np.concatenate(list(raw_data[test_index]))
-            X_train = np.concatenate(list(np.delete(raw_data, test_index, axis=0)))
+            X_test = np.concatenate(raw_data[test_index])
+            X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
 
         else:
             X_train = np.concatenate(list(raw_data))
