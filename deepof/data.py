@@ -806,7 +806,7 @@ class table_dict(dict):
         """Generates training and test sets as numpy.array objects for model training"""
 
         # Padding of videos with slightly different lengths
-        raw_data = np.array([v for v in self.values()], dtype=object)
+        raw_data = np.array([np.array(v) for v in self.values()], dtype=object)
         test_index = np.random.choice(range(len(raw_data)), test_videos, replace=False)
 
         X_test = []
