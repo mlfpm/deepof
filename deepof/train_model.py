@@ -248,15 +248,15 @@ undercond = "" if animal_id == "" else "_"
 # Coordinates for training data
 coords = project_coords.get_coords(
     center=animal_id + undercond + "Center",
-    align=animal_id + undercond + "Nose",
+    align=animal_id + undercond + "Spine_1",
     align_inplace=True,
 )
-#distances = project_coords.get_distances()
-#angles = project_coords.get_angles()
-#coords_distances = merge_tables(coords, distances)
-#coords_angles = merge_tables(coords, angles)
-#dists_angles = merge_tables(distances, angles)
-#coords_dist_angles = merge_tables(coords, distances, angles)
+distances = project_coords.get_distances()
+angles = project_coords.get_angles()
+coords_distances = merge_tables(coords, distances)
+coords_angles = merge_tables(coords, angles)
+dists_angles = merge_tables(distances, angles)
+coords_dist_angles = merge_tables(coords, distances, angles)
 
 
 def batch_preprocess(tab_dict):
@@ -275,12 +275,12 @@ def batch_preprocess(tab_dict):
 
 input_dict_train = {
     "coords": coords,
-#    "dists": distances,
-#    "angles": angles,
-#    "coords+dist": coords_distances,
-#    "coords+angle": coords_angles,
-#    "dists+angle": dists_angles,
-#    "coords+dist+angle": coords_dist_angles,
+    "dists": distances,
+    "angles": angles,
+    "coords+dist": coords_distances,
+    "coords+angle": coords_angles,
+    "dists+angle": dists_angles,
+    "coords+dist+angle": coords_dist_angles,
 }
 
 print("Preprocessing data...")
