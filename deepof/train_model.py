@@ -248,7 +248,7 @@ undercond = "" if animal_id == "" else "_"
 # Coordinates for training data
 coords = project_coords.get_coords(
     center=animal_id + undercond + "Center",
-    align=animal_id + undercond + "Nose",
+    align=animal_id + undercond + "Spine_1",
     align_inplace=True,
 )
 #distances = project_coords.get_distances()

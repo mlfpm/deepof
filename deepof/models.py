@@ -642,7 +642,7 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         gmvaep.compile(
-            loss=Huber(delta=self.delta),
+            loss=Huber(delta=self.delta, reduction="sum"),
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
             loss_weights=([1.0, self.predictor] if self.predictor > 0 else [1.0]),
