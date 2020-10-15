@@ -143,14 +143,15 @@ class project:
 
             scales = []
             for vid_index, _ in enumerate(self.videos):
+
                 scales.append(
                     list(
-                        deepof.utils.recognize_arena(
+                        [deepof.utils.recognize_arena(
                             self.videos,
                             vid_index,
                             path=self.video_path,
                             arena_type=self.arena,
-                        )[0]
+                        )[0]]
                         * 2
                     )
                     + list(self.arena_dims)
