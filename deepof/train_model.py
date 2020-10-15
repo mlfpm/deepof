@@ -224,9 +224,7 @@ treatment_dict = load_treatments(train_path)
 project_coords = project(
     animal_ids=tuple([animal_id]),
     arena="circular",
-    arena_dims=tuple(
-        [arena_dims]
-    ),  # Dimensions of the arena. Just one if it's circular
+    arena_dims=tuple([arena_dims]),
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
     path=train_path,

@@ -881,11 +881,9 @@ class table_dict(dict):
                     "Invalid scaler. Select one of standard, minmax or None"
                 )  # pragma: no cover
 
-            scaler.fit(X_train.reshape(-1, X_train.shape[-1]))
-
-            X_train = scaler.transform(X_train.reshape(-1, X_train.shape[-1])).reshape(
-                X_train.shape
-            )
+            X_train = scaler.fit_transform(
+                X_train.reshape(-1, X_train.shape[-1])
+            ).reshape(X_train.shape)
 
             if scale == "standard":
                 assert np.allclose(np.mean(X_train), 0)
