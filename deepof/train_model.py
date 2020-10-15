@@ -322,7 +322,7 @@ if not tune:
                     cp_callback,
                     onecycle,
                     tf.keras.callbacks.EarlyStopping(
-                        "val_loss", patience=10, restore_best_weights=True
+                        "val_mae", patience=15, restore_best_weights=True
                     ),
                 ],
             )
@@ -356,7 +356,7 @@ if not tune:
                 cp_callback,
                 onecycle,
                 tf.keras.callbacks.EarlyStopping(
-                    "val_loss", patience=10, restore_best_weights=True
+                    "val_mae", patience=15, restore_best_weights=True
                 ),
             ]
 
