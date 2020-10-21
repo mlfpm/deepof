@@ -303,13 +303,13 @@ class SEQ_2_SEQ_GMVAE:
                 iters=self.initialiser_iters,
             )
 
-            self.prior = deepof.model_utils.tfd.mixture.Mixture(
-                cat=deepof.model_utils.tfd.categorical.Categorical(
+            self.prior = tfd.mixture.Mixture(
+                cat=tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
                 components=[
-                    deepof.model_utils.tfd.Independent(
-                        deepof.model_utils.tfd.Normal(loc=init_means[k], scale=1,),
+                    tfd.Independent(
+                        tfd.Normal(loc=init_means[k], scale=1,),
                         reinterpreted_batch_ndims=1,
                     )
                     for k in range(self.number_of_components)
@@ -536,11 +536,11 @@ class SEQ_2_SEQ_GMVAE:
             )(z_gauss)
 
         z = deepof.model_utils.tfpl.DistributionLambda(
-            lambda gauss: deepof.model_utils.tfd.mixture.Mixture(
-                cat=deepof.model_utils.tfd.categorical.Categorical(probs=gauss[0],),
+            lambda gauss: tfd.mixture.Mixture(
+                cat=tfd.categorical.Categorical(probs=gauss[0],),
                 components=[
-                    deepof.model_utils.tfd.Independent(
-                        deepof.model_utils.tfd.Normal(
+                    tfd.Independent(
+                        tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
                             scale=softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
