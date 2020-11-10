@@ -665,8 +665,10 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
+#       - Check KL weight in the overal loss function! Are we scaling the loss components correctly?
+#       - Check batch and event shapes of all distributions involved. Incorrect shapes (batch >1) could bring problems with the KL.
+#       - Check merge mode in LSTM layers. Maybe we can drastically reduce model size!
+#       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate posterior collapse (L1 as kernel/activity regulariser does not work)
-#       - Random horizontal flip for data augmentation
-#       - Align first frame and untamper sliding window (reduce window stride)
 #       - design clustering-conscious hyperparameter tuning pipeline
 #       - execute the pipeline ;)
