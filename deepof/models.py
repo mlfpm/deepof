@@ -18,7 +18,7 @@ from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
-from tensorflow.keras.losses import Huber
+from tensorflow.keras.losses import BinaryCrossentropy, Huber
 from tensorflow.keras.optimizers import Nadam
 import deepof.model_utils
 import tensorflow as tf
@@ -259,6 +259,7 @@ class SEQ_2_SEQ_GMVAE:
         entropy_reg_weight: float = 0.0,
         initialiser_iters: int = int(1e4),
         huber_delta: float = 1.0,
+        phenotype_prediction: float = 0.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.batch_size = batch_size
@@ -280,6 +281,7 @@ class SEQ_2_SEQ_GMVAE:
         self.entropy_reg_weight = entropy_reg_weight
         self.initialiser_iters = initialiser_iters
         self.delta = huber_delta
+        self.phenotype_prediction = phenotype_prediction
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
@@ -425,6 +427,8 @@ class SEQ_2_SEQ_GMVAE:
                 use_bias=False,
             )
         )
+
+        # Predictor layers
         Model_P1 = Dense(
             self.DENSE_1,
             activation="elu",
@@ -452,6 +456,10 @@ class SEQ_2_SEQ_GMVAE:
             )
         )
 
+        # Phenotype classification layers
+        Model_PC1 = Dense(self.number_of_components, activation="elu", kernel_initializer=he_uniform())
+        Model_PC2 = Dense(1, activation="sigmoid", kernel_initializer=he_uniform())
+
         return (
             Model_E0,
             Model_E1,
@@ -470,6 +478,8 @@ class SEQ_2_SEQ_GMVAE:
             Model_P1,
             Model_P2,
             Model_P3,
+            Model_PC1,
+            Model_PC2
         )
 
     def build(self, input_shape: Tuple):
@@ -497,6 +507,8 @@ class SEQ_2_SEQ_GMVAE:
             Model_P1,
             Model_P2,
             Model_P3,
+            Model_PC1,
+            Model_PC2,
         ) = self.get_layers(input_shape)
 
         # Define and instantiate encoder
@@ -596,6 +608,10 @@ class SEQ_2_SEQ_GMVAE:
             Dense(input_shape[2]), name="vaep_reconstruction"
         )(generator)
 
+        model_outs = [x_decoded_mean]
+        model_losses = [Huber(delta=self.delta, reduction="sum")]
+        loss_weights = [1.]
+
         if self.predictor > 0:
             # Define and instantiate predictor
             predictor = Dense(
@@ -613,17 +629,26 @@ class SEQ_2_SEQ_GMVAE:
                 Dense(input_shape[2]), name="vaep_prediction"
             )(predictor)
 
+            model_outs.append(x_predicted_mean)
+            model_losses.append(Huber(delta=self.delta, reduction="sum"))
+            loss_weights.append(self.predictor)
+
+        if self.phenotype_prediction > 0:
+            pheno_pred = Model_PC1(z)
+            pheno_pred = Model_PC2(pheno_pred)
+
+            model_outs.append(pheno_pred)
+            model_losses.append(BinaryCrossentropy())
+            loss_weights.append(self.phenotype_prediction)
+
         # end-to-end autoencoder
         encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         grouper = Model(x, z_cat, name="Deep_Gaussian_Mixture_clustering")
         # noinspection PyUnboundLocalVariable
+
         gmvaep = Model(
             inputs=x,
-            outputs=(
-                [x_decoded_mean, x_predicted_mean]
-                if self.predictor > 0
-                else x_decoded_mean
-            ),
+            outputs=model_outs,
             name="SEQ_2_SEQ_GMVAE",
         )
 
@@ -642,10 +667,10 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         gmvaep.compile(
-            loss=Huber(delta=self.delta, reduction="sum"),
+            loss=model_losses,
             optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
             metrics=["mae"],
-            loss_weights=([1.0, self.predictor] if self.predictor > 0 else [1.0]),
+            loss_weights=loss_weights,
         )
 
         gmvaep.build(input_shape)
