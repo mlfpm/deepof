@@ -47,6 +47,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
         mmd_warmup_epochs=mmd_warmup_epochs,
         number_of_components=number_of_components,
         predictor=True,
+        phenotype_prediction=True,
         overlap_loss=True,
         entropy_reg_weight=entropy_reg_weight,
         initialiser_iters=1,
