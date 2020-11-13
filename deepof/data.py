@@ -843,7 +843,10 @@ class table_dict(dict):
             X_train = np.concatenate(list(raw_data))
 
         if propagate_labels:
-            return (X_train[:, :-1], X_train[:, -1]), (X_test[:, :-1], X_test[:, -1])
+            return (
+                (X_train[:, :-1], X_train[:, -1]),
+                ((X_test[:, :-1], X_test[:, -1]) if test_videos > 0 else []),
+            )
         return X_train, X_test
 
     # noinspection PyTypeChecker,PyGlobalUndefined
@@ -859,6 +862,7 @@ class table_dict(dict):
         shift: float = 0.0,
         shuffle: bool = False,
         align: str = False,
+        propagate_labels: bool = False,
     ) -> np.ndarray:
         """
 
@@ -883,6 +887,7 @@ class table_dict(dict):
                 when calling get_coords) axis with the y-axis of the cartesian plane. If 'center', rotates all instances
                 using the angle of the central frame of the sliding window. This way rotations of the animal are caught
                 as well. It doesn't do anything if False.
+                - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
 
             Returns:
                 - X_train (np.ndarray): 3d dataset with shape (instances, sliding_window_size, features)
