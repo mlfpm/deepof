@@ -16,7 +16,7 @@ Contains methods for generating training and test sets ready for model training.
 
 from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
-from typing import Dict, List, Any, Union, Tuple
+from typing import Dict, List, Tuple, Union
 from pandas_profiling import ProfileReport
 from multiprocessing import cpu_count
 from sklearn import random_projection
@@ -565,6 +565,7 @@ class coordinates:
             arena_dims=self._scales,
             center=center,
             polar=polar,
+            propagate_labels=propagate_labels,
         )
 
     def get_distances(
@@ -603,7 +604,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tab["pheno"] = self._exp_conditions[key]
 
-            return table_dict(tabs, typ="dists")
+            return table_dict(tabs, propagate_labels=propagate_labels, typ="dists")
 
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
@@ -652,7 +653,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tab["pheno"] = self._exp_conditions[key]
 
-            return table_dict(tabs, typ="angles")
+            return table_dict(tabs, propagate_labels=propagate_labels, typ="angles")
 
         raise ValueError(
             "Angles not computed. Read the documentation for more details"
@@ -770,6 +771,7 @@ class table_dict(dict):
         arena_dims: np.array = None,
         center: str = None,
         polar: bool = None,
+        propagate_labels: bool = False,
     ):
         super().__init__(tabs)
         self._type = typ
@@ -777,6 +779,7 @@ class table_dict(dict):
         self._polar = polar
         self._arena = arena
         self._arena_dims = arena_dims
+        self._propagate_labels = propagate_labels
 
     def filter_videos(self, keys: list) -> Table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
@@ -823,7 +826,7 @@ class table_dict(dict):
             return heatmaps
 
     def get_training_set(
-        self, test_videos: int = 0, propagate_labels: bool = False,
+        self, test_videos: int = 0,
     ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
@@ -839,7 +842,7 @@ class table_dict(dict):
         else:
             X_train = np.concatenate(list(raw_data))
 
-        if propagate_labels:
+        if self._propagate_labels:
             X_train, y_train = X_train[:, :-1], X_train[:, -1]
             try:
                 X_test, y_test = X_test[:, :-1], X_test[:, -1]
@@ -861,7 +864,6 @@ class table_dict(dict):
         shift: float = 0.0,
         shuffle: bool = False,
         align: str = False,
-        propagate_labels: bool = False,
     ) -> np.ndarray:
         """
 
@@ -897,9 +899,7 @@ class table_dict(dict):
         """
 
         global g
-        X_train, y_train, X_test, y_test = self.get_training_set(
-            test_videos, propagate_labels=propagate_labels
-        )
+        X_train, y_train, X_test, y_test = self.get_training_set(test_videos)
 
         if scale:
             if verbose:
@@ -992,7 +992,7 @@ class table_dict(dict):
         X = self.get_training_set()[0]
 
         # Takes care of propagated labels if present
-        if type(X[:, 0]) != float:
+        if self._propagate_labels:
             X = X[:, :-1]
 
         # noinspection PyUnresolvedReferences
@@ -1013,7 +1013,7 @@ class table_dict(dict):
         X = self.get_training_set()[0]
 
         # Takes care of propagated labels if present
-        if type(X[:, 0]) != float:
+        if self._propagate_labels:
             X = X[:, :-1]
 
         # noinspection PyUnresolvedReferences
@@ -1034,7 +1034,7 @@ class table_dict(dict):
         X = self.get_training_set()[0]
 
         # Takes care of propagated labels if present
-        if type(X[:, 0]) != float:
+        if self._propagate_labels:
             X = X[:, :-1]
 
         # noinspection PyUnresolvedReferences
