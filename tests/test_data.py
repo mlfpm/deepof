@@ -196,6 +196,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         video_format=".mp4",
         table_format=".h5",
         exclude_bodyparts=exclude,
+        exp_conditions={"test": "test_cond"},
     )
 
     prun.distances = nodes
@@ -206,6 +207,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     inplace = sampler.draw(st.booleans())
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=0, max_value=5))
+    propagate = sampler.draw(st.booleans())
 
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
@@ -213,21 +215,25 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         align=algn,
         align_inplace=inplace,
+        propagate_labels=propagate,
     )
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=speed,
+        propagate_labels=propagate,
     )
     distances = prun.get_distances(
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
+        propagate_labels=propagate,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
+        propagate_labels=propagate,
     )
 
     # deepof.coordinates testing
@@ -237,7 +243,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     assert type(distances) == deepof.data.table_dict
     assert type(angles) == deepof.data.table_dict
     assert type(prun.get_videos()) == list
-    assert prun.get_exp_conditions is None
+    assert prun.get_exp_conditions is not None
     assert type(prun.get_quality()) == defaultdict
     assert type(prun.get_arenas) == tuple
 
@@ -254,7 +260,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     tset = table.get_training_set(
         test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1))
     )
-    assert len(tset) == 2
+    assert len(tset) == 4
     assert type(tset[0]) == np.ndarray
 
     if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
@@ -283,10 +289,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         align=align,
     )
 
-    assert type(prep) == np.ndarray or type(prep) == tuple
-
-    if type(prep) == tuple:
-        assert type(prep[0]) == np.ndarray
+    assert type(prep[0]) == np.ndarray
 
     # deepof dimensionality reduction testing
 
