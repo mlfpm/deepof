@@ -106,7 +106,7 @@ class project:
     def __str__(self):
         if self.exp_conditions:
             return "deepof analysis of {} videos across {} conditions".format(
-                len(self.videos), len(self.exp_conditions)
+                len(self.videos), len(set(self.exp_conditions.values()))
             )
         else:
             return "deepof analysis of {} videos".format(len(self.videos))
@@ -426,7 +426,7 @@ class coordinates:
     def __str__(self):
         if self._exp_conditions:
             return "Coordinates of {} videos across {} conditions".format(
-                len(self._videos), len(self._exp_conditions)
+                len(self._videos), len(set(self._exp_conditions.values()))
             )
         else:
             return "deepof analysis of {} videos".format(len(self._videos))
@@ -439,6 +439,7 @@ class coordinates:
         length: str = None,
         align: bool = False,
         align_inplace: bool = False,
+        propagate_labels: bool = False,
     ) -> Table_dict:
         """
         Returns a table_dict object with the coordinates of each animal as values.
@@ -456,6 +457,7 @@ class coordinates:
                 (see preprocess in table_dict documentation).
                 - align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to
                 the selected body part with the y axis, for all time points.
+                - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -552,6 +554,10 @@ class coordinates:
                     tab.columns = index
                     tabs[key] = tab
 
+        if propagate_labels:
+            for key, tab in tabs.items():
+                tab["pheno"] = self._exp_conditions[key]
+
         return table_dict(
             tabs,
             "coords",
@@ -561,7 +567,9 @@ class coordinates:
             polar=polar,
         )
 
-    def get_distances(self, speed: int = 0, length: str = None) -> Table_dict:
+    def get_distances(
+        self, speed: int = 0, length: str = None, propagate_labels: bool = False
+    ) -> Table_dict:
         """
         Returns a table_dict object with the distances between body parts animal as values.
 
@@ -570,6 +578,7 @@ class coordinates:
                 acceleration if 2, jerk if 3, etc.
                 - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
                 of the stored dataframes will reflect the actual timing in the video.
+                - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -590,6 +599,10 @@ class coordinates:
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                     ).astype("timedelta64[s]")
 
+            if propagate_labels:
+                for key, tab in tabs.items():
+                    tab["pheno"] = self._exp_conditions[key]
+
             return table_dict(tabs, typ="dists")
 
         raise ValueError(
@@ -597,7 +610,11 @@ class coordinates:
         )  # pragma: no cover
 
     def get_angles(
-        self, degrees: bool = False, speed: int = 0, length: str = None
+        self,
+        degrees: bool = False,
+        speed: int = 0,
+        length: str = None,
+        propagate_labels: bool = False,
     ) -> Table_dict:
         """
         Returns a table_dict object with the angles between body parts animal as values.
@@ -608,6 +625,7 @@ class coordinates:
                 acceleration if 2, jerk if 3, etc.
                 - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
                 of the stored dataframes will reflect the actual timing in the video.
+                - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -629,6 +647,10 @@ class coordinates:
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
                     ).astype("timedelta64[s]")
+
+            if propagate_labels:
+                for key, tab in tabs.items():
+                    tab["pheno"] = self._exp_conditions[key]
 
             return table_dict(tabs, typ="angles")
 

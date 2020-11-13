@@ -555,7 +555,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -636,7 +636,9 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.phenotype_prediction > 0:
             pheno_pred = Model_PC1(z)
-            pheno_pred = Dense(1, activation="sigmoid", name="phenotype_prediction")(pheno_pred)
+            pheno_pred = Dense(1, activation="sigmoid", name="phenotype_prediction")(
+                pheno_pred
+            )
 
             model_outs.append(pheno_pred)
             model_losses.append(BinaryCrossentropy())
