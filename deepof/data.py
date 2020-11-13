@@ -824,17 +824,14 @@ class table_dict(dict):
 
     def get_training_set(
         self, test_videos: int = 0, propagate_labels: bool = False,
-    ) -> Union[
-        Tuple[Tuple[Any, Any], Tuple[Union[list, Any], Union[list, Any]]],
-        Tuple[np.ndarray, Union[np.ndarray, list]],
-    ]:
+    ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
         # Padding of videos with slightly different lengths
         raw_data = np.array([np.array(v) for v in self.values()], dtype=object)
         test_index = np.random.choice(range(len(raw_data)), test_videos, replace=False)
 
-        X_test = []
+        y_train, X_test, y_test = [], [], []
         if test_videos > 0:
             X_test = np.concatenate(raw_data[test_index])
             X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
@@ -843,11 +840,13 @@ class table_dict(dict):
             X_train = np.concatenate(list(raw_data))
 
         if propagate_labels:
-            return (
-                (X_train[:, :-1], X_train[:, -1]),
-                ((X_test[:, :-1], X_test[:, -1]) if test_videos > 0 else []),
-            )
-        return X_train, X_test
+            X_train, y_train = X_train[:, :-1], X_train[:, -1]
+            try:
+                X_test, y_test = X_test[:, :-1], X_test[:, -1]
+            except TypeError:
+                pass
+
+        return X_train, y_train, X_test, y_test
 
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
@@ -887,7 +886,7 @@ class table_dict(dict):
                 when calling get_coords) axis with the y-axis of the cartesian plane. If 'center', rotates all instances
                 using the angle of the central frame of the sliding window. This way rotations of the animal are caught
                 as well. It doesn't do anything if False.
-                - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+                - propagate_labels (bool): If True, returns a label vector acompaigning each training instance
 
             Returns:
                 - X_train (np.ndarray): 3d dataset with shape (instances, sliding_window_size, features)
@@ -898,7 +897,9 @@ class table_dict(dict):
         """
 
         global g
-        X_train, X_test = self.get_training_set(test_videos)
+        X_train, y_train, X_test, y_test = self.get_training_set(
+            test_videos, propagate_labels=propagate_labels
+        )
 
         if scale:
             if verbose:
