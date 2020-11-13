@@ -966,21 +966,24 @@ class table_dict(dict):
                 X_test = X_test * g.reshape([1, window_size, 1])
 
             if shuffle:
-                X_train = X_train[
-                    np.random.choice(X_train.shape[0], X_train.shape[0], replace=False)
-                ]
-                X_test = X_test[
-                    np.random.choice(X_test.shape[0], X_test.shape[0], replace=False)
-                ]
+                shuffle_test = np.random.choice(
+                    X_test.shape[0], X_test.shape[0], replace=False
+                )
+                X_test = X_test[shuffle_test]
 
-            return X_train, X_test
+                if self._propagate_labels:
+                    y_test = y_test[shuffle_test]
 
         if shuffle:
-            X_train = X_train[
-                np.random.choice(X_train.shape[0], X_train.shape[0], replace=False)
-            ]
+            shuffle_train = np.random.choice(
+                X_train.shape[0], X_train.shape[0], replace=False
+            )
+            X_train = X_train[shuffle_train]
 
-        return X_train
+            if self._propagate_labels:
+                y_train = y_train[shuffle_train]
+
+        return X_train, y_train, X_test, y_test
 
     def random_projection(
         self, n_components: int = None, sample: int = 1000
