@@ -16,7 +16,7 @@ Contains methods for generating training and test sets ready for model training.
 
 from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
-from typing import Dict, List
+from typing import Dict, List, Any, Union, Tuple
 from pandas_profiling import ProfileReport
 from multiprocessing import cpu_count
 from sklearn import random_projection
@@ -823,8 +823,11 @@ class table_dict(dict):
             return heatmaps
 
     def get_training_set(
-        self, test_videos: int = 0
-    ) -> deepof.utils.Tuple[np.ndarray, np.ndarray]:
+        self, test_videos: int = 0, propagate_labels: bool = False,
+    ) -> Union[
+        Tuple[Tuple[Any, Any], Tuple[Union[list, Any], Union[list, Any]]],
+        Tuple[np.ndarray, Union[np.ndarray, list]],
+    ]:
         """Generates training and test sets as numpy.array objects for model training"""
 
         # Padding of videos with slightly different lengths
@@ -839,6 +842,8 @@ class table_dict(dict):
         else:
             X_train = np.concatenate(list(raw_data))
 
+        if propagate_labels:
+            return (X_train[:, :-1], X_train[:, -1]), (X_test[:, :-1], X_test[:, -1])
         return X_train, X_test
 
     # noinspection PyTypeChecker,PyGlobalUndefined
@@ -979,6 +984,12 @@ class table_dict(dict):
         performance or visualization reasons"""
 
         X = self.get_training_set()[0]
+
+        # Takes care of propagated labels if present
+        if type(X[:, 0]) != float:
+            X = X[:, :-1]
+
+        # noinspection PyUnresolvedReferences
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         rproj = random_projection.GaussianRandomProjection(n_components=n_components)
@@ -994,6 +1005,12 @@ class table_dict(dict):
         performance or visualization reasons"""
 
         X = self.get_training_set()[0]
+
+        # Takes care of propagated labels if present
+        if type(X[:, 0]) != float:
+            X = X[:, :-1]
+
+        # noinspection PyUnresolvedReferences
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         pca = KernelPCA(n_components=n_components, kernel=kernel)
@@ -1009,6 +1026,12 @@ class table_dict(dict):
         performance or visualization reasons"""
 
         X = self.get_training_set()[0]
+
+        # Takes care of propagated labels if present
+        if type(X[:, 0]) != float:
+            X = X[:, :-1]
+
+        # noinspection PyUnresolvedReferences
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
 
         tsne = TSNE(n_components=n_components, perplexity=perplexity)
