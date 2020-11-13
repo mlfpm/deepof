@@ -22,7 +22,7 @@ from multiprocessing import cpu_count
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.manifold import TSNE
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
 from tqdm import tqdm
 import deepof.pose_utils
 import deepof.utils
@@ -826,7 +826,7 @@ class table_dict(dict):
             return heatmaps
 
     def get_training_set(
-        self, test_videos: int = 0,
+        self, test_videos: int = 0, encode_labels: bool = True,
     ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
@@ -848,6 +848,11 @@ class table_dict(dict):
                 X_test, y_test = X_test[:, :-1], X_test[:, -1]
             except TypeError:
                 pass
+
+        if encode_labels:
+            le = LabelEncoder()
+            y_train = le.fit_transform(y_train)
+            y_test = le.fit_transform(y_test)
 
         return X_train, y_train, X_test, y_test
 
