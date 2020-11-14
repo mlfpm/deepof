@@ -611,6 +611,7 @@ class SEQ_2_SEQ_GMVAE:
 
         model_outs = [x_decoded_mean]
         model_losses = [Huber(delta=self.delta, reduction="sum")]
+        model_metrics = {"vaep_reconstruction":"mae"}
         loss_weights = [1.0]
 
         if self.predictor > 0:
@@ -632,6 +633,7 @@ class SEQ_2_SEQ_GMVAE:
 
             model_outs.append(x_predicted_mean)
             model_losses.append(Huber(delta=self.delta, reduction="sum"))
+            model_metrics["vaep_prediction"] = "mae"
             loss_weights.append(self.predictor)
 
         if self.phenotype_prediction > 0:
@@ -642,6 +644,7 @@ class SEQ_2_SEQ_GMVAE:
 
             model_outs.append(pheno_pred)
             model_losses.append(BinaryCrossentropy())
+            model_metrics["phenotype_prediction"] = "AUC"
             loss_weights.append(self.phenotype_prediction)
 
         # end-to-end autoencoder
@@ -669,7 +672,7 @@ class SEQ_2_SEQ_GMVAE:
             gmvaep.compile(
                 loss=model_losses,
                 optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
-                metrics=["mae"],
+                metrics=model_metrics,
                 loss_weights=loss_weights,
             )
 
