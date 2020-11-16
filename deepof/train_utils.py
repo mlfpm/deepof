@@ -141,6 +141,9 @@ def tune_search(
     X_train, y_train, X_val, y_val = data
 
     if hypermodel == "S2SAE":  # pragma: no cover
+        assert (
+            predictor == 0.0 and pheno_class == 0.0
+        ), "Prediction branches are only available for variational models. See documentation for more details"
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=X_train.shape)
 
     elif hypermodel == "S2SGMVAE":
