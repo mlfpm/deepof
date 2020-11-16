@@ -250,7 +250,7 @@ class SEQ_2_SEQ_GMVAE:
         self,
         architecture_hparams: dict = {},
         batch_size: int = 256,
-        compile: bool = True,
+        compile_model: bool = True,
         entropy_reg_weight: float = 0.0,
         huber_delta: float = 1.0,
         initialiser_iters: int = int(1e4),
@@ -272,7 +272,7 @@ class SEQ_2_SEQ_GMVAE:
         self.DROPOUT_RATE = self.hparams["dropout_rate"]
         self.ENCODING = self.hparams["encoding"]
         self.learn_rate = self.hparams["learning_rate"]
-        self.compile = compile
+        self.compile = compile_model
         self.delta = huber_delta
         self.entropy_reg_weight = entropy_reg_weight
         self.initialiser_iters = initialiser_iters
@@ -562,6 +562,7 @@ class SEQ_2_SEQ_GMVAE:
                     for k in range(self.number_of_components)
                 ],
             ),
+            convert_to_tensor_fn="sample",
         )([z_cat, z_gauss])
 
         # Define and control custom loss functions
@@ -611,7 +612,7 @@ class SEQ_2_SEQ_GMVAE:
 
         model_outs = [x_decoded_mean]
         model_losses = [Huber(delta=self.delta, reduction="sum")]
-        model_metrics = {"vaep_reconstruction":["mae","mse"]}
+        model_metrics = {"vaep_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
 
         if self.predictor > 0:
@@ -693,7 +694,7 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - Check KL weight in the overal loss function! Are we scaling the loss components correctly?
+#       - Check KL weight in the overall loss function! Are we scaling the loss components correctly?
 #       - Check batch and event shapes of all distributions involved. Incorrect shapes (batch >1) could bring
 #         problems with the KL.
 #       - Check merge mode in LSTM layers. Maybe we can drastically reduce model size!

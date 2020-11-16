@@ -120,7 +120,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         k = hp.Int(
             "n_components",
             min_value=1,
-            max_value=15,
+            max_value=25,
             step=1,
             default=self.number_of_components,
             sampling="linear",

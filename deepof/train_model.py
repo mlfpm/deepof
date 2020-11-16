@@ -122,9 +122,17 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "--phenotype-classifier",
+    "-pheno",
+    help="Activates the phenotype classification branch with the specified weight. Defaults to 0.0 (inactive)",
+    default=0.0,
+    type=float,
+)
+parser.add_argument(
     "--predictor",
     "-pred",
-    help="Activates the prediction branch of the variational Seq 2 Seq model. Defaults to True",
+    help="Activates the prediction branch of the variational Seq 2 Seq model with the specified weight. "
+    "Defaults to 0.0 (inactive)",
     default=0.0,
     type=float,
 )
@@ -189,6 +197,7 @@ kl_wu = args.kl_warmup
 loss = args.loss
 mmd_wu = args.mmd_warmup
 overlap_loss = args.overlap_loss
+pheno_class = float(args.phenotype_classifier)
 predictor = float(args.predictor)
 runs = args.stability_check
 smooth_alpha = args.smooth_alpha
@@ -278,13 +287,14 @@ input_dict_train = {
 }
 
 print("Preprocessing data...")
-preprocessed = batch_preprocess(input_dict_train[input_type])
+X_train, y_train, X_val, y_val = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
-X_train = preprocessed[0]
-X_val = preprocessed[1]
 
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
+if pheno_class > 0:
+    print("Training set label shape:", y_train.shape)
+    print("Validation set label shape:", y_val.shape)
 
 print("Done!")
 
@@ -338,11 +348,13 @@ if not tune:
             ) = SEQ_2_SEQ_GMVAE(
                 architecture_hparams=hparams,
                 batch_size=batch_size,
+                compile_model=True,
                 kl_warmup_epochs=kl_wu,
                 loss=loss,
                 mmd_warmup_epochs=mmd_wu,
                 number_of_components=k,
                 overlap_loss=overlap_loss,
+                phenotype_prediction=pheno_class,
                 predictor=predictor,
             ).build(
                 X_train.shape
@@ -363,26 +375,26 @@ if not tune:
             if "MMD" in loss and mmd_wu > 0:
                 callbacks_.append(mmd_warmup_callback)
 
-            if predictor == 0.0:
-                history = gmvaep.fit(
-                    x=X_train,
-                    y=X_train,
-                    epochs=250,
-                    batch_size=batch_size,
-                    verbose=1,
-                    validation_data=(X_val, X_val,),
-                    callbacks=callbacks_,
-                )
-            else:
-                history = gmvaep.fit(
-                    x=X_train[:-1],
-                    y=[X_train[:-1], X_train[1:]],
-                    epochs=250,
-                    batch_size=batch_size,
-                    verbose=1,
-                    validation_data=(X_val[:-1], [X_val[:-1], X_val[1:]],),
-                    callbacks=callbacks_,
-                )
+            Xs, ys = [X_train], [X_train]
+            Xvals, yvals = [X_val], [X_val]
+
+            if predictor > 0.0:
+                Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
+                Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
+
+            if pheno_class > 0.0:
+                ys += [y_train]
+                yvals += [y_val]
+
+            history = gmvaep.fit(
+                x=Xs,
+                y=ys,
+                epochs=250,
+                batch_size=batch_size,
+                verbose=1,
+                validation_data=(Xvals, yvals,),
+                callbacks=callbacks_,
+            )
 
             gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
 
