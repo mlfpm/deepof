@@ -67,7 +67,7 @@ def test_get_callbacks(
 
 @settings(max_examples=1, deadline=None)
 @given(
-    train=arrays(
+    X_train=arrays(
         dtype=float,
         shape=st.tuples(
             st.integers(min_value=10, max_value=100),
@@ -93,8 +93,7 @@ def test_tune_search(
     )[1:]
 
     deepof.train_utils.tune_search(
-        train,
-        train,
+        data,
         1,
         hypermodel,
         k,
