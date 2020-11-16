@@ -411,8 +411,7 @@ else:
     )
 
     best_hyperparameters, best_model = tune_search(
-        X_train,
-        X_val,
+        data=[X_train, y_train, X_val, y_val],
         bayopt_trials=bayopt_trials,
         hypermodel=hyp,
         k=k,
