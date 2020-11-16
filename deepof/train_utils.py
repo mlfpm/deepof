@@ -104,6 +104,7 @@ def tune_search(
     k: int,
     loss: str,
     overlap_loss: float,
+    pheno_class: float,
     predictor: float,
     project_name: str,
     callbacks: List,
@@ -122,6 +123,8 @@ def tune_search(
             - loss (str): one of [ELBO, MMD, ELBO+MMD]
             - overlap_loss (float): assigns as weight to an extra loss term which
             penalizes overlap between GM components
+            - pheno_class (float): adds an extra regularizing neural network to the model,
+            which tries to predict the phenotype of the animal from which the sequence comes
             - predictor (float): adds an extra regularizing neural network to the model,
             which tries to predict the next frame from the current one
             - project_name (str): ID of the current run

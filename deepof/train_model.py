@@ -418,6 +418,7 @@ else:
         k=k,
         loss=loss,
         overlap_loss=overlap_loss,
+        pheno_class=pheno_class,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
         callbacks=[tensorboard_callback, cp_callback, onecycle],
