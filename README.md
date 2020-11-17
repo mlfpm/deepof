@@ -62,12 +62,12 @@ my_project_dists  = my_project.get_distances(speed=0)
 my_project_angles = my_project.get_angles(speed=0)
 ```
 Here, the data are stored as ```deepof.data.table_dict``` instances. These are very similar to python dictionaries
-with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convinience. Peeping
+with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convenience. Peeping
 into the parameters you see in the code block above, ```center``` centers your data (it can be either a boolean or
 one of the body parts in your model! in which case the coordinate origin will be fixed to the position of that point);
 ```polar``` makes the ```.get_coords()``` method return polar instead of Cartesian coordinates, and ```speed``` 
 indicates the derivation level to apply (0 is position-based, 1 speed, 2 acceleration, 3 jerk, etc). Regarding 
 ```align``` and ```align-inplace```, they take care of aligning the animal position to the y Cartesian axis: if we
-center the data to "Center" and set ```align="Nose", align_inplace=True```, all frames in the video will be alignes in a
-way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movemets that one can extract
+center the data to "Center" and set ```align="Nose", align_inplace=True```, all frames in the video will be aligned in a
+way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movements that one can extract
 with out unsupervised methods. 
