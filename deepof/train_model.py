@@ -421,6 +421,8 @@ else:
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
         callbacks=[tensorboard_callback, cp_callback, onecycle],
+        n_replicas=3,
+        n_epochs=30,
     )
 
     # Saves a compiled, untrained version of the best model
