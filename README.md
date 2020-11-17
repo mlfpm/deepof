@@ -24,7 +24,7 @@ my_project  -- Videos -> all tagged videos
             |
             -- Tables -> all tracking tables (.h5 or .csv)
 ```
-IMPORTANT: Your should make sure that the tables and videos correspond to the same experiments. While the names should 
+IMPORTANT: You should make sure that the tables and videos correspond to the same experiments. While the names should 
 be compatible, this is handled by DLC by default.
 
 ##### Basic usage:
