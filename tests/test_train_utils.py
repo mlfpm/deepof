@@ -65,7 +65,7 @@ def test_get_callbacks(
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 
-@settings(max_examples=1, deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
@@ -93,7 +93,7 @@ def test_tune_search(
         )
     )[1:]
 
-    y_train = tf.random.uniform(shape=(X_train.shape[0],), maxval=1.0)
+    y_train = tf.random.uniform(shape=(X_train.shape[1],), maxval=1.0)
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],

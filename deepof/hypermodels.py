@@ -71,15 +71,16 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
     def __init__(
         self,
-        input_shape,
-        entropy_reg_weight=0.0,
-        huber_delta=1.0,
-        learn_rate=1e-3,
-        loss="ELBO+MMD",
-        number_of_components=10,
-        overlap_loss=False,
-        predictor=0.0,
-        prior="standard_normal",
+        input_shape: tuple,
+        entropy_reg_weight: float = 0.0,
+        huber_delta: float = 1.0,
+        learn_rate: float = 1e-3,
+        loss: str = "ELBO+MMD",
+        number_of_components: int = 10,
+        overlap_loss: bool = False,
+        phenotype_predictor: float = 0.0,
+        predictor: float = 0.0,
+        prior: str = "standard_normal",
     ):
         super().__init__()
         self.input_shape = input_shape
@@ -89,6 +90,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.loss = loss
         self.number_of_components = number_of_components
         self.overlap_loss = overlap_loss
+        self.pheno_class = phenotype_predictor
         self.predictor = predictor
         self.prior = prior
 
@@ -161,6 +163,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             loss=self.loss,
             number_of_components=k,
             overlap_loss=self.overlap_loss,
+            phenotype_prediction=self.pheno_class,
             predictor=self.predictor,
         ).build(self.input_shape)[3:]
 

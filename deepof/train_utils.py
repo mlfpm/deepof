@@ -152,6 +152,7 @@ def tune_search(
             loss=loss,
             number_of_components=k,
             overlap_loss=overlap_loss,
+            phenotype_predictor=pheno_class,
             predictor=predictor,
         )
 
