@@ -51,9 +51,9 @@ my_project = my_project.run(verbose=True)
 Once you have this, you can do several things! But let's first explore how the results of those computations I mentioned
 are stored. To extract trajectories, distances and/or angles, you can respectively type:
 ```
-deepof_coords = deepof_main.get_coords(center=True, polar=False, speed=0, align="Nose", align_inplace=True)
-deepof_dists  = deepof_main.get_distances(speed=0)
-deepof_angles = deepof_main.get_angles(speed=0)
+my_project_coords = my_project.get_coords(center=True, polar=False, speed=0, align="Nose", align_inplace=True)
+my_project_dists  = my_project.get_distances(speed=0)
+my_project_angles = my_project.get_angles(speed=0)
 ```
 Here, the data are stored as ```deepof.data.table_dict``` instances. These are very similar to python dictionaries
 with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convinience. Peeping
