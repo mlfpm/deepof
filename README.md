@@ -5,13 +5,25 @@
 [![Maintainability](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 
 # DeepOF
-### DeepLabCut postprocessing package
+### A suite for postprocessing of time series extracted from videos of freely moving animals using DeepLabCut
+#
+### How do I start?
+##### Installation: 
+clone the repository, go to its containing folder and type 
+``` pip install -e deepof ``` (Careful: this will change upon PyPI submission!).
 
-Includes:
-1. Loading and parsing of data
-2. Trajectory smoothing
-3. Distance and angle computation
-4. Velocity, acceleration and jerk computation
-5. Supervised learning of known behavioural traits
-6. Unsupervised behavioural exploration
-7. Dimensionality reduction
+##### Basic usage:
+To start, create a folder for your project
+ with at least two subdirectories inside, called 'Videos' and 'Tables'. The former should contain the videos you're
+ working with (either you original data or the labeled ones obtained from DLC); the latter should have all the tracking 
+ tables you got from DeepLabCut, either in .h5 or in .csv format. If you don't want to use DLC yourself, don't worry:
+ a compatible pre-trained model for mice will be released soon!
+```
+my_project  -- Videos -> all tagged videos
+            |
+            |
+            -- Tables -> all tracking tables (.h5 or .csv)
+```
+IMPORTANT: Your should make sure that the tables and videos correspond to the same experiments. While the names should 
+be compatible, this is handled by DLC by default.
+
