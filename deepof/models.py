@@ -526,9 +526,9 @@ class SEQ_2_SEQ_GMVAE:
         encoder = Model_E4(encoder)
         encoder = BatchNormalization()(encoder)
 
-        encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
+        # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(self.number_of_components, activation="softmax",)(
-            encoding_shuffle
+            encoder
         )
         z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
