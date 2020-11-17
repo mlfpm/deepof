@@ -258,7 +258,7 @@ class SEQ_2_SEQ_GMVAE:
         loss: str = "ELBO+MMD",
         mmd_warmup_epochs: int = 0,
         number_of_components: int = 1,
-        overlap_loss: bool = False,
+        overlap_loss: float = False,
         phenotype_prediction: float = 0.0,
         predictor: float = 0.0,
     ):

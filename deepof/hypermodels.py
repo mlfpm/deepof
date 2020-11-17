@@ -77,7 +77,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         learn_rate: float = 1e-3,
         loss: str = "ELBO+MMD",
         number_of_components: int = 10,
-        overlap_loss: bool = False,
+        overlap_loss: float = False,
         phenotype_predictor: float = 0.0,
         predictor: float = 0.0,
         prior: str = "standard_normal",
