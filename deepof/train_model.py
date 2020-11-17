@@ -415,13 +415,15 @@ else:
         bayopt_trials=bayopt_trials,
         hypermodel=hyp,
         k=k,
+        kl_warmup_epochs=kl_wu,
         loss=loss,
+        mmd_warmup_epochs=mmd_wu,
         overlap_loss=overlap_loss,
         pheno_class=pheno_class,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
         callbacks=[tensorboard_callback, cp_callback, onecycle],
-        n_replicas=3,
+        n_replicas=1,
         n_epochs=30,
     )
 

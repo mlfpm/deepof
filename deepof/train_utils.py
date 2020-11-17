@@ -101,13 +101,15 @@ def tune_search(
     bayopt_trials: int,
     hypermodel: str,
     k: int,
+    kl_warmup_epochs: int,
     loss: str,
+    mmd_warmup_epochs: int,
     overlap_loss: float,
     pheno_class: float,
     predictor: float,
     project_name: str,
     callbacks: List,
-    n_epochs: int = 40,
+    n_epochs: int = 30,
     n_replicas: int = 1,
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
@@ -149,7 +151,9 @@ def tune_search(
     elif hypermodel == "S2SGMVAE":
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_GMVAE(
             input_shape=X_train.shape,
+            kl_warmup_epochs=kl_warmup_epochs,
             loss=loss,
+            mmd_warmup_epochs=mmd_warmup_epochs,
             number_of_components=k,
             overlap_loss=overlap_loss,
             phenotype_predictor=pheno_class,
