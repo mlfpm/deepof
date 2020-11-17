@@ -29,7 +29,7 @@ be compatible, this is handled by DLC by default.
 
 ##### Basic usage:
 
-The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project object
+The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project:
 ```
 import deepof.data
 my_project = deepof.data.project(path="./my_project",
@@ -41,10 +41,27 @@ Values close to 0 apply a stronger smoothing, and values close to 1 a very light
 between 0.95 and 0.99 if your trajectories are not too noisy. There are other things you can do here, but let's stick to
 the basics for now.  
   
-One you have this, you must run you project using the ```.run()``` method, which will do quite a lot of computing under
+One you have this, you can run you project using the ```.run()``` method, which will do quite a lot of computing under
 the hood (load your data, smooth your trajectories, compute distances and angles). The returned object belongs to the 
 ```deepof.data.coordinates``` class.
 ```
-my_project = my_project.run()
+my_project = my_project.run(verbose=True)
 ```
 
+Once you have this, you can do several things! But let's first explore how the results of those computations I mentioned
+are stored. To extract trajectories, distances and/or angles, you can respectively type:
+```
+deepof_coords = deepof_main.get_coords(center=True, polar=False, speed=0, align="Nose", align_inplace=True)
+deepof_dists  = deepof_main.get_distances(speed=0)
+deepof_angles = deepof_main.get_angles(speed=0)
+```
+Here, the data are stored as ```deepof.data.table_dict``` instances. These are very similar to python dictionaries
+with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convinience. Peeping
+into the parameters you see in the code block above, ```center``` centers your data (it can be either a boolean or
+one of the body parts in your model! in which case the coordinate origin will be fixed to the position of that point);
+```polar``` makes the ```.get_coords()``` method return polar instead of Cartesian coordinates, and ```speed``` 
+indicates the derivation level to apply (0 is position-based, 1 speed, 2 acceleration, 3 jerk, etc). Regarding 
+```align``` and ```align-inplace```, they take care of aligning the animal position to the y Cartesian axis: if we
+center the data to "Center" and set ```align="Nose", align_inplace=True```, all frames in the video will be alignes in a
+way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movemets that one can extract
+with out unsupervised methods. 
