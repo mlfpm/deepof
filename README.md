@@ -70,4 +70,23 @@ indicates the derivation level to apply (0 is position-based, 1 speed, 2 acceler
 ```align``` and ```align-inplace```, they take care of aligning the animal position to the y Cartesian axis: if we
 center the data to "Center" and set ```align="Nose", align_inplace=True```, all frames in the video will be aligned in a
 way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movements that one can extract
-with out unsupervised methods. 
+with out unsupervised methods.
+
+As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
+the ```.rule_based_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.coordinates``` 
+class, respectively.
+```
+rule_based_annot = my_project.rule_based_annotation()
+gmvae_embedding  = my_project.gmvae_embedding()
+```
+The former returns a ```deepof.data.table_dict``` object, with a pandas.DataFrame per experiment containing a series of 
+annotations. The latter is a bit more complicated: it returns an array containing the encoding of the data per animal, 
+another one with motif membership per time point (probabilities of the animal doing whatever is represented by each of 
+the clusters at any given time), an abstract distribution (a multivariate Gaussian mixture) representing the extracted
+ components, and a decoder you can use to generate samples from each of the extracted components (yeah, 
+ you get a generative model for free).
+
+ #
+ 
+ That's it for this (very basic) introduction. More detailed documentation, tutorials and method explanation will follow,
+ so stay tuned!
