@@ -5,7 +5,7 @@
 [![Maintainability](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 
 # DeepOF
-### A suite for postprocessing of time series extracted from videos of freely moving animals using DeepLabCut
+### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
 #
 ### How do I start?
 ##### Installation: 
@@ -47,3 +47,4 @@ the hood (load your data, smooth your trajectories, compute distances and angles
 ```
 my_project = my_project.run()
 ```
+
