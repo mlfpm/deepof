@@ -8,7 +8,7 @@
 ### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
 #
 
-You can use this package to extract either pre-defined motifs from the time series (such as time-in-zone, climbing, 
+You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing, 
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically 
 compare user-defined experimental groups.
