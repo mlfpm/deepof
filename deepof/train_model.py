@@ -428,7 +428,7 @@ else:
     )
 
     # Saves a compiled, untrained version of the best model
-    best_model.build(input_dict_train[input_type].shape)
+    best_model.build(X_train.shape)
     best_model.save(
         "{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf"
     )
