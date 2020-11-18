@@ -30,17 +30,7 @@ tfpl = tfp.layers
 
 # noinspection PyDefaultArgument
 class SEQ_2_SEQ_AE:
-    """
-
-        Simple sequence to sequence autoencoder implemented with tf.keras
-
-            Parameters:
-                -
-
-            Returns:
-                -
-
-        """
+    """  Simple sequence to sequence autoencoder implemented with tf.keras """
 
     def __init__(
         self, architecture_hparams: Dict = {}, huber_delta: float = 1.0,
@@ -234,17 +224,7 @@ class SEQ_2_SEQ_AE:
 
 # noinspection PyDefaultArgument
 class SEQ_2_SEQ_GMVAE:
-    """
-
-    Gaussian Mixture Variational Autoencoder for pose motif elucidation.
-
-        Parameters:
-            -
-
-        Returns:
-            -
-
-    """
+    """  Gaussian Mixture Variational Autoencoder for pose motif elucidation.  """
 
     def __init__(
         self,
@@ -555,7 +535,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -695,10 +675,6 @@ class SEQ_2_SEQ_GMVAE:
 
 # TODO:
 #       - Check KL weight in the overall loss function! Are we scaling the loss components correctly?
-#       - Check batch and event shapes of all distributions involved. Incorrect shapes (batch >1) could bring
-#         problems with the KL.
 #       - Check merge mode in LSTM layers. Maybe we can drastically reduce model size!
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate posterior collapse (L1 as kernel/activity regulariser does not work)
-#       - design clustering-conscious hyperparameter tuning pipeline
-#       - execute the pipeline ;)

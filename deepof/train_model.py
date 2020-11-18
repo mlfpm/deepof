@@ -443,5 +443,3 @@ else:
 
 # TODO:
 #    - Investigate how goussian filters affect reproducibility (in a systematic way)
-#    - Investigate how smoothing affects reproducibility (in a systematic way)
-#    - Check if MCDropout effectively enhances reproducibility or not
