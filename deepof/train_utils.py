@@ -7,7 +7,7 @@
 Simple utility functions used in deepof example scripts. These are not part of the main package
 
 """
-from datetime import datetime
+from datetime import date, datetime
 
 from kerastuner import BayesianOptimization
 from kerastuner import HyperParameters
@@ -62,7 +62,7 @@ def load_treatments(train_path):
 
 def get_callbacks(
     X_train: np.array, batch_size: int, cp: bool, variational: bool, predictor: float, loss: str,
-) -> Tuple:
+) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
         - run_ID: run name, with coarse parameter details;
         - tensorboard_callback: for real-time visualization;
@@ -169,7 +169,7 @@ def tune_search(
 
     tuner = BayesianOptimization(
         hypermodel,
-        directory="BayesianOptx",
+        directory="BayesianOptx_{}_{}".format(loss, str(date.today())),
         executions_per_trial=n_replicas,
         logger=TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
         max_trials=bayopt_trials,
