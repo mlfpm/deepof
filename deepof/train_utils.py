@@ -61,7 +61,7 @@ def load_treatments(train_path):
 
 
 def get_callbacks(
-    X_train: np.array, batch_size: int, variational: bool, predictor: float, loss: str,
+    X_train: np.array, batch_size: int, cp: bool, variational: bool, predictor: float, loss: str,
 ) -> Tuple:
     """Generates callbacks for model training, including:
         - run_ID: run name, with coarse parameter details;
@@ -81,19 +81,23 @@ def get_callbacks(
         log_dir=log_dir, histogram_freq=1, profile_batch=2,
     )
 
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(
-        "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
-        verbose=1,
-        save_best_only=False,
-        save_weights_only=True,
-        save_freq="epoch",
-    )
-
     onecycle = deepof.model_utils.one_cycle_scheduler(
         X_train.shape[0] // batch_size * 250, max_rate=0.005,
     )
 
-    return run_ID, tensorboard_callback, cp_callback, onecycle
+    callbacks = [run_ID, tensorboard_callback, onecycle]
+
+    if cp:
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(
+            "./logs/checkpoints/" + run_ID + "/cp-{epoch:04d}.ckpt",
+            verbose=1,
+            save_best_only=False,
+            save_weights_only=True,
+            save_freq="epoch",
+        )
+        callbacks.append(cp_callback)
+
+    return callbacks
 
 
 def tune_search(

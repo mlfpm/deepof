@@ -308,8 +308,8 @@ if not tune:
         # To avoid stability issues
         tf.keras.backend.clear_session()
 
-        run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
-            X_train, batch_size, variational, predictor, loss,
+        run_ID, tensorboard_callback, onecycle, cp_callback = get_callbacks(
+            X_train, batch_size, True, variational, predictor, loss,
         )
 
         if not variational:
@@ -406,8 +406,8 @@ else:
 
     hyp = "S2SGMVAE" if variational else "S2SAE"
 
-    run_ID, tensorboard_callback, cp_callback, onecycle = get_callbacks(
-        X_train, batch_size, variational, predictor, loss
+    run_ID, tensorboard_callback, onecycle = get_callbacks(
+        X_train, batch_size, False, variational, predictor, loss
     )
 
     best_hyperparameters, best_model = tune_search(
