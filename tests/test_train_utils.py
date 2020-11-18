@@ -56,8 +56,8 @@ def test_load_treatments():
 def test_get_callbacks(
     X_train, batch_size, variational, predictor, loss,
 ):
-    runID, tbc, cpc, cycle1c = deepof.train_utils.get_callbacks(
-        X_train, batch_size, variational, predictor, loss,
+    runID, tbc, cycle1c, cpc = deepof.train_utils.get_callbacks(
+        X_train, batch_size, True, variational, predictor, loss,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
@@ -89,7 +89,7 @@ def test_tune_search(
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
-            X_train, batch_size, hypermodel == "S2SGMVAE", predictor, loss,
+            X_train, batch_size, False, hypermodel == "S2SGMVAE", predictor, loss,
         )
     )[1:]
 
