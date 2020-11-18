@@ -422,7 +422,7 @@ else:
         pheno_class=pheno_class,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
-        callbacks=[tensorboard_callback, cp_callback, onecycle],
+        callbacks=[tensorboard_callback, onecycle],
         n_replicas=1,
         n_epochs=30,
     )
