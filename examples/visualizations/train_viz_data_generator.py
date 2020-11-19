@@ -216,7 +216,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--samples",
-    "-sa",
+    "-sam",
     help="Sets the number of samples (without replacement) to take from the validation set.",
     default=5000,
     type=int,
@@ -237,7 +237,7 @@ animal_id = args.animal_id
 arena_dims = args.arena_dims
 batch_size = args.batch_size
 bayopt_trials = args.bayopt
-checkpoints = args.Zcheckpoint_path
+checkpoints = args.checkpoint_path
 exclude_bodyparts = tuple(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
