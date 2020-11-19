@@ -3,7 +3,7 @@
 # Add to the system path for the script to find deepof
 import sys
 
-sys.path.insert(1, "../../")
+sys.path.insert(0, "../../")
 
 from train_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -216,7 +216,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--samples",
-    "-s",
+    "-sa",
     help="Sets the number of samples (without replacement) to take from the validation set.",
     default=5000,
     type=int,
