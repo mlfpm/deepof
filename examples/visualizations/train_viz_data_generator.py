@@ -3,7 +3,7 @@
 # Add to the system path for the script to find deepof
 import sys
 
-sys.path.insert(1, "../")
+sys.path.insert(1, "../../")
 
 from train_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
