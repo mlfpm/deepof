@@ -364,7 +364,7 @@ checkpoints = sorted(
 )
 
 pttest_idx = np.random.choice(list(range(X_train.shape[0])), samples)
-pttest = X_val[pttest_idx]
+pttest = X_train[pttest_idx]
 
 # Instanciate all models
 clusters = []
