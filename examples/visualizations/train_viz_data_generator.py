@@ -377,7 +377,7 @@ reconstructions = []
     predictor=predictor,
     kl_warmup_epochs=10,
     mmd_warmup_epochs=10,
-    **hparams
+    architecture_hparams=hparams
 ).build(pttest.shape)
 gmvaep.build(pttest.shape)
 
