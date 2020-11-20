@@ -20,4 +20,4 @@ sklearn~=0.0
 tensorflow-probability~=0.10.0
 tensorflow~=2.2.0
 tqdm~=4.50.0
-umap~=0.1.1
+umap-learn~=0.4.6

@@ -265,6 +265,22 @@ if not val_num:
         "Set a valid data path / validation number for the validation to run"
     )
 
+# Load checkpoints and build dataframe with predictions
+path = checkpoints
+checkpoints = sorted(
+    list(
+        set(
+            [
+                path + re.findall('(.*\.ckpt).data', i)[0]
+                for i in os.listdir(path)
+                if "ckpt.data" in i
+            ]
+        )
+    )
+)
+
+assert len(checkpoints) >= 1, "Please provide a valid checkpoint path!"
+
 assert input_type in [
     "coords",
     "dists",
@@ -347,21 +363,6 @@ if pheno_class > 0:
     print("Validation set label shape:", y_val.shape)
 
 print("Done!")
-
-
-# Load checkpoints and build dataframe with predictions
-path = checkpoints
-checkpoints = sorted(
-    list(
-        set(
-            [
-                path + re.findall('(.*\.ckpt).data', i)[0]
-                for i in os.listdir(path)
-                if "ckpt.data" in i
-            ]
-        )
-    )
-)
 
 pttest_idx = np.random.choice(list(range(X_train.shape[0])), samples)
 pttest = X_train[pttest_idx]
