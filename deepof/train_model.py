@@ -423,7 +423,7 @@ else:
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
         callbacks=[tensorboard_callback, onecycle],
-        n_replicas=1,
+        n_replicas=3,
         n_epochs=30,
     )
 
