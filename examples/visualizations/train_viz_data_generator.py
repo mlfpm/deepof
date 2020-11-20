@@ -426,7 +426,7 @@ for i in range(len(checkpoints) + 1):
         else:
             encs.append(reducer.fit_transform(predictions[i]))
     else:
-        if red == "LDA":
+        if red == "LDA" or red == "umap":
             encs.append(
                 reducer.fit_transform(
                     predictions[i], np.argmax(clusters[i - 1], axis=1)
