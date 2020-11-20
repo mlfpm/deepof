@@ -64,12 +64,16 @@ class project:
     ):
 
         self.path = path
-        self.video_path = self.path + "/Videos/"
-        self.table_path = self.path + "/Tables/"
-        self.table_format = table_format
+        self.video_path = os.path.join(self.path, "Videos")
+        self.table_path = os.path.join(self.path, "Tables")
 
+        self.table_format = table_format
         if self.table_format == "autodetect":
-            self.table_format = os.listdir(os.path.join(self.path, "Tables"))[0][-3:]
+            ex = os.listdir(self.table_path)[0]
+            if ".h5" in ex:
+                self.table_format = ".h5"
+            elif ".csv" in ex:
+                self.table_format = ".csv"
 
         self.videos = sorted(
             [
@@ -82,7 +86,7 @@ class project:
             [
                 tab
                 for tab in deepof.utils.os.listdir(self.table_path)
-                if tab.endswith(table_format)
+                if tab.endswith(self.table_format)
             ]
         )
         self.animal_ids = animal_ids
