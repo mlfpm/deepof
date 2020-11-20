@@ -405,7 +405,7 @@ print("Reducing latent space to 2 dimensions for dataviz...")
 if red == "LDA":
     reducer = LinearDiscriminantAnalysis(n_components=2)
 
-elif red == "UMAP":
+elif red == "umap":
     reducer = umap.UMAP(n_components=2)
 
 elif red == "tSNE":
@@ -420,7 +420,7 @@ for i in range(len(checkpoints) + 1):
             if variational
             else np.zeros(samples)
         )
-        if red == "LDA":
+        if red == "LDA" or red == "umap":
             encs.append(reducer.fit_transform(predictions[i], clusts))
         else:
             encs.append(reducer.fit_transform(predictions[i]))
