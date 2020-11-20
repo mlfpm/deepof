@@ -107,26 +107,26 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Architectural hyperparameters
         conv_filters = hp.Int(
-            "units_conv", min_value=128, max_value=160, step=32, default=128,
+            "units_conv", min_value=32, max_value=256, step=32, default=256,
         )
         lstm_units_1 = hp.Int(
-            "units_lstm", min_value=300, max_value=350, step=10, default=320,
+            "units_lstm", min_value=128, max_value=512, step=32, default=256,
         )
         dense_2 = hp.Int(
-            "units_dense2", min_value=120, max_value=180, step=10, default=64,
+            "units_dense2", min_value=32, max_value=256, step=32, default=64,
         )
         dropout_rate = hp.Float(
             "dropout_rate",
             min_value=0.0,
-            max_value=0.15,
-            default=0.0,
+            max_value=0.5,
+            default=0.25,
             sampling="linear",
         )
-        encoding = hp.Int("encoding", min_value=32, max_value=32, step=8, default=32,)
+        encoding = hp.Int("encoding", min_value=16, max_value=64, step=8, default=24,)
         k = hp.Int(
             "n_components",
-            min_value=self.number_of_components,
-            max_value=self.number_of_components,
+            min_value=1,
+            max_value=25,
             step=1,
             default=self.number_of_components,
             sampling="linear",
