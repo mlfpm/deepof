@@ -66,6 +66,11 @@ class project:
         self.path = path
         self.video_path = self.path + "/Videos/"
         self.table_path = self.path + "/Tables/"
+        self.table_format = table_format
+
+        if self.table_format == "autodetect":
+            self.table_format = os.listdir(os.path.join(self.path, "Tables"))[0][-3:]
+
         self.videos = sorted(
             [
                 vid
@@ -87,11 +92,6 @@ class project:
         self.scales = self.get_scale
         self.smooth_alpha = smooth_alpha
         self.video_format = video_format
-
-        self.table_format = table_format
-        if self.table_format == "autodetect":
-            self.table_format = os.listdir(os.path.join(self.path, "Tables"))[0][:-3:]
-
         self.angles = True
         self.distances = "all"
         self.ego = False
