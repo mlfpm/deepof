@@ -59,7 +59,7 @@ class project:
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0.99,
-        table_format: str = ".h5",
+        table_format: str = "autodetect",
         video_format: str = ".mp4",
     ):
 
@@ -86,8 +86,11 @@ class project:
         self.exp_conditions = exp_conditions
         self.scales = self.get_scale
         self.smooth_alpha = smooth_alpha
-        self.table_format = table_format
         self.video_format = video_format
+
+        self.table_format = table_format
+        if self.table_format == "autodetect":
+            self.table_format = os.listdir(os.path.join(self.path, "Tables"))[0][:-3:]
 
         self.angles = True
         self.distances = "all"
