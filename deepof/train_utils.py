@@ -61,7 +61,12 @@ def load_treatments(train_path):
 
 
 def get_callbacks(
-    X_train: np.array, batch_size: int, cp: bool, variational: bool, predictor: float, loss: str,
+    X_train: np.array,
+    batch_size: int,
+    cp: bool,
+    variational: bool,
+    predictor: float,
+    loss: str,
 ) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
         - run_ID: run name, with coarse parameter details;

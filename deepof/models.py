@@ -507,9 +507,7 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
-        z_cat = Dense(self.number_of_components, activation="softmax",)(
-            encoder
-        )
+        z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
         z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             deepof.model_utils.tfpl.IndependentNormal.params_size(
@@ -535,7 +533,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )

@@ -9,6 +9,8 @@ Functions and general utilities for the deepof tensorflow models. See documentat
 """
 
 from itertools import combinations
+from typing import Any, Tuple
+
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
@@ -136,7 +138,7 @@ def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def compute_mmd(tensors: tuple) -> tf.Tensor:
+def compute_mmd(tensors: Tuple[Any, Any]) -> tf.Tensor:
     """
 
         Computes the MMD between the two specified vectors using a gaussian kernel.
@@ -317,7 +319,9 @@ class DenseTranspose(Layer):
         """Updates Layer's build method"""
 
         self.biases = self.add_weight(
-            name="bias", shape=[self.dense.input_shape[-1]], initializer="zeros"
+            name="bias",
+            shape=self.dense.get_input_at(-1).get_shape().as_list(),
+            initializer="zeros",
         )
         super().build(batch_input_shape)
 
@@ -390,6 +394,7 @@ class MMDiscrepancyLayer(Layer):
         """Updates Layer's call method"""
 
         true_samples = self.prior.sample(self.batch_size)
+        # noinspection PyTypeChecker
         mmd_batch = self.beta * compute_mmd((true_samples, z))
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
@@ -428,7 +433,7 @@ class Gaussian_mixture_overlap(Layer):
         dists = []
         for k in range(self.n_components):
             locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
+            scales = tf.keras.activations.softplus(target[..., self.lat_dims:, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
