@@ -65,7 +65,7 @@ def test_get_callbacks(
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 
-@settings(max_examples=5, deadline=None)
+@settings(max_examples=1, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
