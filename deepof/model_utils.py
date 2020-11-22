@@ -320,7 +320,7 @@ class DenseTranspose(Layer):
 
         self.biases = self.add_weight(
             name="bias",
-            shape=self.dense.get_input_at(-1).get_shape().as_list(),
+            shape=self.dense.get_input_at(-1).get_shape().as_list()[1:],
             initializer="zeros",
         )
         super().build(batch_input_shape)
