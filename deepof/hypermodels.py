@@ -113,7 +113,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             "units_lstm", min_value=300, max_value=350, step=10, default=320,
         )
         dense_2 = hp.Int(
-            "units_dense2", min_value=120, max_value=180, step=10, default=64,
+            "units_dense2", min_value=120, max_value=180, step=10, default=150,
         )
         dropout_rate = hp.Float(
             "dropout_rate",
@@ -129,7 +129,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             max_value=self.number_of_components + 5,
             step=5,
             default=self.number_of_components,
-            sampling="linear",
+            # sampling="linear",
         )
 
         return (
