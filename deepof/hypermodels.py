@@ -107,7 +107,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Architectural hyperparameters
         conv_filters = hp.Int(
-            "units_conv", min_value=128, max_value=160, step=32, default=128,
+            "units_conv", min_value=128, max_value=160, step=16, default=128,
         )
         lstm_units_1 = hp.Int(
             "units_lstm", min_value=300, max_value=350, step=10, default=320,
@@ -122,15 +122,15 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             default=0.0,
             sampling="linear",
         )
-        encoding = hp.Int("encoding", min_value=20, max_value=30, step=5, default=25, )
-        k = hp.Int(
-            "n_components",
-            min_value=self.number_of_components - 5,
-            max_value=self.number_of_components + 5,
-            step=5,
-            default=self.number_of_components,
-            # sampling="linear",
-        )
+        encoding = 16 #hp.Int("encoding", min_value=20, max_value=30, step=5, default=25, )
+        k = 5 # hp.Int(
+        #     "n_components",
+        #     min_value=self.number_of_components - 5,
+        #     max_value=self.number_of_components + 5,
+        #     step=5,
+        #     default=self.number_of_components,
+        #     # sampling="linear",
+        # )
 
         return (
             conv_filters,
