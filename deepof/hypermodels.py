@@ -119,7 +119,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         dense_2 = hp.Int(
             "units_dense2", min_value=120, max_value=180, step=10, default=150,
         )
-        dense_activation = hp.Choice(["elu", "relu"])
+        dense_activation = hp.Choice("dense_activation", values=["elu", "relu"])
         dropout_rate = hp.Float(
             "dropout_rate",
             min_value=0.0,
