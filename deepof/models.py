@@ -381,7 +381,7 @@ class SEQ_2_SEQ_GMVAE:
                 kernel_initializer=he_uniform(),
                 use_bias=True,
             )
-            for _ in self.dense_layers_per_branch
+            for _ in range(self.dense_layers_per_branch)
         ]
 
         # Decoder layers
@@ -396,7 +396,7 @@ class SEQ_2_SEQ_GMVAE:
                 kernel_initializer=he_uniform(),
                 use_bias=True,
             )
-            for _ in self.dense_layers_per_branch
+            for _ in range(self.dense_layers_per_branch)
         ]
         Model_D2 = Dense(
             self.DENSE_1,
