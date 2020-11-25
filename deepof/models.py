@@ -249,6 +249,7 @@ class SEQ_2_SEQ_GMVAE:
         self.dense_activation = dense_activation
         self.LSTM_units_1 = self.hparams["units_lstm"]
         self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
+        self.LSTM_unroll = True
         self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
         self.DENSE_2 = self.hparams["units_dense2"]
         self.DROPOUT_RATE = self.hparams["dropout_rate"]
@@ -344,6 +345,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             )
@@ -354,6 +356,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=False,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             )
@@ -397,6 +400,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -407,6 +411,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="sigmoid",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -425,6 +430,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -435,6 +441,7 @@ class SEQ_2_SEQ_GMVAE:
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
+                unroll=self.lstm_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
