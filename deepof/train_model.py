@@ -422,7 +422,13 @@ else:
         pheno_class=pheno_class,
         predictor=predictor,
         project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
-        callbacks=[tensorboard_callback, onecycle],
+        callbacks=[
+            tensorboard_callback,
+            onecycle,
+            tf.keras.callbacks.EarlyStopping(
+                "val_mae", patience=15, restore_best_weights=True
+            ),
+        ],
         n_replicas=3,
         n_epochs=30,
     )
