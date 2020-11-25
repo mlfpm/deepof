@@ -122,8 +122,10 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             default=0.0,
             sampling="linear",
         )
-        encoding = 16 #hp.Int("encoding", min_value=20, max_value=30, step=5, default=25, )
-        k = 5 # hp.Int(
+        encoding = (
+            16  # hp.Int("encoding", min_value=20, max_value=30, step=5, default=25, )
+        )
+        k = 5  # hp.Int(
         #     "n_components",
         #     min_value=self.number_of_components - 5,
         #     max_value=self.number_of_components + 5,

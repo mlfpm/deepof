@@ -433,7 +433,7 @@ class Gaussian_mixture_overlap(Layer):
         dists = []
         for k in range(self.n_components):
             locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims:, k])
+            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
