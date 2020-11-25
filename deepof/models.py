@@ -249,7 +249,7 @@ class SEQ_2_SEQ_GMVAE:
         self.dense_activation = dense_activation
         self.LSTM_units_1 = self.hparams["units_lstm"]
         self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
-        self.LSTM_unroll = True
+        self.lstm_unroll = True
         self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
         self.DENSE_2 = self.hparams["units_dense2"]
         self.DROPOUT_RATE = self.hparams["dropout_rate"]
