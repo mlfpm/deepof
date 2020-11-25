@@ -334,7 +334,7 @@ class SEQ_2_SEQ_GMVAE:
             padding="causal",
             activation="elu",
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
         Model_E1 = Bidirectional(
             LSTM(
@@ -343,7 +343,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=0),
-                use_bias=False,
+                use_bias=True,
             )
         )
         Model_E2 = Bidirectional(
@@ -353,7 +353,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=False,
                 kernel_constraint=UnitNorm(axis=0),
-                use_bias=False,
+                use_bias=True,
             )
         )
         Model_E3 = Dense(
@@ -361,14 +361,14 @@ class SEQ_2_SEQ_GMVAE:
             activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
         Model_E4 = Dense(
             self.DENSE_2,
             activation="elu",
             kernel_constraint=UnitNorm(axis=0),
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
 
         # Decoder layers
@@ -380,13 +380,13 @@ class SEQ_2_SEQ_GMVAE:
             self.DENSE_2,
             activation="elu",
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
         Model_D2 = Dense(
             self.DENSE_1,
             activation="elu",
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
         Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
@@ -396,7 +396,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
-                use_bias=False,
+                use_bias=True,
             )
         )
         Model_D5 = Bidirectional(
@@ -406,7 +406,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
-                use_bias=False,
+                use_bias=True,
             )
         )
 
@@ -415,7 +415,7 @@ class SEQ_2_SEQ_GMVAE:
             self.DENSE_1,
             activation="elu",
             kernel_initializer=he_uniform(),
-            use_bias=False,
+            use_bias=True,
         )
         Model_P2 = Bidirectional(
             LSTM(
@@ -424,7 +424,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
-                use_bias=False,
+                use_bias=True,
             )
         )
         Model_P3 = Bidirectional(
@@ -434,7 +434,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 kernel_constraint=UnitNorm(axis=1),
-                use_bias=False,
+                use_bias=True,
             )
         )
 
