@@ -254,7 +254,6 @@ class SEQ_2_SEQ_GMVAE:
         self.clipvalue = self.hparams["clipvalue"]
         self.dense_activation = self.hparams["dense_activation"]
         self.learn_rate = self.hparams["learning_rate"]
-        self.optimizer = self.hparams["optimizer"]
         self.lstm_unroll = True
         self.compile = compile_model
         self.delta = huber_delta
