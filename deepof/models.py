@@ -253,6 +253,7 @@ class SEQ_2_SEQ_GMVAE:
         self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
         self.clipvalue = self.hparams["clipvalue"]
         self.dense_activation = self.hparams["dense_activation"]
+        self.dense_layers_per_branch = self.hparams["dense_layers_per_branch"]
         self.learn_rate = self.hparams["learning_rate"]
         self.lstm_unroll = True
         self.compile = compile_model
@@ -313,14 +314,15 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "units_conv": 256,
-            "units_lstm": 256,
-            "units_dense2": 64,
+            "clipvalue": 0.5,
+            "dense_activation": "elu",
+            "dense_layers_per_branch": 1,
             "dropout_rate": 0.15,
             "encoding": 16,
             "learning_rate": 1e-3,
-            "clipvalue": 0.5,
-            "dense_activation": "elu",
+            "units_conv": 256,
+            "units_dense2": 64,
+            "units_lstm": 256,
         }
 
         for k, v in params.items():
@@ -370,25 +372,32 @@ class SEQ_2_SEQ_GMVAE:
             kernel_initializer=he_uniform(),
             use_bias=True,
         )
-        Model_E4 = Dense(
-            self.DENSE_2,
-            activation=self.dense_activation,
-            # kernel_constraint=UnitNorm(axis=0),
-            kernel_initializer=he_uniform(),
-            use_bias=True,
-        )
+
+        Model_E4 = [
+            Dense(
+                self.DENSE_2,
+                activation=self.dense_activation,
+                # kernel_constraint=UnitNorm(axis=0),
+                kernel_initializer=he_uniform(),
+                use_bias=True,
+            )
+            for _ in self.dense_layers_per_branch
+        ]
 
         # Decoder layers
         Model_B1 = BatchNormalization()
         Model_B2 = BatchNormalization()
         Model_B3 = BatchNormalization()
         Model_B4 = BatchNormalization()
-        Model_D1 = Dense(
-            self.DENSE_2,
-            activation=self.dense_activation,
-            kernel_initializer=he_uniform(),
-            use_bias=True,
-        )
+        Model_D1 = [
+            Dense(
+                self.DENSE_2,
+                activation=self.dense_activation,
+                kernel_initializer=he_uniform(),
+                use_bias=True,
+            )
+            for _ in self.dense_layers_per_branch
+        ]
         Model_D2 = Dense(
             self.DENSE_1,
             activation=self.dense_activation,
@@ -516,7 +525,7 @@ class SEQ_2_SEQ_GMVAE:
         encoder = Model_E3(encoder)
         encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
-        encoder = Model_E4(encoder)
+        encoder = Sequential(Model_E4)(encoder)
         encoder = BatchNormalization()(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
@@ -546,7 +555,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -588,7 +597,7 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
 
         # Define and instantiate generator
-        generator = Model_D1(z)
+        generator = Sequential(Model_D1)(z)
         generator = Model_B1(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
@@ -650,7 +659,7 @@ class SEQ_2_SEQ_GMVAE:
 
         # Build generator as a separate entity
         g = Input(shape=self.ENCODING)
-        _generator = Model_D1(g)
+        _generator = Sequential(Model_D1)(g)
         _generator = Model_B1(_generator)
         _generator = Model_D2(_generator)
         _generator = Model_B2(_generator)

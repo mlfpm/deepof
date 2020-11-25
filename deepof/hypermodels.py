@@ -107,11 +107,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Architectural hyperparameters
         clipvalue = hp.Float(
-            "clipvalue",
-            min_value=0.0,
-            max_value=1.0,
-            default=0.5,
-            sampling="Linear"
+            "clipvalue", min_value=0.0, max_value=1.0, default=0.5, sampling="Linear"
         )
         conv_filters = hp.Int(
             "units_conv", min_value=128, max_value=160, step=16, default=128,
@@ -120,6 +116,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             "units_dense2", min_value=120, max_value=180, step=10, default=150,
         )
         dense_activation = hp.Choice("dense_activation", values=["elu", "relu"])
+        dense_layers_per_branch = hp.Int("dense_layers_per_branch", min_value=1, max_value=3, default=1)
         dropout_rate = hp.Float(
             "dropout_rate",
             min_value=0.0,
@@ -138,6 +135,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             conv_filters,
             dense_2,
             dense_activation,
+            dense_layers_per_branch,
             dropout_rate,
             encoding,
             k,
@@ -153,6 +151,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             conv_filters,
             dense_2,
             dense_activation,
+            dense_layers_per_branch,
             dropout_rate,
             encoding,
             k,
@@ -164,6 +163,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                 "clipvalue": clipvalue,
                 "dense_activation": dense_activation,
                 "dropout_rate": dropout_rate,
+                "dense_layers_per_branch": dense_layers_per_branch,
                 "encoding": encoding,
                 "units_conv": conv_filters,
                 "units_dense_2": dense_2,
