@@ -233,7 +233,7 @@ class SEQ_2_SEQ_GMVAE:
         compile_model: bool = True,
         entropy_reg_weight: float = 0.0,
         huber_delta: float = 1.0,
-        initialiser_iters: int = int(1e4),
+        initialiser_iters: int = int(1),
         kl_warmup_epochs: int = 0,
         loss: str = "ELBO+MMD",
         mmd_warmup_epochs: int = 0,
