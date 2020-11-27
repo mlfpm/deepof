@@ -244,6 +244,7 @@ class SEQ_2_SEQ_GMVAE:
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.batch_size = batch_size
+        self.bidirectional_merge = self.hparams["bidirectional_merge"]
         self.CONV_filters = self.hparams["units_conv"]
         self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
         self.DENSE_2 = self.hparams["units_dense2"]
@@ -314,6 +315,7 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
+            "bidirectional_merge": "concat",
             "clipvalue": 1.0,
             "dense_activation": "relu",
             "dense_layers_per_branch": 1,
@@ -350,6 +352,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             )
@@ -361,6 +364,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=False,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             )
@@ -412,6 +416,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -423,6 +428,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -442,6 +448,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )
@@ -453,6 +460,7 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
+                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             )

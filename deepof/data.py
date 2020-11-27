@@ -202,8 +202,6 @@ class project:
                     dtype={"coords": int},
                 )
 
-                if head.shape[1] != data.shape[1]:
-                    data.drop("1", axis=1, inplace=True)
                 data.columns = pd.MultiIndex.from_product(
                     [
                         [head.columns[2]],
