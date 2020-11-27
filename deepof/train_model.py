@@ -73,7 +73,7 @@ parser.add_argument(
     "-tune",
     help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
     "See documentation for details",
-    type=str2bool,
+    type=str,
     default=False,
 )
 parser.add_argument(
