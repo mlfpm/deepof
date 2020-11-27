@@ -200,7 +200,10 @@ class project:
                     skiprows=2,
                     index_col="coords",
                     dtype={"coords": int},
-                ).drop("1", axis=1)
+                )
+
+                if head.shape[1] != data.shape[1]:
+                    data.drop("1", axis=1, inplace=True)
                 data.columns = pd.MultiIndex.from_product(
                     [
                         [head.columns[2]],
