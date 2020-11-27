@@ -41,13 +41,6 @@ parser.add_argument(
     default=512,
 )
 parser.add_argument(
-    "--bayopt",
-    "-n",
-    help="sets the number of Bayesian optimization iterations to run. Default is 25",
-    type=int,
-    default=25,
-)
-parser.add_argument(
     "--components",
     "-k",
     help="set the number of components for the GMVAE(P) model. Defaults to 1",
@@ -69,9 +62,17 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "--hpt_trials",
+    "-n",
+    help="sets the number of hyperparameter tuning iterations to run. Default is 25",
+    type=int,
+    default=25,
+)
+parser.add_argument(
     "--hyperparameter-tuning",
     "-tune",
-    help="If True, hyperparameter tuning is performed. See documentation for details",
+    help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
+    "See documentation for details",
     type=str2bool,
     default=False,
 )
@@ -187,7 +188,7 @@ args = parser.parse_args()
 animal_id = args.animal_id
 arena_dims = args.arena_dims
 batch_size = args.batch_size
-bayopt_trials = args.bayopt
+hypertun_trials = args.hpt_trials
 exclude_bodyparts = list(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
@@ -412,7 +413,8 @@ else:
 
     best_hyperparameters, best_model = tune_search(
         data=[X_train, y_train, X_val, y_val],
-        bayopt_trials=bayopt_trials,
+        hypertun_trials=hypertun_trials,
+        hpt_type=tune,
         hypermodel=hyp,
         k=k,
         kl_warmup_epochs=kl_wu,
@@ -421,7 +423,7 @@ else:
         overlap_loss=overlap_loss,
         pheno_class=pheno_class,
         predictor=predictor,
-        project_name="{}-based_{}_BAYESIAN_OPT".format(input_type, hyp),
+        project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
             onecycle,
@@ -436,12 +438,12 @@ else:
     # Saves a compiled, untrained version of the best model
     best_model.build(X_train.shape)
     best_model.save(
-        "{}-based_{}_BAYESIAN_OPT.h5".format(input_type, hyp), save_format="tf"
+        "{}-based_{}_{}.h5".format(input_type, hyp, tune.capitalize()), save_format="tf"
     )
 
     # Saves the best hyperparameters
     with open(
-        "{}-based_{}_BAYESIAN_OPT_params.pickle".format(input_type, hyp), "wb"
+        "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()), "wb"
     ) as handle:
         pickle.dump(
             best_hyperparameters.values, handle, protocol=pickle.HIGHEST_PROTOCOL

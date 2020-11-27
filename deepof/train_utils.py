@@ -107,7 +107,8 @@ def get_callbacks(
 
 def tune_search(
     data: List[np.array],
-    bayopt_trials: int,
+    hypertun_trials: int,
+    hpt_type: str,
     hypermodel: str,
     k: int,
     kl_warmup_epochs: int,
@@ -126,7 +127,8 @@ def tune_search(
         Parameters:
             - train (np.array): dataset to train the model on
             - test (np.array): dataset to validate the model on
-            - bayopt_trials (int): number of Bayesian optimization iterations to run
+            - hypertun_trials (int): number of Bayesian optimization iterations to run
+            - hpt_type (str): specify one of Bayesian Optimization (bayopt) and Hyperband (hyperband)
             - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder)
             or S2SGMVAE (Gaussian Mixture Variational autoencoder).
             - k (int) number of components of the Gaussian Mixture
@@ -151,6 +153,10 @@ def tune_search(
 
     X_train, y_train, X_val, y_val = data
 
+    assert hpt_type in ["bayopt", "hyperband"], (
+        "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
+    )
+
     if hypermodel == "S2SAE":  # pragma: no cover
         assert (
             predictor == 0.0 and pheno_class == 0.0
@@ -172,17 +178,28 @@ def tune_search(
     else:
         return False
 
-    tuner = Hyperband(
-        hypermodel,
-        directory="HyperBandx_{}_{}".format(loss, str(date.today())),
-        executions_per_trial=n_replicas,
-        logger=TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
-        max_epochs=bayopt_trials,
-        objective="val_mae",
-        project_name=project_name,
-        seed=42,
-        tune_new_entries=True,
-    )
+    hpt_params = {
+        "hypermodel": hypermodel,
+        "executions_per_trial": n_replicas,
+        "logger": TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
+        "objective": "val_mae",
+        "project_name": project_name,
+        "seed": 42,
+        "tune_new_entries": True,
+    }
+
+    if hpt_type == "hyperband":
+        tuner = Hyperband(
+            directory="HyperBandx_{}_{}".format(loss, str(date.today())),
+            max_epochs=hypertun_trials,
+            **hpt_params
+        )
+    else:
+        tuner = BayesianOptimization(
+            directory="BayOpt_{}_{}".format(loss, str(date.today())),
+            max_trials=hypertun_trials,
+            **hpt_params
+        )
 
     print(tuner.search_space_summary())
 
