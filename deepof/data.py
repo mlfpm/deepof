@@ -201,7 +201,6 @@ class project:
                     index_col="coords",
                     dtype={"coords": int},
                 )
-
                 data.columns = pd.MultiIndex.from_product(
                     [
                         [head.columns[2]],
