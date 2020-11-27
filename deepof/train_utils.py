@@ -9,7 +9,7 @@ Simple utility functions used in deepof example scripts. These are not part of t
 """
 from datetime import date, datetime
 
-from kerastuner import BayesianOptimization
+from kerastuner import BayesianOptimization, Hyperband
 from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from typing import Tuple, Union, Any, List
@@ -172,12 +172,12 @@ def tune_search(
     else:
         return False
 
-    tuner = BayesianOptimization(
+    tuner = Hyperband(
         hypermodel,
-        directory="BayesianOptx_{}_{}".format(loss, str(date.today())),
+        directory="HyperBandx_{}_{}".format(loss, str(date.today())),
         executions_per_trial=n_replicas,
         logger=TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
-        max_trials=bayopt_trials,
+        max_epochs=bayopt_trials,
         objective="val_mae",
         project_name=project_name,
         seed=42,
