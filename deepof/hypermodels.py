@@ -106,31 +106,21 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         """Retrieve hyperparameters to tune"""
 
         # Architectural hyperparameters
-        clipvalue = hp.Float(
-            "clipvalue", min_value=0.0, max_value=1.0, default=0.5, sampling="Linear"
+        bidirectional_merge = hp.Choice(
+            "bidirectional_merge", values=["sum", "mul", "concat", "ave"]
         )
-        conv_filters = hp.Int(
-            "units_conv", min_value=128, max_value=160, step=16, default=128,
-        )
-        dense_2 = hp.Int(
-            "units_dense2", min_value=120, max_value=180, step=10, default=150,
-        )
-        dense_activation = hp.Choice("dense_activation", values=["elu", "relu"])
-        dense_layers_per_branch = hp.Int("dense_layers_per_branch", min_value=1, max_value=3, default=1)
-        dropout_rate = hp.Float(
-            "dropout_rate",
-            min_value=0.0,
-            max_value=0.15,
-            default=0.0,
-            sampling="linear",
-        )
+        clipvalue = hp.Choice("clipvalue", values=[1.0, None])
+        conv_filters = 160
+        dense_2 = 120
+        dense_activation = "relu"
+        dense_layers_per_branch = 1
+        dropout_rate = 1e-3
         encoding = 16
         k = self.number_of_components
-        lstm_units_1 = hp.Int(
-            "units_lstm", min_value=300, max_value=350, step=10, default=320,
-        )
+        lstm_units_1 = 300
 
         return (
+            bidirectional_merge,
             clipvalue,
             conv_filters,
             dense_2,
@@ -147,6 +137,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         # Hyperparameters to tune
         (
+            bidirectional_merge,
             clipvalue,
             conv_filters,
             dense_2,
@@ -160,10 +151,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams={
+                "bidirectional_merge": "concat",
                 "clipvalue": clipvalue,
                 "dense_activation": dense_activation,
-                "dropout_rate": dropout_rate,
                 "dense_layers_per_branch": dense_layers_per_branch,
+                "dropout_rate": dropout_rate,
                 "encoding": encoding,
                 "units_conv": conv_filters,
                 "units_dense_2": dense_2,

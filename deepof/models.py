@@ -314,15 +314,15 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "clipvalue": 0.5,
-            "dense_activation": "elu",
+            "clipvalue": 1.0,
+            "dense_activation": "relu",
             "dense_layers_per_branch": 1,
-            "dropout_rate": 0.15,
+            "dropout_rate": 1e-3,
             "encoding": 16,
             "learning_rate": 1e-3,
-            "units_conv": 256,
-            "units_dense2": 64,
-            "units_lstm": 256,
+            "units_conv": 160,
+            "units_dense2": 120,
+            "units_lstm": 300,
         }
 
         for k, v in params.items():
@@ -555,7 +555,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
