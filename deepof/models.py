@@ -352,10 +352,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
         Model_E2 = Bidirectional(
             LSTM(
@@ -364,10 +364,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=False,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
         Model_E3 = Dense(
             self.DENSE_1,
@@ -416,10 +416,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
         Model_D5 = Bidirectional(
             LSTM(
@@ -428,10 +428,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
 
         # Predictor layers
@@ -448,10 +448,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
         Model_P3 = Bidirectional(
             LSTM(
@@ -460,10 +460,10 @@ class SEQ_2_SEQ_GMVAE:
                 recurrent_activation="sigmoid",
                 return_sequences=True,
                 unroll=self.lstm_unroll,
-                merge_mode=self.bidirectional_merge,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
-            )
+            ),
+            merge_mode=self.bidirectional_merge,
         )
 
         # Phenotype classification layers
