@@ -62,7 +62,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "--hpt_trials",
+    "--hpt-trials",
     "-n",
     help="sets the number of hyperparameter tuning iterations to run. Default is 25",
     type=int,
