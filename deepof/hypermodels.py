@@ -11,6 +11,7 @@ keras hypermodels for hyperparameter tuning of deep autoencoders
 from kerastuner import HyperModel
 import deepof.models
 import deepof.model_utils
+import numpy as np
 import tensorflow_probability as tfp
 
 tfd = tfp.distributions
@@ -109,7 +110,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         bidirectional_merge = hp.Choice(
             "bidirectional_merge", values=["sum", "mul", "concat", "ave"]
         )
-        clipvalue = hp.Choice("clipvalue", values=[1.0, None])
+        clipvalue = hp.Choice("clipvalue", values=[1.0, np.inf])
         conv_filters = 160
         dense_2 = 120
         dense_activation = "relu"
