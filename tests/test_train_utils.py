@@ -77,6 +77,7 @@ def test_get_callbacks(
         elements=st.floats(min_value=0.0, max_value=1,),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
+    hpt_type=st.one_of(st.just("bayopt"), st.just("hypermodel")),
     hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
@@ -85,7 +86,7 @@ def test_get_callbacks(
     predictor=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_tune_search(
-    X_train, batch_size, hypermodel, k, loss, overlap_loss, pheno_class, predictor,
+    X_train, batch_size, hpt_type, hypermodel, k, loss, overlap_loss, pheno_class, predictor,
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
@@ -97,7 +98,8 @@ def test_tune_search(
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
-        bayopt_trials=1,
+        hpt_type=hpt_type,
+        hypertun_trials=1,
         hypermodel=hypermodel,
         k=k,
         kl_warmup_epochs=0,
