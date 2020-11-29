@@ -7,7 +7,7 @@ test:
   script:
     - pip install pipenv
     - pip install coverage
-    - pipenv install Pipfile --dev
+    - pipenv install --dev Pipfile
     - pip install -e deepof/
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
