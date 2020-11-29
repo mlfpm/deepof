@@ -1,7 +1,7 @@
 [[source]]
 url = "https://pypi.org/simple"
 verify_ssl = true
-name = "deepof"
+name = "pypi"
 
 [packages]
 joblib = "~=0.16.0"
@@ -29,4 +29,4 @@ kerastuner-tensorboard-logger = "~=0.2.3"
 pytest = "~=5.3.5"
 
 [requires]
-python_version = "3.7"
+python_version = "3.8"

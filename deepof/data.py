@@ -17,7 +17,6 @@ Contains methods for generating training and test sets ready for model training.
 from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
 from typing import Dict, List, Tuple, Union
-from pandas_profiling import ProfileReport
 from multiprocessing import cpu_count
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
@@ -680,16 +679,9 @@ class coordinates:
 
         return self._exp_conditions
 
-    def get_quality(self, report: bool = False):
+    def get_quality(self):
         """Retrieves a dictionary with the tagging quality per video, as reported by DLC"""
 
-        if report:  # pragma: no cover
-            profile = ProfileReport(
-                self._quality[report],
-                title="Quality Report, {}".format(report),
-                html={"style": {"full_width": True}},
-            )
-            return profile
         return self._quality
 
     @property
