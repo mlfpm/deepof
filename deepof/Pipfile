@@ -20,6 +20,7 @@ tensorflow-probability = "~=0.11.1"
 tensorflow = "~=2.3.0"
 tqdm = "~=4.50.0"
 umap-learn = "~=0.4.6"
+pipfile = "*"
 
 [dev-packages]
 dash = "~=1.11.0"
