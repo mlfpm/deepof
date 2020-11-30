@@ -5,7 +5,7 @@ test:
   stage: test
   image: continuumio/anaconda3
   script:
-    - pt-get install --fix-missing 'libgl1-mesa-glx' -y
+    - sudo apt-get install --fix-missing 'libgl1-mesa-glx' -y
     - python -V
     - pip install pipenv
     - pipenv install --python=3.8 --dev
