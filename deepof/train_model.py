@@ -439,7 +439,7 @@ else:
                 "val_mae", patience=15, restore_best_weights=True
             ),
         ],
-        n_replicas=1,
+        n_replicas=3,
         n_epochs=30,
     )
 
