@@ -4,18 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-dash = "*"
-hypothesis = "*"
 joblib = "*"
-keras-tuner = "*"
-kerastuner-tensorboard-logger = "*"
 matplotlib = "*"
 networkx = "*"
 numpy = "*"
 opencv-python = "*"
 pandas = "*"
 plotly = "*"
-pytest = "*"
 regex = "*"
 scikit-learn = "*"
 scipy = "*"
@@ -28,6 +23,11 @@ tqdm = "*"
 umap-learn = "*"
 
 [dev-packages]
+dash = "*"
+hypothesis = "*"
+keras-tuner = "*"
+kerastuner-tensorboard-logger = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.8"
