@@ -7,7 +7,7 @@ test:
   script:
     - python -V
     - pip install pipenv
-    - pipenv install --python=3.8
+    - pipenv install --python=3.8 --dev
     - pipenv install coverage
     - pipenv install -e deepof/
     - pipend shell
