@@ -5,6 +5,7 @@ test:
   stage: test
   image: continuumio/anaconda3
   script:
+    - gitlab-runner restart
     - python -V
     - pip install coverage
     - pip install -r ./requirements.txt
