@@ -29,18 +29,18 @@ def plot_heatmap(
     dpi: int = 200,
 ) -> plt.figure:
     """Returns a heatmap of the movement of a specific bodypart in the arena.
-       If more than one bodypart is passed, it returns one subplot for each
+    If more than one bodypart is passed, it returns one subplot for each
 
-        Parameters:
-            - dframe (pandas.DataFrame): table_dict value with info to plot
-            - bodyparts (List): bodyparts to represent (at least 1)
-            - xlim (float): limits of the x-axis
-            - ylim (float): limits of the y-axis
-            - save (str): name of the file to which the figure should be saved
-            - dpi (int): dots per inch of the returned image
+     Parameters:
+         - dframe (pandas.DataFrame): table_dict value with info to plot
+         - bodyparts (List): bodyparts to represent (at least 1)
+         - xlim (float): limits of the x-axis
+         - ylim (float): limits of the y-axis
+         - save (str): name of the file to which the figure should be saved
+         - dpi (int): dots per inch of the returned image
 
-        Returns:
-            - heatmaps (plt.figure): figure with the specified characteristics"""
+     Returns:
+         - heatmaps (plt.figure): figure with the specified characteristics"""
 
     # noinspection PyTypeChecker
     heatmaps, ax = plt.subplots(1, len(bodyparts), sharex=True, sharey=True, dpi=dpi)
@@ -48,9 +48,9 @@ def plot_heatmap(
     for i, bpart in enumerate(bodyparts):
         heatmap = dframe[bpart]
         if len(bodyparts) > 1:
-            sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax[i])
+            sns.kdeplot(heatmap.x, heatmap.y, cmap=None, shade=True, alpha=1, ax=ax[i])
         else:
-            sns.kdeplot(heatmap.x, heatmap.y, cmap="jet", shade=True, alpha=1, ax=ax)
+            sns.kdeplot(heatmap.x, heatmap.y, cmap=None, shade=True, alpha=1, ax=ax)
             ax = np.array([ax])
 
     [x.set_xlim(xlim) for x in ax]
@@ -94,7 +94,7 @@ def model_comparison_plot(
         Returns:
             - modelcomp (plt.figure): figure with all specified characteristics
 
-        """
+    """
 
     m_bic = np.array(m_bic)
     color_iter = cycle(["navy", "turquoise", "cornflowerblue", "darkorange"])

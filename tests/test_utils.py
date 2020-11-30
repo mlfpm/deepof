@@ -322,7 +322,9 @@ def test_rolling_window(a, window):
     alpha=st.data(),
     series=arrays(
         dtype=float,
-        shape=st.tuples(st.integers(min_value=10, max_value=1000),),
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=1000),
+        ),
         elements=st.floats(
             min_value=1.0, max_value=1.0, allow_nan=False, allow_infinity=False
         ),
@@ -391,7 +393,8 @@ def test_rolling_speed(dframe, sampler):
     order2 = sampler.draw(st.integers(min_value=order1, max_value=3))
 
     idx = pd.MultiIndex.from_product(
-        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
+        [["bpart1", "bpart2"], ["X", "y"]],
+        names=["bodyparts", "coords"],
     )
     dframe.columns = idx
 
@@ -404,7 +407,8 @@ def test_rolling_speed(dframe, sampler):
 
 
 @settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
 )
 @given(
     x=arrays(
@@ -413,7 +417,10 @@ def test_rolling_speed(dframe, sampler):
             st.integers(min_value=10, max_value=1000),
             st.integers(min_value=10, max_value=1000),
         ),
-        elements=st.floats(min_value=1.0, max_value=1.0,),
+        elements=st.floats(
+            min_value=1.0,
+            max_value=1.0,
+        ),
     ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
     n_components=st.integers(min_value=1, max_value=10),
     cv_type=st.integers(min_value=0, max_value=3),
@@ -424,7 +431,8 @@ def test_gmm_compute(x, n_components, cv_type):
 
 
 @settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
 )
 @given(
     x=arrays(
@@ -433,7 +441,10 @@ def test_gmm_compute(x, n_components, cv_type):
             st.integers(min_value=10, max_value=1000),
             st.integers(min_value=10, max_value=1000),
         ),
-        elements=st.floats(min_value=1.0, max_value=1.0,),
+        elements=st.floats(
+            min_value=1.0,
+            max_value=1.0,
+        ),
     ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
     sampler=st.data(),
 )

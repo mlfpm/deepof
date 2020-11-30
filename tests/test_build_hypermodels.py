@@ -37,10 +37,15 @@ def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
     number_of_components=st.integers(min_value=1, max_value=5),
 )
 def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
-    loss, number_of_components,
+    loss,
+    number_of_components,
 ):
     deepof.hypermodels.SEQ_2_SEQ_GMVAE(
-        input_shape=(100, 15, 10,),
+        input_shape=(
+            100,
+            15,
+            10,
+        ),
         loss=loss,
         number_of_components=number_of_components,
         predictor=True,

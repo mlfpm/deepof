@@ -74,11 +74,13 @@ def test_one_cycle_scheduler():
     test_model.add(tf.keras.layers.Dense(1))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
-        X.shape[0] // 100 * 10, max_rate=0.005,
+        X.shape[0] // 100 * 10,
+        max_rate=0.005,
     )
 
     fit = test_model.fit(X, y, callbacks=[onecycle], epochs=10, batch_size=100)
@@ -127,7 +129,8 @@ def test_MCDropout():
     test_model.add(deepof.model_utils.MCDropout(0.5))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -146,7 +149,8 @@ def test_dense_transpose():
     test_model = tf.keras.Model(dense_input, dense_tran)
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -158,7 +162,11 @@ def test_KLDivergenceLayer():
     y = np.random.randint(0, 2, [1500, 1])
 
     prior = tfd.Independent(
-        tfd.Normal(loc=tf.zeros(10), scale=1,), reinterpreted_batch_ndims=1,
+        tfd.Normal(
+            loc=tf.zeros(10),
+            scale=1,
+        ),
+        reinterpreted_batch_ndims=1,
     )
 
     dense_1 = tf.keras.layers.Dense(10)
@@ -167,7 +175,11 @@ def test_KLDivergenceLayer():
     d = dense_1(i)
     x = tfpl.DistributionLambda(
         lambda dense: tfd.Independent(
-            tfd.Normal(loc=dense, scale=1,), reinterpreted_batch_ndims=1,
+            tfd.Normal(
+                loc=dense,
+                scale=1,
+            ),
+            reinterpreted_batch_ndims=1,
         )
     )(d)
     x = deepof.model_utils.KLDivergenceLayer(
@@ -176,7 +188,8 @@ def test_KLDivergenceLayer():
     test_model = tf.keras.Model(i, x)
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -188,7 +201,11 @@ def test_MMDiscrepancyLayer():
     y = np.random.randint(0, 2, [1500, 1])
 
     prior = tfd.Independent(
-        tfd.Normal(loc=tf.zeros(10), scale=1,), reinterpreted_batch_ndims=1,
+        tfd.Normal(
+            loc=tf.zeros(10),
+            scale=1,
+        ),
+        reinterpreted_batch_ndims=1,
     )
 
     dense_1 = tf.keras.layers.Dense(10)
@@ -197,7 +214,11 @@ def test_MMDiscrepancyLayer():
     d = dense_1(i)
     x = tfpl.DistributionLambda(
         lambda dense: tfd.Independent(
-            tfd.Normal(loc=dense, scale=1,), reinterpreted_batch_ndims=1,
+            tfd.Normal(
+                loc=dense,
+                scale=1,
+            ),
+            reinterpreted_batch_ndims=1,
         )
     )(d)
 
@@ -207,7 +228,8 @@ def test_MMDiscrepancyLayer():
     test_model = tf.keras.Model(i, x)
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -223,7 +245,8 @@ def test_dead_neuron_control():
     test_model.add(deepof.model_utils.Dead_neuron_control())
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -239,7 +262,8 @@ def test_entropy_regulariser():
     test_model.add(deepof.model_utils.Entropy_regulariser(1.0))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
@@ -255,7 +279,8 @@ def test_find_learning_rate():
     test_model.add(deepof.model_utils.Entropy_regulariser(1.0))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
     )
     test_model.build(X.shape)
 

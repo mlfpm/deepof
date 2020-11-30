@@ -74,7 +74,10 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
-    "--video-name", "-n", help="Sets the video to process", type=str,
+    "--video-name",
+    "-n",
+    help="Sets the video to process",
+    type=str,
 )
 parser.add_argument(
     "--frame-limit",
@@ -307,7 +310,13 @@ while cap.isOpened() and fnum < frame_limit:
     downleft = (30, 30)
 
     cv2.putText(
-        frame, str(frame_labels[fnum]), downleft, font, 1, (255, 255, 255), 2,
+        frame,
+        str(frame_labels[fnum]),
+        downleft,
+        font,
+        1,
+        (255, 255, 255),
+        2,
     )
 
     if action == "show":

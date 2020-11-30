@@ -37,7 +37,8 @@ import string
 def test_close_single_contact(pos_dframe, tol):
 
     idx = pd.MultiIndex.from_product(
-        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
+        [["bpart1", "bpart2"], ["X", "y"]],
+        names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
     close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol, 1, 1)
@@ -213,7 +214,8 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     ]
 
     pos_idx = pd.MultiIndex.from_product(
-        [bparts, ["X", "y"]], names=["bodyparts", "coords"],
+        [bparts, ["X", "y"]],
+        names=["bodyparts", "coords"],
     )
 
     position_dframe.columns = pos_idx
@@ -236,7 +238,8 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
 
 
 @settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
 )
 @given(sampler=st.data())
 def test_single_behaviour_analysis(sampler):
@@ -287,13 +290,16 @@ def test_single_behaviour_analysis(sampler):
 
 
 @settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
 )
 @given(
     behaviour_dframe=data_frames(
         index=range_indexes(min_size=100, max_size=1000),
         columns=columns(
-            ["d1", "d2", "d3", "d4", "speed1"], dtype=bool, elements=st.booleans(),
+            ["d1", "d2", "d3", "d4", "speed1"],
+            dtype=bool,
+            elements=st.booleans(),
         ),
     ),
     window_size=st.data(),

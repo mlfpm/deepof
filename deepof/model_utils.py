@@ -141,16 +141,16 @@ def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
 def compute_mmd(tensors: Tuple[Any, Any]) -> tf.Tensor:
     """
 
-        Computes the MMD between the two specified vectors using a gaussian kernel.
+    Computes the MMD between the two specified vectors using a gaussian kernel.
 
-            Parameters:
-                - tensors (tuple): tuple containing two tf.Tensor objects
+        Parameters:
+            - tensors (tuple): tuple containing two tf.Tensor objects
 
-            Returns
-                - mmd (tf.Tensor): returns the maximum mean discrepancy for each
-                training instance
+        Returns
+            - mmd (tf.Tensor): returns the maximum mean discrepancy for each
+            training instance
 
-        """
+    """
 
     x = tensors[0]
     y = tensors[1]
@@ -339,8 +339,8 @@ class DenseTranspose(Layer):
 
 class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     """
-        Identity transform layer that adds KL Divergence
-        to the final model loss.
+    Identity transform layer that adds KL Divergence
+    to the final model loss.
     """
 
     def __init__(self, *args, **kwargs):
@@ -360,7 +360,9 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         kl_batch = self._regularizer(distribution_a)
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
-            kl_batch, aggregation="mean", name="kl_divergence",
+            kl_batch,
+            aggregation="mean",
+            name="kl_divergence",
         )
         # noinspection PyProtectedMember
         self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")

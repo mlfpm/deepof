@@ -92,12 +92,12 @@ def str2bool(v: str) -> bool:
 def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
     """Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
 
-        Parameters:
-            - dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihhod
-            - threshold (float): minimum acceptable confidence
+    Parameters:
+        - dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihhod
+        - threshold (float): minimum acceptable confidence
 
-        Returns:
-            - filt_mask (np.array): mask on the rows of dframe"""
+    Returns:
+        - filt_mask (np.array): mask on the rows of dframe"""
 
     Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
     Likes = np.nan_to_num(Likes, nan=1.0)
@@ -109,11 +109,11 @@ def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
     """Returns the DataFrame in polar coordinates.
 
-        Parameters:
-            - tab (pandas.DataFrame):Table with cartesian coordinates
+    Parameters:
+        - tab (pandas.DataFrame):Table with cartesian coordinates
 
-        Returns:
-            - polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+    Returns:
+        - polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
 
     tab_ = np.array(tab)
     complex_ = tab_[:, 0] + 1j * tab_[:, 1]
@@ -125,11 +125,11 @@ def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
 def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
     """Returns a pandas.DataFrame in which all the coordinates are polar.
 
-        Parameters:
-            - cartesian_df (pandas.DataFrame):DataFrame containing tables with cartesian coordinates
+    Parameters:
+        - cartesian_df (pandas.DataFrame):DataFrame containing tables with cartesian coordinates
 
-        Returns:
-            - result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+    Returns:
+        - result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
 
     result = []
     for df in list(cartesian_df.columns.levels[0]):
@@ -148,15 +148,15 @@ def compute_dist(
 ) -> pd.DataFrame:
     """Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
 
-        Parameters:
-            - pair_array (numpy.array): np.array of shape N * 4 containing X,y positions
-            over time for a given pair of body parts
-            - arena_abs (int): diameter of the real arena in cm
-            - arena_rel (int): diameter of the captured arena in pixels
+    Parameters:
+        - pair_array (numpy.array): np.array of shape N * 4 containing X,y positions
+        over time for a given pair of body parts
+        - arena_abs (int): diameter of the real arena in cm
+        - arena_rel (int): diameter of the captured arena in pixels
 
-        Returns:
-            - result (pd.DataFrame): pandas.DataFrame with the
-            absolute distances between a pair of body parts"""
+    Returns:
+        - result (pd.DataFrame): pandas.DataFrame with the
+        absolute distances between a pair of body parts"""
 
     lim = 2 if pair_array.shape[1] == 4 else 1
     a, b = pair_array[:, :lim], pair_array[:, lim:]
@@ -171,15 +171,15 @@ def bpart_distance(
 ) -> pd.DataFrame:
     """Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
-        Parameters:
-            - dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
-        over time for a given set of bp body parts
-            - arena_abs (int): diameter of the real arena in cm
-            - arena_rel (int): diameter of the captured arena in pixels
+    Parameters:
+        - dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
+    over time for a given set of bp body parts
+        - arena_abs (int): diameter of the real arena in cm
+        - arena_rel (int): diameter of the captured arena in pixels
 
-        Returns:
-            - result (pd.DataFrame): pandas.DataFrame with the
-            absolute distances between all pairs of body parts"""
+    Returns:
+        - result (pd.DataFrame): pandas.DataFrame with the
+        absolute distances between all pairs of body parts"""
 
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
@@ -194,13 +194,13 @@ def bpart_distance(
 def angle(a: np.array, b: np.array, c: np.array) -> np.array:
     """Returns a numpy.array with the angles between the provided instances.
 
-        Parameters:
-            - a (2D np.array): positions over time for a bodypart
-            - b (2D np.array): positions over time for a bodypart
-            - c (2D np.array): positions over time for a bodypart
+    Parameters:
+        - a (2D np.array): positions over time for a bodypart
+        - b (2D np.array): positions over time for a bodypart
+        - c (2D np.array): positions over time for a bodypart
 
-        Returns:
-            - ang (1D np.array): angles between the three-point-instances"""
+    Returns:
+        - ang (1D np.array): angles between the three-point-instances"""
 
     ba = a - b
     bc = c - b
@@ -216,11 +216,11 @@ def angle(a: np.array, b: np.array, c: np.array) -> np.array:
 def angle_trio(bpart_array: np.array) -> np.array:
     """Returns a numpy.array with all three possible angles between the provided instances.
 
-        Parameters:
-            - bpart_array (2D numpy.array): positions over time for a bodypart
+    Parameters:
+        - bpart_array (2D numpy.array): positions over time for a bodypart
 
-        Returns:
-            - ang_trio (2D numpy.array): all-three angles between the three-point-instances"""
+    Returns:
+        - ang_trio (2D numpy.array): all-three angles between the three-point-instances"""
 
     a, b, c = bpart_array
     ang_trio = np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c)])
@@ -233,13 +233,13 @@ def rotate(
 ) -> np.array:
     """Returns a numpy.array with the initial values rotated by angles radians
 
-        Parameters:
-            - p (2D numpy.array): array containing positions of bodyparts over time
-            - angles (2D numpy.array): set of angles (in radians) to rotate p with
-            - origin (2D numpy.array): rotation axis (zero vector by default)
+    Parameters:
+        - p (2D numpy.array): array containing positions of bodyparts over time
+        - angles (2D numpy.array): set of angles (in radians) to rotate p with
+        - origin (2D numpy.array): rotation axis (zero vector by default)
 
-        Returns:
-            - rotated (2D numpy.array): rotated positions over time"""
+    Returns:
+        - rotated (2D numpy.array): rotated positions over time"""
 
     R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
 
@@ -282,7 +282,8 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 
     for frame in range(data.shape[0]):
         aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2], order="C"), angles[frame],
+            data[frame].reshape([-1, 2], order="C"),
+            angles[frame],
         ).reshape(data.shape[1:], order="C")
 
     if mode == "all" or mode == "none":
@@ -294,11 +295,11 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 def smooth_boolean_array(a: np.array) -> np.array:
     """Returns a boolean array in which isolated appearances of a feature are smoothened
 
-        Parameters:
-            - a (1D numpy.array): boolean instances
+    Parameters:
+        - a (1D numpy.array): boolean instances
 
-        Returns:
-            - a (1D numpy.array): smoothened boolean instances"""
+    Returns:
+        - a (1D numpy.array): smoothened boolean instances"""
 
     for i in range(1, len(a) - 1):
         if a[i - 1] == a[i + 1]:
@@ -309,12 +310,12 @@ def smooth_boolean_array(a: np.array) -> np.array:
 def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
     """Returns a 3D numpy.array with a sliding-window extra dimension
 
-        Parameters:
-            - a (2D np.array): N (instances) * m (features) shape
+    Parameters:
+        - a (2D np.array): N (instances) * m (features) shape
 
-        Returns:
-            - rolled_a (3D np.array):
-            N (sliding window instances) * l (sliding window size) * m (features)"""
+    Returns:
+        - rolled_a (3D np.array):
+        N (sliding window instances) * l (sliding window size) * m (features)"""
 
     shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
     strides = (a.strides[0],) + a.strides
@@ -327,13 +328,13 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
 def smooth_mult_trajectory(series: np.array, alpha: float = 0.99) -> np.array:
     """Returns a smooths a trajectory using exponentially weighted averages
 
-        Parameters:
-            - series (numpy.array): 1D trajectory array with N (instances) - alpha (float): 0 <= alpha <= 1;
-            indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing;
-            lower indicates more (alpha~0)
+    Parameters:
+        - series (numpy.array): 1D trajectory array with N (instances) - alpha (float): 0 <= alpha <= 1;
+        indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing;
+        lower indicates more (alpha~0)
 
-        Returns:
-            - smoothed_series (np.array): smoothed version of the input, with equal shape"""
+    Returns:
+        - smoothed_series (np.array): smoothed version of the input, with equal shape"""
 
     result = [series[0]]
     for n in range(len(series)):
@@ -397,12 +398,12 @@ def recognize_arena(
 def circular_arena_recognition(frame: np.array) -> np.array:
     """Returns x,y position of the center and the radius of the recognised arena
 
-        Parameters:
-            - frame (np.array): numpy.array representing an individual frame of a video
+    Parameters:
+        - frame (np.array): numpy.array representing an individual frame of a video
 
-        Returns:
-            - circles (np.array): 3-element-array containing x,y positions of the center
-            of the arena, and a third value indicating the radius"""
+    Returns:
+        - circles (np.array): 3-element-array containing x,y positions of the center
+        of the arena, and a third value indicating the radius"""
 
     # Convert image to greyscale, threshold it, blur it and detect the biggest best fitting circle
     # using the Hough algorithm
@@ -439,19 +440,19 @@ def rolling_speed(
 ) -> pd.DataFrame:
     """Returns the average speed over n frames in pixels per frame
 
-        Parameters:
-            - dframe (pandas.DataFrame): position over time dataframe
-            - pause (int):  frame-length of the averaging window
-            - rounds (int): float rounding decimals
-            - deriv (int): position derivative order; 1 for speed,
-            2 for acceleration, 3 for jerk, etc
-            - center (str): for internal usage only; solves an issue
-            with pandas.MultiIndex that arises when centering frames
-            to a specific body part
+    Parameters:
+        - dframe (pandas.DataFrame): position over time dataframe
+        - pause (int):  frame-length of the averaging window
+        - rounds (int): float rounding decimals
+        - deriv (int): position derivative order; 1 for speed,
+        2 for acceleration, 3 for jerk, etc
+        - center (str): for internal usage only; solves an issue
+        with pandas.MultiIndex that arises when centering frames
+        to a specific body part
 
-        Returns:
-            - speeds (pd.DataFrame): containing 2D speeds for each body part
-            in the original data or their consequent derivatives"""
+    Returns:
+        - speeds (pd.DataFrame): containing 2D speeds for each body part
+        in the original data or their consequent derivatives"""
 
     original_shape = dframe.shape
     if center:
@@ -501,14 +502,14 @@ def rolling_speed(
 def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
     """Fits a Gaussian Mixture Model to the provided data and returns evaluation metrics.
 
-        Parameters:
-            - x (numpy.array): data matrix to train the model
-            - n_components (int): number of Gaussian components to use
-            - cv_type (str): covariance matrix type to use.
-            Must be one of "spherical", "tied", "diag", "full"
+    Parameters:
+        - x (numpy.array): data matrix to train the model
+        - n_components (int): number of Gaussian components to use
+        - cv_type (str): covariance matrix type to use.
+        Must be one of "spherical", "tied", "diag", "full"
 
-        Returns:
-            - gmm_eval (list): model and associated BIC for downstream selection
+    Returns:
+        - gmm_eval (list): model and associated BIC for downstream selection
     """
 
     gmm = mixture.GaussianMixture(
@@ -531,22 +532,22 @@ def gmm_model_selection(
     cv_types: Tuple = ("spherical", "tied", "diag", "full"),
 ) -> Tuple[List[list], List[np.ndarray], Union[int, Any]]:
     """Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
-       a vector with the median BICs and an object with the overall best model
+    a vector with the median BICs and an object with the overall best model
 
-        Parameters:
-            - x (pandas.DataFrame): data matrix to train the models
-            - n_components_range (range): generator with numbers of components to evaluate
-            - n_runs (int): number of bootstraps for each model
-            - part_size (int): size of bootstrap samples for each model
-            - n_cores (int): number of cores to use for computation
-            - cv_types (tuple): Covariance Matrices to try. All four available by default
+     Parameters:
+         - x (pandas.DataFrame): data matrix to train the models
+         - n_components_range (range): generator with numbers of components to evaluate
+         - n_runs (int): number of bootstraps for each model
+         - part_size (int): size of bootstrap samples for each model
+         - n_cores (int): number of cores to use for computation
+         - cv_types (tuple): Covariance Matrices to try. All four available by default
 
-        Returns:
-            - bic (list): All recorded BIC values for all attempted parameter combinations
-            (useful for plotting)
-            - m_bic(list): All minimum BIC values recorded throughout the process
-            (useful for plottinh)
-            - best_bic_gmm (sklearn.GMM): unfitted version of the best found model
+     Returns:
+         - bic (list): All recorded BIC values for all attempted parameter combinations
+         (useful for plotting)
+         - m_bic(list): All minimum BIC values recorded throughout the process
+         (useful for plottinh)
+         - best_bic_gmm (sklearn.GMM): unfitted version of the best found model
     """
 
     # Set the default of n_cores to the most efficient value
@@ -592,15 +593,15 @@ def cluster_transition_matrix(
 ) -> Tuple[Union[nx.Graph, Any], np.ndarray]:
     """Computes the transition matrix between clusters and the autocorrelation in the sequence.
 
-        Parameters:
-            - cluster_sequence (numpy.array):
-            - nclusts (int):
-            - autocorrelation (bool):
-            - return_graph (bool):
+    Parameters:
+        - cluster_sequence (numpy.array):
+        - nclusts (int):
+        - autocorrelation (bool):
+        - return_graph (bool):
 
-        Returns:
-            - trans_normed (numpy.array / networkx.Graph:
-            - autocorr (numpy.array):
+    Returns:
+        - trans_normed (numpy.array / networkx.Graph:
+        - autocorr (numpy.array):
     """
 
     # Stores all possible transitions between clusters

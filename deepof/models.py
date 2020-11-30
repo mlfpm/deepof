@@ -33,7 +33,9 @@ class SEQ_2_SEQ_AE:
     """  Simple sequence to sequence autoencoder implemented with tf.keras """
 
     def __init__(
-        self, architecture_hparams: Dict = {}, huber_delta: float = 1.0,
+        self,
+        architecture_hparams: Dict = {},
+        huber_delta: float = 1.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.CONV_filters = self.hparams["units_conv"]
@@ -118,13 +120,19 @@ class SEQ_2_SEQ_AE:
 
         # Decoder layers
         Model_D0 = deepof.model_utils.DenseTranspose(
-            Model_E5, activation="elu", output_dim=self.ENCODING,
+            Model_E5,
+            activation="elu",
+            output_dim=self.ENCODING,
         )
         Model_D1 = deepof.model_utils.DenseTranspose(
-            Model_E4, activation="elu", output_dim=self.DENSE_2,
+            Model_E4,
+            activation="elu",
+            output_dim=self.DENSE_2,
         )
         Model_D2 = deepof.model_utils.DenseTranspose(
-            Model_E3, activation="elu", output_dim=self.DENSE_1,
+            Model_E3,
+            activation="elu",
+            output_dim=self.DENSE_1,
         )
         Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
@@ -161,7 +169,10 @@ class SEQ_2_SEQ_AE:
             Model_D5,
         )
 
-    def build(self, input_shape: tuple,) -> Tuple[Any, Any, Any]:
+    def build(
+        self,
+        input_shape: tuple,
+    ) -> Tuple[Any, Any, Any]:
         """Builds the tf.keras model"""
 
         (
@@ -213,7 +224,10 @@ class SEQ_2_SEQ_AE:
 
         model.compile(
             loss=Huber(delta=self.delta),
-            optimizer=Nadam(lr=self.learn_rate, clipvalue=0.5,),
+            optimizer=Nadam(
+                lr=self.learn_rate,
+                clipvalue=0.5,
+            ),
             metrics=["mae"],
         )
 
@@ -298,7 +312,10 @@ class SEQ_2_SEQ_GMVAE:
                 ),
                 components=[
                     tfd.Independent(
-                        tfd.Normal(loc=init_means[k], scale=1,),
+                        tfd.Normal(
+                            loc=init_means[k],
+                            scale=1,
+                        ),
                         reinterpreted_batch_ndims=1,
                     )
                     for k in range(self.number_of_components)
@@ -537,7 +554,10 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
-        z_cat = Dense(self.number_of_components, activation="softmax",)(encoder)
+        z_cat = Dense(
+            self.number_of_components,
+            activation="softmax",
+        )(encoder)
         z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
         z_gauss = Dense(
             deepof.model_utils.tfpl.IndependentNormal.params_size(
@@ -553,12 +573,16 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.overlap_loss:
             z_gauss = deepof.model_utils.Gaussian_mixture_overlap(
-                self.ENCODING, self.number_of_components, loss=self.overlap_loss,
+                self.ENCODING,
+                self.number_of_components,
+                loss=self.overlap_loss,
             )(z_gauss)
 
         z = deepof.model_utils.tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(probs=gauss[0],),
+                cat=tfd.categorical.Categorical(
+                    probs=gauss[0],
+                ),
                 components=[
                     tfd.Independent(
                         tfd.Normal(
@@ -663,7 +687,11 @@ class SEQ_2_SEQ_GMVAE:
         grouper = Model(x, z_cat, name="Deep_Gaussian_Mixture_clustering")
         # noinspection PyUnboundLocalVariable
 
-        gmvaep = Model(inputs=x, outputs=model_outs, name="SEQ_2_SEQ_GMVAE",)
+        gmvaep = Model(
+            inputs=x,
+            outputs=model_outs,
+            name="SEQ_2_SEQ_GMVAE",
+        )
 
         # Build generator as a separate entity
         g = Input(shape=self.ENCODING)
@@ -682,7 +710,10 @@ class SEQ_2_SEQ_GMVAE:
         if self.compile:
             gmvaep.compile(
                 loss=model_losses,
-                optimizer=Nadam(lr=self.learn_rate, clipvalue=self.clipvalue,),
+                optimizer=Nadam(
+                    lr=self.learn_rate,
+                    clipvalue=self.clipvalue,
+                ),
                 metrics=model_metrics,
                 loss_weights=loss_weights,
             )

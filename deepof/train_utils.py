@@ -69,10 +69,10 @@ def get_callbacks(
     loss: str,
 ) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
-        - run_ID: run name, with coarse parameter details;
-        - tensorboard_callback: for real-time visualization;
-        - cp_callback: for checkpoint saving,
-        - onecycle: for learning rate scheduling"""
+    - run_ID: run name, with coarse parameter details;
+    - tensorboard_callback: for real-time visualization;
+    - cp_callback: for checkpoint saving,
+    - onecycle: for learning rate scheduling"""
 
     run_ID = "{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
@@ -83,11 +83,14 @@ def get_callbacks(
 
     log_dir = os.path.abspath("logs/fit/{}".format(run_ID))
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=log_dir, histogram_freq=1, profile_batch=2,
+        log_dir=log_dir,
+        histogram_freq=1,
+        profile_batch=2,
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
-        X_train.shape[0] // batch_size * 250, max_rate=0.005,
+        X_train.shape[0] // batch_size * 250,
+        max_rate=0.005,
     )
 
     callbacks = [run_ID, tensorboard_callback, onecycle]
@@ -124,30 +127,30 @@ def tune_search(
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
 
-        Parameters:
-            - train (np.array): dataset to train the model on
-            - test (np.array): dataset to validate the model on
-            - hypertun_trials (int): number of Bayesian optimization iterations to run
-            - hpt_type (str): specify one of Bayesian Optimization (bayopt) and Hyperband (hyperband)
-            - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder)
-            or S2SGMVAE (Gaussian Mixture Variational autoencoder).
-            - k (int) number of components of the Gaussian Mixture
-            - loss (str): one of [ELBO, MMD, ELBO+MMD]
-            - overlap_loss (float): assigns as weight to an extra loss term which
-            penalizes overlap between GM components
-            - pheno_class (float): adds an extra regularizing neural network to the model,
-            which tries to predict the phenotype of the animal from which the sequence comes
-            - predictor (float): adds an extra regularizing neural network to the model,
-            which tries to predict the next frame from the current one
-            - project_name (str): ID of the current run
-            - callbacks (list): list of callbacks for the training loop
-            - n_epochs (int): optional. Number of epochs to train each run for
-            - n_replicas (int): optional. Number of replicas per parameter set. Higher values
-             will yield more robust results, but will affect performance severely
+    Parameters:
+        - train (np.array): dataset to train the model on
+        - test (np.array): dataset to validate the model on
+        - hypertun_trials (int): number of Bayesian optimization iterations to run
+        - hpt_type (str): specify one of Bayesian Optimization (bayopt) and Hyperband (hyperband)
+        - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder)
+        or S2SGMVAE (Gaussian Mixture Variational autoencoder).
+        - k (int) number of components of the Gaussian Mixture
+        - loss (str): one of [ELBO, MMD, ELBO+MMD]
+        - overlap_loss (float): assigns as weight to an extra loss term which
+        penalizes overlap between GM components
+        - pheno_class (float): adds an extra regularizing neural network to the model,
+        which tries to predict the phenotype of the animal from which the sequence comes
+        - predictor (float): adds an extra regularizing neural network to the model,
+        which tries to predict the next frame from the current one
+        - project_name (str): ID of the current run
+        - callbacks (list): list of callbacks for the training loop
+        - n_epochs (int): optional. Number of epochs to train each run for
+        - n_replicas (int): optional. Number of replicas per parameter set. Higher values
+         will yield more robust results, but will affect performance severely
 
-        Returns:
-            - best_hparams (dict): dictionary with the best retrieved hyperparameters
-            - best_run (tf.keras.Model): trained instance of the best model found
+    Returns:
+        - best_hparams (dict): dictionary with the best retrieved hyperparameters
+        - best_run (tf.keras.Model): trained instance of the best model found
 
     """
 

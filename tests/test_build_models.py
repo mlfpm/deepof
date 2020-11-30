@@ -39,7 +39,11 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     entropy_reg_weight=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_SEQ_2_SEQ_GMVAE_build(
-    loss, kl_warmup_epochs, mmd_warmup_epochs, number_of_components, entropy_reg_weight,
+    loss,
+    kl_warmup_epochs,
+    mmd_warmup_epochs,
+    number_of_components,
+    entropy_reg_weight,
 ):
     deepof.models.SEQ_2_SEQ_GMVAE(
         loss=loss,
@@ -51,4 +55,10 @@ def test_SEQ_2_SEQ_GMVAE_build(
         overlap_loss=True,
         entropy_reg_weight=entropy_reg_weight,
         initialiser_iters=1,
-    ).build(input_shape=(100, 15, 10,))
+    ).build(
+        input_shape=(
+            100,
+            15,
+            10,
+        )
+    )

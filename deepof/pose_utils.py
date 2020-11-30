@@ -33,18 +33,18 @@ def close_single_contact(
 ) -> np.array:
     """Returns a boolean array that's True if the specified body parts are closer than tol.
 
-        Parameters:
-            - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
-            to two-animal experiments.
-            - left (string): First member of the potential contact
-            - right (string): Second member of the potential contact
-            - tol (float): maximum distance for which a contact is reported
-            - arena_abs (int): length in mm of the diameter of the real arena
-            - arena_rel (int): length in pixels of the diameter of the arena in the video
+    Parameters:
+        - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
+        to two-animal experiments.
+        - left (string): First member of the potential contact
+        - right (string): Second member of the potential contact
+        - tol (float): maximum distance for which a contact is reported
+        - arena_abs (int): length in mm of the diameter of the real arena
+        - arena_rel (int): length in pixels of the diameter of the arena in the video
 
-        Returns:
-            - contact_array (np.array): True if the distance between the two specified points
-            is less than tol, False otherwise"""
+    Returns:
+        - contact_array (np.array): True if the distance between the two specified points
+        is less than tol, False otherwise"""
 
     close_contact = (
         np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
@@ -66,21 +66,21 @@ def close_double_contact(
 ) -> np.array:
     """Returns a boolean array that's True if the specified body parts are closer than tol.
 
-        Parameters:
-            - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
-            to two-animal experiments.
-            - left1 (string): First contact point of animal 1
-            - left2 (string): Second contact point of animal 1
-            - right1 (string): First contact point of animal 2
-            - right2 (string): Second contact point of animal 2
-            - tol (float): maximum distance for which a contact is reported
-            - arena_abs (int): length in mm of the diameter of the real arena
-            - arena_rel (int): length in pixels of the diameter of the arena in the video
-            - rev (bool): reverses the default behaviour (nose2tail contact for both mice)
+    Parameters:
+        - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
+        to two-animal experiments.
+        - left1 (string): First contact point of animal 1
+        - left2 (string): Second contact point of animal 1
+        - right1 (string): First contact point of animal 2
+        - right2 (string): Second contact point of animal 2
+        - tol (float): maximum distance for which a contact is reported
+        - arena_abs (int): length in mm of the diameter of the real arena
+        - arena_rel (int): length in pixels of the diameter of the arena in the video
+        - rev (bool): reverses the default behaviour (nose2tail contact for both mice)
 
-        Returns:
-            - double_contact (np.array): True if the distance between the two specified points
-            is less than tol, False otherwise"""
+    Returns:
+        - double_contact (np.array): True if the distance between the two specified points
+        is less than tol, False otherwise"""
 
     if rev:
         double_contact = (
@@ -117,19 +117,19 @@ def climb_wall(
 ) -> np.array:
     """Returns True if the specified mouse is climbing the wall
 
-        Parameters:
-            - arena_type (str): arena type; must be one of ['circular']
-            - arena (np.array): contains arena location and shape details
-            - pos_dict (table_dict): position over time for all videos in a project
-            - tol (float): minimum tolerance to report a hit
-            - nose (str): indicates the name of the body part representing the nose of
-            the selected animal
-            - arena_dims (int): indicates radius of the real arena in mm
-            - centered_data (bool): indicates whether the input data is centered
+    Parameters:
+        - arena_type (str): arena type; must be one of ['circular']
+        - arena (np.array): contains arena location and shape details
+        - pos_dict (table_dict): position over time for all videos in a project
+        - tol (float): minimum tolerance to report a hit
+        - nose (str): indicates the name of the body part representing the nose of
+        the selected animal
+        - arena_dims (int): indicates radius of the real arena in mm
+        - centered_data (bool): indicates whether the input data is centered
 
-        Returns:
-            - climbing (np.array): boolean array. True if selected animal
-            is climbing the walls of the arena"""
+    Returns:
+        - climbing (np.array): boolean array. True if selected animal
+        is climbing the walls of the arena"""
 
     nose = pos_dict[nose]
 
@@ -166,7 +166,7 @@ def huddle(
 
         Returns:
             hudd (np.array): True if the animal is huddling, False otherwise
-        """
+    """
 
     if animal_id != "":
         animal_id += "_"
@@ -254,7 +254,8 @@ def following_path(
     )
 
     follow = np.all(
-        np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]), axis=0,
+        np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]),
+        axis=0,
     )
 
     return follow
@@ -270,28 +271,27 @@ def single_behaviour_analysis(
     ylim: float = None,
 ) -> list:
     """Given the name of the behaviour, a dictionary with the names of the groups to compare, and a dictionary
-       with the actual tags, outputs a box plot and a series of significance tests amongst the groups
+    with the actual tags, outputs a box plot and a series of significance tests amongst the groups
 
-        Parameters:
-            - behaviour_name (str): name of the behavioural trait to analize
-            - treatment_dict (dict): dictionary containing video names as keys and experimental conditions as values
-            - behavioural_dict (dict): tagged dictionary containing video names as keys and annotations as values
-            - plot (int): Silent if 0; otherwise, indicates the dpi of the figure to plot
-            - stat_tests (bool): performs FDR corrected Mann-U non-parametric tests among all groups if True
-            - save (str): Saves the produced figure to the specified file
-            - ylim (float): y-limit for the boxplot. Ignored if plot == False
+     Parameters:
+         - behaviour_name (str): name of the behavioural trait to analize
+         - treatment_dict (dict): dictionary containing video names as keys and experimental conditions as values
+         - behavioural_dict (dict): tagged dictionary containing video names as keys and annotations as values
+         - plot (int): Silent if 0; otherwise, indicates the dpi of the figure to plot
+         - stat_tests (bool): performs FDR corrected Mann-U non-parametric tests among all groups if True
+         - save (str): Saves the produced figure to the specified file
+         - ylim (float): y-limit for the boxplot. Ignored if plot == False
 
-        Returns:
-            - beh_dict (dict): dictionary containing experimental conditions as keys and video names as values
-            - stat_dict (dict): dictionary containing condition pairs as keys and stat results as values"""
+     Returns:
+         - beh_dict (dict): dictionary containing experimental conditions as keys and video names as values
+         - stat_dict (dict): dictionary containing condition pairs as keys and stat results as values"""
 
     beh_dict = {condition: [] for condition in treatment_dict.keys()}
 
     for condition in beh_dict.keys():
         for ind in treatment_dict[condition]:
-            beh_dict[condition].append(
-                np.sum(behavioural_dict[ind][behaviour_name])
-                / len(behavioural_dict[ind][behaviour_name])
+            beh_dict[condition] += np.sum(behavioural_dict[ind][behaviour_name]) / len(
+                behavioural_dict[ind][behaviour_name]
             )
 
     return_list = [beh_dict]
@@ -301,7 +301,10 @@ def single_behaviour_analysis(
         fig, ax = plt.subplots(dpi=plot)
 
         sns.boxplot(
-            list(beh_dict.keys()), list(beh_dict.values()), orient="vertical", ax=ax
+            x=list(beh_dict.keys()),
+            y=list(beh_dict.values()),
+            orient="vertical",
+            ax=ax,
         )
 
         ax.set_title("{} across groups".format(behaviour_name))
@@ -343,16 +346,16 @@ def max_behaviour(
 ) -> np.array:
     """Returns the most frequent behaviour in a window of window_size frames
 
-        Parameters:
-                - behaviour_dframe (pd.DataFrame): boolean matrix containing occurrence
-                of tagged behaviours per frame in the video
-                - window_size (int): size of the window to use when computing
-                the maximum behaviour per time slot
-                - stepped (bool): sliding windows don't overlap if True. False by default
+    Parameters:
+            - behaviour_dframe (pd.DataFrame): boolean matrix containing occurrence
+            of tagged behaviours per frame in the video
+            - window_size (int): size of the window to use when computing
+            the maximum behaviour per time slot
+            - stepped (bool): sliding windows don't overlap if True. False by default
 
-        Returns:
-            - max_array (np.array): string array with the most common behaviour per instance
-            of the sliding window"""
+    Returns:
+        - max_array (np.array): string array with the most common behaviour per instance
+        of the sliding window"""
 
     speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
 
@@ -369,12 +372,12 @@ def max_behaviour(
 def get_hparameters(hparams: dict = {}) -> dict:
     """Returns the most frequent behaviour in a window of window_size frames
 
-        Parameters:
-            - hparams (dict): dictionary containing hyperparameters to overwrite
+    Parameters:
+        - hparams (dict): dictionary containing hyperparameters to overwrite
 
-        Returns:
-            - defaults (dict): dictionary with overwriten parameters. Those not
-            specified in the input retain their default values"""
+    Returns:
+        - defaults (dict): dictionary with overwriten parameters. Those not
+        specified in the input retain their default values"""
 
     defaults = {
         "speed_pause": 3,
@@ -398,14 +401,14 @@ def get_hparameters(hparams: dict = {}) -> dict:
 def frame_corners(w, h, corners: dict = {}):
     """Returns a dictionary with the corner positions of the video frame
 
-        Parameters:
-            - w (int): width of the frame in pixels
-            - h (int): height of the frame in pixels
-            - corners (dict): dictionary containing corners to overwrite
+    Parameters:
+        - w (int): width of the frame in pixels
+        - h (int): height of the frame in pixels
+        - corners (dict): dictionary containing corners to overwrite
 
-        Returns:
-            - defaults (dict): dictionary with overwriten parameters. Those not
-            specified in the input retain their default values"""
+    Returns:
+        - defaults (dict): dictionary with overwriten parameters. Those not
+        specified in the input retain their default values"""
 
     defaults = {
         "downleft": (int(w * 0.3 / 10), int(h / 1.05)),
@@ -614,11 +617,13 @@ def tag_rulebased_frames(
             write_on_frame("Nose-Tail", corners["downright"])
         if tag_dict["sidebyside"][fnum]:
             write_on_frame(
-                "Side-side", conditional_pos(),
+                "Side-side",
+                conditional_pos(),
             )
         if tag_dict["sidereside"][fnum]:
             write_on_frame(
-                "Side-Rside", conditional_pos(),
+                "Side-Rside",
+                conditional_pos(),
             )
         for _id, down_pos, up_pos in zipped_pos:
             if (
@@ -626,7 +631,9 @@ def tag_rulebased_frames(
                 and not tag_dict[_id + "_climbing"][fnum]
             ):
                 write_on_frame(
-                    "*f", (int(w * 0.3 / 10), int(h / 10)), conditional_col(),
+                    "*f",
+                    (int(w * 0.3 / 10), int(h / 10)),
+                    conditional_col(),
                 )
 
     for _id, down_pos, up_pos in zipped_pos:

@@ -310,7 +310,12 @@ if not tune:
         tf.keras.backend.clear_session()
 
         run_ID, tensorboard_callback, onecycle, cp_callback = get_callbacks(
-            X_train, batch_size, True, variational, predictor, loss,
+            X_train,
+            batch_size,
+            True,
+            variational,
+            predictor,
+            loss,
         )
 
         if not variational:
@@ -393,7 +398,10 @@ if not tune:
                 epochs=250,
                 batch_size=batch_size,
                 verbose=1,
-                validation_data=(Xvals, yvals,),
+                validation_data=(
+                    Xvals,
+                    yvals,
+                ),
                 callbacks=callbacks_,
             )
 

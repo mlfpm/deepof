@@ -46,7 +46,10 @@ def test_load_treatments():
     X_train=arrays(
         shape=st.tuples(st.integers(min_value=1, max_value=1000)),
         dtype=float,
-        elements=st.floats(min_value=0.0, max_value=1,),
+        elements=st.floats(
+            min_value=0.0,
+            max_value=1,
+        ),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
     loss=st.one_of(st.just("test_A"), st.just("test_B")),
@@ -54,10 +57,19 @@ def test_load_treatments():
     variational=st.booleans(),
 )
 def test_get_callbacks(
-    X_train, batch_size, variational, predictor, loss,
+    X_train,
+    batch_size,
+    variational,
+    predictor,
+    loss,
 ):
     runID, tbc, cycle1c, cpc = deepof.train_utils.get_callbacks(
-        X_train, batch_size, True, variational, predictor, loss,
+        X_train,
+        batch_size,
+        True,
+        variational,
+        predictor,
+        loss,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
@@ -74,7 +86,10 @@ def test_get_callbacks(
             st.integers(min_value=2, max_value=15),
             st.integers(min_value=2, max_value=10),
         ),
-        elements=st.floats(min_value=0.0, max_value=1,),
+        elements=st.floats(
+            min_value=0.0,
+            max_value=1,
+        ),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hypermodel")),
@@ -86,11 +101,24 @@ def test_get_callbacks(
     predictor=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_tune_search(
-    X_train, batch_size, hpt_type, hypermodel, k, loss, overlap_loss, pheno_class, predictor,
+    X_train,
+    batch_size,
+    hpt_type,
+    hypermodel,
+    k,
+    loss,
+    overlap_loss,
+    pheno_class,
+    predictor,
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
-            X_train, batch_size, False, hypermodel == "S2SGMVAE", predictor, loss,
+            X_train,
+            batch_size,
+            False,
+            hypermodel == "S2SGMVAE",
+            predictor,
+            loss,
         )
     )[1:]
 

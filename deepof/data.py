@@ -138,7 +138,7 @@ class project:
     @property
     def angles(self):
         """Bool. Toggles angle computation. True by default. If turned off,
-         enhances performance for big datasets"""
+        enhances performance for big datasets"""
         return self._angles
 
     @property
@@ -274,7 +274,7 @@ class project:
 
     def get_distances(self, tab_dict: dict, verbose: bool = False) -> dict:
         """Computes the distances between all selected body parts over time.
-           If ego is provided, it only returns distances to a specified bodypart"""
+        If ego is provided, it only returns distances to a specified bodypart"""
 
         if verbose:
             print("Computing distances...")
@@ -290,7 +290,11 @@ class project:
         scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0],)
+            key: deepof.utils.bpart_distance(
+                tab,
+                scales[i, 1],
+                scales[i, 0],
+            )
             for i, (key, tab) in enumerate(tab_dict.items())
         }
 
@@ -782,7 +786,7 @@ class table_dict(dict):
 
     def filter_videos(self, keys: list) -> Table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
-         for selecting data coming from videos of a specified condition."""
+        for selecting data coming from videos of a specified condition."""
 
         assert np.all([k in self.keys() for k in keys]), "Invalid keys selected"
 
@@ -825,7 +829,9 @@ class table_dict(dict):
             return heatmaps
 
     def get_training_set(
-        self, test_videos: int = 0, encode_labels: bool = True,
+        self,
+        test_videos: int = 0,
+        encode_labels: bool = True,
     ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
