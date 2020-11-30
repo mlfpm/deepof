@@ -22,7 +22,7 @@ setuptools.setup(
         "Google :: Tensorflow",
         "Neuroscience :: Animal behaviour",
     ],
-    python_requires=">3.8",
+    python_requires=">3.7",
     platform="Platform independent",
     License="MIT",
 )
