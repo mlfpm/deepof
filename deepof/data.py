@@ -78,14 +78,14 @@ class project:
             [
                 vid
                 for vid in deepof.utils.os.listdir(self.video_path)
-                if vid.endswith(video_format)
+                if vid.endswith(video_format) and not vid.startswith(".")
             ]
         )
         self.tables = sorted(
             [
                 tab
                 for tab in deepof.utils.os.listdir(self.table_path)
-                if tab.endswith(self.table_format)
+                if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
         self.animal_ids = animal_ids
