@@ -6,6 +6,7 @@ test:
   image: continuumio/anaconda3
   script:
     - python -V
+    - apt-get install 'ffmpeg' 'libsm6' 'libxext6'
     - pip install pipenv
     - pipenv install --python=3.8 --dev
     - pipenv install coverage
