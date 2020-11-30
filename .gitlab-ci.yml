@@ -5,6 +5,8 @@ test:
   stage: test
   image: continuumio/anaconda3
   script:
+    - apt-get update
+    - apt-get install -y libgl1-mesa-dev
     - python -V
     - pip install pipenv
     - pipenv install --python=3.8 --dev --ignore-pipfile
