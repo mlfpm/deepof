@@ -6,11 +6,11 @@ test:
   image: continuumio/anaconda3
   script:
     - python -V
-    - apt-get install 'ffmpeg' 'libsm6' 'libxext6' -y
     - pip install pipenv
     - pipenv install --python=3.8 --dev
     - pipenv install coverage
     - pipenv install -e deepof/
+    - pipenv run apt-get install 'ffmpeg' 'libsm6' 'libxext6' -y
     - pipenv run coverage run --source deepof -m pytest
     - pipenv run coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
     - pipenv run coverage xml -o deepof_cov.xml
