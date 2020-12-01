@@ -196,6 +196,7 @@ def tune_search(
             directory="HyperBandx_{}_{}".format(loss, str(date.today())),
             max_epochs=hypertun_trials,
             hyperband_iterations=3,
+            factor=2,
             **hpt_params
         )
     else:

@@ -434,7 +434,7 @@ else:
         project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
-            #onecycle,
+            onecycle,
             tf.keras.callbacks.EarlyStopping(
                 "val_mae", patience=5, restore_best_weights=True
             ),
