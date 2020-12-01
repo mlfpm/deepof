@@ -370,7 +370,7 @@ if not tune:
             callbacks_ = [
                 tensorboard_callback,
                 cp_callback,
-                onecycle,
+                #onecycle,
                 tf.keras.callbacks.EarlyStopping(
                     "val_mae", patience=10, restore_best_weights=True
                 ),
