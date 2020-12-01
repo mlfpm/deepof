@@ -235,10 +235,3 @@ def tune_search(
     print(tuner.results_summary())
 
     return best_hparams, best_run
-
-
-# TODO:
-#    - load_treatments should be part of the main data module. If available in the main directory,
-#    a table (preferrable in csv) should be loaded as metadata of the coordinates automatically.
-#    This becomes particularly important por the supervised models that include phenotype classification
-#    alongside the encoding.
