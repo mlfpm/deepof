@@ -332,7 +332,7 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "bidirectional_merge": "concat",
+            "bidirectional_merge": "ave",
             "clipvalue": 1.0,
             "dense_activation": "relu",
             "dense_layers_per_branch": 1,
@@ -736,6 +736,5 @@ class SEQ_2_SEQ_GMVAE:
 
 # TODO:
 #       - Check KL weight in the overall loss function! Are we scaling the loss components correctly?
-#       - Check merge mode in LSTM layers. Maybe we can drastically reduce model size!
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate posterior collapse (L1 as kernel/activity regulariser does not work)
