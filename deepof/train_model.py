@@ -13,7 +13,6 @@ from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
 from deepof.train_utils import *
-from tensorflow import keras
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -370,7 +369,7 @@ if not tune:
             callbacks_ = [
                 tensorboard_callback,
                 cp_callback,
-                #onecycle,
+                onecycle,
                 tf.keras.callbacks.EarlyStopping(
                     "val_mae", patience=10, restore_best_weights=True
                 ),
