@@ -131,6 +131,13 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--output-path",
+    "-o",
+    help="Sets the base directory where to output results. Default is the current directory",
+    type=str,
+    default=".",
+)
+parser.add_argument(
     "--overlap-loss",
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
@@ -214,6 +221,7 @@ kl_wu = args.kl_warmup
 logparam = args.logparam
 loss = args.loss
 mmd_wu = args.mmd_warmup
+output_path = os.path.join(args.output_path)
 overlap_loss = args.overlap_loss
 pheno_class = float(args.phenotype_classifier)
 predictor = float(args.predictor)
@@ -433,8 +441,11 @@ if not tune:
             )
 
             gmvaep.save_weights(
-                "GMVAE_loss={}_encoding={}_run_{}_final_weights.h5".format(
-                    loss, encoding_size, run
+                os.path.join(
+                    output_path,
+                    "GMVAE_loss={}_encoding={}_run_{}_final_weights.h5".format(
+                        loss, encoding_size, run
+                    ),
                 )
             )
 
