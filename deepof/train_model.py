@@ -350,7 +350,25 @@ if not tune:
         )
 
         if logparam == "encoding":
-            encoding_size = hp.HParam("encoding_dim", hp.Discrete(encoding_size))
+            encoding_size = hp.HParam(
+                "encoding_dim",
+                hp.Discrete([encoding_size]),
+                display_name="encoding_dim",
+                description="encoding size dimensionality",
+            )
+
+            with tf.summary.create_file_writer(
+                os.path.join(output_path, "hparams")
+            ).as_default():
+                hp.hparams_config(
+                    hparams=[encoding_size],
+                    metrics=[
+                        hp.Metric("val_mae", display_name="val_mae"),
+                        hp.Metric("val_mse", display_name="val_mse"),
+                        hp.Metric("mae", display_name="train_mae"),
+                        hp.Metric("mse", display_name="train_mse"),
+                    ],
+                )
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
@@ -443,6 +461,7 @@ if not tune:
             gmvaep.save_weights(
                 os.path.join(
                     output_path,
+                    "trained_weights",
                     "GMVAE_loss={}_encoding={}_run_{}_final_weights.h5".format(
                         loss, encoding_size, run
                     ),
@@ -493,19 +512,24 @@ else:
         n_epochs=30,
     )
 
-    # Saves a compiled, untrained version of the best model
-    best_model.build(X_train.shape)
-    best_model.save(
-        "{}-based_{}_{}.h5".format(input_type, hyp, tune.capitalize()), save_format="tf"
-    )
+    # # Saves a compiled, untrained version of the best model
+    # best_model.build(X_train.shape)
+    # # noinspection PyArgumentList
+    # best_model.save(
+    #     os.path.join(
+    #         output_path, "{}-based_{}_{}.h5".format(input_type, hyp, tune.capitalize())
+    #     ),
+    #     save_format="tf",
+    # )
 
     # Saves the best hyperparameters
     with open(
-        "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()), "wb"
+        os.path.join(
+            output_path,
+            "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()),
+        ),
+        "wb",
     ) as handle:
         pickle.dump(
             best_hyperparameters.values, handle, protocol=pickle.HIGHEST_PROTOCOL
         )
-
-# TODO:
-#    - Investigate how goussian filters affect reproducibility (in a systematic way)
