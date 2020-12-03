@@ -360,6 +360,19 @@ if not tune:
                 )
             logparams["encoding"] = encoding_size
 
+            with tf.summary.create_file_writer(
+                os.path.join(output_path, "hparams")
+            ).as_default():
+                hp.hparams_config(
+                    hparams=[encoding_size],
+                    metrics=[
+                        hp.Metric("val_mae", display_name="val_mae"),
+                        hp.Metric("val_mse", display_name="val_mse"),
+                        hp.Metric("mae", display_name="train_mae"),
+                        hp.Metric("mse", display_name="train_mse"),
+                    ],
+                )
+
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
             print(ae.summary())
