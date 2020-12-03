@@ -413,7 +413,9 @@ if not tune:
                 callbacks=callbacks_,
             )
 
-            gmvaep.save_weights("{}_final_weights.h5".format(run_ID))
+            gmvaep.save_weights(
+                "GMVAE_loss={}_encoding={}_final_weights.h5".format(loss, encoding_size)
+            )
 
         # To avoid stability issues
         tf.keras.backend.clear_session()
