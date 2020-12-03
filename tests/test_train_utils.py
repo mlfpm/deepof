@@ -92,6 +92,7 @@ def test_get_callbacks(
         ),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
+    encoding_size=st.integers(min_value=1, max_value=16),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hypermodel")),
     hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
@@ -103,6 +104,7 @@ def test_get_callbacks(
 def test_tune_search(
     X_train,
     batch_size,
+    encoding_size,
     hpt_type,
     hypermodel,
     k,
@@ -126,6 +128,7 @@ def test_tune_search(
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
+        encoding_size=encoding_size,
         hpt_type=hpt_type,
         hypertun_trials=1,
         hypermodel=hypermodel,

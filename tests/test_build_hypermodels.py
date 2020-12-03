@@ -33,14 +33,17 @@ def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
 
 @settings(deadline=None, max_examples=10)
 @given(
+    encoding_size=st.integers(min_value=2, max_value=16),
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     number_of_components=st.integers(min_value=1, max_value=5),
 )
 def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
+    encoding_size,
     loss,
     number_of_components,
 ):
     deepof.hypermodels.SEQ_2_SEQ_GMVAE(
+        encoding=encoding_size,
         input_shape=(
             100,
             15,
