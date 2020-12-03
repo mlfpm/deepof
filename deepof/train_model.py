@@ -349,32 +349,26 @@ if not tune:
             logparam=logparam,
         )
 
-        if logparam == "encoding":
-            encoding_size = hp.HParam(
-                "encoding_dim",
-                hp.Discrete([encoding_size]),
-                display_name="encoding_dim",
-                description="encoding size dimensionality",
-            )
-
-            with tf.summary.create_file_writer(
-                os.path.join(output_path, "hparams")
-            ).as_default():
-                hp.hparams_config(
-                    hparams=[encoding_size],
-                    metrics=[
-                        hp.Metric("val_mae", display_name="val_mae"),
-                        hp.Metric("val_mse", display_name="val_mse"),
-                        hp.Metric("mae", display_name="train_mae"),
-                        hp.Metric("mse", display_name="train_mse"),
-                    ],
+        if logparam is not None:
+            logparams = {}
+            if logparam == "encoding":
+                encoding_size = hp.HParam(
+                    "encoding_dim",
+                    hp.Discrete([encoding_size]),
+                    display_name="encoding_dim",
+                    description="encoding size dimensionality",
                 )
+            logparams["encoding"] = encoding_size
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
             print(ae.summary())
 
-            ae.save_weights("./logs/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0))
+            ae.save_weights(
+                os.path.join(
+                    output_path, "/checkpoints/cp-{epoch:04d}.ckpt".format(epoch=0)
+                )
+            )
             # Fit the specified model to the data
             history = ae.fit(
                 x=X_train,
@@ -433,6 +427,11 @@ if not tune:
                 callbacks_.append(kl_warmup_callback)
             if "MMD" in loss and mmd_wu > 0:
                 callbacks_.append(mmd_warmup_callback)
+
+            if logparam is not None:
+                callbacks_.append(
+                    hp.KerasCallback(os.path.join(output_path, "hparams"), logparams)
+                )
 
             Xs, ys = [X_train], [X_train]
             Xvals, yvals = [X_val], [X_val]
