@@ -40,7 +40,7 @@ rule explore_encoding_dimension_and_loss_function:
         "pipenv run python -m deepof.train_model --train-path {input.data_path} --val-num 10 --components 10 \
                 --input-type coords --predictor 0 --variational True --loss {wildcards.loss} --kl-warmup 20 --mmd-warmup 20 \
                 --encoding-size {wildcards.encs} --batch-size 256 --window-size 11 --window-step 11 --exclude-bodyparts \
-                Tail_base,Tail_1,Tail_2,Tail_tip,Spine_2 --stability-check 3 --output-path \
+                Tail_base,Tail_1,Tail_2,Tail_tip,Spine_2 --stability-check 3 --output-path --logparam encoding \
                 {outpath}dimension_and_loss_experiments/trained_weights"
 
 
