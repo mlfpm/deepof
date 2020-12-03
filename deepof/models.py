@@ -9,7 +9,6 @@ deep autoencoder models for unsupervised pose detection
 """
 
 from typing import Any, Dict, Tuple
-from tensorflow.keras import backend as K
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.callbacks import LambdaCallback
@@ -245,6 +244,7 @@ class SEQ_2_SEQ_GMVAE:
         architecture_hparams: dict = {},
         batch_size: int = 256,
         compile_model: bool = True,
+        encoding: int = 16,
         entropy_reg_weight: float = 0.0,
         huber_delta: float = 1.0,
         initialiser_iters: int = int(1),
@@ -263,7 +263,7 @@ class SEQ_2_SEQ_GMVAE:
         self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
         self.DENSE_2 = self.hparams["units_dense2"]
         self.DROPOUT_RATE = self.hparams["dropout_rate"]
-        self.ENCODING = self.hparams["encoding"]
+        self.ENCODING = encoding
         self.LSTM_units_1 = self.hparams["units_lstm"]
         self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
         self.clipvalue = self.hparams["clipvalue"]
@@ -337,7 +337,6 @@ class SEQ_2_SEQ_GMVAE:
             "dense_activation": "relu",
             "dense_layers_per_branch": 1,
             "dropout_rate": 1e-3,
-            "encoding": 16,
             "learning_rate": 1e-3,
             "units_conv": 160,
             "units_dense2": 120,
@@ -587,7 +586,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -610,6 +609,7 @@ class SEQ_2_SEQ_GMVAE:
                     )
                 )
 
+            # noinspection PyCallingNonCallable
             z = deepof.model_utils.KLDivergenceLayer(self.prior, weight=kl_beta)(z)
 
         mmd_warmup_callback = False

@@ -47,6 +47,13 @@ parser.add_argument(
     default=1,
 )
 parser.add_argument(
+    "--encoding-size",
+    "-es",
+    help="set the number of dimensions of the latent space. 16 by default",
+    type=int,
+    default=16,
+)
+parser.add_argument(
     "--exclude-bodyparts",
     "-exc",
     help="Excludes the indicated bodyparts from all analyses. It should consist of several values separated by commas",
@@ -188,6 +195,7 @@ animal_id = args.animal_id
 arena_dims = args.arena_dims
 batch_size = args.batch_size
 hypertun_trials = args.hpt_trials
+encoding_size = args.encoding_size
 exclude_bodyparts = list(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
@@ -354,6 +362,7 @@ if not tune:
                 architecture_hparams=hparams,
                 batch_size=batch_size,
                 compile_model=True,
+                encoding=encoding_size,
                 kl_warmup_epochs=kl_wu,
                 loss=loss,
                 mmd_warmup_epochs=mmd_wu,
@@ -420,6 +429,7 @@ else:
 
     best_hyperparameters, best_model = tune_search(
         data=[X_train, y_train, X_val, y_val],
+        encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
         hypermodel=hyp,

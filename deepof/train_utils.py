@@ -110,6 +110,7 @@ def get_callbacks(
 
 def tune_search(
     data: List[np.array],
+    encoding_size: int,
     hypertun_trials: int,
     hpt_type: str,
     hypermodel: str,
@@ -169,6 +170,7 @@ def tune_search(
     elif hypermodel == "S2SGMVAE":
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_GMVAE(
             input_shape=X_train.shape,
+            encoding=encoding_size,
             kl_warmup_epochs=kl_warmup_epochs,
             loss=loss,
             mmd_warmup_epochs=mmd_warmup_epochs,

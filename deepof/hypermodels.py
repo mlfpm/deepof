@@ -11,7 +11,6 @@ keras hypermodels for hyperparameter tuning of deep autoencoders
 from kerastuner import HyperModel
 import deepof.models
 import deepof.model_utils
-import numpy as np
 import tensorflow_probability as tfp
 
 tfd = tfp.distributions
@@ -95,6 +94,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
     def __init__(
         self,
         input_shape: tuple,
+        encoding: int,
         entropy_reg_weight: float = 0.0,
         huber_delta: float = 1.0,
         kl_warmup_epochs: int = 0,
@@ -109,6 +109,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
     ):
         super().__init__()
         self.input_shape = input_shape
+        self.encoding = encoding
         self.entropy_reg_weight = entropy_reg_weight
         self.huber_delta = huber_delta
         self.kl_warmup_epochs = kl_warmup_epochs
@@ -136,7 +137,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         dense_activation = "relu"
         dense_layers_per_branch = 1
         dropout_rate = 1e-3
-        encoding = 16
         k = self.number_of_components
         lstm_units_1 = 300
 
@@ -148,7 +148,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             dense_activation,
             dense_layers_per_branch,
             dropout_rate,
-            encoding,
             k,
             lstm_units_1,
         )
@@ -165,7 +164,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             dense_activation,
             dense_layers_per_branch,
             dropout_rate,
-            encoding,
             k,
             lstm_units_1,
         ) = self.get_hparams(hp)
@@ -177,11 +175,11 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
                 "dense_activation": dense_activation,
                 "dense_layers_per_branch": dense_layers_per_branch,
                 "dropout_rate": dropout_rate,
-                "encoding": encoding,
                 "units_conv": conv_filters,
                 "units_dense_2": dense_2,
                 "units_lstm": lstm_units_1,
             },
+            encoding=self.encoding,
             entropy_reg_weight=self.entropy_reg_weight,
             huber_delta=self.huber_delta,
             kl_warmup_epochs=self.kl_warmup_epochs,
