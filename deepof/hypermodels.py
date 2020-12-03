@@ -170,7 +170,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
 
         gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams={
-                "bidirectional_merge": "concat",
+                "bidirectional_merge": "ave",
                 "clipvalue": clipvalue,
                 "dense_activation": dense_activation,
                 "dense_layers_per_branch": dense_layers_per_branch,

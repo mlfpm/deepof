@@ -32,12 +32,15 @@ def load_hparams(hparams):
             hparams = pickle.load(handle)
     else:
         hparams = {
-            "units_conv": 256,
-            "units_lstm": 256,
-            "units_dense2": 64,
-            "dropout_rate": 0.25,
-            "encoding": 16,
+            "bidirectional_merge": "ave",
+            "clipvalue": 1.0,
+            "dense_activation": "relu",
+            "dense_layers_per_branch": 1,
+            "dropout_rate": 1e-3,
             "learning_rate": 1e-3,
+            "units_conv": 160,
+            "units_dense2": 120,
+            "units_lstm": 300,
         }
     return hparams
 
