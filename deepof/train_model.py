@@ -13,6 +13,7 @@ from deepof.data import *
 from deepof.models import *
 from deepof.utils import *
 from deepof.train_utils import *
+from tensorboard.plugins.hparams import api as hp
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -105,6 +106,14 @@ parser.add_argument(
     help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
     default=10,
     type=int,
+)
+parser.add_argument(
+    "--logparam",
+    "-lp",
+    help="Logs the specified parameter to tensorboard. None by default. "
+    "Supported values are: encoding",
+    default=None,
+    type=str,
 )
 parser.add_argument(
     "--loss",
@@ -202,6 +211,7 @@ hparams = args.hyperparameters
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
+logparam = args.logparam
 loss = args.loss
 mmd_wu = args.mmd_warmup
 overlap_loss = args.overlap_loss
@@ -236,6 +246,10 @@ assert input_type in [
 # Loads model hyperparameters and treatment conditions, if available
 hparams = load_hparams(hparams)
 treatment_dict = load_treatments(train_path)
+
+# Logs hyperparameters  if specified on the --logparam CLI argument
+if logparam == "encoding":
+    logparam = {"encoding": encoding_size}
 
 # noinspection PyTypeChecker
 project_coords = project(
@@ -317,13 +331,18 @@ if not tune:
         tf.keras.backend.clear_session()
 
         run_ID, tensorboard_callback, onecycle, cp_callback = get_callbacks(
-            X_train,
-            batch_size,
-            True,
-            variational,
-            predictor,
-            loss,
+            X_train=X_train,
+            batch_size=batch_size,
+            cp=True,
+            variational=variational,
+            phenotype_class=pheno_class,
+            predictor=predictor,
+            loss=loss,
+            logparam=logparam,
         )
+
+        if logparam == "encoding":
+            encoding_size = hp.HParam("encoding_dim", hp.Discrete(encoding_size))
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
@@ -414,7 +433,9 @@ if not tune:
             )
 
             gmvaep.save_weights(
-                "GMVAE_loss={}_encoding={}_final_weights.h5".format(loss, encoding_size)
+                "GMVAE_loss={}_encoding={}_run_{}_final_weights.h5".format(
+                    loss, encoding_size, run
+                )
             )
 
         # To avoid stability issues
@@ -426,7 +447,14 @@ else:
     hyp = "S2SGMVAE" if variational else "S2SAE"
 
     run_ID, tensorboard_callback, onecycle = get_callbacks(
-        X_train, batch_size, False, variational, predictor, loss
+        X_train=X_train,
+        batch_size=batch_size,
+        cp=False,
+        variational=variational,
+        phenotype_class=pheno_class,
+        predictor=predictor,
+        loss=loss,
+        logparam=None,
     )
 
     best_hyperparameters, best_model = tune_search(
