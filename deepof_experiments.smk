@@ -11,11 +11,6 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 """
 
-import numpy as np
-import pandas as pd
-import subprocess
-import re
-
 
 losses = ["ELBO", "MMD", "ELBO+MMD"]
 encodings = [2, 4, 6, 8, 12, 16]
