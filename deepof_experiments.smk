@@ -41,9 +41,7 @@ rule explore_encoding_dimension_and_loss_function:
                 --input-type coords --predictor 0 --variational True --loss {wildcards.loss} --kl-warmup 20 --mmd-warmup 20 \
                 --encoding-size {wildcards.encs} --batch-size 256 --window-size 11 --window-step 11 --exclude-bodyparts \
                 Tail_base,Tail_1,Tail_2,Tail_tip,Spine_2 --stability-check 3 --out-path \
-                {}dimension_and_loss_experiments/trained_weights".format(
-            outpath
-        )
+                {outpath}dimension_and_loss_experiments/trained_weights"
 
 
 # rule explore_number_of_components:
