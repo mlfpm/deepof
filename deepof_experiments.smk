@@ -21,8 +21,8 @@ encodings = [2, 4, 6, 8, 12, 16]
 rule deepof_experiments:
     input:
         expand(
-            "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/dimension_and_loss_experiments/trained_weights/\
-                    GMVAE_loss={loss}_encoding={encs}_final_weights.h5",
+            "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/dimension_and_loss_experiments/trained_weights/"
+            "GMVAE_loss={loss}_encoding={encs}_final_weights.h5",
             loss=losses,
             encs=encodings,
         ),
