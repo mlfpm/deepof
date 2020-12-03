@@ -22,7 +22,7 @@ rule deepof_experiments:
     input:
         expand(
             "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/dimension_and_loss_experiments/trained_weights/"
-            "GMVAE_loss={loss}_encoding={encs}_final_weights.h5",
+            "GMVAE_loss={loss}_encoding={encs}_run_1_final_weights.h5",
             loss=losses,
             encs=encodings,
         ),
@@ -34,7 +34,7 @@ rule explore_encoding_dimension_and_loss_function:
     output:
         trained_models=os.path.join(
             outpath,
-            "dimension_and_loss_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_final_weights.h5",
+            "dimension_and_loss_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_run_1_final_weights.h5",
         ),
     shell:
         "pipenv run python -m deepof.train_model --train-path {input.data_path} --val-num 10 --components 10 \
