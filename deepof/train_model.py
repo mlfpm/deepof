@@ -131,6 +131,13 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--neuron-control",
+    "-nc",
+    help="If True, adds the proportion of dead neurons in the latent space as a metric",
+    type=str2bool,
+    default=False,
+)
+parser.add_argument(
     "--output-path",
     "-o",
     help="Sets the base directory where to output results. Default is the current directory",
@@ -221,6 +228,7 @@ kl_wu = args.kl_warmup
 logparam = args.logparam
 loss = args.loss
 mmd_wu = args.mmd_warmup
+neuron_control = args.neuron_control
 output_path = os.path.join(args.output_path)
 overlap_loss = args.overlap_loss
 pheno_class = float(args.phenotype_classifier)
@@ -350,29 +358,27 @@ if not tune:
         )
 
         if logparam is not None:
-            logparams = {}
-            if logparam == "encoding":
-                encoding_size = hp.HParam(
+            logparams = []
+
+            if "encoding" in logparam.keys():
+
+                logparams.append(hp.HParam(
                     "encoding",
                     hp.Discrete([encoding_size]),
                     display_name="encoding",
                     description="encoding size dimensionality",
-                )
-
-                logparams["encoding"] = encoding_size
+                ))
 
             with tf.summary.create_file_writer(
                 os.path.join(output_path, "hparams")
             ).as_default():
                 hp.hparams_config(
-                    hparams=list(logparams.values()),
+                    hparams=logparams,
                     metrics=[
                         hp.Metric("val_mae", display_name="val_mae"),
                         hp.Metric("val_mse", display_name="val_mse"),
                     ],
                 )
-
-            logparams = {key: val.values[0] for key, val in logparams}
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
@@ -419,6 +425,7 @@ if not tune:
                 kl_warmup_epochs=kl_wu,
                 loss=loss,
                 mmd_warmup_epochs=mmd_wu,
+                neuron_control=neuron_control,
                 number_of_components=k,
                 overlap_loss=overlap_loss,
                 phenotype_prediction=pheno_class,
@@ -478,9 +485,9 @@ if not tune:
 
             if logparam is not None:
                 # Logparams to tensorboard
-                def run(run_dir, hparams):
+                def run(run_dir, hpms):
                     with tf.summary.create_file_writer(run_dir).as_default():
-                        hp.hparams(hparams)  # record the values used in this trial
+                        hp.hparams(hpms)  # record the values used in this trial
                         val_mae = tf.reduce_mean(
                             tf.keras.metrics.mean_absolute_error(
                                 X_val, gmvaep.predict(X_val)
@@ -494,7 +501,7 @@ if not tune:
                         tf.summary.scalar("val_mae", val_mae, step=1)
                         tf.summary.scalar("val_mse", val_mse, step=1)
 
-                run(os.path.join(output_path, "hparams"), logparams)
+                run(os.path.join(output_path, "hparams"), logparam)
 
         # To avoid stability issues
         tf.keras.backend.clear_session()

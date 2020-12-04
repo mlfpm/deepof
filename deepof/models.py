@@ -251,6 +251,7 @@ class SEQ_2_SEQ_GMVAE:
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO+MMD",
         mmd_warmup_epochs: int = 20,
+        neuron_control: bool = False,
         number_of_components: int = 1,
         overlap_loss: float = False,
         phenotype_prediction: float = 0.0,
@@ -278,6 +279,7 @@ class SEQ_2_SEQ_GMVAE:
         self.kl_warmup = kl_warmup_epochs
         self.loss = loss
         self.mmd_warmup = mmd_warmup_epochs
+        self.neuron_control = neuron_control
         self.number_of_components = number_of_components
         self.overlap_loss = overlap_loss
         self.phenotype_prediction = phenotype_prediction
@@ -557,7 +559,10 @@ class SEQ_2_SEQ_GMVAE:
             self.number_of_components,
             activation="softmax",
         )(encoder)
-        z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
+
+        if self.entropy_reg_weight > 0:
+            z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
+
         z_gauss = Dense(
             deepof.model_utils.tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
@@ -568,7 +573,8 @@ class SEQ_2_SEQ_GMVAE:
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
 
         # Identity layer controlling for dead neurons in the Gaussian Mixture posterior
-        z_gauss = deepof.model_utils.Dead_neuron_control()(z_gauss)
+        if self.neuron_control:
+            z_gauss = deepof.model_utils.Dead_neuron_control()(z_gauss)
 
         if self.overlap_loss:
             z_gauss = deepof.model_utils.Gaussian_mixture_overlap(
