@@ -561,7 +561,9 @@ class SEQ_2_SEQ_GMVAE:
         )(encoder)
 
         if self.entropy_reg_weight > 0:
-            z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(z_cat)
+            z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(
+                z_cat
+            )
 
         z_gauss = Dense(
             deepof.model_utils.tfpl.IndependentNormal.params_size(

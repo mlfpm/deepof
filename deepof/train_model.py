@@ -357,17 +357,22 @@ if not tune:
             logparam=logparam,
         )
 
-        if logparam is not None:
+        if (
+            logparam is not None
+            and len(os.listdir(os.path.join(output_path, "hparams"))) == 0
+        ):
             logparams = []
 
             if "encoding" in logparam.keys():
 
-                logparams.append(hp.HParam(
-                    "encoding",
-                    hp.Discrete([encoding_size]),
-                    display_name="encoding",
-                    description="encoding size dimensionality",
-                ))
+                logparams.append(
+                    hp.HParam(
+                        "encoding",
+                        hp.Discrete([2, 4, 6, 8, 12, 16]),
+                        display_name="encoding",
+                        description="encoding size dimensionality",
+                    )
+                )
 
             with tf.summary.create_file_writer(
                 os.path.join(output_path, "hparams")
