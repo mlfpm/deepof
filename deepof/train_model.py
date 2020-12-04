@@ -475,7 +475,7 @@ if not tune:
             history = gmvaep.fit(
                 x=Xs,
                 y=ys,
-                epochs=1,
+                epochs=3,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
