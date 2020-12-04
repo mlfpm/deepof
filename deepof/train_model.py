@@ -477,7 +477,7 @@ if not tune:
                         tf.summary.scalar("val_mae", val_mae, step=1)
                         tf.summary.scalar("val_mse", val_mse, step=1)
 
-                run(os.path.join(output_path, "hparams"), list(logparams.values()))
+                run(os.path.join(output_path, "hparams"), logparams)
 
         # To avoid stability issues
         tf.keras.backend.clear_session()
