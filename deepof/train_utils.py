@@ -109,7 +109,7 @@ def get_callbacks(
 
     if cp:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(
-            os.path.join(outpath,"checkpoints", run_ID + "/cp-{epoch:04d}.ckpt"),
+            os.path.join(outpath, "checkpoints", run_ID + "/cp-{epoch:04d}.ckpt"),
             verbose=1,
             save_best_only=False,
             save_weights_only=True,

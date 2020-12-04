@@ -108,14 +108,6 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--logparam",
-    "-lp",
-    help="Logs the specified parameter to tensorboard. None by default. "
-    "Supported values are: encoding",
-    default=None,
-    type=str,
-)
-parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
@@ -225,7 +217,6 @@ hparams = args.hyperparameters
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
-logparam = args.logparam
 loss = args.loss
 mmd_wu = args.mmd_warmup
 neuron_control = args.neuron_control
@@ -264,11 +255,11 @@ hparams = load_hparams(hparams)
 treatment_dict = load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
-if logparam is not None:
-    temparam = logparam
-    logparam = {"loss": loss}
-    if temparam == "encoding":
-        logparam["encoding"] = encoding_size
+logparam = {
+    "encoding": encoding_size,
+    "k": k,
+    "loss": loss,
+}
 
 # noinspection PyTypeChecker
 project_coords = project(
@@ -360,45 +351,45 @@ if not tune:
             logparam=logparam,
         )
 
-        if logparam is not None:
-            logparams = [
-                hp.HParam(
-                    "loss",
-                    hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
-                    display_name="loss function",
-                    description="loss function",
-                ),
-                hp.HParam(
-                    "run",
-                    hp.Discrete([0, 1, 2]),
-                    display_name="trial run",
-                    description="trial run",
-                ),
-            ]
+        logparams = [
+            hp.HParam(
+                "encoding",
+                hp.Discrete([2, 4, 6, 8, 12, 16]),
+                display_name="encoding",
+                description="encoding size dimensionality",
+            ),
+            hp.HParam(
+                "k",
+                hp.IntInterval(min_value=1, max_value=15),
+                display_name="k",
+                description="cluster_number",
+            ),
+            hp.HParam(
+                "loss",
+                hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
+                display_name="loss function",
+                description="loss function",
+            ),
+            hp.HParam(
+                "run",
+                hp.Discrete([0, 1, 2]),
+                display_name="trial run",
+                description="trial run",
+            ),
+        ]
 
-            if "encoding" in logparam.keys():
+        logparam["run"] = run
 
-                logparams.append(
-                    hp.HParam(
-                        "encoding",
-                        hp.Discrete([2, 4, 6, 8, 12, 16]),
-                        display_name="encoding",
-                        description="encoding size dimensionality",
-                    )
-                )
-
-            logparam["run"] = run
-
-            with tf.summary.create_file_writer(
-                os.path.join(output_path, "hparams", run_ID)
-            ).as_default():
-                hp.hparams_config(
-                    hparams=logparams,
-                    metrics=[
-                        hp.Metric("val_mae", display_name="val_mae"),
-                        hp.Metric("val_mse", display_name="val_mse"),
-                    ],
-                )
+        with tf.summary.create_file_writer(
+            os.path.join(output_path, "hparams", run_ID)
+        ).as_default():
+            hp.hparams_config(
+                hparams=logparams,
+                metrics=[
+                    hp.Metric("val_mae", display_name="val_mae"),
+                    hp.Metric("val_mse", display_name="val_mse"),
+                ],
+            )
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
