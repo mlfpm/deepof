@@ -265,8 +265,9 @@ treatment_dict = load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
 if logparam is not None:
+    temparam = logparam
     logparam = {"loss": loss}
-    if logparam == "encoding":
+    if temparam == "encoding":
         logparam["encoding"] = encoding_size
 
 # noinspection PyTypeChecker
@@ -382,6 +383,8 @@ if not tune:
                         description="encoding size dimensionality",
                     )
                 )
+
+            print(logparams)
 
             with tf.summary.create_file_writer(
                 os.path.join(output_path, "hparams")
