@@ -384,7 +384,7 @@ if not tune:
             print(logparams)
 
             with tf.summary.create_file_writer(
-                os.path.join(output_path, "hparams")
+                os.path.join(output_path, run_ID, "hparams")
             ).as_default():
                 hp.hparams_config(
                     hparams=logparams,
@@ -515,7 +515,7 @@ if not tune:
                         tf.summary.scalar("val_mae", val_mae, step=1)
                         tf.summary.scalar("val_mse", val_mse, step=1)
 
-                run(os.path.join(output_path, "hparams"), logparam)
+                run(os.path.join(output_path, run_ID, "hparams"), logparam)
 
         # To avoid stability issues
         tf.keras.backend.clear_session()
