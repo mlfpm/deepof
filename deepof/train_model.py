@@ -361,6 +361,17 @@ if not tune:
 
                 logparams["encoding"] = encoding_size
 
+            with tf.summary.create_file_writer(
+                os.path.join(output_path, "hparams")
+            ).as_default():
+                hp.hparams_config(
+                    hparams=list(logparams.values()),
+                    metrics=[
+                        hp.Metric("val_mae", display_name="val_mae"),
+                        hp.Metric("val_mse", display_name="val_mse"),
+                    ],
+                )
+
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
             print(ae.summary())
@@ -468,12 +479,16 @@ if not tune:
                 def run(run_dir, hparams):
                     with tf.summary.create_file_writer(run_dir).as_default():
                         hp.hparams(hparams)  # record the values used in this trial
-                        val_mae = tf.reduce_mean(tf.keras.metrics.mean_absolute_error(
-                            X_val, gmvaep.predict(X_val)
-                        ))
-                        val_mse = tf.reduce_mean(tf.keras.metrics.mean_squared_error(
-                            X_val, gmvaep.predict(X_val)
-                        ))
+                        val_mae = tf.reduce_mean(
+                            tf.keras.metrics.mean_absolute_error(
+                                X_val, gmvaep.predict(X_val)
+                            )
+                        )
+                        val_mse = tf.reduce_mean(
+                            tf.keras.metrics.mean_squared_error(
+                                X_val, gmvaep.predict(X_val)
+                            )
+                        )
                         tf.summary.scalar("val_mae", val_mae, step=1)
                         tf.summary.scalar("val_mse", val_mse, step=1)
 
