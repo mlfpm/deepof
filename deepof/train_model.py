@@ -349,6 +349,7 @@ if not tune:
             predictor=predictor,
             loss=loss,
             logparam=logparam,
+            outpath=output_path
         )
 
         logparams = [
