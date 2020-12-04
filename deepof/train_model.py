@@ -264,8 +264,10 @@ hparams = load_hparams(hparams)
 treatment_dict = load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
-if logparam == "encoding":
-    logparam = {"encoding": encoding_size}
+if logparam is not None:
+    logparam = {"loss": loss}
+    if logparam == "encoding":
+        logparam["encoding"] = encoding_size
 
 # noinspection PyTypeChecker
 project_coords = project(
@@ -361,7 +363,14 @@ if not tune:
             logparam is not None
             and len(os.listdir(os.path.join(output_path, "hparams"))) == 0
         ):
-            logparams = []
+            logparams = [
+                hp.HParam(
+                    "loss",
+                    hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
+                    display_name="loss function",
+                    description="loss function",
+                )
+            ]
 
             if "encoding" in logparam.keys():
 
