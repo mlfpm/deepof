@@ -21,7 +21,7 @@ import umap
 
 def flip_axes(projections):
     """Flips projected PCA axes for subsequent latent representations of the input
-     to remain closer to one another in the visualization"""
+    to remain closer to one another in the visualization"""
 
     projs = deepcopy(projections)
 
@@ -271,7 +271,7 @@ checkpoints = sorted(
     list(
         set(
             [
-                path + re.findall('(.*\.ckpt).data', i)[0]
+                path + re.findall("(.*\.ckpt).data", i)[0]
                 for i in os.listdir(path)
                 if "ckpt.data" in i
             ]
@@ -378,7 +378,7 @@ reconstructions = []
     predictor=predictor,
     kl_warmup_epochs=10,
     mmd_warmup_epochs=10,
-    architecture_hparams=hparams
+    architecture_hparams=hparams,
 ).build(pttest.shape)
 gmvaep.build(pttest.shape)
 
