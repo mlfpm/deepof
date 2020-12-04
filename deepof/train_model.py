@@ -468,12 +468,12 @@ if not tune:
                 def run(run_dir, hparams):
                     with tf.summary.create_file_writer(run_dir).as_default():
                         hp.hparams(hparams)  # record the values used in this trial
-                        val_mae = tf.keras.metrics.mean_absolute_error(
+                        val_mae = tf.reduce_mean(tf.keras.metrics.mean_absolute_error(
                             X_val, gmvaep.predict(X_val)
-                        )
-                        val_mse = tf.keras.metrics.mean_squared_error(
+                        ))
+                        val_mse = tf.reduce_mean(tf.keras.metrics.mean_squared_error(
                             X_val, gmvaep.predict(X_val)
-                        )
+                        ))
                         tf.summary.scalar("val_mae", val_mae, step=1)
                         tf.summary.scalar("val_mse", val_mse, step=1)
 
