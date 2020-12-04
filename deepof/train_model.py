@@ -353,9 +353,9 @@ if not tune:
             logparams = {}
             if logparam == "encoding":
                 encoding_size = hp.HParam(
-                    "encoding_dim",
+                    "encoding",
                     hp.Discrete([encoding_size]),
-                    display_name="encoding_dim",
+                    display_name="encoding",
                     description="encoding size dimensionality",
                 )
 
@@ -371,6 +371,8 @@ if not tune:
                         hp.Metric("val_mse", display_name="val_mse"),
                     ],
                 )
+
+            logparams = {key: val.values[0] for key, val in logparams}
 
         if not variational:
             encoder, decoder, ae = SEQ_2_SEQ_AE(hparams).build(X_train.shape)
