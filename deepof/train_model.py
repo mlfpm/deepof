@@ -360,10 +360,7 @@ if not tune:
             logparam=logparam,
         )
 
-        if (
-            logparam is not None
-            and len(os.listdir(os.path.join(output_path, "hparams"))) == 0
-        ):
+        if logparam is not None:
             logparams = [
                 hp.HParam(
                     "loss",
