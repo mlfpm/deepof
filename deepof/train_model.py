@@ -359,19 +359,6 @@ if not tune:
                     description="encoding size dimensionality",
                 )
 
-                with tf.summary.create_file_writer(
-                    os.path.join(output_path, "hparams")
-                ).as_default():
-                    hp.hparams_config(
-                        hparams=[encoding_size],
-                        metrics=[
-                            hp.Metric("val_mae", display_name="val_mae"),
-                            hp.Metric("val_mse", display_name="val_mse"),
-                            hp.Metric("mae", display_name="train_mae"),
-                            hp.Metric("mse", display_name="train_mse"),
-                        ],
-                    )
-
                 logparams["encoding"] = encoding_size
 
         if not variational:
@@ -442,11 +429,6 @@ if not tune:
             if "MMD" in loss and mmd_wu > 0:
                 callbacks_.append(mmd_warmup_callback)
 
-            if logparam is not None:
-                callbacks_.append(
-                    hp.KerasCallback(os.path.join(output_path, "hparams"), logparams)
-                )
-
             Xs, ys = [X_train], [X_train]
             Xvals, yvals = [X_val], [X_val]
 
@@ -480,6 +462,22 @@ if not tune:
                     ),
                 )
             )
+
+            if logparam is not None:
+                # Logparams to tensorboard
+                def run(run_dir, hparams):
+                    with tf.summary.create_file_writer(run_dir).as_default():
+                        hp.hparams(hparams)  # record the values used in this trial
+                        val_mae = tf.keras.metrics.mean_absolute_error(
+                            X_val, gmvaep.predict(X_val)
+                        )
+                        val_mse = tf.keras.metrics.mean_squared_error(
+                            X_val, gmvaep.predict(X_val)
+                        )
+                        tf.summary.scalar("val_mae", val_mae, step=1)
+                        tf.summary.scalar("val_mse", val_mse, step=1)
+
+                run(os.path.join(output_path, "hparams"), list(logparams.values()))
 
         # To avoid stability issues
         tf.keras.backend.clear_session()
