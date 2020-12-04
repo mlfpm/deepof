@@ -367,7 +367,13 @@ if not tune:
                     hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
                     display_name="loss function",
                     description="loss function",
-                )
+                ),
+                hp.HParam(
+                    "run",
+                    hp.Discrete([0, 1, 2]),
+                    display_name="trial run",
+                    description="trial run",
+                ),
             ]
 
             if "encoding" in logparam.keys():
@@ -381,7 +387,7 @@ if not tune:
                     )
                 )
 
-            print(logparams)
+            logparam["run"] = run
 
             with tf.summary.create_file_writer(
                 os.path.join(output_path, "hparams", run_ID)
