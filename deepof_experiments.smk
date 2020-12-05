@@ -15,16 +15,17 @@ import os
 
 outpath = "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 losses = ["ELBO", "MMD", "ELBO+MMD"]
-encodings = [2, 4, 6, 8, 12, 16]
-
+encodings = [2, 4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = [i+1 for i in range(10)]
 
 rule deepof_experiments:
     input:
         expand(
             "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/dimension_and_loss_experiments/trained_weights/"
-            "GMVAE_loss={loss}_encoding={encs}_run_1_final_weights.h5",
+            "GMVAE_loss={loss}_encoding={encs}_k={k}_run_1_final_weights.h5",
             loss=losses,
             encs=encodings,
+            k=cluster_numbers,
         ),
 
 
@@ -62,13 +63,13 @@ rule explore_encoding_dimension_and_loss_function:
     output:
         trained_models=os.path.join(
             outpath,
-            "dimension_and_loss_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_run_1_final_weights.h5",
+            "dimension_and_loss_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_run_1_final_weights.h5",
         ),
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
         "--val-num 10 "
-        "--components 10 "
+        "--components {wildcards.k} "
         "--input-type coords "
         "--predictor 0 "
         "--variational True "
