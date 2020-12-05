@@ -743,6 +743,5 @@ class SEQ_2_SEQ_GMVAE:
 
 
 # TODO:
-#       - Check KL weight in the overall loss function! Are we scaling the loss components correctly?
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
-#       - Investigate posterior collapse (L1 as kernel/activity regulariser does not work)
+#       - Investigate full covariance matrix approximation for the latent space! :)
