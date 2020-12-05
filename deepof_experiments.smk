@@ -28,6 +28,34 @@ rule deepof_experiments:
         ),
 
 
+rule coarse_hyperparameter_tuning:
+    input:
+        data_path="/u/lucasmir/DLC/DLC_models/deepof_single_topview/",
+    output:
+        trained_models=os.path.join(
+            outpath,
+            "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_encoding={encs}_run_1_final_weights.h5",
+        ),
+    shell:
+        "pipenv run python -m deepof.train_model "
+        "--train-path {input.data_path} "
+        "--val-num 25 "
+        "--components 10 "
+        "--input-type coords "
+        "--predictor 0 "
+        "--variational True "
+        "--loss {wildcards.loss} "
+        "--kl-warmup 20 "
+        "--mmd-warmup 20 "
+        "--encoding-size 2 "
+        "--batch-size 256 "
+        "--window-size 11 "
+        "--window-step 11 "
+        "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip,Spine_2 "
+        "--output-path {outpath}coarse_hyperparameter_tuning "
+        "--hyperparameter-tuning hyperband "
+        "--hpt-trials 3"
+
 rule explore_encoding_dimension_and_loss_function:
     input:
         data_path="/u/lucasmir/DLC/DLC_models/deepof_single_topview/",
