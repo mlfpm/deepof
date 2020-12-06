@@ -251,6 +251,7 @@ class SEQ_2_SEQ_GMVAE:
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO+MMD",
         mmd_warmup_epochs: int = 20,
+        montecarlo_kl: int = 1,
         neuron_control: bool = False,
         number_of_components: int = 1,
         overlap_loss: float = False,
@@ -278,6 +279,7 @@ class SEQ_2_SEQ_GMVAE:
         self.initialiser_iters = initialiser_iters
         self.kl_warmup = kl_warmup_epochs
         self.loss = loss
+        self.mc_kl = montecarlo_kl
         self.mmd_warmup = mmd_warmup_epochs
         self.neuron_control = neuron_control
         self.number_of_components = number_of_components
@@ -618,7 +620,11 @@ class SEQ_2_SEQ_GMVAE:
                 )
 
             # noinspection PyCallingNonCallable
-            z = deepof.model_utils.KLDivergenceLayer(self.prior, weight=kl_beta)(z)
+            z = deepof.model_utils.KLDivergenceLayer(
+                self.prior,
+                test_points_fn=lambda q: q.sample(self.mc_kl),
+                weight=kl_beta,
+            )(z)
 
         mmd_warmup_callback = False
         if "MMD" in self.loss:

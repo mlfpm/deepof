@@ -35,6 +35,7 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     kl_warmup_epochs=st.integers(min_value=0, max_value=5),
     mmd_warmup_epochs=st.integers(min_value=0, max_value=5),
+    montecarlo_kl=st.integers(min_value=1, max_value=10),
     number_of_components=st.integers(min_value=1, max_value=5),
     entropy_reg_weight=st.one_of(st.just(0.0), st.just(1.0)),
 )
@@ -42,6 +43,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
     loss,
     kl_warmup_epochs,
     mmd_warmup_epochs,
+    montecarlo_kl,
     number_of_components,
     entropy_reg_weight,
 ):
@@ -49,6 +51,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
         loss=loss,
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,
+        montecarlo_kl=montecarlo_kl,
         number_of_components=number_of_components,
         predictor=True,
         phenotype_prediction=True,

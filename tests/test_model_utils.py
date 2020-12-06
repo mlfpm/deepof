@@ -188,10 +188,12 @@ def test_KLDivergenceLayer():
         )
     )(d)
     kl_canon = tfpl.KLDivergenceAddLoss(
-        prior, weight=1.
+        prior,
+        weight=1.0,
     )(x)
     kl_deepof = deepof.model_utils.KLDivergenceLayer(
-        prior, weight=1.
+        prior,
+        weight=1.0,
     )(x)
     test_model = tf.keras.Model(i, [kl_canon, kl_deepof])
 
@@ -200,7 +202,7 @@ def test_KLDivergenceLayer():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, [y,y], epochs=1, batch_size=100)
+    fit = test_model.fit(X, [y, y], epochs=1, batch_size=100)
     assert tf.python.keras.callbacks.History == type(fit)
     assert test_model.losses[0] == test_model.losses[1]
 
