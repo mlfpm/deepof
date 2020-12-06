@@ -61,6 +61,7 @@ def test_compute_mmd(tensor):
     assert null_kernel == 0
 
 
+# noinspection PyUnresolvedReferences
 def test_one_cycle_scheduler():
     cycle1 = deepof.model_utils.one_cycle_scheduler(
         iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
@@ -89,6 +90,7 @@ def test_one_cycle_scheduler():
     assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
 
 
+# noinspection PyUnresolvedReferences
 def test_uncorrelated_features_constraint():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
@@ -120,6 +122,7 @@ def test_uncorrelated_features_constraint():
     assert correlations[0] > correlations[1]
 
 
+# noinspection PyUnresolvedReferences
 def test_MCDropout():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
@@ -137,6 +140,7 @@ def test_MCDropout():
     assert type(fit) == tf.python.keras.callbacks.History
 
 
+# noinspection PyUnresolvedReferences
 def test_dense_transpose():
     X = np.random.uniform(0, 10, [1500, 10])
     y = np.random.randint(0, 2, [1500, 1])
@@ -157,21 +161,22 @@ def test_dense_transpose():
     assert type(fit) == tf.python.keras.callbacks.History
 
 
+# noinspection PyCallingNonCallable,PyUnresolvedReferences
 def test_KLDivergenceLayer():
-    X = tf.random.uniform([1500, 10], 0, 10)
-    y = np.random.randint(0, 2, [1500, 1])
+    X = tf.random.uniform([10, 2], 0, 10)
+    y = np.random.randint(0, 1, [10, 1])
 
     prior = tfd.Independent(
         tfd.Normal(
-            loc=tf.zeros(10),
+            loc=tf.zeros(2),
             scale=1,
         ),
         reinterpreted_batch_ndims=1,
     )
 
-    dense_1 = tf.keras.layers.Dense(10)
+    dense_1 = tf.keras.layers.Dense(2)
 
-    i = tf.keras.layers.Input(shape=(10,))
+    i = tf.keras.layers.Input(shape=(2,))
     d = dense_1(i)
     x = tfpl.DistributionLambda(
         lambda dense: tfd.Independent(
@@ -182,20 +187,25 @@ def test_KLDivergenceLayer():
             reinterpreted_batch_ndims=1,
         )
     )(d)
-    x = deepof.model_utils.KLDivergenceLayer(
-        prior, weight=tf.keras.backend.variable(1.0, name="kl_beta")
+    kl_canon = tfpl.KLDivergenceAddLoss(
+        prior, weight=1.
     )(x)
-    test_model = tf.keras.Model(i, x)
+    kl_deepof = deepof.model_utils.KLDivergenceLayer(
+        prior, weight=1.
+    )(x)
+    test_model = tf.keras.Model(i, [kl_canon, kl_deepof])
 
     test_model.compile(
         loss=tf.keras.losses.binary_crossentropy,
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    fit = test_model.fit(X, [y,y], epochs=1, batch_size=100)
+    assert tf.python.keras.callbacks.History == type(fit)
+    assert test_model.losses[0] == test_model.losses[1]
 
 
+# noinspection PyUnresolvedReferences
 def test_MMDiscrepancyLayer():
     X = tf.random.uniform([1500, 10], 0, 10)
     y = np.random.randint(0, 2, [1500, 1])
@@ -233,9 +243,10 @@ def test_MMDiscrepancyLayer():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert tf.python.keras.callbacks.History == type(fit)
 
 
+# noinspection PyUnresolvedReferences
 def test_dead_neuron_control():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
@@ -250,9 +261,10 @@ def test_dead_neuron_control():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert tf.python.keras.callbacks.History == type(fit)
 
 
+# noinspection PyUnresolvedReferences
 def test_entropy_regulariser():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])

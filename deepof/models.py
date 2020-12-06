@@ -594,7 +594,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]) + 1e-5,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -744,4 +744,4 @@ class SEQ_2_SEQ_GMVAE:
 
 # TODO:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
-#       - Investigate full covariance matrix approximation for the latent space! :)
+#       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)

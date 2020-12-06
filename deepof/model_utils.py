@@ -138,7 +138,7 @@ def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def compute_mmd(tensors: Tuple[Any, Any]) -> tf.Tensor:
+def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:
     """
 
     Computes the MMD between the two specified vectors using a gaussian kernel.
