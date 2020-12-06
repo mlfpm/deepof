@@ -68,7 +68,7 @@ rule explore_encoding_dimension_and_loss_function:
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
-        "--val-num 10 "
+        "--val-num 25 "
         "--components {wildcards.k} "
         "--input-type coords "
         "--predictor 0 "
@@ -83,17 +83,3 @@ rule explore_encoding_dimension_and_loss_function:
         "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip,Spine_2 "
         "--stability-check 3  "
         "--output-path {outpath}dimension_and_loss_experiments"
-
-
-# rule explore_number_of_components:
-# 	input:
-# 	output:
-# 	shell:
-# rule explore_phenotype_prediction:
-# 	input:
-# 	output:
-# 	shell:
-# rule explore_predictor_branch:
-# 	input:
-# 	output:
-# 	shell:
