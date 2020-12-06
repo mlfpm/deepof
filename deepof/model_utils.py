@@ -22,7 +22,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
-# Helper functions
+# Helper functions and classes
 class exponential_learning_rate(tf.keras.callbacks.Callback):
     """Simple class that allows to grow learning rate exponentially during training"""
 
