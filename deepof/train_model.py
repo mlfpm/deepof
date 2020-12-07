@@ -300,7 +300,7 @@ def batch_preprocess(tab_dict):
     return tab_dict.preprocess(
         window_size=window_size,
         window_step=window_step,
-        scale="standard",
+        scale="minmax",
         conv_filter=gaussian_filter,
         sigma=1,
         test_videos=val_num,
@@ -457,7 +457,7 @@ if not tune:
                 CustomStopper(
                     monitor="val_loss",
                     patience=15,
-                    restore_best_weights=False,
+                    restore_best_weights=True,
                     start_epoch=max(kl_wu, mmd_wu),
                 ),
             ]
@@ -560,7 +560,7 @@ else:
             CustomStopper(
                 monitor="val_loss",
                 patience=15,
-                restore_best_weights=False,
+                restore_best_weights=True,
                 start_epoch=max(kl_wu, mmd_wu),
             ),
         ],
