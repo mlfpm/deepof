@@ -317,11 +317,15 @@ class SEQ_2_SEQ_GMVAE:
                 ),
                 components_distribution=tfd.MultivariateNormalDiag(
                     loc=tf.Variable(
-                        tf.random.normal([self.number_of_components, self.ENCODING])
+                        tf.random.normal(
+                            [self.number_of_components, self.ENCODING],
+                            name="prior_means",
+                        )
                     ),
                     scale_diag=tfp.util.TransformedVariable(
                         tf.ones([self.number_of_components, self.ENCODING]),
                         tfb.Softplus(),
+                        name="prior_scales",
                     ),
                 ),
             )
