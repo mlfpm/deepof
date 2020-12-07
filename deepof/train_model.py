@@ -123,6 +123,13 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--montecarlo-kl",
+    "-mckl",
+    help="Number of samples to compute when adding KLDivergence to the loss function",
+    default=10,
+    type=int,
+)
+parser.add_argument(
     "--neuron-control",
     "-nc",
     help="If True, adds the proportion of dead neurons in the latent space as a metric",
@@ -219,6 +226,7 @@ k = args.components
 kl_wu = args.kl_warmup
 loss = args.loss
 mmd_wu = args.mmd_warmup
+mc_kl = args.montecarlo_kl
 neuron_control = args.neuron_control
 output_path = os.path.join(args.output_path)
 overlap_loss = args.overlap_loss
@@ -440,6 +448,7 @@ if not tune:
                 kl_warmup_epochs=kl_wu,
                 loss=loss,
                 mmd_warmup_epochs=mmd_wu,
+                montecarlo_kl=mc_kl,
                 neuron_control=neuron_control,
                 number_of_components=k,
                 overlap_loss=overlap_loss,

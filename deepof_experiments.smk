@@ -76,6 +76,7 @@ rule explore_encoding_dimension_and_loss_function:
         "--loss {wildcards.loss} "
         "--kl-warmup 2 "
         "--mmd-warmup 2 "
+        "--montecarlo-kl 10 "
         "--encoding-size {wildcards.encs} "
         "--batch-size 256 "
         "--window-size 11 "
