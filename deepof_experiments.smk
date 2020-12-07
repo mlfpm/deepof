@@ -67,7 +67,7 @@ rule explore_encoding_dimension_and_loss_function:
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
-        "--val-num 25 "
+        "--val-num 5 "
         "--components {wildcards.k} "
         "--input-type coords "
         "--predictor 0 "

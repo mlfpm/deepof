@@ -218,7 +218,7 @@ arena_dims = args.arena_dims
 batch_size = args.batch_size
 hypertun_trials = args.hpt_trials
 encoding_size = args.encoding_size
-exclude_bodyparts = list(args.exclude_bodyparts.split(","))
+exclude_bodyparts = tuple(args.exclude_bodyparts.split(","))
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
 input_type = args.input_type
@@ -274,7 +274,7 @@ project_coords = project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),
-    exclude_bodyparts=(None if exclude_bodyparts == [""] else exclude_bodyparts),
+    exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
     path=train_path,
     smooth_alpha=smooth_alpha,
