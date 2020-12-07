@@ -23,6 +23,25 @@ import tensorflow as tf
 hp = HyperParameters()
 
 
+class CustomStopper(tf.keras.callbacks.EarlyStopping):
+    """ Custom callback for """
+
+    def __init__(self, start_epoch, *args, **kwargs):
+        super(CustomStopper, self).__init__(*args, **kwargs)
+        self.start_epoch = start_epoch
+
+    def get_config(self):  # pragma: no cover
+        """Updates callback metadata"""
+
+        config = super().get_config().copy()
+        config.update({"start_epoch": self.start_epoch})
+        return config
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch > self.start_epoch:
+            super().on_epoch_end(epoch, logs)
+
+
 def load_hparams(hparams):
     """Loads hyperparameters from a custom dictionary pickled on disc.
     Thought to be used with the output of hyperparameter_tuning.py"""
