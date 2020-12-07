@@ -300,7 +300,7 @@ def batch_preprocess(tab_dict):
     return tab_dict.preprocess(
         window_size=window_size,
         window_step=window_step,
-        scale="minmax",
+        scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
         test_videos=val_num,
@@ -413,8 +413,11 @@ if not tune:
                     tensorboard_callback,
                     cp_callback,
                     onecycle,
-                    tf.keras.callbacks.EarlyStopping(
-                        "val_loss", patience=15, restore_best_weights=True
+                    CustomStopper(
+                        "val_loss",
+                        patience=5,
+                        restore_best_weights=True,
+                        start_epoch=max(kl_wu, mmd_wu),
                     ),
                 ],
             )
@@ -451,8 +454,11 @@ if not tune:
                 tensorboard_callback,
                 cp_callback,
                 onecycle,
-                tf.keras.callbacks.EarlyStopping(
-                    "val_loss", patience=15, restore_best_weights=True
+                CustomStopper(
+                    "val_loss",
+                    patience=15,
+                    restore_best_weights=False,
+                    start_epoch=max(kl_wu, mmd_wu),
                 ),
             ]
 
@@ -551,8 +557,11 @@ else:
         callbacks=[
             tensorboard_callback,
             onecycle,
-            tf.keras.callbacks.EarlyStopping(
-                "val_loss", patience=15, restore_best_weights=True
+            CustomStopper(
+                "val_loss",
+                patience=15,
+                restore_best_weights=False,
+                start_epoch=max(kl_wu, mmd_wu),
             ),
         ],
         n_replicas=3,

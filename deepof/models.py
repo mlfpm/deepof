@@ -624,7 +624,7 @@ class SEQ_2_SEQ_GMVAE:
             z = deepof.model_utils.KLDivergenceLayer(
                 self.prior,
                 test_points_fn=lambda q: q.sample(self.mc_kl),
-                test_points_reduce_axis=None,
+                test_points_reduce_axis=0,
                 weight=kl_beta,
             )(z)
 
@@ -664,12 +664,21 @@ class SEQ_2_SEQ_GMVAE:
         def log_loss(x_true, p_x_q_given_z):
             """Computes the negative log likelihood of the data given
             the output distribution"""
-            return -tf.reduce_mean(p_x_q_given_z.log_prob(x_true))
+            return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
 
         model_outs = [x_decoded_mean]
         model_losses = [log_loss]
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
+
+        # x_decoded_mean = TimeDistributed(Dense(input_shape[2]), name="vae_prediction")(
+        #     generator
+        # )
+        #
+        # model_outs = [x_decoded_mean]
+        # model_losses = [Huber(delta=self.delta, reduction="sum_over_batch_size")]
+        # model_metrics = {"vae_reconstruction": ["mae", "mse"]}
+        # loss_weights = [1.0]
 
         if self.predictor > 0:
             # Define and instantiate predictor
