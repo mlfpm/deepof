@@ -23,6 +23,7 @@ import deepof.model_utils
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
 
@@ -303,27 +304,26 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the Variational Autoencoder prior distribution"""
 
         if self.prior == "standard_normal":
-            init_means = deepof.model_utils.far_away_uniform_initialiser(
-                shape=(self.number_of_components, self.ENCODING),
-                minval=0,
-                maxval=5,
-                iters=self.initialiser_iters,
-            )
+            # init_means = deepof.model_utils.far_away_uniform_initialiser(
+            #     shape=(self.number_of_components, self.ENCODING),
+            #     minval=0,
+            #     maxval=5,
+            #     iters=self.initialiser_iters,
+            # )
 
-            self.prior = tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(
+            self.prior = tfd.MixtureSameFamily(
+                mixture_distribution=tfd.categorical.Categorical(
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
-                components=[
-                    tfd.Independent(
-                        tfd.Normal(
-                            loc=init_means[k],
-                            scale=1,
-                        ),
-                        reinterpreted_batch_ndims=1,
-                    )
-                    for k in range(self.number_of_components)
-                ],
+                components_distribution=tfd.MultivariateNormalDiag(
+                    loc=tf.Variable(
+                        tf.random.normal([self.number_of_components, self.ENCODING])
+                    ),
+                    scale_diag=tfp.util.TransformedVariable(
+                        tf.ones([self.number_of_components, self.ENCODING]),
+                        tfb.Softplus(),
+                    ),
+                ),
             )
 
         else:  # pragma: no cover
@@ -654,9 +654,7 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model_B3(generator)
         generator = Model_D5(generator)
         generator = Model_B4(generator)
-        generator = TimeDistributed(Dense(input_shape[2]))(
-            generator
-        )
+        generator = TimeDistributed(Dense(input_shape[2]))(generator)
         x_decoded_mean = tfpl.IndependentBernoulli(
             event_shape=input_shape[2:],
             convert_to_tensor_fn=tfp.distributions.Distribution.mean,
