@@ -413,7 +413,7 @@ if not tune:
             history = ae.fit(
                 x=X_train,
                 y=X_train,
-                epochs=25,
+                epochs=35,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(X_val, X_val),
@@ -465,7 +465,7 @@ if not tune:
                 onecycle,
                 CustomStopper(
                     monitor="val_loss",
-                    patience=15,
+                    patience=5,
                     restore_best_weights=True,
                     start_epoch=max(kl_wu, mmd_wu),
                 ),
@@ -490,7 +490,7 @@ if not tune:
             history = gmvaep.fit(
                 x=Xs,
                 y=ys,
-                epochs=250,
+                epochs=35,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
@@ -568,7 +568,7 @@ else:
             onecycle,
             CustomStopper(
                 monitor="val_loss",
-                patience=15,
+                patience=5,
                 restore_best_weights=True,
                 start_epoch=max(kl_wu, mmd_wu),
             ),
