@@ -414,7 +414,7 @@ if not tune:
                     cp_callback,
                     onecycle,
                     CustomStopper(
-                        "val_loss",
+                        monitor="val_loss",
                         patience=5,
                         restore_best_weights=True,
                         start_epoch=max(kl_wu, mmd_wu),
@@ -455,7 +455,7 @@ if not tune:
                 cp_callback,
                 onecycle,
                 CustomStopper(
-                    "val_loss",
+                    monitor="val_loss",
                     patience=15,
                     restore_best_weights=False,
                     start_epoch=max(kl_wu, mmd_wu),
@@ -558,7 +558,7 @@ else:
             tensorboard_callback,
             onecycle,
             CustomStopper(
-                "val_loss",
+                monitor="val_loss",
                 patience=15,
                 restore_best_weights=False,
                 start_epoch=max(kl_wu, mmd_wu),
