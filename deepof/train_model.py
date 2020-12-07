@@ -59,7 +59,7 @@ parser.add_argument(
     "-exc",
     help="Excludes the indicated bodyparts from all analyses. It should consist of several values separated by commas",
     type=str,
-    default="",
+    default=None,
 )
 parser.add_argument(
     "--gaussian-filter",
