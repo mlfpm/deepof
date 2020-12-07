@@ -490,7 +490,7 @@ if not tune:
             history = gmvaep.fit(
                 x=Xs,
                 y=ys,
-                epochs=35,
+                epochs=1,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
@@ -510,25 +510,24 @@ if not tune:
                 )
             )
 
-            if logparam is not None:
-                # Logparams to tensorboard
-                def run(run_dir, hpms):
-                    with tf.summary.create_file_writer(run_dir).as_default():
-                        hp.hparams(hpms)  # record the values used in this trial
-                        val_mae = tf.reduce_mean(
-                            tf.keras.metrics.mean_absolute_error(
-                                X_val, gmvaep.predict(X_val)
-                            )
+            # Logparams to tensorboard
+            def run(run_dir, hpms):
+                with tf.summary.create_file_writer(run_dir).as_default():
+                    hp.hparams(hpms)  # record the values used in this trial
+                    val_mae = tf.reduce_mean(
+                        tf.keras.metrics.mean_absolute_error(
+                            X_val, gmvaep.predict(X_val)
                         )
-                        val_mse = tf.reduce_mean(
-                            tf.keras.metrics.mean_squared_error(
-                                X_val, gmvaep.predict(X_val)
-                            )
+                    )
+                    val_mse = tf.reduce_mean(
+                        tf.keras.metrics.mean_squared_error(
+                            X_val, gmvaep.predict(X_val)
                         )
-                        tf.summary.scalar("val_mae", val_mae, step=1)
-                        tf.summary.scalar("val_mse", val_mse, step=1)
+                    )
+                    tf.summary.scalar("val_mae", val_mae, step=1)
+                    tf.summary.scalar("val_mse", val_mse, step=1)
 
-                run(os.path.join(output_path, "hparams", run_ID), logparam)
+            run(os.path.join(output_path, "hparams", run_ID), logparam)
 
         # To avoid stability issues
         tf.keras.backend.clear_session()
