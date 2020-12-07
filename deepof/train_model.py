@@ -414,7 +414,7 @@ if not tune:
                     cp_callback,
                     onecycle,
                     tf.keras.callbacks.EarlyStopping(
-                        "val_mae", patience=15, restore_best_weights=True
+                        "val_loss", patience=10, restore_best_weights=True
                     ),
                 ],
             )
@@ -452,7 +452,7 @@ if not tune:
                 cp_callback,
                 onecycle,
                 tf.keras.callbacks.EarlyStopping(
-                    "val_mae", patience=10, restore_best_weights=True
+                    "val_loss", patience=10, restore_best_weights=True
                 ),
             ]
 
@@ -552,7 +552,7 @@ else:
             tensorboard_callback,
             onecycle,
             tf.keras.callbacks.EarlyStopping(
-                "val_mae", patience=10, restore_best_weights=True
+                "val_loss", patience=10, restore_best_weights=True
             ),
         ],
         n_replicas=3,
