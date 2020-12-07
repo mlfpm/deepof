@@ -461,7 +461,7 @@ if not tune:
 
             callbacks_ = [
                 tensorboard_callback,
-                cp_callback,
+                # cp_callback,
                 onecycle,
                 CustomStopper(
                     monitor="val_loss",
@@ -490,7 +490,7 @@ if not tune:
             history = gmvaep.fit(
                 x=Xs,
                 y=ys,
-                epochs=1,
+                epochs=40,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
