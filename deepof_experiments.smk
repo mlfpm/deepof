@@ -14,8 +14,8 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 import os
 
 outpath = "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
-losses = ["ELBO", "MMD", "ELBO+MMD"]
-encodings = [2, 4, 6, 8, 10, 12, 14, 16]
+losses = ["ELBO"]#, "MMD", "ELBO+MMD"]
+encodings = [6]#[2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [10]
 
 rule deepof_experiments:
