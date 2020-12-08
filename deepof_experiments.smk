@@ -15,8 +15,8 @@ import os
 
 outpath = "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 losses = ["ELBO"]#, "MMD", "ELBO+MMD"]
-encodings = [6]#[2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = [10]
+encodings = [2, 4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = [1, 5, 10, 15, 20]
 
 rule deepof_experiments:
     input:
