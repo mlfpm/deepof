@@ -99,17 +99,14 @@ def get_callbacks(
     - cp_callback: for checkpoint saving,
     - onecycle: for learning rate scheduling"""
 
-    run_ID = "{}{}{}{}{}_{}".format(
+    run_ID = "{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
         ("P" if predictor > 0 and variational else ""),
         ("_Pheno" if phenotype_class > 0 else ""),
         ("_loss={}".format(loss) if variational else ""),
-        (
-            "_{}={}".format(list(logparam.keys())[0], list(logparam.values())[0])
-            if logparam is not None
-            else ""
-        ),
-        datetime.now().strftime("%Y%m%d-%H%M%S"),
+        ("_encoding={}".format(logparam["encoding"])),
+        ("_k={}".format(logparam["k"])),
+        (datetime.now().strftime("%Y%m%d-%H%M%S")),
     )
 
     log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
