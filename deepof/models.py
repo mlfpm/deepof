@@ -658,8 +658,8 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model_B3(generator)
         generator = Model_D5(generator)
         generator = Model_B4(generator)
-        generator = TimeDistributed(Dense(input_shape[2]))(generator)
-        x_decoded_mean = tfpl.IndependentBernoulli(
+        generator = Dense(tfpl.IndependentNormal.params_size(input_shape[2:]))(generator)
+        x_decoded_mean = tfpl.IndependentNormal(
             event_shape=input_shape[2:],
             convert_to_tensor_fn=tfp.distributions.Distribution.mean,
             name="vae_reconstruction",
