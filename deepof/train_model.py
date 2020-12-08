@@ -308,7 +308,7 @@ def batch_preprocess(tab_dict):
     return tab_dict.preprocess(
         window_size=window_size,
         window_step=window_step,
-        scale="minmax",
+        scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
         test_videos=val_num,
