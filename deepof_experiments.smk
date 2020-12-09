@@ -120,4 +120,4 @@ rule explore_phenotype_classification:
         "--window-size 11 "
         "--window-step 11 "
         "--stability-check 3  "
-        "--output-path {outpath}dimension_and_loss_experiments"
+        "--output-path {outpath}pheno_classification_experiments"

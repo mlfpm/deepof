@@ -405,18 +405,16 @@ if not tune:
                     description="weight applied to phenotypic classifier from the latent space",
                 )
             )
-            metrics.append(
-                [
-                    hp.Metric(
-                        "phenotype_prediction_accuracy",
-                        display_name="phenotype_prediction_accuracy",
-                    ),
-                    hp.Metric(
-                        "phenotype_prediction_auc",
-                        display_name="phenotype_prediction_auc",
-                    ),
-                ]
-            )
+            metrics += [
+                hp.Metric(
+                    "phenotype_prediction_accuracy",
+                    display_name="phenotype_prediction_accuracy",
+                ),
+                hp.Metric(
+                    "phenotype_prediction_auc",
+                    display_name="phenotype_prediction_auc",
+                ),
+            ]
 
         with tf.summary.create_file_writer(
             os.path.join(output_path, "hparams", run_ID)
