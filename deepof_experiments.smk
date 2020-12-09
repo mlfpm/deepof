@@ -34,7 +34,7 @@ rule deepof_experiments:
             loss=losses,
             encs=encodings,
             k=cluster_numbers,
-            pheno=pheno_weights,
+            phenos=pheno_weights,
         )
 
 
@@ -69,10 +69,10 @@ rule explore_encoding_dimension_and_loss_function:
     input:
         data_path="/u/lucasmir/DLC/DLC_models/deepof_single_topview/",
     output:
-        trained_models=os.path.join(
+        trained_models=ancient(os.path.join(
             outpath,
             "dimension_and_loss_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_run_1_final_weights.h5",
-        ),
+        )),
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
