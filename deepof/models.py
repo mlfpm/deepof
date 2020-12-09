@@ -775,3 +775,5 @@ class SEQ_2_SEQ_GMVAE:
 # TODO:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
+#       - Explore expanding the event dims of the final reconstruction layer
+#       - Gaussian Mixture as output layer? One component per bodypart (makes sense?)

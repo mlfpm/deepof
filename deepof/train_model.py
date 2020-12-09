@@ -400,7 +400,7 @@ if not tune:
             logparams.append(
                 hp.HParam(
                     "pheno_weight",
-                    hp.RealInterval(min_value=0, max_value=1000),
+                    hp.RealInterval(min_value=0.0, max_value=1000.0),
                     display_name="pheno weight",
                     description="weight applied to phenotypic classifier from the latent space",
                 )
