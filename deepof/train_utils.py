@@ -143,7 +143,7 @@ def tensorboard_metric_logging(
     hpms: Any,
     X: np.ndarray,
     y: np.ndarray,
-    model: tensorflow.python.keras.engine.functional.Functional,
+    model: tf.python.keras.engine.functional.Functional,
     predictor: float,
     pheno_class: float,
     rec: str,
