@@ -293,6 +293,7 @@ coords = project_coords.get_coords(
     center=animal_id + undercond + "Center",
     align=animal_id + undercond + "Spine_1",
     align_inplace=True,
+    propagate_labels=(pheno_class > 0)
 )
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
