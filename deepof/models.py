@@ -692,25 +692,31 @@ class SEQ_2_SEQ_GMVAE:
             predictor = BatchNormalization()(predictor)
             predictor = Model_P3(predictor)
             predictor = BatchNormalization()(predictor)
-            x_predicted_mean = TimeDistributed(
-                Dense(input_shape[2]), name="vae_prediction"
+            predictor = Dense(tfpl.IndependentNormal.params_size(input_shape[2:]))(
+                predictor
+            )
+            x_predicted_mean = tfpl.IndependentNormal(
+                event_shape=input_shape[2:],
+                convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+                name="vae_prediction",
             )(predictor)
 
             model_outs.append(x_predicted_mean)
-            model_losses.append(
-                Huber(delta=self.delta, reduction="sum_over_batch_size")
-            )
+            model_losses.append(log_loss)
             model_metrics["vae_prediction"] = ["mae", "mse"]
             loss_weights.append(self.predictor)
 
         if self.phenotype_prediction > 0:
             pheno_pred = Model_PC1(z)
-            pheno_pred = Dense(1, activation="sigmoid", name="phenotype_prediction")(
-                pheno_pred
-            )
+            pheno_pred = Dense(tfpl.IndependentBernoulli.params_size(1))(pheno_pred)
+            pheno_pred = tfpl.IndependentBernoulli(
+                event_shape=1,
+                convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+                name="phenotype_prediction",
+            )(pheno_pred)
 
             model_outs.append(pheno_pred)
-            model_losses.append(BinaryCrossentropy(reduction="sum_over_batch_size"))
+            model_losses.append(log_loss)
             model_metrics["phenotype_prediction"] = ["AUC", "accuracy"]
             loss_weights.append(self.phenotype_prediction)
 
