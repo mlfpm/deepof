@@ -104,8 +104,8 @@ def get_callbacks(
         ("P" if predictor > 0 and variational else ""),
         ("_Pheno" if phenotype_class > 0 else ""),
         ("_loss={}".format(loss) if variational else ""),
-        ("_encoding={}".format(logparam["encoding"])),
-        ("_k={}".format(logparam["k"])),
+        ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
+        ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         (datetime.now().strftime("%Y%m%d-%H%M%S")),
     )
 

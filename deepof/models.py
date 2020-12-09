@@ -658,7 +658,9 @@ class SEQ_2_SEQ_GMVAE:
         generator = Model_B3(generator)
         generator = Model_D5(generator)
         generator = Model_B4(generator)
-        generator = Dense(tfpl.IndependentNormal.params_size(input_shape[2:]))(generator)
+        generator = Dense(tfpl.IndependentNormal.params_size(input_shape[2:]))(
+            generator
+        )
         x_decoded_mean = tfpl.IndependentNormal(
             event_shape=input_shape[2:],
             convert_to_tensor_fn=tfp.distributions.Distribution.mean,
@@ -674,15 +676,6 @@ class SEQ_2_SEQ_GMVAE:
         model_losses = [log_loss]
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
-
-        # x_decoded_mean = TimeDistributed(Dense(input_shape[2]), name="vae_prediction")(
-        #     generator
-        # )
-        #
-        # model_outs = [x_decoded_mean]
-        # model_losses = [Huber(delta=self.delta, reduction="sum_over_batch_size")]
-        # model_metrics = {"vae_reconstruction": ["mae", "mse"]}
-        # loss_weights = [1.0]
 
         if self.predictor > 0:
             # Define and instantiate predictor
