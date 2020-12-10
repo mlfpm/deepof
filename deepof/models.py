@@ -17,7 +17,7 @@ from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
-from tensorflow.keras.losses import BinaryCrossentropy, Huber
+from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Nadam
 import deepof.model_utils
 import tensorflow as tf
