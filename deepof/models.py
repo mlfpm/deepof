@@ -649,7 +649,8 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
 
         # Define and instantiate generator
-        generator = Sequential(Model_D1)(z)
+        g = Input(shape=self.ENCODING)
+        generator = Sequential(Model_D1)(g)
         generator = Model_B1(generator)
         generator = Model_D2(generator)
         generator = Model_B2(generator)
@@ -667,12 +668,16 @@ class SEQ_2_SEQ_GMVAE:
             name="vae_reconstruction",
         )(generator)
 
+        # define individual branches as models
+        encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
+        generator = Model(g, x_decoded_mean, name="vae_reconstruction")
+
         def log_loss(x_true, p_x_q_given_z):
             """Computes the negative log likelihood of the data given
             the output distribution"""
             return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
 
-        model_outs = [x_decoded_mean]
+        model_outs = [generator(encoder.outputs)]
         model_losses = [log_loss]
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
@@ -720,30 +725,13 @@ class SEQ_2_SEQ_GMVAE:
             model_metrics["phenotype_prediction"] = ["AUC", "accuracy"]
             loss_weights.append(self.phenotype_prediction)
 
-        # end-to-end autoencoder
-        encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
-        grouper = Model(x, z_cat, name="Deep_Gaussian_Mixture_clustering")
-        # noinspection PyUnboundLocalVariable
-
+        # define grouper and end-to-end autoencoder model
+        grouper = Model(encoder.inputs, z_cat, name="Deep_Gaussian_Mixture_clustering")
         gmvaep = Model(
-            inputs=x,
+            inputs=encoder.inputs,
             outputs=model_outs,
             name="SEQ_2_SEQ_GMVAE",
         )
-
-        # Build generator as a separate entity
-        g = Input(shape=self.ENCODING)
-        _generator = Sequential(Model_D1)(g)
-        _generator = Model_B1(_generator)
-        _generator = Model_D2(_generator)
-        _generator = Model_B2(_generator)
-        _generator = Model_D3(_generator)
-        _generator = Model_D4(_generator)
-        _generator = Model_B3(_generator)
-        _generator = Model_D5(_generator)
-        _generator = Model_B4(_generator)
-        _x_decoded_mean = TimeDistributed(Dense(input_shape[2]))(_generator)
-        generator = Model(g, _x_decoded_mean, name="SEQ_2_SEQ_VGenerator")
 
         if self.compile:
             gmvaep.compile(
