@@ -837,7 +837,24 @@ class table_dict(dict):
 
         # Padding of videos with slightly different lengths
         raw_data = np.array([np.array(v) for v in self.values()], dtype=object)
-        test_index = np.random.choice(range(len(raw_data)), test_videos, replace=False)
+        if self._propagate_labels:
+            test_index = []
+            for label in set(list(np.squeeze(raw_data[:, -1]))):
+                test_index.append(
+                    np.random.choice(
+                        [
+                            i
+                            for i in range(len(raw_data))
+                            if np.squeeze(raw_data)[i, -1] == label
+                        ],
+                        test_videos,
+                        replace=False,
+                    )
+                )
+        else:
+            test_index = np.random.choice(
+                range(len(raw_data)), test_videos, replace=False
+            )
 
         y_train, X_test, y_test = [], [], []
         if test_videos > 0:
