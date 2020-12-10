@@ -14,10 +14,11 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 import os
 
 outpath = "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
-losses = ["ELBO"]#, "MMD", "ELBO+MMD"]
-encodings = [4, 6, 8]#[2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = [10, 15]#[1, 5, 10, 15, 20]
+losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
+encodings = [4, 6, 8]  # [2, 4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = [10, 15]  # [1, 5, 10, 15, 20]
 pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
+
 
 rule deepof_experiments:
     input:
@@ -35,7 +36,7 @@ rule deepof_experiments:
             encs=encodings,
             k=cluster_numbers,
             phenos=pheno_weights,
-        )
+        ),
 
 
 # rule coarse_hyperparameter_tuning:
@@ -64,6 +65,7 @@ rule deepof_experiments:
 #         "--output-path {outpath}coarse_hyperparameter_tuning "
 #         "--hyperparameter-tuning hyperband "
 #         "--hpt-trials 3"
+
 
 rule explore_encoding_dimension_and_loss_function:
     input:
@@ -121,4 +123,3 @@ rule explore_phenotype_classification:
         "--window-step 11 "
         "--stability-check 3  "
         "--output-path {outpath}pheno_classification_experiments"
-
