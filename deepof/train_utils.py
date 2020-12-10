@@ -102,8 +102,8 @@ def get_callbacks(
 
     run_ID = "{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
-        ("P" if predictor > 0 and variational else ""),
-        ("_Pheno" if phenotype_class > 0 else ""),
+        ("Pred={}".format(predictor) if predictor > 0 and variational else ""),
+        ("_Pheno={}".format(phenotype_class) if phenotype_class > 0 else ""),
         ("_loss={}".format(loss) if variational else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
