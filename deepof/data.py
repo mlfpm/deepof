@@ -984,7 +984,7 @@ class table_dict(dict):
 
             X_test = deepof.utils.rolling_window(X_test, window_size, window_step)
             if self._propagate_labels:
-                y_test= y_test[::window_step][:-1]
+                y_test = y_test[::window_step][:-1]
 
             if align == "center":
                 X_test = deepof.utils.align_trajectories(X_test, align)

@@ -529,8 +529,13 @@ if not tune:
                 os.path.join(
                     output_path,
                     "trained_weights",
-                    "GMVAE_loss={}_encoding={}_k={}_run_{}_final_weights.h5".format(
-                        loss, encoding_size, k, run
+                    "GMVAE_loss={}_encoding={}_k={}_{}{}run_{}_final_weights.h5".format(
+                        loss,
+                        encoding_size,
+                        k,
+                        ("pheno={}_".format(pheno_class) if pheno_class else ""),
+                        ("predictor={}_".format(predictor) if predictor else ""),
+                        run,
                     ),
                 )
             )
