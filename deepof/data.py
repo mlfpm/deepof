@@ -958,7 +958,7 @@ class table_dict(dict):
 
         X_train = deepof.utils.rolling_window(X_train, window_size, window_step)
         if self._propagate_labels:
-            y_train = y_train[::window_step][:-1]
+            y_train = y_train[::window_step][: X_train.shape[0]]
 
         if align == "center":
             X_train = deepof.utils.align_trajectories(X_train, align)
@@ -984,7 +984,7 @@ class table_dict(dict):
 
             X_test = deepof.utils.rolling_window(X_test, window_size, window_step)
             if self._propagate_labels:
-                y_test = y_test[::window_step][:-1]
+                y_test = y_test[::window_step][: X_test.shape[0]]
 
             if align == "center":
                 X_test = deepof.utils.align_trajectories(X_test, align)
@@ -1009,9 +1009,6 @@ class table_dict(dict):
 
             if self._propagate_labels:
                 y_train = y_train[shuffle_train]
-
-        for i in [X_train, y_train, X_test, y_test]:
-            print(i.shape)
 
         return X_train, y_train, X_test, y_test
 
