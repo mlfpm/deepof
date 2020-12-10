@@ -14,6 +14,7 @@ from deepof.models import *
 from deepof.utils import *
 from deepof.train_utils import *
 from tensorboard.plugins.hparams import api as hp
+from sklearn.metrics import roc_auc_score
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -390,7 +391,7 @@ if not tune:
             ),
         ]
 
-        rec = "reconstruction_" if (pheno_class) else ""
+        rec = "reconstruction_" if pheno_class else ""
         metrics = [
             hp.Metric("val_{}mae".format(rec), display_name="val_{}mae".format(rec)),
             hp.Metric("val_{}mse".format(rec), display_name="val_{}mse".format(rec)),
@@ -570,8 +571,10 @@ if not tune:
                         )
 
                     if pheno_class:
-                        pheno_acc = tf.keras.metrics.Accuracy(y_val, pheno)
-                        pheno_auc = tf.keras.metrics.AUC(y_val, pheno)
+                        pheno_acc = tf.keras.metrics.binary_accuracy(
+                            y_val, tf.squeeze(pheno)
+                        )
+                        pheno_auc = roc_auc_score(y_val, pheno)
 
                         tf.summary.scalar(
                             "phenotype_prediction_accuracy", pheno_acc, step=1
