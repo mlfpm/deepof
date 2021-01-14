@@ -93,7 +93,7 @@ def test_climb_wall(arena, tol):
 
     prun = (
         deepof.data.project(
-            path=os.path.join(".", "tests", "test_examples"),
+            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([arena[2]]),
             video_format=".mp4",
@@ -360,7 +360,7 @@ def test_frame_corners(w, h):
 def test_rule_based_tagging():
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -376,7 +376,9 @@ def test_rule_based_tagging():
         prun.get_coords(speed=1),
         arena_type="circular",
         vid_index=0,
-        path=os.path.join(".", "tests", "test_examples", "Videos"),
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
     )
 
     assert type(hardcoded_tags) == pd.DataFrame
@@ -386,7 +388,7 @@ def test_rule_based_tagging():
 def test_rule_based_video():
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -402,7 +404,9 @@ def test_rule_based_video():
         prun.get_coords(speed=1),
         arena_type="circular",
         vid_index=0,
-        path=os.path.join(".", "tests", "test_examples", "Videos"),
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
     )
 
     rule_based_video(
@@ -412,5 +416,7 @@ def test_rule_based_video():
         vid_index=0,
         frame_limit=100,
         tag_dict=hardcoded_tags,
-        path=os.path.join(".", "tests", "test_examples", "Videos"),
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
     )

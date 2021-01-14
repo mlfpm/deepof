@@ -85,7 +85,7 @@ def test_one_cycle_scheduler():
     )
 
     fit = test_model.fit(X, y, callbacks=[onecycle], epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert type(fit) == tf.keras.callbacks.History
     assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
     assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
 
@@ -115,7 +115,7 @@ def test_uncorrelated_features_constraint():
         )
 
         fit = test_model.fit(X, y, epochs=10, batch_size=100)
-        assert type(fit) == tf.python.keras.callbacks.History
+        assert type(fit) == tf.keras.callbacks.History
 
         correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
 
@@ -137,7 +137,7 @@ def test_MCDropout():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert type(fit) == tf.keras.callbacks.History
 
 
 # noinspection PyUnresolvedReferences
@@ -158,7 +158,7 @@ def test_dense_transpose():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert type(fit) == tf.keras.callbacks.History
 
 
 # noinspection PyCallingNonCallable,PyUnresolvedReferences
@@ -203,7 +203,7 @@ def test_KLDivergenceLayer():
     )
 
     fit = test_model.fit(X, [y, y], epochs=1, batch_size=100)
-    assert tf.python.keras.callbacks.History == type(fit)
+    assert tf.keras.callbacks.History == type(fit)
     assert test_model.losses[0] == test_model.losses[1]
 
 
@@ -245,7 +245,7 @@ def test_MMDiscrepancyLayer():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert tf.python.keras.callbacks.History == type(fit)
+    assert tf.keras.callbacks.History == type(fit)
 
 
 # noinspection PyUnresolvedReferences
@@ -263,7 +263,7 @@ def test_dead_neuron_control():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert tf.python.keras.callbacks.History == type(fit)
+    assert tf.keras.callbacks.History == type(fit)
 
 
 # noinspection PyUnresolvedReferences
@@ -281,7 +281,7 @@ def test_entropy_regulariser():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.python.keras.callbacks.History
+    assert type(fit) == tf.keras.callbacks.History
 
 
 def test_find_learning_rate():

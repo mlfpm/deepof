@@ -22,7 +22,7 @@ import matplotlib.figure
 def test_plot_heatmap(bparts):
     prun = (
         deepof.data.project(
-            path=os.path.join(".", "tests", "test_examples"),
+            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([380]),
             video_format=".mp4",
@@ -49,7 +49,7 @@ def test_plot_heatmap(bparts):
 def test_model_comparison_plot():
     prun = (
         deepof.data.project(
-            path=os.path.join(".", "tests", "test_examples"),
+            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([380]),
             video_format=".mp4",

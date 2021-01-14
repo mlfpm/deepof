@@ -23,7 +23,13 @@ def test_load_hparams():
     assert (
         type(
             deepof.train_utils.load_hparams(
-                os.path.join("tests", "test_examples", "Others", "test_hparams.pkl")
+                os.path.join(
+                    "tests",
+                    "test_examples",
+                    "test_single_topview",
+                    "Others",
+                    "test_hparams.pkl",
+                )
             )
         )
         == dict
@@ -35,7 +41,7 @@ def test_load_treatments():
     assert (
         type(
             deepof.train_utils.load_treatments(
-                os.path.join("tests", "test_examples", "Others")
+                os.path.join("tests", "test_examples", "test_single_topview", "Others")
             )
         )
         == dict
@@ -70,7 +76,7 @@ def test_get_callbacks(
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
-    assert type(cpc) == tf.python.keras.callbacks.ModelCheckpoint
+    assert type(cpc) == tf.keras.callbacks.ModelCheckpoint
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 

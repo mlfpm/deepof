@@ -354,7 +354,7 @@ def test_smooth_mult_trajectory(alpha, series):
 @given(indexes=st.data())
 def test_recognize_arena_and_subfunctions(indexes):
 
-    path = os.path.join(".", "tests", "test_examples", "Videos")
+    path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))

@@ -33,7 +33,7 @@ def test_project_init(table_type, arena_type):
     if arena_type == "foo":
         with pytest.raises(NotImplementedError):
             prun = deepof.data.project(
-                path=os.path.join(".", "tests", "test_examples"),
+                path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
                 arena=arena_type,
                 arena_dims=tuple([380]),
                 video_format=".mp4",
@@ -41,7 +41,7 @@ def test_project_init(table_type, arena_type):
             )
     else:
         prun = deepof.data.project(
-            path=os.path.join(".", "tests", "test_examples"),
+            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena=arena_type,
             arena_dims=tuple([380]),
             video_format=".mp4",
@@ -63,7 +63,7 @@ def test_project_init(table_type, arena_type):
 def test_project_properties():
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -98,7 +98,7 @@ def test_get_distances(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -122,7 +122,7 @@ def test_get_angles(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -147,7 +147,7 @@ def test_run(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -164,7 +164,7 @@ def test_run(nodes, ego):
 def test_get_rule_based_annotation():
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
@@ -190,7 +190,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples"),
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
