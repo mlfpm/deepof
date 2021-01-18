@@ -364,8 +364,6 @@ def test_frame_corners(w, h):
 )
 def test_rule_based_tagging(multi_animal, video_output):
 
-    multi_animal = True
-
     if video_output:
         video_output = ["test"]
 
