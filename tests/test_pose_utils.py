@@ -385,7 +385,9 @@ def test_rule_based_tagging(multi_animal, video_output):
         animal_ids=(["B", "W"] if multi_animal else [""]),
     ).run(verbose=True)
 
-    hardcoded_tags = prun.rule_based_annotation(video_output=video_output, frame_limit=50)
+    hardcoded_tags = prun.rule_based_annotation(
+        video_output=video_output, frame_limit=50
+    )
 
     assert type(hardcoded_tags) == deepof.data.table_dict
     assert list(hardcoded_tags.values())[0].shape[1] == (13 if multi_animal else 3)

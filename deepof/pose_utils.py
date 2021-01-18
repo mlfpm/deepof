@@ -556,7 +556,7 @@ def rule_based_tagging(
                 hparams["huddle_forward"],
                 hparams["huddle_spine"],
                 hparams["huddle_speed"],
-                animal_id=_id
+                animal_id=_id,
             )
         )
 
@@ -602,13 +602,14 @@ def tag_rulebased_frames(
         else:
             return 150, 255, 150
 
-    zipped_pos = zip(
+    zipped_pos = list(zip(
         animal_ids,
         [corners["downleft"], corners["downright"]],
         [corners["upleft"], corners["upright"]],
-    )
+    ))
 
     if len(animal_ids) > 1:
+
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
         if (
@@ -659,7 +660,10 @@ def tag_rulebased_frames(
             colcond = hparams["huddle_speed"] > frame_speeds
 
         write_on_frame(
-            str(np.round(frame_speeds, 2)) + " mmpf",
+            str(
+                np.round((frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2)
+            )
+            + " mmpf",
             up_pos,
             conditional_col(cond=colcond),
         )
