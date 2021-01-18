@@ -703,7 +703,9 @@ class coordinates:
         tag_dict = {}
         # noinspection PyTypeChecker
         coords = self.get_coords(center=False)
+        dists = self.get_distances()
         speeds = self.get_coords(speed=1)
+
         for key in tqdm(self._tables.keys()):
 
             video = [vid for vid in self._videos if key + "DLC" in vid][0]
@@ -712,6 +714,7 @@ class coordinates:
                 self._videos,
                 self,
                 coords,
+                dists,
                 speeds,
                 self._videos.index(video),
                 arena_type=self._arena,

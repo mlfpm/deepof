@@ -429,6 +429,7 @@ def rule_based_tagging(
     videos: List,
     coordinates: Coordinates,
     coords: Any,
+    dists: Any,
     speeds: Any,
     vid_index: int,
     arena_type: str,
@@ -444,6 +445,7 @@ def rule_based_tagging(
         - videos (list): list of videos to load, in the same order as tracks
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
         - coords (deepof.preprocessing.table_dict): table_dict with already processed coordinates
+        - dists (deepof.preprocessing.table_dict): table_dict with already processed distances
         - speeds (deepof.preprocessing.table_dict): table_dict with already processed speeds
         - vid_index (int): index in videos of the experiment to annotate
         - path (str): directory in which the experimental data is stored
@@ -474,6 +476,7 @@ def rule_based_tagging(
         vid_name = tracks[vid_index]
 
     coords = coords[vid_name]
+    dists = dists[vid_name]
     speeds = speeds[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
     arena, h, w = deepof.utils.recognize_arena(
@@ -532,7 +535,7 @@ def rule_based_tagging(
         for _id in animal_ids:
             tag_dict[_id + "_following"] = deepof.utils.smooth_boolean_array(
                 following_path(
-                    coords[vid_name],
+                    dists,
                     coords,
                     follower=_id,
                     followed=[i for i in animal_ids if i != _id][0],
@@ -553,6 +556,7 @@ def rule_based_tagging(
                 hparams["huddle_forward"],
                 hparams["huddle_spine"],
                 hparams["huddle_speed"],
+                animal_id=_id
             )
         )
 
