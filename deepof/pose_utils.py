@@ -486,6 +486,7 @@ def rule_based_tagging(
     def onebyone_contact(bparts: List):
         """Returns a smooth boolean array with 1to1 contacts between two mice"""
         nonlocal coords, animal_ids, hparams, arena_abs, arena
+
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 coords,
@@ -524,8 +525,9 @@ def rule_based_tagging(
         tag_dict["sidereside"] = twobytwo_contact(rev=True)
 
         for i, _id in enumerate(animal_ids):
-            bps = [["_Nose", "_Tail_base"], ["_Tail_base", "_Nose"]]
-            tag_dict[_id + "_nose2tail"] = onebyone_contact(bparts=bps)
+            tag_dict[_id + "_nose2tail"] = onebyone_contact(
+                bparts=["_Nose", "_Tail_base"]
+            )
 
         for _id in animal_ids:
             tag_dict[_id + "_following"] = deepof.utils.smooth_boolean_array(

@@ -357,66 +357,35 @@ def test_frame_corners(w, h):
     assert frame_corners(w, h, {"downright": "test"})["downright"] == "test"
 
 
-def test_rule_based_tagging():
+@settings(deadline=None)
+@given(
+    multi_animal=st.booleans(),
+    video_output=st.booleans(),
+)
+def test_rule_based_tagging(multi_animal, video_output):
+
+    multi_animal = False
+
+    if video_output:
+        video_output = ["test"]
+
+    path = os.path.join(
+        ".",
+        "tests",
+        "test_examples",
+        "test_{}_topview".format("multi" if multi_animal else "single"),
+    )
 
     prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        path=path,
         arena="circular",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
-        animal_ids=[""],
+        animal_ids=(["B", "W"] if multi_animal else [""]),
     ).run(verbose=True)
 
-    hardcoded_tags = rule_based_tagging(
-        list([i for i in prun.get_coords().keys()]),
-        ["testDLC_video_circular_arena.mp4"],
-        prun,
-        prun.get_coords(),
-        prun.get_coords(speed=1),
-        arena_type="circular",
-        vid_index=0,
-        path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-    )
+    hardcoded_tags = prun.rule_based_annotation(video_output=video_output, frame_limit=50)
 
-    assert type(hardcoded_tags) == pd.DataFrame
-    assert hardcoded_tags.shape[1] == 3
-
-
-def test_rule_based_video():
-
-    prun = deepof.data.project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
-        arena_dims=tuple([380]),
-        video_format=".mp4",
-        table_format=".h5",
-        animal_ids=[""],
-    ).run(verbose=True)
-
-    hardcoded_tags = rule_based_tagging(
-        list([i for i in prun.get_coords().keys()]),
-        ["testDLC_video_circular_arena.mp4"],
-        prun,
-        prun.get_coords(),
-        prun.get_coords(speed=1),
-        arena_type="circular",
-        vid_index=0,
-        path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-    )
-
-    rule_based_video(
-        coordinates=prun,
-        tracks=list([i + "_" for i in prun.get_coords().keys()]),
-        videos=["testDLC_video_circular_arena.mp4"],
-        vid_index=0,
-        frame_limit=100,
-        tag_dict=hardcoded_tags,
-        path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-    )
+    assert type(hardcoded_tags) == deepof.data.table_dict
+    assert list(hardcoded_tags.values())[0].shape[1] == 3
