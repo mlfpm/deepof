@@ -602,11 +602,13 @@ def tag_rulebased_frames(
         else:
             return 150, 255, 150
 
-    zipped_pos = list(zip(
-        animal_ids,
-        [corners["downleft"], corners["downright"]],
-        [corners["upleft"], corners["upright"]],
-    ))
+    zipped_pos = list(
+        zip(
+            animal_ids,
+            [corners["downleft"], corners["downright"]],
+            [corners["upleft"], corners["upright"]],
+        )
+    )
 
     if len(animal_ids) > 1:
 
@@ -661,7 +663,9 @@ def tag_rulebased_frames(
 
         write_on_frame(
             str(
-                np.round((frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2)
+                np.round(
+                    (frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2
+                )
             )
             + " mmpf",
             up_pos,
