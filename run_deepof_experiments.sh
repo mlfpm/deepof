@@ -1,3 +1,5 @@
+#!/bin/sh
+
 mkdir snakemake_logs
 
 snakemake --snakefile deepof_experiments.smk --forceall --dag | dot -Tpdf > deepof_experiments_DAG.pdf
