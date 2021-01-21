@@ -16,7 +16,7 @@ import os
 outpath = "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 encodings = [4, 6, 8]  # [2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = [10, 15]  # [1, 5, 10, 15, 20]
+cluster_numbers = [10, 15, 20]  # [1, 5, 10, 15, 20]
 pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 
@@ -29,14 +29,14 @@ rule deepof_experiments:
             encs=encodings,
             k=cluster_numbers,
         ),
-        expand(
-            "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
-            "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
-            loss=losses,
-            encs=encodings,
-            k=cluster_numbers,
-            phenos=pheno_weights,
-        ),
+        # expand(
+        #     "/u/lucasmir/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
+        #     "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
+        #     loss=losses,
+        #     encs=encodings,
+        #     k=cluster_numbers,
+        #     phenos=pheno_weights,
+        # ),
 
 
 # rule coarse_hyperparameter_tuning:
