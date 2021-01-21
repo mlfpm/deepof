@@ -323,28 +323,8 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 
 def test_get_hparameters():
-    assert get_hparameters() == {
-        "speed_pause": 3,
-        "close_contact_tol": 15,
-        "side_contact_tol": 15,
-        "follow_frames": 20,
-        "follow_tol": 20,
-        "huddle_forward": 15,
-        "huddle_spine": 10,
-        "huddle_speed": 0.1,
-        "fps": 24,
-    }
-    assert get_hparameters({"speed_pause": 20}) == {
-        "speed_pause": 20,
-        "close_contact_tol": 15,
-        "side_contact_tol": 15,
-        "follow_frames": 20,
-        "follow_tol": 20,
-        "huddle_forward": 15,
-        "huddle_spine": 10,
-        "huddle_speed": 0.1,
-        "fps": 24,
-    }
+    assert type(get_hparameters()) == dict
+    assert get_hparameters({"speed_pause": 20})["speed_pause"] == 20
 
 
 @settings(deadline=None)
