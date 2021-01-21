@@ -10,7 +10,6 @@ test:
     - python -V
     - pip install pipenv
     - pipenv install --python=3.8 --dev --ignore-pipfile
-    - pipenv shell
     - pipenv install coverage --ignore-pipfile
     - pipenv install -e deepof/ --ignore-pipfile
     - pipenv run coverage run --source deepof -m pytest

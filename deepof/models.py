@@ -574,7 +574,7 @@ class SEQ_2_SEQ_GMVAE:
             )
 
         z_gauss = Dense(
-            deepof.model_utils.tfpl.IndependentNormal.params_size(
+            tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
             ),
             activation=None,
@@ -593,7 +593,7 @@ class SEQ_2_SEQ_GMVAE:
                 loss=self.overlap_loss,
             )(z_gauss)
 
-        z = deepof.model_utils.tfpl.DistributionLambda(
+        z = tfpl.DistributionLambda(
             lambda gauss: tfd.mixture.Mixture(
                 cat=tfd.categorical.Categorical(
                     probs=gauss[0],
@@ -602,7 +602,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]) + 1e-5,
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]) + 1e-5,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
