@@ -23,6 +23,7 @@ tqdm = "*"
 umap-learn = "*"
 
 [dev-packages]
+coverage = "*"
 dash = "*"
 hypothesis = "*"
 keras-tuner = "*"
