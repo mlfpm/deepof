@@ -565,6 +565,7 @@ class SEQ_2_SEQ_GMVAE:
         z_cat = Dense(
             self.number_of_components,
             activation="softmax",
+            kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01)
         )(encoder)
 
         if self.entropy_reg_weight > 0:
