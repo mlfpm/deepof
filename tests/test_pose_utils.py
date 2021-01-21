@@ -389,3 +389,7 @@ def test_rule_based_tagging(multi_animal, video_output):
 
     assert type(hardcoded_tags) == deepof.data.table_dict
     assert list(hardcoded_tags.values())[0].shape[1] == (13 if multi_animal else 3)
+
+
+# TODO:
+#     - Test if tagging is working properly!
