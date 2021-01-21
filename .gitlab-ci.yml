@@ -11,7 +11,6 @@ test:
     - pip install pipenv
     - pipenv install --python=3.8 --dev --ignore-pipfile
     - pipenv install -e deepof/ --ignore-pipfile
-    - pip uninstall tensorflow
     - conda install tensorflow
     - pipenv run coverage run --source deepof -m pytest
     - pipenv run coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
