@@ -15,11 +15,8 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-        "Machine Learning :: Unsupervised Deep Learning",
-        "Google :: Tensorflow",
-        "Neuroscience :: Animal behaviour",
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Science/Research",
     ],
     python_requires=">3.7",
     platform="Platform independent",
