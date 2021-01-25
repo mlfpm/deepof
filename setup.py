@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="deepof",
-    version="0.1.0",
+    version="0.1.1",
     author="Lucas Miranda",
     author_email="lucas_miranda@psych.mpg.de",
     description="deepof (Deep Open Field): Open Field animal pose classification tool ",
