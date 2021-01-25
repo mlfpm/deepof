@@ -565,7 +565,7 @@ class SEQ_2_SEQ_GMVAE:
         z_cat = Dense(
             self.number_of_components,
             activation="softmax",
-            kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01)
+            kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01),
         )(encoder)
 
         if self.entropy_reg_weight > 0:
@@ -578,7 +578,9 @@ class SEQ_2_SEQ_GMVAE:
                 self.ENCODING * self.number_of_components
             ),
             activation=None,
-        )(encoder)
+        )(
+            encoder
+        )  # REMOVE BIAS FROM HERE! WHAT's THE POINT?
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
 
@@ -602,7 +604,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING:, k]) + 1e-5,
+                            scale=softplus(gauss[1][..., self.ENCODING :, k]) + 1e-5,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
