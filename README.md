@@ -15,8 +15,8 @@ compare user-defined experimental groups.
 
 ### How do I start?
 ##### Installation: 
-clone the repository, go to its containing folder and type 
-``` pip install -e deepof ``` (Careful: this will change upon PyPI submission!).
+open a terminal (with python>3.6 installed) and type: 
+``` pip install deepof ```
 
 ##### Before we delve in:
 To start, create a folder for your project
