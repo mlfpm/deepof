@@ -108,7 +108,7 @@ rule explore_phenotype_classification:
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
-        "--val-num 5 "
+        "--val-num 15 "
         "--components {wildcards.k} "
         "--input-type coords "
         "--predictor 0 "
