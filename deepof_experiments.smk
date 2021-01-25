@@ -90,9 +90,10 @@ rule explore_encoding_dimension_and_loss_function:
         "--montecarlo-kl 10 "
         "--encoding-size {wildcards.encs} "
         "--batch-size 256 "
-        "--window-size 11 "
-        "--window-step 11 "
-        "--stability-check 3  "
+        "--window-size 24 "
+        "--window-step 24 "
+        "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
+        "--stability-check 3 "
         "--output-path {outpath}dimension_and_loss_experiments"
 
 
