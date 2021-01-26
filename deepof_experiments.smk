@@ -91,7 +91,7 @@ rule explore_encoding_dimension_and_loss_function:
         "--encoding-size {wildcards.encs} "
         "--batch-size 256 "
         "--window-size 24 "
-        "--window-step 24 "
+        "--window-step 6 "
         "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
         "--stability-check 3 "
         "--output-path {outpath}dimension_and_loss_experiments"
@@ -124,3 +124,8 @@ rule explore_phenotype_classification:
         "--window-step 11 "
         "--stability-check 3  "
         "--output-path {outpath}pheno_classification_experiments"
+
+
+
+
+"pipenv run python -m deepof.train_model --train-path {input.data_path} --val-num 5 --components {wildcards.k} --input-type coords --predictor 0 --phenotype-classifier 0 --variational True --loss {wildcards.loss} --kl-warmup 20 --mmd-warmup 20 --montecarlo-kl 10 --encoding-size {wildcards.encs} --batch-size 256 --window-size 24 --window-step 6 --exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip --stability-check 3 --output-path {outpath}dimension_and_loss_experiments"
