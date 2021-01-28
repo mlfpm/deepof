@@ -68,7 +68,7 @@ class project:
 
         self.table_format = table_format
         if self.table_format == "autodetect":
-            ex = os.listdir(self.table_path)[0]
+            ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
             if ".h5" in ex:
                 self.table_format = ".h5"
             elif ".csv" in ex:
@@ -190,25 +190,15 @@ class project:
             }
         elif self.table_format == ".csv":
 
-            for tab in self.tables:
-                head = pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab), nrows=2
-                )
-                data = pd.read_csv(
+            tab_dict = {
+                deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_csv(
                     deepof.utils.os.path.join(self.table_path, tab),
-                    skiprows=2,
-                    index_col="coords",
-                    dtype={"coords": int},
+                    header=[0, 1, 2],
+                    index_col=0,
+                    dtype=float,
                 )
-                data.columns = pd.MultiIndex.from_product(
-                    [
-                        [head.columns[2]],
-                        set(list(head.iloc[0])[2:]),
-                        ["x", "y", "likelihood"],
-                    ],
-                    names=["scorer", "bodyparts", "coords"],
-                )
-                tab_dict[deepof.utils.re.findall("(.*)DLC", tab)[0]] = data
+                for tab in self.tables
+            }
 
         lik_dict = defaultdict()
 

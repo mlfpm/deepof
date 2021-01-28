@@ -376,7 +376,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         - hparams (dict): dictionary containing hyperparameters to overwrite
 
     Returns:
-        - defaults (dict): dictionary with overwriten parameters. Those not
+        - defaults (dict): dictionary with overwritten parameters. Those not
         specified in the input retain their default values"""
 
     defaults = {
@@ -548,7 +548,7 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(arena_type, arena, coords, w / 100, _id + undercond + "Nose")
+            climb_wall(arena_type, arena, coords, 1, _id + undercond + "Nose")
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
@@ -578,11 +578,13 @@ def tag_rulebased_frames(
     dims,
     undercond,
     hparams,
+    arena,
 ):
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
 
     w, h = dims
+    arena, h, w = arena
 
     def write_on_frame(text, pos, col=(255, 255, 255)):
         """Partial closure over cv2.putText to avoid code repetition"""
@@ -614,7 +616,7 @@ def tag_rulebased_frames(
 
     if len(animal_ids) > 1:
 
-        cv2.line(frame, (100, 100), (110, 100), (255, 0, 0))
+        cv2.circle(frame, (arena[0], arena[1]), arena[2], thickness=2, color=(0, 0, 255))
 
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
@@ -775,6 +777,7 @@ def rule_based_video(
             (w, h),
             undercond,
             hparams,
+            (arena, h, w)
         )
 
         if writer is None:

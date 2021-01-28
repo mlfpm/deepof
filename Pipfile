@@ -21,6 +21,7 @@ tensorflow-probability = "*"
 tensorflow = "*"
 tqdm = "*"
 umap-learn = "*"
+scikit-image = "*"
 
 [dev-packages]
 coverage = "*"
