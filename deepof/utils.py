@@ -411,7 +411,7 @@ def circular_arena_recognition(frame: np.array) -> np.array:
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     ret, thresh = cv2.threshold(gray_image, 50, 255, 0)
     frame = cv2.medianBlur(thresh, 9)
-    circle = hough_ellipse(
+    circle = cv2.HoughCircles(
         frame,
         # accuracy=20,
         # threshold=250,
