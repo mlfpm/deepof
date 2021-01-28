@@ -425,7 +425,7 @@ def circular_arena_recognition(frame: np.array) -> np.array:
        minRadius=0,
        maxRadius=frame.shape[0] // 2,
     )
-    result.sort(order='accumulator')
+    #result.sort(order='accumulator')
 
     circles = []
 
