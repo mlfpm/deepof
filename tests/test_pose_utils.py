@@ -81,13 +81,20 @@ def test_close_double_contact(pos_dframe, tol, rev):
 
 @settings(deadline=None)
 @given(
-    arena=st.lists(
-        min_size=3, max_size=3, elements=st.integers(min_value=300, max_value=500)
+    center=st.tuples(
+        st.integers(min_value=300, max_value=500),
+        st.integers(min_value=300, max_value=500),
     ),
+    axes=st.tuples(
+        st.integers(min_value=300, max_value=500),
+        st.integers(min_value=300, max_value=500),
+    ),
+    angle=st.floats(min_value=0, max_value=360),
     tol=st.data(),
 )
-def test_climb_wall(arena, tol):
+def test_climb_wall(center, axes, angle, tol):
 
+    arena = (center, axes, np.radians(angle))
     tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
     tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
 
