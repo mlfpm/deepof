@@ -686,7 +686,11 @@ class coordinates:
 
     # noinspection PyDefaultArgument
     def rule_based_annotation(
-        self, hparams: Dict = {}, video_output: bool = False, frame_limit: int = np.inf, debug: bool = False,
+        self,
+        hparams: Dict = {},
+        video_output: bool = False,
+        frame_limit: int = np.inf,
+        debug: bool = False,
     ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 

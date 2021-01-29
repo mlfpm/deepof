@@ -141,7 +141,7 @@ def climb_wall(
         qy = oy + np.sin(angle) * (px - ox) + np.cos(angle) * (py - oy)
         return qx, qy
 
-    def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.):
+    def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
 
         x, y = rotate(e_center, (x, y), np.radians(e_angle))
 
@@ -573,7 +573,13 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(arena_type, arena, coords, hparams["climb_tol"], _id + undercond + "Nose")
+            climb_wall(
+                arena_type,
+                arena,
+                coords,
+                hparams["climb_tol"],
+                _id + undercond + "Nose",
+            )
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
@@ -605,6 +611,7 @@ def tag_rulebased_frames(
     hparams,
     arena,
     debug,
+    coords,
 ):
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
@@ -643,7 +650,19 @@ def tag_rulebased_frames(
     if len(animal_ids) > 1:
 
         if debug:
+            # Print arena for debugging
             cv2.ellipse(frame, arena[0], arena[1], arena[2], 0, 360, (0, 255, 0), 3)
+            # Print body parts for debuging
+            for bpart in coords.columns.levels[0]:
+                cv2.circle(
+                    frame,
+                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
+                    radius=3,
+                    color=(
+                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
+                    ),
+                    thickness=-1,
+                )
 
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
@@ -808,7 +827,8 @@ def rule_based_video(
             undercond,
             hparams,
             (arena, h, w),
-            debug
+            debug,
+            coordinates.get_coords(center=False)[vid_name],
         )
 
         if writer is None:
@@ -830,6 +850,7 @@ def rule_based_video(
     cv2.destroyAllWindows()
 
     return True
+
 
 # TODO:
 #    - Is border sniffing anything you might consider interesting?
