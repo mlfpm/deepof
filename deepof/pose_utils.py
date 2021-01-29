@@ -133,10 +133,34 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
+    def rotate(origin, point, angle):
+        ox, oy = origin
+        px, py = point
+
+        qx = ox + np.cos(angle) * (px - ox) - np.sin(angle) * (py - oy)
+        qy = oy + np.sin(angle) * (px - ox) + np.cos(angle) * (py - oy)
+        return qx, qy
+
+    def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.):
+
+        x, y = rotate(e_center, (x, y), np.radians(e_angle))
+
+        term_x = (x - e_center[0]) ** 2 / (e_axes[0] + threshold) ** 2
+        term_y = (y - e_center[1]) ** 2 / (e_axes[1] + threshold) ** 2
+        return term_x + term_y > 1
+
     if arena_type == "circular":
-        center = np.zeros(2) if centered_data else np.array(arena[:2])
-        radius = arena[2]
-        climbing = np.linalg.norm(nose - center, axis=1) > (radius + tol)
+        center = np.zeros(2) if centered_data else np.array(arena[0])
+        axes = arena[1]
+        angle = arena[2]
+        climbing = outside_ellipse(
+            x=nose["x"],
+            y=nose["y"],
+            e_center=center,
+            e_axes=axes,
+            e_angle=-angle,
+            threshold=tol,
+        )
 
     else:
         raise NotImplementedError("Supported values for arena_type are ['circular']")
@@ -381,6 +405,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
 
     defaults = {
         "speed_pause": 3,
+        "climb_tol": 10,
         "close_contact_tol": 35,
         "side_contact_tol": 80,
         "follow_frames": 10,
@@ -548,7 +573,7 @@ def rule_based_tagging(
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(arena_type, arena, coords, 1, _id + undercond + "Nose")
+            climb_wall(arena_type, arena, coords, hparams["climb_tol"], _id + undercond + "Nose")
         )
         tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
@@ -579,6 +604,7 @@ def tag_rulebased_frames(
     undercond,
     hparams,
     arena,
+    debug,
 ):
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
@@ -616,7 +642,8 @@ def tag_rulebased_frames(
 
     if len(animal_ids) > 1:
 
-        cv2.circle(frame, (arena[0], arena[1]), arena[2], thickness=2, color=(0, 0, 255))
+        if debug:
+            cv2.ellipse(frame, arena[0], arena[1], arena[2], 0, 360, (0, 255, 0), 3)
 
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
@@ -690,6 +717,7 @@ def rule_based_video(
     recog_limit: int = 1,
     path: str = os.path.join("."),
     hparams: dict = {},
+    debug: bool = False,
 ) -> True:
     """Renders a version of the input video with all rule-based taggings in place.
 
@@ -697,6 +725,8 @@ def rule_based_video(
         - tracks (list): list containing experiment IDs as strings
         - videos (list): list of videos to load, in the same order as tracks
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
+        - debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in
+        the output video
         - vid_index (int): index in videos of the experiment to annotate
         - fps (float): frames per second of the analysed video. Same as input by default
         - path (str): directory in which the experimental data is stored
@@ -777,7 +807,8 @@ def rule_based_video(
             (w, h),
             undercond,
             hparams,
-            (arena, h, w)
+            (arena, h, w),
+            debug
         )
 
         if writer is None:
@@ -800,7 +831,5 @@ def rule_based_video(
 
     return True
 
-
 # TODO:
-#    - Relativise default contact parameters
-#    (right now they only work if 'arena_dims' is correctly set in the project object
+#    - Is border sniffing anything you might consider interesting?

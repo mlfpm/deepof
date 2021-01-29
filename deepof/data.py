@@ -149,16 +149,16 @@ class project:
 
             scales = []
             for vid_index, _ in enumerate(self.videos):
+
+                ellipse = deepof.utils.recognize_arena(
+                    self.videos,
+                    vid_index,
+                    path=self.video_path,
+                    arena_type=self.arena,
+                )[0]
+
                 scales.append(
-                    list(
-                        deepof.utils.recognize_arena(
-                            self.videos,
-                            vid_index,
-                            path=self.video_path,
-                            arena_type=self.arena,
-                        )[0]
-                        * 2
-                    )
+                    list(np.array([ellipse[0][0], ellipse[0][1], ellipse[1][1]]) * 2)
                     + list(self.arena_dims)
                 )
 
@@ -686,7 +686,7 @@ class coordinates:
 
     # noinspection PyDefaultArgument
     def rule_based_annotation(
-        self, hparams: Dict = {}, video_output: bool = False, frame_limit: int = np.inf
+        self, hparams: Dict = {}, video_output: bool = False, frame_limit: int = np.inf, debug: bool = False,
     ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
@@ -724,6 +724,7 @@ class coordinates:
                     self._videos,
                     list(self._tables.keys()).index(idx),
                     tag_dict[idx],
+                    debug=debug,
                     frame_limit=frame_limit,
                     recog_limit=1,
                     path=os.path.join(self._path, "Videos"),

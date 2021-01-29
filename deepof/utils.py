@@ -19,7 +19,8 @@ import regex as re
 from copy import deepcopy
 from itertools import combinations, product
 from joblib import Parallel, delayed
-#from skimage.transform import hough_ellipse
+
+# from skimage.transform import hough_ellipse
 from sklearn import mixture
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
@@ -409,10 +410,14 @@ def circular_arena_recognition(frame: np.array) -> np.array:
 
     # Convert image to greyscale, threshold it, blur it and apply open-close operations
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 100, 255, 0)
+    ret, thresh = cv2.threshold(gray_image, 80, 255, 0)
     frame = cv2.medianBlur(thresh, 9)
-    frame = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80)))
-    frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80)))
+    frame = cv2.morphologyEx(
+        frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
+    )
+    frame = cv2.morphologyEx(
+        frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
+    )
 
     # Find contours in the processed image
     cnts, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -423,30 +428,8 @@ def circular_arena_recognition(frame: np.array) -> np.array:
     axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
     angle = ellipse_params[2]
 
-    # circle = cv2.HoughCircles(
-    #     frame,
-    #     # accuracy=20,
-    #     # threshold=250,
-    #     # min_size=frame.shape[0] // 6,
-    #     # max_size=frame.shape[0] // 2,
-    #    cv2.HOUGH_GRADIENT,
-    #    1,
-    #    300,
-    #    param1=50,
-    #    param2=10,
-    #    minRadius=0,
-    #    maxRadius=frame.shape[0] // 2,
-    # )
-    # #result.sort(order='accumulator')
-    #
-    # circles = []
-    #
-    # if circle is not None:
-    #     circle = np.uint16(np.around(circle[0]))
-    #     circles.append(circle)
-
-    # return circles[0]
     return center_coordinates, axes_length, angle
+
 
 def rolling_speed(
     dframe: pd.DatetimeIndex,
