@@ -384,7 +384,8 @@ def recognize_arena(
         if arena_type == "circular":
 
             # Detect arena and extract positions
-            arena = circular_arena_recognition(frame)[0]
+            arena = circular_arena_recognition(frame)
+
             if h is None and w is None:
                 w, h = frame.shape[0], frame.shape[1]
 
@@ -406,35 +407,46 @@ def circular_arena_recognition(frame: np.array) -> np.array:
         - circles (np.array): 3-element-array containing x,y positions of the center
         of the arena, and a third value indicating the radius"""
 
-    # Convert image to greyscale, threshold it, blur it and detect the biggest best fitting circle
-    # using the Hough algorithm
+    # Convert image to greyscale, threshold it, blur it and apply open-close operations
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 50, 255, 0)
+    ret, thresh = cv2.threshold(gray_image, 100, 255, 0)
     frame = cv2.medianBlur(thresh, 9)
-    circle = cv2.HoughCircles(
-        frame,
-        # accuracy=20,
-        # threshold=250,
-        # min_size=frame.shape[0] // 6,
-        # max_size=frame.shape[0] // 2,
-       cv2.HOUGH_GRADIENT,
-       1,
-       300,
-       param1=50,
-       param2=10,
-       minRadius=0,
-       maxRadius=frame.shape[0] // 2,
-    )
-    #result.sort(order='accumulator')
+    frame = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80)))
+    frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80)))
 
-    circles = []
+    # Find contours in the processed image
+    cnts, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-    if circle is not None:
-        circle = np.uint16(np.around(circle[0]))
-        circles.append(circle)
+    # Detect the main ellipse containing the arena
+    ellipse_params = cv2.fitEllipse(cnts[0])
+    center_coordinates = tuple([int(i) for i in ellipse_params[0]])
+    axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
+    angle = ellipse_params[2]
 
-    return circles[0]
+    # circle = cv2.HoughCircles(
+    #     frame,
+    #     # accuracy=20,
+    #     # threshold=250,
+    #     # min_size=frame.shape[0] // 6,
+    #     # max_size=frame.shape[0] // 2,
+    #    cv2.HOUGH_GRADIENT,
+    #    1,
+    #    300,
+    #    param1=50,
+    #    param2=10,
+    #    minRadius=0,
+    #    maxRadius=frame.shape[0] // 2,
+    # )
+    # #result.sort(order='accumulator')
+    #
+    # circles = []
+    #
+    # if circle is not None:
+    #     circle = np.uint16(np.around(circle[0]))
+    #     circles.append(circle)
 
+    # return circles[0]
+    return center_coordinates, axes_length, angle
 
 def rolling_speed(
     dframe: pd.DatetimeIndex,
