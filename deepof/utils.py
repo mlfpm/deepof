@@ -361,11 +361,20 @@ def moving_average(time_series: pd.Series, N: int = 5):
     return moving_avg
 
 
-def mask_outliers(time_series: pd.DataFrame, lag: int, n_std: int, mode: str):
+def mask_outliers(
+    time_series: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
+    lag: int,
+    n_std: int,
+    mode: str,
+):
     """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers
 
     Parameters:
         - time_series (pd.DataFrame): bivariate time series representing the x, y positions of a single body part
+        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
+        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
         - lag (int): size of the convolution window used to compute the moving average
         - n_std (int): number of standard deviations over the moving average to be considered an outlier
         - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
@@ -382,24 +391,34 @@ def mask_outliers(time_series: pd.DataFrame, lag: int, n_std: int, mode: str):
 
     outlier_mask_x = np.abs(residuals_x) > n_std * np.std(residuals_x)
     outlier_mask_y = np.abs(residuals_y) > n_std * np.std(residuals_y)
+    outlier_mask_l = likelihood < likelihood_tolerance
     mask = None
 
     if mode == "and":
-        mask = outlier_mask_x & outlier_mask_y
+        mask = outlier_mask_x & outlier_mask_y & outlier_mask_l
     elif mode == "or":
-        mask = outlier_mask_x | outlier_mask_y
+        mask = (outlier_mask_x | outlier_mask_y) & outlier_mask_l
 
     return mask
 
 
 def full_outlier_mask(
-    experiment: pd.DataFrame, exclude: str, lag: int, n_std: int, mode: str
+    experiment: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
+    exclude: str,
+    lag: int,
+    n_std: int,
+    mode: str,
 ):
     """Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
     replaced by a boolean mask, where True indicates an outlier
 
     Parameters:
         - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
+        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
+        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
+        - exclude (str): body part to exclude from the analysis (to concatenate with bpart alignment)
         - lag (int): size of the convolution window used to compute the moving average
         - n_std (int): number of standard deviations over the moving average to be considered an outlier
         - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
@@ -414,7 +433,14 @@ def full_outlier_mask(
     full_mask = experiment.copy()
     for bpart in body_parts:
         if bpart != exclude:
-            mask = mask_outliers(experiment[bpart], lag, n_std, mode)
+            mask = mask_outliers(
+                experiment[bpart],
+                likelihood[bpart],
+                likelihood_tolerance,
+                lag,
+                n_std,
+                mode,
+            )
             full_mask.loc[:, (bpart, "x")] = mask
             full_mask.loc[:, (bpart, "y")] = mask
             continue
@@ -424,6 +450,8 @@ def full_outlier_mask(
 
 def interpolate_outliers(
     experiment: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
     exclude: str,
     lag: int = 5,
     n_std: int = 3,
@@ -435,6 +463,9 @@ def interpolate_outliers(
 
     Parameters:
         - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
+        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
+        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
+        - exclude (str): body part to exclude from the analysis (to concatenate with bpart alignment)
         - lag (int): size of the convolution window used to compute the moving average
         - n_std (int): number of standard deviations over the moving average to be considered an outlier
         - mode (str): if "and" both x and y have to be marked in order to call an outlier.
@@ -446,7 +477,9 @@ def interpolate_outliers(
     """
 
     interpolated_exp = experiment.copy()
-    mask = full_outlier_mask(experiment, exclude, lag, n_std, mode)
+    mask = full_outlier_mask(
+        experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode
+    )
     interpolated_exp[mask] = np.nan
     interpolated_exp.interpolate(
         method="linear", limit=limit, limit_direction="both", inplace=True

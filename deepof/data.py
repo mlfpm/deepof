@@ -205,9 +205,7 @@ class project:
         for key, value in tab_dict.items():
             x = value.xs("x", level="coords", axis=1, drop_level=False)
             y = value.xs("y", level="coords", axis=1, drop_level=False)
-            lik = value.xs(
-                "likelihood", level="coords", axis=1, drop_level=True
-            )
+            lik = value.xs("likelihood", level="coords", axis=1, drop_level=True)
 
             tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
             lik_dict[key] = lik.droplevel("scorer", axis=1)
