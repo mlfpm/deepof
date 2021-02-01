@@ -350,6 +350,10 @@ def test_smooth_mult_trajectory(alpha, series):
     assert autocorr(smoothed2) <= autocorr(smoothed1)
 
 
+def test_interpolate_outliers():
+    pass
+
+
 @settings(deadline=None)
 @given(indexes=st.data())
 def test_recognize_arena_and_subfunctions(indexes):
