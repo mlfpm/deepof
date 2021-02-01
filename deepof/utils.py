@@ -257,14 +257,14 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     """Returns a numpy.array with the positions rotated in a way that the center (0 vector)
     and the body part in the first column of data are aligned with the y axis.
 
-        Parameters:
-            - data (3D numpy.array): array containing positions of body parts over time, where
-            shape is N (sliding window instances) * m (sliding window size) * l (features)
-            - mode (string): specifies if *all* instances of each sliding window get
-            aligned, or only the *center*
+    Parameters:
+        - data (3D numpy.array): array containing positions of body parts over time, where
+        shape is N (sliding window instances) * m (sliding window size) * l (features)
+        - mode (string): specifies if *all* instances of each sliding window get
+        aligned, or only the *center*
 
-        Returns:
-            - aligned_trajs (2D np.array): aligned positions over time"""
+    Returns:
+        - aligned_trajs (2D np.array): aligned positions over time"""
 
     angles = np.zeros(data.shape[0])
     data = deepcopy(data)
@@ -427,17 +427,32 @@ def interpolate_outliers(
     exclude: str,
     lag: int = 5,
     n_std: int = 3,
-    mode: str = "or",
+    mode: str = "and",
     limit: int = 5,
 ):
-    """"""
+    """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
+    Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
-    exp = experiment.copy()
+    Parameters:
+        - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
+        - lag (int): size of the convolution window used to compute the moving average
+        - n_std (int): number of standard deviations over the moving average to be considered an outlier
+        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
+        If "or", one is enough
+        - limit (int): maximum of consecutive outliers to interpolate. Defaults to 5
+
+    Returns:
+        interpolated_exp (pd.DataFrame): Interpolated version of experiment
+    """
+
+    interpolated_exp = experiment.copy()
     mask = full_outlier_mask(experiment, exclude, lag, n_std, mode)
-    exp[mask] = np.nan
-    exp.interpolate(method="linear", limit=limit, limit_direction="both", inplace=True)
+    interpolated_exp[mask] = np.nan
+    interpolated_exp.interpolate(
+        method="linear", limit=limit, limit_direction="both", inplace=True
+    )
 
-    return exp
+    return interpolated_exp
 
 
 def recognize_arena(
