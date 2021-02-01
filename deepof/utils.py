@@ -347,6 +347,86 @@ def smooth_mult_trajectory(series: np.array, alpha: float = 0.99) -> np.array:
     return smoothed_series
 
 
+def moving_average(time_series: pd.Series, N: int = 5):
+    """Fast implementation of a moving average function
+
+    Parameters:
+        - time_series (pd.Series): univariate time series to take the moving average of
+        - N (int): size of the convolution window used to compute the moving average
+
+    Returns:
+        -  moving_avg (pd.Series): univariate moving average over time_series"""
+
+    moving_avg = np.convolve(time_series, np.ones(N) / N, mode="same")
+    return moving_avg
+
+
+def mask_outliers(time_series: pd.DataFrame, lag: int, n_std: int, mode: str):
+    """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers
+
+    Parameters:
+        - time_series (pd.DataFrame): bivariate time series representing the x, y positions of a single body part
+        - lag (int): size of the convolution window used to compute the moving average
+        - n_std (int): number of standard deviations over the moving average to be considered an outlier
+        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
+        If "or", one is enough
+
+    Returns
+        - mask (pd.DataFrame): bivariate mask over time_series. True indicates an outlier"""
+
+    moving_avg_x = moving_average(time_series["x"], lag)
+    moving_avg_y = moving_average(time_series["y"], lag)
+
+    residuals_x = time_series["x"] - moving_avg_x
+    residuals_y = time_series["y"] - moving_avg_y
+
+    outlier_mask_x = np.abs(residuals_x) > n_std * np.std(residuals_x)
+    outlier_mask_y = np.abs(residuals_y) > n_std * np.std(residuals_y)
+    mask = None
+
+    if mode == "and":
+        mask = outlier_mask_x & outlier_mask_y
+    elif mode == "or":
+        mask = outlier_mask_x | outlier_mask_y
+
+    return mask
+
+
+def full_outlier_mask(
+    experiment: pd.DataFrame, exclude: str, lag: int, n_std: int, mode: str
+):
+    """"""
+
+    body_parts = experiment.columns.levels[0]
+    full_mask = experiment.copy()
+    for bpart in body_parts:
+        if bpart != exclude:
+            mask = mask_outliers(experiment[bpart], lag, n_std, mode)
+            full_mask.loc[:, (bpart, "x")] = mask
+            full_mask.loc[:, (bpart, "y")] = mask
+            continue
+
+    return full_mask
+
+
+def interpolate_outliers(
+    experiment: pd.DataFrame,
+    exclude: str,
+    lag: int = 5,
+    n_std: int = 3,
+    mode: str = "or",
+    limit: int = 5,
+):
+    """"""
+
+    exp = experiment.copy()
+    mask = full_outlier_mask(experiment, exclude, lag, n_std, mode)
+    exp[mask] = np.nan
+    exp.interpolate(method="linear", limit=limit, limit_direction="both", inplace=True)
+
+    return exp
+
+
 def recognize_arena(
     videos: list,
     vid_index: int,
