@@ -205,7 +205,7 @@ class project:
         for key, value in tab_dict.items():
             x = value.xs("x", level="coords", axis=1, drop_level=False)
             y = value.xs("y", level="coords", axis=1, drop_level=False)
-            lik: pd.DataFrame = value.xs(
+            lik = value.xs(
                 "likelihood", level="coords", axis=1, drop_level=True
             )
 
@@ -225,7 +225,7 @@ class project:
                     )
                 )
                 smooth.columns = cols
-                tab_dict[key] = smooth
+                tab_dict[key] = smooth.iloc[1:, :]
 
         for key, tab in tab_dict.items():
             tab_dict[key] = tab[tab.columns.levels[0][0]]
