@@ -687,7 +687,7 @@ class coordinates:
     # noinspection PyDefaultArgument
     def rule_based_annotation(
         self,
-        hparams: Dict = {},
+        params: Dict = {},
         video_output: bool = False,
         frame_limit: int = np.inf,
         debug: bool = False,
@@ -714,7 +714,7 @@ class coordinates:
                 arena_type=self._arena,
                 recog_limit=1,
                 path=os.path.join(self._path, "Videos"),
-                hparams=hparams,
+                hparams=params,
             )
 
         if video_output:  # pragma: no cover
@@ -732,7 +732,7 @@ class coordinates:
                     frame_limit=frame_limit,
                     recog_limit=1,
                     path=os.path.join(self._path, "Videos"),
-                    hparams=hparams,
+                    hparams=params,
                 )
                 pbar.update(1)
 
