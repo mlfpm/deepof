@@ -427,8 +427,8 @@ def interpolate_outliers(
     exclude: str,
     lag: int = 5,
     n_std: int = 3,
-    mode: str = "and",
-    limit: int = 5,
+    mode: str = "or",
+    limit: int = 15,
 ):
     """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
@@ -437,9 +437,9 @@ def interpolate_outliers(
         - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
         - lag (int): size of the convolution window used to compute the moving average
         - n_std (int): number of standard deviations over the moving average to be considered an outlier
-        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
-        If "or", one is enough
-        - limit (int): maximum of consecutive outliers to interpolate. Defaults to 5
+        - mode (str): if "and" both x and y have to be marked in order to call an outlier.
+        If "or" (default), one is enough
+        - limit (int): maximum of consecutive outliers to interpolate. Defaults to 15
 
     Returns:
         interpolated_exp (pd.DataFrame): Interpolated version of experiment

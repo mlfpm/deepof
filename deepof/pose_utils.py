@@ -663,6 +663,8 @@ def tag_rulebased_frames(
                     ),
                     thickness=-1,
                 )
+            # Print frame number
+            write_on_frame("Frame " + str(fnum), corners["downleft"])
 
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())

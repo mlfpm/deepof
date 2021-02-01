@@ -210,7 +210,7 @@ class project:
             )
 
             tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
-            lik_dict[key] = lik
+            lik_dict[key] = lik.droplevel("scorer", axis=1)
 
         if self.smooth_alpha:
 
@@ -225,7 +225,7 @@ class project:
                     )
                 )
                 smooth.columns = cols
-                tab_dict[key] = smooth.iloc[1:, :]
+                tab_dict[key] = smooth.iloc[1:, :].reset_index(drop=True)
 
         for key, tab in tab_dict.items():
             tab_dict[key] = tab[tab.columns.levels[0][0]]
