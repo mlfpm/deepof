@@ -395,7 +395,20 @@ def mask_outliers(time_series: pd.DataFrame, lag: int, n_std: int, mode: str):
 def full_outlier_mask(
     experiment: pd.DataFrame, exclude: str, lag: int, n_std: int, mode: str
 ):
-    """"""
+    """Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
+    replaced by a boolean mask, where True indicates an outlier
+
+    Parameters:
+        - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
+        - lag (int): size of the convolution window used to compute the moving average
+        - n_std (int): number of standard deviations over the moving average to be considered an outlier
+        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
+        If "or", one is enough
+
+    Returns:
+        full_mask (pd.DataFrame): mask over all body parts in experiment. True indicates an outlier
+
+    """
 
     body_parts = experiment.columns.levels[0]
     full_mask = experiment.copy()
