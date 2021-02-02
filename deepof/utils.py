@@ -441,6 +441,7 @@ def full_outlier_mask(
                 n_std,
                 mode,
             )
+
             full_mask.loc[:, (bpart, "x")] = mask
             full_mask.loc[:, (bpart, "y")] = mask
             continue

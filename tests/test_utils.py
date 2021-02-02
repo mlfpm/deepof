@@ -15,6 +15,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
+from deepof.data import *
 from deepof.utils import *
 
 
@@ -350,8 +351,44 @@ def test_smooth_mult_trajectory(alpha, series):
     assert autocorr(smoothed2) <= autocorr(smoothed1)
 
 
-def test_interpolate_outliers():
-    pass
+@given(mode=st.one_of(st.just("and"), st.just("or")))
+def test_interpolate_outliers(mode):
+
+    prun = project(
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        arena="circular",
+        arena_dims=tuple([380]),
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond"},
+    ).run()
+    coords = prun.get_coords()
+    lkhood = prun.get_quality()
+    coords_name = list(coords.keys())[0]
+
+    interp = interpolate_outliers(
+        coords[coords_name], lkhood[coords_name], 0.9, exclude="Center", mode=mode
+    )
+    assert (
+        full_outlier_mask(
+            interp,
+            lkhood,
+            likelihood_tolerance=0.9,
+            exclude="Center",
+            lag=5,
+            n_std=2,
+            mode=mode,
+        ).sum()
+        < full_outlier_mask(
+            coords,
+            lkhood,
+            likelihood_tolerance=0.9,
+            exclude="Center",
+            lag=5,
+            n_std=2,
+            mode=mode,
+        ).sum()
+    )
 
 
 @settings(deadline=None)
