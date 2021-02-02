@@ -522,7 +522,7 @@ def rule_based_tagging(
                 animal_ids[1] + bparts[-1],
                 hparams["close_contact_tol"],
                 arena_abs,
-                arena[2],
+                arena[1][1],
             )
         )
 
@@ -540,7 +540,7 @@ def rule_based_tagging(
                 hparams["side_contact_tol"],
                 rev=rev,
                 arena_abs=arena_abs,
-                arena_rel=arena[2],
+                arena_rel=arena[1][1],
             )
         )
 

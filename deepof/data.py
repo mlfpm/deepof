@@ -58,7 +58,7 @@ class project:
         interpolate_outliers: str = "MA",
         interpolation_limit: int = 15,
         interpolation_std: int = 2,
-        likelihood_tol: float = 0.9,
+        likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0.99,
