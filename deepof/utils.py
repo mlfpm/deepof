@@ -358,6 +358,7 @@ def moving_average(time_series: pd.Series, N: int = 5):
         -  moving_avg (pd.Series): univariate moving average over time_series"""
 
     moving_avg = np.convolve(time_series, np.ones(N) / N, mode="same")
+
     return moving_avg
 
 

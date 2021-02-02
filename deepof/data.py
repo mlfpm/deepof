@@ -55,7 +55,7 @@ class project:
         arena_dims: tuple = (1,),
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
-        interpolate_outliers: str = "MA",
+        interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 2,
         likelihood_tol: float = 0.75,
