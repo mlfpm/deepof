@@ -491,7 +491,6 @@ def interpolate_outliers(
     interpolated_exp.interpolate(
         method="linear", limit=limit, limit_direction="both", inplace=True
     )
-    interpolated_exp[np.isnan(interpolated_exp)] = np.nan
 
     return interpolated_exp
 
