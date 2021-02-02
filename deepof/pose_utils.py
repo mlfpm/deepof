@@ -654,15 +654,16 @@ def tag_rulebased_frames(
             cv2.ellipse(frame, arena[0], arena[1], arena[2], 0, 360, (0, 255, 0), 3)
             # Print body parts for debuging
             for bpart in coords.columns.levels[0]:
-                cv2.circle(
-                    frame,
-                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
-                    radius=3,
-                    color=(
-                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
-                    ),
-                    thickness=-1,
-                )
+                if not np.isnan(coords[bpart]["x"][fnum]):
+                    cv2.circle(
+                        frame,
+                        (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
+                        radius=3,
+                        color=(
+                            (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
+                        ),
+                        thickness=-1,
+                    )
             # Print frame number
             write_on_frame("Frame " + str(fnum), corners["downleft"])
 
