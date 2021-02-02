@@ -351,6 +351,7 @@ def test_smooth_mult_trajectory(alpha, series):
     assert autocorr(smoothed2) <= autocorr(smoothed1)
 
 
+@settings(deadline=None)
 @given(mode=st.one_of(st.just("and"), st.just("or")))
 def test_interpolate_outliers(mode):
 
@@ -367,27 +368,38 @@ def test_interpolate_outliers(mode):
     coords_name = list(coords.keys())[0]
 
     interp = interpolate_outliers(
-        coords[coords_name], lkhood[coords_name], 0.9, exclude="Center", mode=mode
+        coords[coords_name],
+        lkhood[coords_name],
+        0.999,
+        exclude="Center",
+        mode=mode,
+        limit=100,
+        n_std=1,
     )
+
     assert (
         full_outlier_mask(
             interp,
-            lkhood,
+            lkhood[coords_name],
             likelihood_tolerance=0.9,
             exclude="Center",
             lag=5,
             n_std=2,
             mode=mode,
-        ).sum()
+        )
+        .sum()
+        .sum()
         < full_outlier_mask(
-            coords,
-            lkhood,
+            coords[coords_name],
+            lkhood[coords_name],
             likelihood_tolerance=0.9,
             exclude="Center",
             lag=5,
             n_std=2,
             mode=mode,
-        ).sum()
+        )
+        .sum()
+        .sum()
     )
 
 

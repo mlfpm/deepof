@@ -430,7 +430,7 @@ def full_outlier_mask(
     """
 
     body_parts = experiment.columns.levels[0]
-    full_mask = experiment.copy()
+    full_mask = experiment.copy().drop(exclude, axis=1)
     for bpart in body_parts:
         if bpart != exclude:
             mask = mask_outliers(
@@ -481,6 +481,7 @@ def interpolate_outliers(
     mask = full_outlier_mask(
         experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode
     )
+
     interpolated_exp[mask] = np.nan
     interpolated_exp.interpolate(
         method="linear", limit=limit, limit_direction="both", inplace=True
