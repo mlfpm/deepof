@@ -55,6 +55,10 @@ class project:
         arena_dims: tuple = (1,),
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
+        interpolate_outliers: str = "MA",
+        interpolation_limit: int = 15,
+        interpolation_std: int = 2,
+        likelihood_tol: float = 0.9,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0.99,
@@ -88,17 +92,21 @@ class project:
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
+        self.angles = True
         self.animal_ids = animal_ids
         self.arena = arena
         self.arena_dims = arena_dims
-        self.exp_conditions = exp_conditions
-        self.scales = self.get_scale
-        self.smooth_alpha = smooth_alpha
-        self.video_format = video_format
-        self.angles = True
         self.distances = "all"
         self.ego = False
+        self.exp_conditions = exp_conditions
+        self.interpolate_outliers = interpolate_outliers
+        self.interpolation_limit = interpolation_limit
+        self.interpolation_std = interpolation_std
+        self.likelihood_tolerance = likelihood_tol
+        self.scales = self.get_scale
+        self.smooth_alpha = smooth_alpha
         self.subset_condition = None
+        self.video_format = video_format
 
         model_dict = {
             "mouse_topview": deepof.utils.connect_mouse_topview(animal_ids[0])
@@ -257,6 +265,21 @@ class project:
                     [sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
+
+        if self.interpolate_outliers:
+
+            if verbose:
+                print("Interpolating outliers...")
+
+            for k, value in tab_dict.items():
+                tab_dict[k] = deepof.utils.interpolate_outliers(
+                    value,
+                    lik_dict[k],
+                    likelihood_tolerance=self.likelihood_tolerance,
+                    mode="or",
+                    limit=self.interpolation_limit,
+                    n_std=self.interpolation_std,
+                )
 
         return tab_dict, lik_dict
 

@@ -430,7 +430,11 @@ def full_outlier_mask(
     """
 
     body_parts = experiment.columns.levels[0]
-    full_mask = experiment.copy().drop(exclude, axis=1)
+    full_mask = experiment.copy()
+
+    if exclude:
+        full_mask.drop(exclude, axis=1, inplace=True)
+
     for bpart in body_parts:
         if bpart != exclude:
             mask = mask_outliers(
@@ -453,7 +457,7 @@ def interpolate_outliers(
     experiment: pd.DataFrame,
     likelihood: pd.DataFrame,
     likelihood_tolerance: float,
-    exclude: str,
+    exclude: str = "",
     lag: int = 5,
     n_std: int = 3,
     mode: str = "or",
