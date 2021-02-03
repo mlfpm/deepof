@@ -57,7 +57,7 @@ class project:
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
-        interpolation_std: int = 3,
+        interpolation_std: int = 5,
         likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
@@ -543,7 +543,7 @@ class coordinates:
 
         if speed:
             for key, tab in tabs.items():
-                vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, center=center)
+                vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
                 tabs[key] = vel
 
         if length:

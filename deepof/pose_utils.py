@@ -16,10 +16,15 @@ import os
 import pandas as pd
 import regex as re
 import seaborn as sns
+import warnings
 from itertools import combinations
 from scipy import stats
 from typing import Any, List, NewType
 
+# Ignore warning with no downstream effect
+warnings.filterwarnings("ignore", message="All-NaN slice encountered")
+
+# Create custom string type
 Coordinates = NewType("Coordinates", Any)
 
 
@@ -197,13 +202,13 @@ def huddle(
 
     forward = (
         np.linalg.norm(
-            pos_dframe[animal_id + "Left_ear"] - pos_dframe[animal_id + "Left_fhip"],
+            pos_dframe[animal_id + "Left_bhip"] - pos_dframe[animal_id + "Left_fhip"],
             axis=1,
         )
         < tol_forward
-    ) & (
+    ) | (
         np.linalg.norm(
-            pos_dframe[animal_id + "Right_ear"] - pos_dframe[animal_id + "Right_fhip"],
+            pos_dframe[animal_id + "Right_bhip"] - pos_dframe[animal_id + "Right_fhip"],
             axis=1,
         )
         < tol_forward
@@ -224,7 +229,7 @@ def huddle(
         )
     spine = np.mean(spine_dists) < tol_spine
     speed = speed_dframe[animal_id + "Center"] < tol_speed
-    hudd = forward & spine & speed
+    hudd = forward & speed
 
     return hudd
 
@@ -404,7 +409,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         specified in the input retain their default values"""
 
     defaults = {
-        "speed_pause": 3,
+        "speed_pause": 5,
         "climb_tol": 10,
         "close_contact_tol": 35,
         "side_contact_tol": 80,
@@ -412,7 +417,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "follow_tol": 5,
         "huddle_forward": 15,
         "huddle_spine": 10,
-        "huddle_speed": 0.1,
+        "huddle_speed": 1,
         "fps": 24,
     }
 
@@ -544,6 +549,24 @@ def rule_based_tagging(
             )
         )
 
+    def overall_speed(speeds, _id, undercond):
+        bparts = [
+            "Center",
+            "Spine_1",
+            "Spine_2",
+            "Nose",
+            "Left_ear",
+            "Right_ear",
+            "Left_fhip",
+            "Right_fhip",
+            "Left_bhip",
+            "Right_bhip",
+            "Tail_base",
+        ]
+        array = speeds[[_id + undercond + bpart for bpart in bparts]]
+        avg_speed = np.nanmedian(array[1:], axis=1)
+        return np.insert(avg_speed, 0, np.nan, axis=0)
+
     if len(animal_ids) == 2:
         # Define behaviours that can be computed on the fly from the distance matrix
         tag_dict["nose2nose"] = onebyone_contact(bparts=["_Nose"])
@@ -581,7 +604,7 @@ def rule_based_tagging(
                 _id + undercond + "Nose",
             )
         )
-        tag_dict[_id + undercond + "speed"] = speeds[_id + undercond + "Center"]
+        tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
                 coords,
@@ -635,9 +658,9 @@ def tag_rulebased_frames(
         if cond is None:
             cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
         if cond:
-            return 150, 150, 255
-        else:
             return 150, 255, 150
+        else:
+            return 150, 150, 255
 
     zipped_pos = list(
         zip(

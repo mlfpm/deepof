@@ -581,10 +581,11 @@ def circular_arena_recognition(frame: np.array) -> np.array:
 
 def rolling_speed(
     dframe: pd.DatetimeIndex,
-    window: int = 5,
-    rounds: int = 10,
+    window: int = 3,
+    rounds: int = 3,
     deriv: int = 1,
     center: str = None,
+    shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
     """Returns the average speed over n frames in pixels per frame
@@ -618,12 +619,15 @@ def rolling_speed(
 
         features = 2 if der == 0 and typ == "coords" else 1
 
-        distances = np.concatenate(
-            [
-                np.array(dframe).reshape([-1, features], order="F"),
-                np.array(dframe.shift()).reshape([-1, features], order="F"),
-            ],
-            axis=1,
+        distances = (
+            np.concatenate(
+                [
+                    np.array(dframe).reshape([-1, features], order="F"),
+                    np.array(dframe.shift(shift)).reshape([-1, features], order="F"),
+                ],
+                axis=1,
+            )
+            / shift
         )
 
         distances = np.array(compute_dist(distances))
@@ -636,7 +640,7 @@ def rolling_speed(
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)
-        speeds[np.isnan(speeds)] = 0.0
+        # speeds[np.isnan(speeds)] = 0.0
 
         dframe = speeds
 
