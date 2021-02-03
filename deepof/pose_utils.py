@@ -660,7 +660,9 @@ def tag_rulebased_frames(
                         (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
                         radius=3,
                         color=(
-                            (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
+                            (255, 0, 0)
+                            if bpart.startswith(animal_ids[0])
+                            else (0, 0, 255)
                         ),
                         thickness=-1,
                     )

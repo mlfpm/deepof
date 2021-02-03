@@ -961,8 +961,8 @@ class table_dict(dict):
             ).reshape(X_train.shape)
 
             if scale == "standard":
-                assert np.allclose(np.mean(X_train), 0)
-                assert np.allclose(np.std(X_train), 1)
+                assert np.allclose(np.nan_to_num(np.mean(X_train), nan=0), 0)
+                assert np.allclose(np.nan_to_num(np.std(X_train), nan=1), 1)
 
             if test_videos:
                 X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
@@ -1124,3 +1124,5 @@ def merge_tables(*args):
 #   - with the current implementation, preprocess can't fully work on merged table_dict instances.
 #   While some operations (mainly alignment) should be carried out before merging, others require
 #   the whole dataset to function properly.
+#   - Understand how keras handles NA values. Decide whether to do nothing, to mask them or to impute them using
+#   a clear outlier (e.g. -9999)
