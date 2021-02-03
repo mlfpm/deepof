@@ -622,8 +622,8 @@ def rolling_speed(
         distances = (
             np.concatenate(
                 [
-                    np.array(dframe).reshape([-1, features], order="F"),
-                    np.array(dframe.shift(shift)).reshape([-1, features], order="F"),
+                    np.array(dframe).reshape([-1, features], order="C"),
+                    np.array(dframe.shift(shift)).reshape([-1, features], order="C"),
                 ],
                 axis=1,
             )
@@ -636,7 +636,7 @@ def rolling_speed(
                 original_shape[0],
                 (original_shape[1] // 2 if typ == "coords" else original_shape[1]),
             ],
-            order="F",
+            order="C",
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)

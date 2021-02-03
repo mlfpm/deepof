@@ -735,7 +735,7 @@ class coordinates:
                 arena_type=self._arena,
                 recog_limit=1,
                 path=os.path.join(self._path, "Videos"),
-                hparams=params,
+                params=params,
             )
 
         if video_output:  # pragma: no cover
@@ -753,7 +753,7 @@ class coordinates:
                     frame_limit=frame_limit,
                     recog_limit=1,
                     path=os.path.join(self._path, "Videos"),
-                    hparams=params,
+                    params=params,
                 )
                 pbar.update(1)
 
