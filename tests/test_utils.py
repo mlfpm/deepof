@@ -373,8 +373,8 @@ def test_interpolate_outliers(mode):
         0.999,
         exclude="Center",
         mode=mode,
-        limit=100,
-        n_std=1,
+        limit=15,
+        n_std=0,
     )
 
     assert (
