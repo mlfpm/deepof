@@ -776,6 +776,9 @@ class coordinates:
             tag_dict, typ="rule-based", arena=self._arena, arena_dims=self._arena_dims
         )
 
+    def gmvae_embedding(self):
+        pass
+
 
 class table_dict(dict):
     """
