@@ -57,7 +57,7 @@ class project:
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
-        interpolation_std: int = 2,
+        interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
