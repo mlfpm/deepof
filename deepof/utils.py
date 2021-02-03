@@ -640,8 +640,6 @@ def rolling_speed(
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)
-        # speeds[np.isnan(speeds)] = 0.0
-
         dframe = speeds
 
     speeds.columns = body_parts
