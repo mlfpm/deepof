@@ -137,23 +137,16 @@ def test_climb_wall(center, axes, angle, tol):
                 "y4",
                 "X5",
                 "y5",
-                "X6",
-                "y6",
-                "X7",
-                "y7",
-                "X8",
-                "y8",
             ],
             dtype=float,
             elements=st.floats(min_value=-20, max_value=20),
         ),
     ),
     tol_forward=st.floats(min_value=0.01, max_value=4.98),
-    tol_spine=st.floats(min_value=0.01, max_value=4.98),
     tol_speed=st.floats(min_value=0.01, max_value=4.98),
     animal_id=st.text(min_size=0, max_size=15, alphabet=string.ascii_lowercase),
 )
-def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed, animal_id):
+def test_huddle(pos_dframe, tol_forward, tol_speed, animal_id):
 
     _id = animal_id
     if animal_id != "":
@@ -162,14 +155,11 @@ def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed, animal_id):
     idx = pd.MultiIndex.from_product(
         [
             [
-                _id + "Left_ear",
-                _id + "Right_ear",
+                _id + "Left_bhip",
+                _id + "Right_bhip",
                 _id + "Left_fhip",
                 _id + "Right_fhip",
-                _id + "Spine_1",
                 _id + "Center",
-                _id + "Spine_2",
-                _id + "Tail_base",
             ],
             ["X", "y"],
         ],
@@ -180,7 +170,6 @@ def test_huddle(pos_dframe, tol_forward, tol_spine, tol_speed, animal_id):
         pos_dframe,
         pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
         tol_forward,
-        tol_spine,
         tol_speed,
         animal_id,
     )

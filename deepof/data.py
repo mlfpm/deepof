@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple, Union
 from multiprocessing import cpu_count
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
+from sklearn.impute import SimpleImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
 from tqdm import tqdm
@@ -1049,6 +1050,7 @@ class table_dict(dict):
 
         # noinspection PyUnresolvedReferences
         X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+        X = SimpleImputer(strategy="median").fit_transform(X)
 
         rproj = random_projection.GaussianRandomProjection(n_components=n_components)
         X = rproj.fit_transform(X)
@@ -1063,6 +1065,7 @@ class table_dict(dict):
         performance or visualization reasons"""
 
         X = self.get_training_set()[0]
+        X = SimpleImputer(strategy="median").fit_transform(X)
 
         # Takes care of propagated labels if present
         if self._propagate_labels:
@@ -1084,6 +1087,7 @@ class table_dict(dict):
         performance or visualization reasons"""
 
         X = self.get_training_set()[0]
+        X = SimpleImputer(strategy="median").fit_transform(X)
 
         # Takes care of propagated labels if present
         if self._propagate_labels:
