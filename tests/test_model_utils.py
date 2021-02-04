@@ -114,7 +114,7 @@ def test_uncorrelated_features_constraint():
             optimizer=tf.keras.optimizers.SGD(),
         )
 
-        fit = test_model.fit(X, y, epochs=10, batch_size=100)
+        fit = test_model.fit(X, y, epochs=25, batch_size=100)
         assert type(fit) == tf.keras.callbacks.History
 
         correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
