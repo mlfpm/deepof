@@ -781,9 +781,8 @@ class coordinates:
     @staticmethod
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-        encoding_size: int = 4,
         batch_size: int = 256,
-        cp: bool = True,
+        encoding_size: int = 4,
         hparams: dict = None,
         kl_warmup: int = 0,
         loss: str = "ELBO",
@@ -794,17 +793,19 @@ class coordinates:
         phenotype_class: float = 0,
         predictor: float = 0,
         pretrained: str = False,
+        save_checkpoints: bool = True,
         variational: bool = True,
     ) -> Tuple:
         """
-        Annotates coordinates using an unsupervised autoencoder
+        Annotates coordinates using an unsupervised autoencoder.
+        Full implementation in deepof.train_utils.deep_unsupervised_embedding
 
         Parameters:
             - preprocessed_object (Tuple[np.ndarray]): tuple containing a preprocessed object (X_train,
             y_train, X_test, y_test)
             - encoding_size (int): number of dimensions in the latent space of the autoencoder
             - batch_size (int): training batch size
-            - cp (bool): if True, training checkpoints are saved to disk. Useful for debugging,
+            - save_checkpoints (bool): if True, training checkpoints are saved to disk. Useful for debugging,
             but can make training significantly slower
             - hparams (dict): dictionary to change architecture hyperparameters of the autoencoders
             (see documentation for details)
@@ -831,51 +832,26 @@ class coordinates:
 
         """
 
-        # Load all
-        X_train, y_train, X_val, y_val = preprocessed_object
-
-        if not variational:
-            encoder, decoder, ae = deepof.models.SEQ_2_SEQ_AE(
-                ({} if hparams is None else hparams)
-            ).build(X_train.shape)
-            return_list = (encoder, decoder, ae)
-
-        else:
-            (
-                encoder,
-                generator,
-                grouper,
-                ae,
-                kl_warmup_callback,
-                mmd_warmup_callback,
-            ) = deepof.models.SEQ_2_SEQ_GMVAE(
-                architecture_hparams=({} if hparams is None else hparams),
-                batch_size=batch_size,
-                compile_model=True,
-                encoding=encoding_size,
-                kl_warmup_epochs=kl_warmup,
-                loss=loss,
-                mmd_warmup_epochs=mmd_warmup,
-                montecarlo_kl=montecarlo_kl,
-                neuron_control=False,
-                number_of_components=n_components,
-                overlap_loss=False,
-                phenotype_prediction=phenotype_class,
-                predictor=predictor,
-            ).build(
-                X_train.shape
-            )
-            return_list = (encoder, generator, grouper, ae)
-
-        if pretrained:
-            ae.load_weights(pretrained)
-            return return_list
-
-        else:
-            pass
+        trained_models = deepof.train_utils.deep_unsupervised_embedding(
+            preprocessed_object,
+            batch_size,
+            encoding_size,
+            hparams,
+            kl_warmup,
+            loss,
+            mmd_warmup,
+            montecarlo_kl,
+            n_components,
+            outpath,
+            phenotype_class,
+            predictor,
+            pretrained,
+            save_checkpoints,
+            variational,
+        )
 
         # returns a list of trained tensorflow models
-        return ae
+        return trained_models
 
 
 class table_dict(dict):
