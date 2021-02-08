@@ -622,7 +622,7 @@ else:
         loss=loss,
         mmd_warmup_epochs=mmd_wu,
         overlap_loss=overlap_loss,
-        pheno_class=pheno_class,
+        phenotype_class=pheno_class,
         predictor=predictor,
         project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
         callbacks=[
