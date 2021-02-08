@@ -156,6 +156,7 @@ def deep_unsupervised_embedding(
     predictor: float,
     pretrained: str,
     save_checkpoints: bool,
+    save_weights: bool,
     variational: bool,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""

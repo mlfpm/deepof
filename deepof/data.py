@@ -797,6 +797,7 @@ class coordinates:
         predictor: float = 0,
         pretrained: str = False,
         save_checkpoints: bool = False,
+        save_weights: bool = True,
         variational: bool = True,
     ) -> Tuple:
         """
@@ -852,6 +853,7 @@ class coordinates:
             predictor=predictor,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
+            save_weights=save_weights,
             variational=variational,
         )
 
