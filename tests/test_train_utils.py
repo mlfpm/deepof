@@ -142,7 +142,7 @@ def test_tune_search(
         loss=loss,
         mmd_warmup_epochs=0,
         overlap_loss=overlap_loss,
-        pheno_class=pheno_class,
+        phenotype_class=pheno_class,
         predictor=predictor,
         project_name="test_run",
         callbacks=callbacks,

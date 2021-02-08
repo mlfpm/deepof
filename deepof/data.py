@@ -836,7 +836,7 @@ class coordinates:
 
         """
 
-        trained_models = deepof.train_utils.deep_unsupervised_embedding(
+        trained_models = deepof.train_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
             batch_size=batch_size,
             encoding_size=encoding_size,

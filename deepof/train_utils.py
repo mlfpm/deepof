@@ -139,7 +139,7 @@ def get_callbacks(
     return callbacks
 
 
-def deep_unsupervised_embedding(
+def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     batch_size: int,
     encoding_size: int,
@@ -308,6 +308,9 @@ def deep_unsupervised_embedding(
                 ],
             )
 
+            if save_weights:
+                ae.save_weights("{}_final_weights.h5".format(run_ID))
+
         else:
 
             callbacks_ = cbacks + [
@@ -340,7 +343,7 @@ def deep_unsupervised_embedding(
             ae.fit(
                 x=Xs,
                 y=ys,
-                epochs=35,
+                epochs=2,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(
@@ -349,6 +352,9 @@ def deep_unsupervised_embedding(
                 ),
                 callbacks=callbacks_,
             )
+
+            if save_weights:
+                ae.save_weights("{}_final_weights.h5".format(run_ID))
 
             if log_hparams:
                 # noinspection PyUnboundLocalVariable
