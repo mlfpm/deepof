@@ -780,8 +780,8 @@ class coordinates:
 
     @staticmethod
     def deep_unsupervised_embedding(
-        preprocessed_object: np.array,
-        encoding_size: int,
+        preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        encoding_size: int = 4,
         batch_size: int = 256,
         cp: bool = True,
         hparams: dict = None,
@@ -795,7 +795,41 @@ class coordinates:
         predictor: float = 0,
         pretrained: str = False,
         variational: bool = True,
-    ):
+    ) -> Tuple:
+        """
+        Annotates coordinates using an unsupervised autoencoder
+
+        Parameters:
+            - preprocessed_object (Tuple[np.ndarray]): tuple containing a preprocessed object (X_train,
+            y_train, X_test, y_test)
+            - encoding_size (int): number of dimensions in the latent space of the autoencoder
+            - batch_size (int): training batch size
+            - cp (bool): if True, training checkpoints are saved to disk. Useful for debugging,
+            but can make training significantly slower
+            - hparams (dict): dictionary to change architecture hyperparameters of the autoencoders
+            (see documentation for details)
+            - kl_warmup (int): number of epochs over which to increase KL weight linearly
+            (default is number of epochs // 4)
+            - loss (str): Loss function to use. Currently, 'ELBO', 'MMD' and 'ELBO+MMD' are supported.
+            - mmd_warmup (int): number of epochs over which to increase MMD weight linearly
+            (default is number of epochs // 4)
+            - montecarlo_kl (int): Number of Montecarlo samples used to estimate the KL between latent space and prior
+            - n_components (int): Number of components of the Gaussian Mixture in the latent space
+            - outpath (str): Path where to save the training loggings
+            - phenotype_class (float): weight assigned to phenotype classification. If > 0,
+            a classification neural network is appended to the latent space,
+            aiming to enforce structure from a set of labels in the encoding.
+            - predictor (float): weight assigned to a predictor branch. If > 0, a regression neural network
+            is appended to the latent space,
+            aiming to predict what happens immediately next in the sequence, which can help with regularization.
+            - pretrained (bool): If True, a pretrained set of weights is expected.
+            - variational (bool): If True (default) a variational autoencoder is used. If False,
+            a simple autoencoder is used for dimensionality reduction
+
+        Returns:
+            - return_list (tuple): List containing all relevant trained models for unsupervised prediction.
+
+        """
 
         # Load all
         X_train, y_train, X_val, y_val = preprocessed_object
@@ -836,8 +870,11 @@ class coordinates:
         if pretrained:
             ae.load_weights(pretrained)
             return return_list
-        # returns a trained tensorflow model
 
+        else:
+            pass
+
+        # returns a list of trained tensorflow models
         return ae
 
 
