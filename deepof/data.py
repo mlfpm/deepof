@@ -28,6 +28,7 @@ import deepof.models
 import deepof.pose_utils
 import deepof.utils
 import deepof.visuals
+import deepof.train_utils
 import matplotlib.pyplot as plt
 import numpy as np
 import os
