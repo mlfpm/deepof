@@ -521,7 +521,6 @@ class SEQ_2_SEQ_GMVAE:
     def build(self, input_shape: Tuple):
         """Builds the tf.keras model"""
 
-        print(input_shape)
         # Instanciate prior
         self.get_prior()
 
