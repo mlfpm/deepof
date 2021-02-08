@@ -19,8 +19,6 @@ import regex as re
 from copy import deepcopy
 from itertools import combinations, product
 from joblib import Parallel, delayed
-
-# from skimage.transform import hough_ellipse
 from sklearn import mixture
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType

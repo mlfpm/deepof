@@ -786,6 +786,8 @@ class coordinates:
         encoding_size: int = 4,
         hparams: dict = None,
         kl_warmup: int = 0,
+        log_history: bool = True,
+        log_hparams: bool = False,
         loss: str = "ELBO",
         mmd_warmup: int = 0,
         montecarlo_kl: int = 10,
@@ -794,7 +796,7 @@ class coordinates:
         phenotype_class: float = 0,
         predictor: float = 0,
         pretrained: str = False,
-        save_checkpoints: bool = True,
+        save_checkpoints: bool = False,
         variational: bool = True,
     ) -> Tuple:
         """
@@ -834,21 +836,23 @@ class coordinates:
         """
 
         trained_models = deepof.train_utils.deep_unsupervised_embedding(
-            preprocessed_object,
-            batch_size,
-            encoding_size,
-            hparams,
-            kl_warmup,
-            loss,
-            mmd_warmup,
-            montecarlo_kl,
-            n_components,
-            output_path,
-            phenotype_class,
-            predictor,
-            pretrained,
-            save_checkpoints,
-            variational,
+            preprocessed_object=preprocessed_object,
+            batch_size=batch_size,
+            encoding_size=encoding_size,
+            hparams=hparams,
+            kl_warmup=kl_warmup,
+            log_history=log_history,
+            log_hparams=log_hparams,
+            loss=loss,
+            mmd_warmup=mmd_warmup,
+            montecarlo_kl=montecarlo_kl,
+            n_components=n_components,
+            output_path=output_path,
+            phenotype_class=phenotype_class,
+            predictor=predictor,
+            pretrained=pretrained,
+            save_checkpoints=save_checkpoints,
+            variational=variational,
         )
 
         # returns a list of trained tensorflow models

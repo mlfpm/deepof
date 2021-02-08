@@ -7,8 +7,8 @@
 Simple utility functions used in deepof example scripts. These are not part of the main package
 
 """
-from datetime import date, datetime
 
+from datetime import date, datetime
 from kerastuner import BayesianOptimization, Hyperband
 from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
@@ -21,8 +21,13 @@ import os
 import pickle
 import tensorflow as tf
 
+# Ignore warning with no downstream effect
+tf.get_logger().setLevel("ERROR")
+tf.autograph.set_verbosity(0)
+
+
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
-    """ Custom callback for """
+    """ Custom early stopping callback. Prevents the model from stopping before warmup is over """
 
     def __init__(self, start_epoch, *args, **kwargs):
         super(CustomStopper, self).__init__(*args, **kwargs)
@@ -136,20 +141,22 @@ def get_callbacks(
 
 def deep_unsupervised_embedding(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    batch_size: int = 256,
-    encoding_size: int = 4,
-    hparams: dict = None,
-    kl_warmup: int = 0,
-    loss: str = "ELBO",
-    mmd_warmup: int = 0,
-    montecarlo_kl: int = 10,
-    n_components: int = 25,
-    output_path: str = ".",
-    phenotype_class: float = 0,
-    predictor: float = 0,
-    pretrained: str = False,
-    save_checkpoints: bool = True,
-    variational: bool = True,
+    batch_size: int,
+    encoding_size: int,
+    hparams: dict,
+    kl_warmup: int,
+    log_history: bool,
+    log_hparams: bool,
+    loss: str,
+    mmd_warmup,
+    montecarlo_kl,
+    n_components,
+    output_path,
+    phenotype_class,
+    predictor: float,
+    pretrained: str,
+    save_checkpoints: bool,
+    variational: bool,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -160,6 +167,7 @@ def deep_unsupervised_embedding(
     tf.keras.backend.clear_session()
 
     # Defines what to log on tensorboard (useful for trying out different models)
+
     logparam = {
         "encoding": encoding_size,
         "k": n_components,
@@ -169,7 +177,7 @@ def deep_unsupervised_embedding(
         logparam["pheno_weight"] = phenotype_class
 
     # Load callbacks
-    run_ID, tensorboard_callback, onecycle, cp_callback = get_callbacks(
+    run_ID, *cbacks = get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
         cp=save_checkpoints,
@@ -180,61 +188,64 @@ def deep_unsupervised_embedding(
         logparam=logparam,
         outpath=output_path,
     )
+    if not log_history:
+        cbacks = cbacks[1:]
 
     # Logs hyperparameters to tensorboard
-    logparams = [
-        hp.HParam(
-            "encoding",
-            hp.Discrete([2, 4, 6, 8, 12, 16]),
-            display_name="encoding",
-            description="encoding size dimensionality",
-        ),
-        hp.HParam(
-            "k",
-            hp.IntInterval(min_value=1, max_value=15),
-            display_name="k",
-            description="cluster_number",
-        ),
-        hp.HParam(
-            "loss",
-            hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
-            display_name="loss function",
-            description="loss function",
-        ),
-    ]
-
-    rec = "reconstruction_" if phenotype_class else ""
-    metrics = [
-        hp.Metric("val_{}mae".format(rec), display_name="val_{}mae".format(rec)),
-        hp.Metric("val_{}mse".format(rec), display_name="val_{}mse".format(rec)),
-    ]
-    if phenotype_class:
-        logparams.append(
+    if log_hparams:
+        logparams = [
             hp.HParam(
-                "pheno_weight",
-                hp.RealInterval(min_value=0.0, max_value=1000.0),
-                display_name="pheno weight",
-                description="weight applied to phenotypic classifier from the latent space",
-            )
-        )
-        metrics += [
-            hp.Metric(
-                "phenotype_prediction_accuracy",
-                display_name="phenotype_prediction_accuracy",
+                "encoding",
+                hp.Discrete([2, 4, 6, 8, 12, 16]),
+                display_name="encoding",
+                description="encoding size dimensionality",
             ),
-            hp.Metric(
-                "phenotype_prediction_auc",
-                display_name="phenotype_prediction_auc",
+            hp.HParam(
+                "k",
+                hp.IntInterval(min_value=1, max_value=25),
+                display_name="k",
+                description="cluster_number",
+            ),
+            hp.HParam(
+                "loss",
+                hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
+                display_name="loss function",
+                description="loss function",
             ),
         ]
 
-    with tf.summary.create_file_writer(
-        os.path.join(output_path, "hparams", run_ID)
-    ).as_default():
-        hp.hparams_config(
-            hparams=logparams,
-            metrics=metrics,
-        )
+        rec = "reconstruction_" if phenotype_class else ""
+        metrics = [
+            hp.Metric("val_{}mae".format(rec), display_name="val_{}mae".format(rec)),
+            hp.Metric("val_{}mse".format(rec), display_name="val_{}mse".format(rec)),
+        ]
+        if phenotype_class:
+            logparams.append(
+                hp.HParam(
+                    "pheno_weight",
+                    hp.RealInterval(min_value=0.0, max_value=1000.0),
+                    display_name="pheno weight",
+                    description="weight applied to phenotypic classifier from the latent space",
+                )
+            )
+            metrics += [
+                hp.Metric(
+                    "phenotype_prediction_accuracy",
+                    display_name="phenotype_prediction_accuracy",
+                ),
+                hp.Metric(
+                    "phenotype_prediction_auc",
+                    display_name="phenotype_prediction_auc",
+                ),
+            ]
+
+        with tf.summary.create_file_writer(
+            os.path.join(output_path, "hparams", run_ID)
+        ).as_default():
+            hp.hparams_config(
+                hparams=logparams,
+                metrics=metrics,
+            )
 
     # Build models
     if not variational:
@@ -285,10 +296,8 @@ def deep_unsupervised_embedding(
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(X_val, X_val),
-                callbacks=[
-                    tensorboard_callback,
-                    cp_callback,
-                    onecycle,
+                callbacks=cbacks
+                + [
                     CustomStopper(
                         monitor="val_loss",
                         patience=5,
@@ -300,10 +309,7 @@ def deep_unsupervised_embedding(
 
         else:
 
-            callbacks_ = [
-                tensorboard_callback,
-                cp_callback,
-                onecycle,
+            callbacks_ = cbacks + [
                 CustomStopper(
                     monitor="val_loss",
                     patience=5,
@@ -343,57 +349,60 @@ def deep_unsupervised_embedding(
                 callbacks=callbacks_,
             )
 
-            # noinspection PyUnboundLocalVariable
-            def tensorboard_metric_logging(run_dir: str, hpms: Any):
-                output = gmvaep.predict(X_val)
-                if phenotype_class or predictor:
-                    reconstruction = output[0]
-                    prediction = output[1]
-                    pheno = output[-1]
-                else:
-                    reconstruction = output
+            if log_hparams:
+                # noinspection PyUnboundLocalVariable
+                def tensorboard_metric_logging(run_dir: str, hpms: Any):
+                    output = gmvaep.predict(X_val)
+                    if phenotype_class or predictor:
+                        reconstruction = output[0]
+                        prediction = output[1]
+                        pheno = output[-1]
+                    else:
+                        reconstruction = output
 
-                with tf.summary.create_file_writer(run_dir).as_default():
-                    hp.hparams(hpms)  # record the values used in this trial
-                    val_mae = tf.reduce_mean(
-                        tf.keras.metrics.mean_absolute_error(X_val, reconstruction)
-                    )
-                    val_mse = tf.reduce_mean(
-                        tf.keras.metrics.mean_squared_error(X_val, reconstruction)
-                    )
-                    tf.summary.scalar("val_{}mae".format(rec), val_mae, step=1)
-                    tf.summary.scalar("val_{}mse".format(rec), val_mse, step=1)
+                    with tf.summary.create_file_writer(run_dir).as_default():
+                        hp.hparams(hpms)  # record the values used in this trial
+                        val_mae = tf.reduce_mean(
+                            tf.keras.metrics.mean_absolute_error(X_val, reconstruction)
+                        )
+                        val_mse = tf.reduce_mean(
+                            tf.keras.metrics.mean_squared_error(X_val, reconstruction)
+                        )
+                        tf.summary.scalar("val_{}mae".format(rec), val_mae, step=1)
+                        tf.summary.scalar("val_{}mse".format(rec), val_mse, step=1)
 
-                    if predictor:
-                        pred_mae = tf.reduce_mean(
-                            tf.keras.metrics.mean_absolute_error(X_val, prediction)
-                        )
-                        pred_mse = tf.reduce_mean(
-                            tf.keras.metrics.mean_squared_error(X_val, prediction)
-                        )
-                        tf.summary.scalar(
-                            "val_prediction_mae".format(rec), pred_mae, step=1
-                        )
-                        tf.summary.scalar(
-                            "val_prediction_mse".format(rec), pred_mse, step=1
-                        )
+                        if predictor:
+                            pred_mae = tf.reduce_mean(
+                                tf.keras.metrics.mean_absolute_error(X_val, prediction)
+                            )
+                            pred_mse = tf.reduce_mean(
+                                tf.keras.metrics.mean_squared_error(X_val, prediction)
+                            )
+                            tf.summary.scalar(
+                                "val_prediction_mae".format(rec), pred_mae, step=1
+                            )
+                            tf.summary.scalar(
+                                "val_prediction_mse".format(rec), pred_mse, step=1
+                            )
 
-                    if phenotype_class:
-                        pheno_acc = tf.keras.metrics.binary_accuracy(
-                            y_val, tf.squeeze(pheno)
-                        )
-                        pheno_auc = roc_auc_score(y_val, pheno)
+                        if phenotype_class:
+                            pheno_acc = tf.keras.metrics.binary_accuracy(
+                                y_val, tf.squeeze(pheno)
+                            )
+                            pheno_auc = roc_auc_score(y_val, pheno)
 
-                        tf.summary.scalar(
-                            "phenotype_prediction_accuracy", pheno_acc, step=1
-                        )
-                        tf.summary.scalar("phenotype_prediction_auc", pheno_auc, step=1)
+                            tf.summary.scalar(
+                                "phenotype_prediction_accuracy", pheno_acc, step=1
+                            )
+                            tf.summary.scalar(
+                                "phenotype_prediction_auc", pheno_auc, step=1
+                            )
 
-            # Logparams to tensorboard
-            tensorboard_metric_logging(
-                os.path.join(output_path, "hparams", run_ID),
-                logparam,
-            )
+                # Logparams to tensorboard
+                tensorboard_metric_logging(
+                    os.path.join(output_path, "hparams", run_ID),
+                    logparam,
+                )
 
     return return_list
 

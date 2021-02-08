@@ -8,6 +8,9 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 
 """
 
+from itertools import combinations
+from scipy import stats
+from typing import Any, List, NewType
 import cv2
 import deepof.utils
 import matplotlib.pyplot as plt
@@ -17,9 +20,6 @@ import pandas as pd
 import regex as re
 import seaborn as sns
 import warnings
-from itertools import combinations
-from scipy import stats
-from typing import Any, List, NewType
 
 # Ignore warning with no downstream effect
 warnings.filterwarnings("ignore", message="All-NaN slice encountered")
