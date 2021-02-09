@@ -599,7 +599,7 @@ class coordinates:
 
         if propagate_labels:
             for key, tab in tabs.items():
-                tab["pheno"] = self._exp_conditions[key]
+                tab.loc[:, "pheno"] = self._exp_conditions[key]
 
         return table_dict(
             tabs,
