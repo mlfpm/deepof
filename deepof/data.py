@@ -63,7 +63,7 @@ class project:
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 5,
-        likelihood_tol: float = 0.75,
+        likelihood_tol: float = 0.25,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0.99,
@@ -296,7 +296,9 @@ class project:
                 print("Iterative imputation of ocluded bodyparts...")
 
             for k, value in tab_dict.items():
-                imputed = IterativeImputer(max_iter=250, skip_complete=True).fit_transform(value)
+                imputed = IterativeImputer(
+                    max_iter=250, skip_complete=True
+                ).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
                 )

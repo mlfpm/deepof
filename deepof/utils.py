@@ -460,7 +460,7 @@ def interpolate_outliers(
     lag: int = 5,
     n_std: int = 3,
     mode: str = "or",
-    limit: int = 15,
+    limit: int = 10,
 ):
     """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
