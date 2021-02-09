@@ -143,6 +143,7 @@ def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     batch_size: int,
     encoding_size: int,
+    epochs: int,
     hparams: dict,
     kl_warmup: int,
     log_history: bool,
@@ -293,7 +294,7 @@ def autoencoder_fitting(
             ae.fit(
                 x=X_train,
                 y=X_train,
-                epochs=35,
+                epochs=epochs,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(X_val, X_val),
@@ -343,7 +344,7 @@ def autoencoder_fitting(
             ae.fit(
                 x=Xs,
                 y=ys,
-                epochs=2,
+                epochs=epochs,
                 batch_size=batch_size,
                 verbose=1,
                 validation_data=(

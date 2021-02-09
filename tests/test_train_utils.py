@@ -12,6 +12,7 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
+import deepof.data
 import deepof.model_utils
 import deepof.train_utils
 import os
@@ -78,6 +79,61 @@ def test_get_callbacks(
     assert type(tbc) == tf.keras.callbacks.TensorBoard
     assert type(cpc) == tf.keras.callbacks.ModelCheckpoint
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
+
+
+@settings(max_examples=2, deadline=None)
+@given(
+    X_train=arrays(
+        dtype=float,
+        shape=st.tuples(
+            st.integers(min_value=10, max_value=100),
+            st.integers(min_value=2, max_value=15),
+            st.integers(min_value=2, max_value=10),
+        ),
+        elements=st.floats(
+            min_value=0.0,
+            max_value=1,
+        ),
+    ),
+    batch_size=st.integers(min_value=128, max_value=512),
+    encoding_size=st.integers(min_value=1, max_value=16),
+    k=st.integers(min_value=1, max_value=10),
+    loss=st.one_of(st.just("ELBO"), st.just("MMD")),
+    pheno_class=st.floats(min_value=0.0, max_value=1.0),
+    predictor=st.floats(min_value=0.0, max_value=1.0),
+    variational=st.booleans(),
+)
+def test_autoencoder_fitting(
+    X_train,
+    batch_size,
+    encoding_size,
+    k,
+    loss,
+    pheno_class,
+    predictor,
+    variational,
+):
+    preprocessed_data = (X_train, [], X_train, [])
+
+    prun = deepof.data.project(
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        arena="circular",
+        arena_dims=tuple([380]),
+        video_format=".mp4",
+    ).run()
+
+    models = prun.deep_unsupervised_embedding(
+        preprocessed_data,
+        batch_size=batch_size,
+        encoding_size=encoding_size,
+        epochs=1,
+        n_components=k,
+        loss=loss,
+        phenotype_class=pheno_class,
+        predictor=predictor,
+        variational=variational,
+    )
+    print(models)
 
 
 @settings(max_examples=1, deadline=None)

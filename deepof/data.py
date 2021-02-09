@@ -784,6 +784,7 @@ class coordinates:
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         batch_size: int = 256,
         encoding_size: int = 4,
+        epochs: int = 35,
         hparams: dict = None,
         kl_warmup: int = 0,
         log_history: bool = True,
@@ -808,6 +809,7 @@ class coordinates:
             - preprocessed_object (Tuple[np.ndarray]): tuple containing a preprocessed object (X_train,
             y_train, X_test, y_test)
             - encoding_size (int): number of dimensions in the latent space of the autoencoder
+            - epochs (int): epochs during which to train the models
             - batch_size (int): training batch size
             - save_checkpoints (bool): if True, training checkpoints are saved to disk. Useful for debugging,
             but can make training significantly slower
@@ -840,6 +842,7 @@ class coordinates:
             preprocessed_object=preprocessed_object,
             batch_size=batch_size,
             encoding_size=encoding_size,
+            epochs=epochs,
             hparams=hparams,
             kl_warmup=kl_warmup,
             log_history=log_history,
