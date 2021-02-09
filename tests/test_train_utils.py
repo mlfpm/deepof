@@ -127,6 +127,7 @@ def test_autoencoder_fitting(
         batch_size=batch_size,
         encoding_size=encoding_size,
         epochs=1,
+        log_hparams=True,
         n_components=k,
         loss=loss,
         phenotype_class=pheno_class,

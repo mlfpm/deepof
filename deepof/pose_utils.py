@@ -626,7 +626,7 @@ def tag_rulebased_frames(
 
     def write_on_frame(text, pos, col=(255, 255, 255)):
         """Partial closure over cv2.putText to avoid code repetition"""
-        return cv2.putText(frame, text, pos, font, 1, col, 2)
+        return cv2.putText(frame, text, pos, font, 0.75, col, 2)
 
     def conditional_pos():
         """Returns a position depending on a condition"""
@@ -672,7 +672,7 @@ def tag_rulebased_frames(
                         thickness=-1,
                     )
             # Print frame number
-            write_on_frame("Frame " + str(fnum), corners["downleft"])
+            write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
 
         if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
@@ -809,7 +809,7 @@ def rule_based_video(
             print("Can't receive frame (stream end?). Exiting ...")
             break
 
-        font = cv2.FONT_HERSHEY_COMPLEX_SMALL
+        font = cv2.FONT_HERSHEY_DUPLEX
 
         # Capture speeds
         try:
