@@ -360,7 +360,7 @@ def autoencoder_fitting(
             if log_hparams:
                 # noinspection PyUnboundLocalVariable
                 def tensorboard_metric_logging(run_dir: str, hpms: Any):
-                    output = gmvaep.predict(X_val)
+                    output = ae.predict(X_val)
                     if phenotype_class or predictor:
                         reconstruction = output[0]
                         prediction = output[1]
