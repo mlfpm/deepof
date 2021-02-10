@@ -97,8 +97,11 @@ def test_autoencoder_fitting(
     variational,
 ):
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
-    y_train = np.round(np.random.uniform(0, 1, (20 if not predictor else 19)))
-    print(X_train.shape, y_train.shape)
+    y_train = np.round(np.random.uniform(0, 1, 20))
+
+    if predictor:
+        y_train = y_train[1:]
+
     preprocessed_data = (X_train, y_train, X_train, y_train)
 
     prun = deepof.data.project(
@@ -108,22 +111,21 @@ def test_autoencoder_fitting(
         video_format=".mp4",
     ).run()
 
-    models = prun.deep_unsupervised_embedding(
+    prun.deep_unsupervised_embedding(
         preprocessed_data,
         batch_size=100,
         encoding_size=2,
         epochs=1,
-        kl_warmup=10,
+        kl_warmup=1,
         log_history=True,
         log_hparams=True,
-        mmd_warmup=10,
+        mmd_warmup=1,
         n_components=2,
         loss=loss,
         phenotype_class=pheno_class,
         predictor=predictor,
         variational=variational,
     )
-    print(models)
 
 
 @settings(max_examples=1, deadline=None)
