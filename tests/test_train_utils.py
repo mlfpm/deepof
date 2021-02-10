@@ -9,7 +9,7 @@ Testing module for deepof.train_utils
 """
 
 from hypothesis import given
-from hypothesis import settings
+from hypothesis import settings, reproduce_failure
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 import deepof.data
@@ -127,10 +127,11 @@ def test_autoencoder_fitting(
         batch_size=batch_size,
         encoding_size=encoding_size,
         epochs=1,
+        log_history=True,
         log_hparams=True,
         n_components=k,
         loss=loss,
-        phenotype_class=pheno_class,
+        phenotype_class=0,
         predictor=predictor,
         variational=variational,
     )

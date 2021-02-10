@@ -139,7 +139,7 @@ def get_callbacks(
     return callbacks
 
 
-def log_hyperparameters():
+def log_hyperparameters(phenotype_class):
     """Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning"""
 
     logparams = [
@@ -288,7 +288,7 @@ def autoencoder_fitting(
 
     # Logs hyperparameters to tensorboard
     if log_hparams:
-        logparams, metrics = log_hyperparameters()
+        logparams, metrics = log_hyperparameters(phenotype_class)
 
         with tf.summary.create_file_writer(
             os.path.join(output_path, "hparams", run_ID)
