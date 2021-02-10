@@ -9,7 +9,7 @@ Testing module for deepof.train_utils
 """
 
 from hypothesis import given
-from hypothesis import HealthCheck
+from hypothesis import HealthCheck, reproduce_failure
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -93,16 +93,16 @@ def test_get_callbacks(
             st.integers(min_value=2, max_value=10),
         ),
         elements=st.floats(
-            min_value=0.0,
+            min_value=-1,
             max_value=1,
         ),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
-    encoding_size=st.integers(min_value=1, max_value=16),
+    encoding_size=st.integers(min_value=2, max_value=16),
     k=st.integers(min_value=1, max_value=10),
-    loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    pheno_class=st.floats(min_value=0.0, max_value=1.0),
-    predictor=st.floats(min_value=0.0, max_value=1.0),
+    loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
+    pheno_class=st.one_of(st.just(0.0), st.just(1.0)),
+    predictor=st.one_of(st.just(0.0), st.just(1.0)),
     variational=st.booleans(),
 )
 def test_autoencoder_fitting(
@@ -116,6 +116,7 @@ def test_autoencoder_fitting(
     variational,
 ):
     y_train = np.round(np.random.uniform(0, 1, X_train.shape[0]))
+
     preprocessed_data = (X_train, y_train, X_train, y_train)
 
     prun = deepof.data.project(
@@ -130,8 +131,10 @@ def test_autoencoder_fitting(
         batch_size=batch_size,
         encoding_size=encoding_size,
         epochs=1,
+        kl_warmup=10,
         log_history=True,
         log_hparams=True,
+        mmd_warmup=10,
         n_components=k,
         loss=loss,
         phenotype_class=pheno_class,
