@@ -9,6 +9,7 @@ Testing module for deepof.model_utils
 """
 
 from hypothesis import given
+from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -41,7 +42,7 @@ def test_far_away_uniform_initialiser(shape):
     )
 
 
-@settings(deadline=None)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     tensor=arrays(
         shape=(10, 10),

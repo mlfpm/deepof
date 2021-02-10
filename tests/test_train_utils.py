@@ -9,7 +9,7 @@ Testing module for deepof.train_utils
 """
 
 from hypothesis import given
-from hypothesis import HealthCheck, reproduce_failure
+from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
