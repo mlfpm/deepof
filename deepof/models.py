@@ -258,6 +258,8 @@ class SEQ_2_SEQ_GMVAE:
         overlap_loss: float = False,
         phenotype_prediction: float = 0.0,
         predictor: float = 0.0,
+        reg_cat_clusters: bool = False,
+        reg_cluster_variance: bool = False,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.batch_size = batch_size
@@ -288,6 +290,8 @@ class SEQ_2_SEQ_GMVAE:
         self.phenotype_prediction = phenotype_prediction
         self.predictor = predictor
         self.prior = "standard_normal"
+        self.reg_cat_clusters = reg_cat_clusters
+        self.reg_cluster_variance = reg_cluster_variance
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
@@ -564,7 +568,11 @@ class SEQ_2_SEQ_GMVAE:
         z_cat = Dense(
             self.number_of_components,
             activation="softmax",
-            kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01),
+            kernel_regularizer=(
+                tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01)
+                if self.reg_cat_clusters
+                else None
+            ),
         )(encoder)
 
         if self.entropy_reg_weight > 0:
@@ -572,14 +580,26 @@ class SEQ_2_SEQ_GMVAE:
                 z_cat
             )
 
-        z_gauss = Dense(
+        z_gauss_mean = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
-            ),
+            )
+            // 2,
             activation=None,
-        )(
-            encoder
-        )  # REMOVE BIAS FROM HERE! WHAT's THE POINT?
+        )(encoder)
+
+        z_gauss_var = Dense(
+            tfpl.IndependentNormal.params_size(
+                self.ENCODING * self.number_of_components
+            )
+            // 2,
+            activation=None,
+            activity_regularizer=(
+                tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
+            ),
+        )(encoder)
+
+        z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
 

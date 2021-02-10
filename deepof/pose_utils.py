@@ -219,6 +219,42 @@ def huddle(
     return hudd
 
 
+def dig(
+    pos_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
+    tol_nose_speed: float,
+    tol_speed: float,
+    tol_likelihood: float,
+    animal_id: str = "",
+):
+    pass
+
+
+def sniff(
+    pos_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
+    tol_nose_speed: float,
+    tol_speed: float,
+    tol_likelihood: float,
+    animal_id: str = "",
+):
+    pass
+
+
+def look_around(
+    pos_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
+    tol_nose_speed: float,
+    tol_speed: float,
+    tol_likelihood: float,
+    animal_id: str = "",
+):
+    pass
+
+
 def following_path(
     distance_dframe: pd.DataFrame,
     position_dframe: pd.DataFrame,

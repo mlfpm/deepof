@@ -48,9 +48,18 @@ def plot_heatmap(
     for i, bpart in enumerate(bodyparts):
         heatmap = dframe[bpart]
         if len(bodyparts) > 1:
-            sns.kdeplot(data=heatmap.x, data2=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax[i])
+            sns.kdeplot(
+                data=heatmap.x,
+                data2=heatmap.y,
+                cmap=None,
+                shade=True,
+                alpha=1,
+                ax=ax[i],
+            )
         else:
-            sns.kdeplot(data=heatmap.x, data2=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax)
+            sns.kdeplot(
+                data=heatmap.x, data2=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax
+            )
             ax = np.array([ax])
 
     [x.set_xlim(xlim) for x in ax]
