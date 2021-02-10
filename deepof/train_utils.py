@@ -12,6 +12,7 @@ from datetime import date, datetime
 from kerastuner import BayesianOptimization, Hyperband
 from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
+from sklearn.metrics import roc_auc_score
 from tensorboard.plugins.hparams import api as hp
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
@@ -139,7 +140,7 @@ def get_callbacks(
     return callbacks
 
 
-def log_hyperparameters(phenotype_class):
+def log_hyperparameters(phenotype_class: float, rec: str):
     """Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning"""
 
     logparams = [
@@ -163,7 +164,6 @@ def log_hyperparameters(phenotype_class):
         ),
     ]
 
-    rec = "reconstruction_" if phenotype_class else ""
     metrics = [
         hp.Metric("val_{}mae".format(rec), display_name="val_{}mae".format(rec)),
         hp.Metric("val_{}mse".format(rec), display_name="val_{}mse".format(rec)),
@@ -192,7 +192,16 @@ def log_hyperparameters(phenotype_class):
 
 
 # noinspection PyUnboundLocalVariable
-def tensorboard_metric_logging(run_dir: str, hpms: Any):
+def tensorboard_metric_logging(
+    run_dir: str,
+    hpms: Any,
+    ae: Any,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    phenotype_class: float,
+    predictor: float,
+    rec: str,
+):
     """Autoencoder metric logging in tensorboard"""
 
     output = ae.predict(X_val)
@@ -262,7 +271,6 @@ def autoencoder_fitting(
     tf.keras.backend.clear_session()
 
     # Defines what to log on tensorboard (useful for trying out different models)
-
     logparam = {
         "encoding": encoding_size,
         "k": n_components,
@@ -287,8 +295,9 @@ def autoencoder_fitting(
         cbacks = cbacks[1:]
 
     # Logs hyperparameters to tensorboard
+    rec = "reconstruction_" if phenotype_class else ""
     if log_hparams:
-        logparams, metrics = log_hyperparameters(phenotype_class)
+        logparams, metrics = log_hyperparameters(phenotype_class, rec)
 
         with tf.summary.create_file_writer(
             os.path.join(output_path, "hparams", run_ID)
@@ -411,6 +420,12 @@ def autoencoder_fitting(
                 tensorboard_metric_logging(
                     os.path.join(output_path, "hparams", run_ID),
                     logparam,
+                    ae,
+                    X_val,
+                    y_val,
+                    phenotype_class,
+                    predictor,
+                    rec,
                 )
 
     return return_list

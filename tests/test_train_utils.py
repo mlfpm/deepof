@@ -9,12 +9,13 @@ Testing module for deepof.train_utils
 """
 
 from hypothesis import given
-from hypothesis import settings, reproduce_failure
+from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 import deepof.data
 import deepof.model_utils
 import deepof.train_utils
+import numpy as np
 import os
 import tensorflow as tf
 
@@ -113,7 +114,8 @@ def test_autoencoder_fitting(
     predictor,
     variational,
 ):
-    preprocessed_data = (X_train, [], X_train, [])
+    y_train = np.round(np.random.uniform(0, 1, X_train.shape[0]))
+    preprocessed_data = (X_train, y_train, X_train, y_train)
 
     prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -131,7 +133,7 @@ def test_autoencoder_fitting(
         log_hparams=True,
         n_components=k,
         loss=loss,
-        phenotype_class=0,
+        phenotype_class=pheno_class,
         predictor=predictor,
         variational=variational,
     )
