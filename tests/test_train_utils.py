@@ -9,6 +9,7 @@ Testing module for deepof.train_utils
 """
 
 from hypothesis import given
+from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -82,7 +83,7 @@ def test_get_callbacks(
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 
-@settings(max_examples=10, deadline=None)
+@settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     X_train=arrays(
         dtype=float,
