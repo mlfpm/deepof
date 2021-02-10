@@ -36,8 +36,10 @@ import os
 import pandas as pd
 import warnings
 
-# DEFINE CUSTOM ANNOTATED TYPES #
+# Remove excessive logging from tensorflow
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+# DEFINE CUSTOM ANNOTATED TYPES #
 Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
 Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
 
