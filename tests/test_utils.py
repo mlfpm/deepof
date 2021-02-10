@@ -216,7 +216,7 @@ def test_angle(abc):
     assert np.allclose(angle(a, b, c), np.array(angles))
 
 
-@settings(deadline=None)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     array=arrays(
         dtype=float,
@@ -234,12 +234,12 @@ def test_angle_trio(array):
     assert len(angle_trio(array)) == 3
 
 
-@settings(deadline=None)
+@settings(max_examples=10, deadline=None)
 @given(
     p=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=2, max_value=100),
+            st.integers(min_value=2, max_value=5),
             st.integers(min_value=2, max_value=2),
         ),
         elements=st.floats(

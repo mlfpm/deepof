@@ -179,7 +179,7 @@ def test_huddle(pos_dframe, tol_forward, tol_speed, animal_id):
     assert np.sum(np.array(hudd)) <= pos_dframe.shape[0]
 
 
-@settings(deadline=None)
+@settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     distance_dframe=data_frames(
         index=range_indexes(min_size=20, max_size=20),
