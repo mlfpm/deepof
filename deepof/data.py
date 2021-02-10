@@ -243,7 +243,7 @@ class project:
                 tab_dict[key] = smooth.iloc[1:, :].reset_index(drop=True)
 
         for key, tab in tab_dict.items():
-            tab_dict[key] = tab[tab.columns.levels[0][0]]
+            tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]
 
         if self.subset_condition:
             for key, value in tab_dict.items():
@@ -645,7 +645,7 @@ class coordinates:
 
             if propagate_labels:
                 for key, tab in tabs.items():
-                    tab["pheno"] = self._exp_conditions[key]
+                    tab.loc[:, "pheno"] = self._exp_conditions[key]
 
             return table_dict(tabs, propagate_labels=propagate_labels, typ="dists")
 
