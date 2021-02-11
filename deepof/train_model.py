@@ -277,6 +277,7 @@ project_coords = project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),
+    enable_iterative_imputation=False,
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
     path=train_path,

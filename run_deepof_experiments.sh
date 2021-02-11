@@ -8,7 +8,7 @@ snakemake --snakefile deepof_experiments.smk --forceall --rulegraph | dot -Tpdf 
 module load anaconda/3
 module load intel/18.0.5
 module load cuda/10.1
-module load cudnn/8.0.4
+module load cudnn/7.6.5
 module load nccl/2.7.8
 module load tensorrt/7.1.3
 
