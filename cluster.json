@@ -1,12 +1,11 @@
 {
     "__default__":
     {
-        "mem": "100G",
-	      "excl": "psycl[02-03]",
+        "mem": "25G",
         "time": "10-0",
         "stderr": "snakemake_logs/{rule}.err",
         "stdout": "snakemake_logs/{rule}.out",
         "jobname": "{rule}",
-        "cpus": "10"
+        "cpus": "2"
     }
 }

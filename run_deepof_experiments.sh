@@ -12,7 +12,5 @@ module load cuda/10.2
 module load cudnn/8.0.4
 module load nccl/2.7.8
 module load tensorrt/7.1.3
-module load tensorflow/gpu/2.3.0
-module load tensorboard/2.3.0
 
-pipenv run snakemake --snakefile deepof_experiments.smk deepof_experiments -j 15 --latency-wait 15 --cluster-config cluster.json --cluster "sbatch --time={cluster.time} --mem={cluster.mem} --exclude={cluster.excl} -o {cluster.stdout} -e {cluster.stderr} --job-name={cluster.jobname} --cpus-per-task={cluster.cpus} --constraint="gpu" --gres=gpu:gtx980:1" > deepof_experiments.out 2> deepof_experiments.err
+pipenv run snakemake --snakefile deepof_experiments.smk deepof_experiments -j 15 --latency-wait 15 --cluster-config cluster.json --cluster "sbatch --time={cluster.time} --mem={cluster.mem} -o {cluster.stdout} -e {cluster.stderr} --job-name={cluster.jobname} --cpus-per-task={cluster.cpus} --constraint="gpu" --gres=gpu:gtx980:1" > deepof_experiments.out 2> deepof_experiments.err
