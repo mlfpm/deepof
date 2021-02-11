@@ -523,8 +523,8 @@ def tune_search(
     if hpt_type == "hyperband":
         tuner = Hyperband(
             directory="HyperBandx_{}_{}".format(loss, str(date.today())),
-            max_epochs=hypertun_trials,
-            hyperband_iterations=3,
+            max_epochs=35,
+            hyperband_iterations=hypertun_trials,
             factor=2,
             **hpt_params
         )

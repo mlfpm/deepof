@@ -28,7 +28,7 @@ rule deepof_experiments:
         #         loss=losses,
         # )
         expand(
-            "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/dimension_and_loss_experiments/trained_weights/"
+            "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
             "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
             loss=losses,
             encs=encodings,
