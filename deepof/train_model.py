@@ -287,7 +287,7 @@ project_coords = project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),
-    enable_iterative_imputation=True,
+    enable_iterative_imputation=False,
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
     path=train_path,
@@ -359,6 +359,7 @@ if not tune:
 
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
+        epochs=1,
         batch_size=batch_size,
         encoding_size=encoding_size,
         hparams=hparams,
