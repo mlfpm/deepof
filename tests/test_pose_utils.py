@@ -127,6 +127,8 @@ def test_climb_wall(center, axes, angle, tol):
         index=range_indexes(min_size=5),
         columns=columns(
             [
+                "X0",
+                "y0",
                 "X1",
                 "y1",
                 "X2",
@@ -146,7 +148,7 @@ def test_climb_wall(center, axes, angle, tol):
     tol_speed=st.floats(min_value=0.01, max_value=4.98),
     animal_id=st.text(min_size=0, max_size=15, alphabet=string.ascii_lowercase),
 )
-def test_huddle(pos_dframe, tol_forward, tol_speed, animal_id):
+def test_single_animal_traits(pos_dframe, tol_forward, tol_speed, animal_id):
 
     _id = animal_id
     if animal_id != "":
@@ -155,6 +157,7 @@ def test_huddle(pos_dframe, tol_forward, tol_speed, animal_id):
     idx = pd.MultiIndex.from_product(
         [
             [
+                _id + "Nose",
                 _id + "Left_bhip",
                 _id + "Right_bhip",
                 _id + "Left_fhip",
@@ -173,10 +176,20 @@ def test_huddle(pos_dframe, tol_forward, tol_speed, animal_id):
         tol_speed,
         animal_id,
     )
+    digging = dig(
+        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
+        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
+        tol_speed,
+        0.85,
+        animal_id,
+    )
 
     assert hudd.dtype == bool
+    assert digging.dtype == bool
     assert np.array(hudd).shape[0] == pos_dframe.shape[0]
+    assert np.array(digging).shape[0] == pos_dframe.shape[0]
     assert np.sum(np.array(hudd)) <= pos_dframe.shape[0]
+    assert np.sum(np.array(digging)) <= pos_dframe.shape[0]
 
 
 @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])

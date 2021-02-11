@@ -245,9 +245,8 @@ def dig(
         animal_id += "_"
 
     speed = speed_dframe[animal_id + "Center"] < tol_speed
-    nose_speed = speed_dframe[animal_id + "Center"] < speed_dframe[animal_id + "Nose"]
-    likelihood = likelihood_dframe[animal_id + "Nose"] < tol_likelihood
-    digging = speed & nose_speed & likelihood
+    nose_likelihood = likelihood_dframe[animal_id + "Nose"] < tol_likelihood
+    digging = speed & nose_likelihood
 
     return digging
 
@@ -770,6 +769,7 @@ def tag_rulebased_frames(
         if (
             tag_dict[_id + undercond + "huddle"][fnum]
             and not tag_dict[_id + undercond + "climbing"][fnum]
+            and not tag_dict[_id + undercond + "dig"][fnum]
         ):
             write_on_frame("huddle", down_pos)
         if (
