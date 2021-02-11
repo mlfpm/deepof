@@ -212,6 +212,9 @@ def sniff_object(
 
     nose, nosing = pos_dict[nose], True
 
+    if animal_id != "":
+        animal_id += "_"
+
     if object == "arena":
         if arena_type == "circular":
             center = np.zeros(2) if centered_data else np.array(arena[0])
