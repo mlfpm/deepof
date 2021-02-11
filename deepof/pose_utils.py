@@ -458,7 +458,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "follow_tol": 5,
         "huddle_forward": 15,
         "huddle_speed": 1,
-        "nose_likelihood":0.85,
+        "nose_likelihood": 0.85,
         "fps": 24,
     }
 
