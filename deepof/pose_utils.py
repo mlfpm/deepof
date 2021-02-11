@@ -112,6 +112,28 @@ def close_double_contact(
     return double_contact
 
 
+def rotate(origin, point, ang):
+    """Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot"""
+
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + np.cos(ang) * (px - ox) - np.sin(ang) * (py - oy)
+    qy = oy + np.sin(ang) * (px - ox) + np.cos(ang) * (py - oy)
+    return qx, qy
+
+
+def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
+    """Auxiliar function to climb_wall and sniff_object. Returns True if the passed x, y coordinates
+    are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain threshold"""
+
+    x, y = rotate(e_center, (x, y), np.radians(e_angle))
+
+    term_x = (x - e_center[0]) ** 2 / (e_axes[0] + threshold) ** 2
+    term_y = (y - e_center[1]) ** 2 / (e_axes[1] + threshold) ** 2
+    return term_x + term_y > 1
+
+
 def climb_wall(
     arena_type: str,
     arena: np.array,
@@ -138,22 +160,6 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
-    def rotate(origin, point, ang):
-        ox, oy = origin
-        px, py = point
-
-        qx = ox + np.cos(ang) * (px - ox) - np.sin(ang) * (py - oy)
-        qy = oy + np.sin(ang) * (px - ox) + np.cos(ang) * (py - oy)
-        return qx, qy
-
-    def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
-
-        x, y = rotate(e_center, (x, y), np.radians(e_angle))
-
-        term_x = (x - e_center[0]) ** 2 / (e_axes[0] + threshold) ** 2
-        term_y = (y - e_center[1]) ** 2 / (e_axes[1] + threshold) ** 2
-        return term_x + term_y > 1
-
     if arena_type == "circular":
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
@@ -171,6 +177,75 @@ def climb_wall(
         raise NotImplementedError("Supported values for arena_type are ['circular']")
 
     return climbing
+
+
+def sniff_object(
+    speed_dframe: pd.DataFrame,
+    arena_type: str,
+    arena: np.array,
+    pos_dict: pd.DataFrame,
+    tol: float,
+    tol_speed: float,
+    nose: str,
+    centered_data: bool = False,
+    object: str = "arena",
+    animal_id: str = "",
+):
+    """Returns True if the specified mouse is sniffing an object
+
+    Parameters:
+        - speed_dframe (pandas.DataFrame): speed of body parts over time
+        - arena_type (str): arena type; must be one of ['circular']
+        - arena (np.array): contains arena location and shape details
+        - pos_dict (table_dict): position over time for all videos in a project
+        - tol (float): minimum tolerance to report a hit
+        - nose (str): indicates the name of the body part representing the nose of
+        the selected animal
+        - arena_dims (int): indicates radius of the real arena in mm
+        - centered_data (bool): indicates whether the input data is centered
+        - object (str): indicates the object that the animal is sniffing.
+        Can be one of ['arena', 'partner']
+
+    Returns:
+        - sniffing (np.array): boolean array. True if selected animal
+        is sniffing the selected object"""
+
+    nose, nosing = pos_dict[nose], True
+
+    if object == "arena":
+        if arena_type == "circular":
+            center = np.zeros(2) if centered_data else np.array(arena[0])
+            axes = arena[1]
+            angle = arena[2]
+
+            nosing_min = outside_ellipse(
+                x=nose["x"],
+                y=nose["y"],
+                e_center=center,
+                e_axes=axes,
+                e_angle=-angle,
+                threshold=-tol,
+            )
+            nosing_max = outside_ellipse(
+                x=nose["x"],
+                y=nose["y"],
+                e_center=center,
+                e_axes=axes,
+                e_angle=-angle,
+                threshold=tol,
+            )
+            nosing = nosing_min & (~nosing_max)
+
+    elif object == "partner":
+        raise NotImplementedError
+
+    else:
+        raise ValueError("object should be one of [arena, partner]")
+
+    speed = speed_dframe[animal_id + "Center"] < tol_speed
+    sniffing = nosing & speed
+
+    return sniffing
 
 
 def huddle(
@@ -644,6 +719,19 @@ def rule_based_tagging(
                 _id + undercond + "Nose",
             )
         )
+        tag_dict[_id + undercond + "sniffing"] = deepof.utils.smooth_boolean_array(
+            sniff_object(
+                speeds,
+                arena_type,
+                arena,
+                coords,
+                params["climb_tol"],
+                params["huddle_speed"],
+                _id + undercond + "Nose",
+                object="arena",
+                animal_id=_id,
+            )
+        )
         tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
@@ -656,6 +744,15 @@ def rule_based_tagging(
         )
         tag_dict[_id + undercond + "dig"] = deepof.utils.smooth_boolean_array(
             dig(
+                speeds,
+                likelihoods,
+                params["huddle_speed"],
+                params["nose_likelihood"],
+                animal_id=_id,
+            )
+        )
+        tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
+            look_around(
                 speeds,
                 likelihoods,
                 params["huddle_speed"],
@@ -772,18 +869,15 @@ def tag_rulebased_frames(
     for _id, down_pos, up_pos in zipped_pos:
 
         if tag_dict[_id + undercond + "climbing"][fnum]:
-            write_on_frame("Climbing", down_pos)
-        if (
-            tag_dict[_id + undercond + "huddle"][fnum]
-            and not tag_dict[_id + undercond + "climbing"][fnum]
-            and not tag_dict[_id + undercond + "dig"][fnum]
-        ):
-            write_on_frame("huddle", down_pos)
-        if (
-            tag_dict[_id + undercond + "dig"][fnum]
-            and not tag_dict[_id + undercond + "climbing"][fnum]
-        ):
-            write_on_frame("dig", down_pos)
+            write_on_frame("climbing", down_pos)
+        elif tag_dict[_id + undercond + "sniffing"][fnum]:
+            write_on_frame("sniffing", down_pos)
+        elif tag_dict[_id + undercond + "huddle"][fnum]:
+            write_on_frame("huddling", down_pos)
+        elif tag_dict[_id + undercond + "dig"][fnum]:
+            write_on_frame("digging", down_pos)
+        elif tag_dict[_id + undercond + "lookaround"][fnum]:
+            write_on_frame("lookaround", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
