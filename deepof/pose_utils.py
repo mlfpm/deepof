@@ -772,6 +772,11 @@ def tag_rulebased_frames(
             and not tag_dict[_id + undercond + "climbing"][fnum]
         ):
             write_on_frame("huddle", down_pos)
+        if (
+            tag_dict[_id + undercond + "dig"][fnum]
+            and not tag_dict[_id + undercond + "climbing"][fnum]
+        ):
+            write_on_frame("dig", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
