@@ -219,7 +219,7 @@ arena_dims = args.arena_dims
 batch_size = args.batch_size
 hypertun_trials = args.hpt_trials
 encoding_size = args.encoding_size
-exclude_bodyparts = args.exclude_bodyparts.split(",")
+exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
 gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters
 input_type = args.input_type
@@ -346,7 +346,7 @@ print("Done!")
 # as many times as specified by runs
 if not tune:
 
-    trained_models = deep_unsupervised_embedding(
+    trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
         encoding_size=encoding_size,

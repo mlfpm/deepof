@@ -132,13 +132,17 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         # Architectural hyperparameters
         bidirectional_merge = "ave"
         clipvalue = 1.0
-        conv_filters = 160
-        dense_2 = 120
+        conv_filters = hp.Int("conv_units", min_value=32, max_value=512, step=32)
+        dense_2 = hp.Int("dense_units", min_value=32, max_value=512, step=32)
         dense_activation = "relu"
-        dense_layers_per_branch = 1
-        dropout_rate = 1e-3
+        dense_layers_per_branch = hp.Int(
+            "dense_layers", min_value=1, max_value=3, step=1
+        )
+        dropout_rate = hp.Float(
+            "dropout_rate", min_value=0.0, max_value=1.0, sampling="linear"
+        )
         k = self.number_of_components
-        lstm_units_1 = 300
+        lstm_units_1 = hp.Int("units", min_value=32, max_value=512, step=32)
 
         return (
             bidirectional_merge,
