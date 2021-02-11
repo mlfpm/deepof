@@ -231,8 +231,6 @@ def dig(
         - speed_dframe (pandas.DataFrame): speed of body parts over time
         - likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time,
         as directly obtained from DeepLabCut
-        - tol_nose_speed (float): Maximum tolerated average distance between spine
-        body parts
         - tol_speed (float): Maximum tolerated speed for the center of the mouse
         - tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal
         is digging, the nose is momentarily occluded).
@@ -251,28 +249,37 @@ def dig(
     return digging
 
 
-def sniff(
-    pos_dframe: pd.DataFrame,
-    speed_dframe: pd.DataFrame,
-    likelihood_dframe: pd.DataFrame,
-    tol_nose_speed: float,
-    tol_speed: float,
-    tol_likelihood: float,
-    animal_id: str = "",
-):
-    pass
-
-
 def look_around(
-    pos_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
-    tol_nose_speed: float,
     tol_speed: float,
     tol_likelihood: float,
     animal_id: str = "",
 ):
-    pass
+    """Returns true when the mouse is digging using simple rules.
+
+    Parameters:
+        - speed_dframe (pandas.DataFrame): speed of body parts over time
+        - likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time,
+        as directly obtained from DeepLabCut
+        - tol_speed (float): Maximum tolerated speed for the center of the mouse
+        - tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal
+        is digging, the nose is momentarily occluded).
+
+    Returns:
+        lookaround (np.array): True if the animal is standing still and looking around, False otherwise
+    """
+
+    if animal_id != "":
+        animal_id += "_"
+
+    speed = speed_dframe[animal_id + "Center"] < tol_speed
+    nose_speed = speed_dframe[animal_id + "Center"] < speed_dframe[animal_id + "Nose"]
+    nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
+
+    lookaround = speed & nose_likelihood & nose_speed
+
+    return lookaround
 
 
 def following_path(
