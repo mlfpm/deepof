@@ -261,6 +261,8 @@ def autoencoder_fitting(
     save_checkpoints: bool,
     save_weights: bool,
     variational: bool,
+    reg_cat_clusters: bool,
+    reg_cluster_variance: bool,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -336,6 +338,8 @@ def autoencoder_fitting(
             overlap_loss=False,
             phenotype_prediction=phenotype_class,
             predictor=predictor,
+            reg_cat_clusters=reg_cat_clusters,
+            reg_cluster_variance=reg_cluster_variance,
         ).build(
             X_train.shape
         )

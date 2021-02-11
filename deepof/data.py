@@ -821,6 +821,8 @@ class coordinates:
         save_checkpoints: bool = False,
         save_weights: bool = True,
         variational: bool = True,
+        reg_cat_clusters: bool = False,
+        reg_cluster_variance: bool = False,
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
@@ -879,6 +881,8 @@ class coordinates:
             save_checkpoints=save_checkpoints,
             save_weights=save_weights,
             variational=variational,
+            reg_cat_clusters=reg_cat_clusters,
+            reg_cluster_variance=reg_cluster_variance,
         )
 
         # returns a list of trained tensorflow models

@@ -109,6 +109,15 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--latent-reg",
+    "-lreg",
+    help="Sets the strategy to regularize the latent mixture of Gaussians. "
+    "It has to be one of none, categorical (an elastic net penalty is applied to the categorical distribution),"
+    "variance (l2 penalty to the variance of the clusters) or categorical+variance. Defaults to none.",
+    default="none",
+    type=str,
+)
+parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
@@ -225,6 +234,7 @@ hparams = args.hyperparameters
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
+latent_reg = args.latent_reg
 loss = args.loss
 mmd_wu = args.mmd_warmup
 mc_kl = args.montecarlo_kl
@@ -365,6 +375,8 @@ if not tune:
         save_checkpoints=False,
         save_weights=True,
         variational=variational,
+        reg_cat_clusters=("categorical" in latent_reg),
+        reg_cluster_variance=("variance" in latent_reg),
     )
 
 else:
