@@ -138,12 +138,12 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
-    def rotate(origin, point, angle):
+    def rotate(origin, point, ang):
         ox, oy = origin
         px, py = point
 
-        qx = ox + np.cos(angle) * (px - ox) - np.sin(angle) * (py - oy)
-        qy = oy + np.sin(angle) * (px - ox) + np.cos(angle) * (py - oy)
+        qx = ox + np.cos(ang) * (px - ox) - np.sin(ang) * (py - oy)
+        qy = oy + np.sin(ang) * (px - ox) + np.cos(ang) * (py - oy)
         return qx, qy
 
     def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
@@ -247,9 +247,9 @@ def dig(
     speed = speed_dframe[animal_id + "Center"] < tol_speed
     nose_speed = speed_dframe[animal_id + "Center"] < speed_dframe[animal_id + "Nose"]
     likelihood = likelihood_dframe[animal_id + "Nose"] < tol_likelihood
-    dig = speed & nose_speed & likelihood
+    digging = speed & nose_speed & likelihood
 
-    return dig
+    return digging
 
 
 def sniff(
@@ -459,6 +459,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "follow_tol": 5,
         "huddle_forward": 15,
         "huddle_speed": 1,
+        "nose_likelihood":0.85,
         "fps": 24,
     }
 
@@ -521,16 +522,8 @@ def rule_based_tagging(
         - vid_index (int): index in videos of the experiment to annotate
         - path (str): directory in which the experimental data is stored
         - recog_limit (int): number of frames to use for arena recognition (1 by default)
-        - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
-        that the rule-based pose estimation utilizes. Values can be:
-            - speed_pause (int): size of the rolling window to use when computing speeds
-            - close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
-            - side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
-            - follow_frames (int): number of frames during which the following trait is tracked
-            - follow_tol (int): maximum distance between follower and followed's path during the last follow_frames,
-            in order to report a detection
-            - huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
-            - huddle_speed (int): maximum speed to report a huddle detection
+        - params (dict): dictionary to overwrite the default values of the parameters of the functions
+        that the rule-based pose estimation utilizes. See documentation for details.
 
     Returns:
         - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
@@ -548,6 +541,7 @@ def rule_based_tagging(
     coords = coords[vid_name]
     dists = dists[vid_name]
     speeds = speeds[vid_name]
+    likelihoods = coordinates.get_quality()[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
     arena, h, w = deepof.utils.recognize_arena(
         videos, vid_index, path, recog_limit, coordinates._arena
@@ -589,7 +583,7 @@ def rule_based_tagging(
             )
         )
 
-    def overall_speed(speeds, _id, undercond):
+    def overall_speed(ovr_speeds, _id, ucond):
         bparts = [
             "Center",
             "Spine_1",
@@ -603,7 +597,7 @@ def rule_based_tagging(
             "Right_bhip",
             "Tail_base",
         ]
-        array = speeds[[_id + undercond + bpart for bpart in bparts]]
+        array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
         return np.insert(avg_speed, 0, np.nan, axis=0)
 
@@ -654,6 +648,15 @@ def rule_based_tagging(
                 animal_id=_id,
             )
         )
+        tag_dict[_id + undercond + "dig"] = deepof.utils.smooth_boolean_array(
+            dig(
+                speeds,
+                likelihoods,
+                params["huddle_speed"],
+                params["nose_likelihood"],
+                animal_id=_id,
+            )
+        )
 
     tag_df = pd.DataFrame(tag_dict)
 
@@ -668,7 +671,6 @@ def tag_rulebased_frames(
     corners,
     tag_dict,
     fnum,
-    dims,
     undercond,
     hparams,
     arena,
@@ -678,7 +680,6 @@ def tag_rulebased_frames(
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
 
-    w, h = dims
     arena, h, w = arena
 
     def write_on_frame(text, pos, col=(255, 255, 255)):
@@ -887,7 +888,6 @@ def rule_based_video(
             corners,
             tag_dict,
             fnum,
-            (w, h),
             undercond,
             params,
             (arena, h, w),
