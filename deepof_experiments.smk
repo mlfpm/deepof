@@ -99,9 +99,8 @@ rule latent_regularization_experiments:
         "--encoding-size {wildcards.encs} "
         "--batch-size 256 "
         "--window-size 24 "
-        "--window-step 6 "
+        "--window-step 12 "
         "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
-        "--stability-check 3 "
         "--output-path {outpath}latent_regularization_experiments"
 #
 #

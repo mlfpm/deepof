@@ -430,7 +430,7 @@ def autoencoder_fitting(
             )
 
             if save_weights:
-                ae.save_weights("{}_final_weights.h5".format(run_ID))
+                ae.save_weights("{}{}_final_weights.h5".format(output_path, run_ID))
 
             if log_hparams:
                 # Logparams to tensorboard

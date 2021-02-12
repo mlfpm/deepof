@@ -183,14 +183,6 @@ parser.add_argument(
     type=float,
     default=0.99,
 )
-parser.add_argument(
-    "--stability-check",
-    "-s",
-    help="Sets the number of times that the model is trained and initialised. "
-    "If greater than 1 (the default), saves the cluster assignments to a dataframe on disk",
-    type=int,
-    default=1,
-)
 parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
 parser.add_argument(
     "--val-num",
@@ -243,7 +235,6 @@ output_path = os.path.join(args.output_path)
 overlap_loss = args.overlap_loss
 pheno_class = float(args.phenotype_classifier)
 predictor = float(args.predictor)
-runs = args.stability_check
 smooth_alpha = args.smooth_alpha
 train_path = os.path.abspath(args.train_path)
 tune = args.hyperparameter_tuning
@@ -287,7 +278,7 @@ project_coords = project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),
-    enable_iterative_imputation=True,
+    enable_iterative_imputation=False,
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,
     path=train_path,
@@ -356,6 +347,10 @@ print("Done!")
 # Proceed with training mode. Fit autoencoder with the same parameters,
 # as many times as specified by runs
 if not tune:
+
+    print(latent_reg)
+    print(("categorical" in latent_reg))
+    print(("variance" in latent_reg))
 
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),

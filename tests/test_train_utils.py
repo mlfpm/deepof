@@ -75,7 +75,16 @@ def test_get_callbacks(
     loss,
 ):
     runID, tbc, cycle1c, cpc = deepof.train_utils.get_callbacks(
-        X_train, batch_size, True, variational, pheno_class, predictor, loss, None
+        X_train,
+        batch_size,
+        True,
+        variational,
+        pheno_class,
+        predictor,
+        loss,
+        True,
+        True,
+        None,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
