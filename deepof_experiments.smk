@@ -23,27 +23,30 @@ pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 rule deepof_experiments:
     input:
-        expand( os.path.join(outpath, "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5"),
-                loss=losses,
-                k=cluster_numbers,
-                enc=encodings,
-        )
-        # expand(
-        #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
-        #     "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
-        #     loss=losses,
-        #     encs=encodings,
-        #     k=cluster_numbers,
-        #     latreg=latent_reg,
-        # )
-        # expand(
-        #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
-        #     "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
-        #     loss=losses,
-        #     encs=encodings,
-        #     k=cluster_numbers,
-        #     phenos=pheno_weights,
-        # ),
+        expand(
+            os.path.join(
+                outpath,
+                "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
+            ),
+            loss=losses,
+            k=cluster_numbers,
+            enc=encodings,
+        ), # expand(
+         #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
+         #     "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
+         #     loss=losses,
+         #     encs=encodings,
+         #     k=cluster_numbers,
+         #     latreg=latent_reg,
+         # )
+         # expand(
+         #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
+         #     "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
+         #     loss=losses,
+         #     encs=encodings,
+         #     k=cluster_numbers,
+         #     phenos=pheno_weights,
+         # ),
 
 
 rule coarse_hyperparameter_tuning:
