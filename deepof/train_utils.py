@@ -301,7 +301,7 @@ def autoencoder_fitting(
         phenotype_class=phenotype_class,
         predictor=predictor,
         loss=loss,
-        reg_cat_clusters=reg_cluster_variance,
+        reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         logparam=logparam,
         outpath=output_path,

@@ -348,10 +348,6 @@ print("Done!")
 # as many times as specified by runs
 if not tune:
 
-    print(latent_reg)
-    print(("categorical" in latent_reg))
-    print(("variance" in latent_reg))
-
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
