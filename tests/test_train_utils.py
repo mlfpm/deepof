@@ -182,6 +182,8 @@ def test_tune_search(
             0,
             predictor,
             loss,
+            True,
+            True,
             None,
         )
     )[1:]
