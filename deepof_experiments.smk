@@ -23,9 +23,10 @@ pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 rule deepof_experiments:
     input:
-        expand( "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/hyperparameter_tuning/trained_weights/"
-                "GMVAE_loss={loss}_encoding=4_run_1_final_weights.h5",
+        expand( os.path.join(outpath, "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5"),
                 loss=losses,
+                k=cluster_numbers,
+                enc=encodings,
         )
         # expand(
         #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
@@ -51,7 +52,7 @@ rule coarse_hyperparameter_tuning:
     output:
         trained_models=os.path.join(
             outpath,
-            "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_encoding=2_run_1_final_weights.h5",
+            "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
         ),
     shell:
         "pipenv run python -m deepof.train_model "
