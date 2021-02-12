@@ -432,7 +432,9 @@ def autoencoder_fitting(
             if save_weights:
                 ae.save_weights(
                     os.path.join(
-                        "{}".format(output_path), "{}_final_weights.h5".format(run_ID)
+                        "{}".format(output_path),
+                        "trained_weights",
+                        "{}_final_weights.h5".format(run_ID),
                     )
                 )
 
