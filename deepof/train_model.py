@@ -350,6 +350,7 @@ if not tune:
 
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
+        epochs=1,
         batch_size=batch_size,
         encoding_size=encoding_size,
         hparams=hparams,
