@@ -113,7 +113,7 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}_{}".format(
+    run_ID = "{}{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
         ("_Pred={}".format(predictor) if predictor > 0 and variational else ""),
         ("_Pheno={}".format(phenotype_class) if phenotype_class > 0 else ""),
