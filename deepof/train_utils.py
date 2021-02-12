@@ -429,6 +429,9 @@ def autoencoder_fitting(
                 callbacks=callbacks_,
             )
 
+            if not os.path.exists("trained_weights"):
+                os.makedirs("trained_weights")
+
             if save_weights:
                 ae.save_weights(
                     os.path.join(
