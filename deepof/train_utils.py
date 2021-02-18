@@ -89,13 +89,13 @@ def load_treatments(train_path):
 def get_callbacks(
     X_train: np.array,
     batch_size: int,
-    cp: bool,
     variational: bool,
     phenotype_class: float,
     predictor: float,
     loss: str,
-    reg_cat_clusters: bool,
-    reg_cluster_variance: bool,
+    cp: bool = False,
+    reg_cat_clusters: bool = False,
+    reg_cluster_variance: bool = False,
     logparam: dict = None,
     outpath: str = ".",
 ) -> List[Union[Any]]:
