@@ -474,6 +474,7 @@ def tune_search(
     callbacks: List,
     n_epochs: int = 30,
     n_replicas: int = 1,
+    outpath: str = ".",
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
 
@@ -544,7 +545,7 @@ def tune_search(
 
     if hpt_type == "hyperband":
         tuner = Hyperband(
-            directory="HyperBandx_{}_{}".format(loss, str(date.today())),
+            directory=os.path.join(outpath, "HyperBandx_{}_{}".format(loss, str(date.today()))),
             max_epochs=35,
             hyperband_iterations=hypertun_trials,
             factor=2,
@@ -552,7 +553,7 @@ def tune_search(
         )
     else:
         tuner = BayesianOptimization(
-            directory="BayOpt_{}_{}".format(loss, str(date.today())),
+            directory=os.path.join(outpath, "BayOpt_{}_{}".format(loss, str(date.today()))),
             max_trials=hypertun_trials,
             **hpt_params
         )

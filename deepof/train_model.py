@@ -384,6 +384,7 @@ else:
         predictor=predictor,
         loss=loss,
         logparam=None,
+        outpath=output_path,
     )
 
     best_hyperparameters, best_model = tune_search(
@@ -412,6 +413,7 @@ else:
         ],
         n_replicas=3,
         n_epochs=30,
+        outpath=output_path,
     )
 
     # Saves the best hyperparameters
