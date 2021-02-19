@@ -414,16 +414,6 @@ else:
         n_epochs=30,
     )
 
-    # # Saves a compiled, untrained version of the best model
-    # best_model.build(X_train.shape)
-    # # noinspection PyArgumentList
-    # best_model.save(
-    #     os.path.join(
-    #         output_path, "{}-based_{}_{}.h5".format(input_type, hyp, tune.capitalize())
-    #     ),
-    #     save_format="tf",
-    # )
-
     # Saves the best hyperparameters
     with open(
         os.path.join(

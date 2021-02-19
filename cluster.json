@@ -1,7 +1,7 @@
 {
     "__default__":
     {
-        "mem": "25G",
+        "mem": "150G",
         "time": "10-0",
         "stderr": "snakemake_logs/{rule}.err",
         "stdout": "snakemake_logs/{rule}.out",
