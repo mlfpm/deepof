@@ -577,7 +577,7 @@ def tune_search(
         epochs=n_epochs,
         validation_data=(Xvals, yvals),
         verbose=1,
-        batch_size=256,
+        batch_size=32,
         callbacks=callbacks,
     )
 
