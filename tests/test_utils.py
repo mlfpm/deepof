@@ -187,7 +187,7 @@ def test_bpart_distance(cordarray):
     assert bpart.shape[1] == len(list(combinations(range(cord_df.shape[1] // 2), 2)))
 
 
-@settings(deadline=None)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     abc=arrays(
         dtype=float,
