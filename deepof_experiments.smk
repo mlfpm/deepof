@@ -26,7 +26,7 @@ rule deepof_experiments:
         expand(
             os.path.join(
                 outpath,
-                "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
+                "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
             ),
             loss=losses,
             k=cluster_numbers,
@@ -55,7 +55,7 @@ rule coarse_hyperparameter_tuning:
     output:
         trained_models=os.path.join(
             outpath,
-            "hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
+            "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
         ),
     shell:
         "pipenv run python -m deepof.train_model "
