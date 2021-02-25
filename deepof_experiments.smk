@@ -75,7 +75,7 @@ rule coarse_hyperparameter_tuning:
         "--window-step 12 "
         "--output-path {outpath}coarse_hyperparameter_tuning "
         "--hyperparameter-tuning hyperband "
-        "--hpt-trials 3"
+        "--hpt-trials 1"
 
 
 # rule latent_regularization_experiments:
