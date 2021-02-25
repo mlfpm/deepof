@@ -429,7 +429,7 @@ def autoencoder_fitting(
                 callbacks=callbacks_,
             )
 
-            if not os.path.exists("trained_weights"):
+            if not os.path.exists(os.path.join(output_path, "trained_weights")):
                 os.makedirs("trained_weights")
 
             if save_weights:
@@ -536,7 +536,9 @@ def tune_search(
     hpt_params = {
         "hypermodel": hypermodel,
         "executions_per_trial": n_replicas,
-        "logger": TensorBoardLogger(metrics=["val_mae"], logdir="./logs/hparams"),
+        "logger": TensorBoardLogger(
+            metrics=["val_mae"], logdir=os.path.join(outpath, "logged_hparams")
+        ),
         "objective": "val_mae",
         "project_name": project_name,
         "seed": 42,
@@ -550,7 +552,7 @@ def tune_search(
             ),
             max_epochs=35,
             hyperband_iterations=hypertun_trials,
-            factor=2,
+            factor=3,
             **hpt_params
         )
     else:
