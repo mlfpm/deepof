@@ -411,7 +411,7 @@ else:
                 start_epoch=max(kl_wu, mmd_wu),
             ),
         ],
-        n_replicas=3,
+        n_replicas=1,
         n_epochs=30,
         outpath=output_path,
     )

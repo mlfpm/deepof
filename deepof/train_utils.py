@@ -545,7 +545,9 @@ def tune_search(
 
     if hpt_type == "hyperband":
         tuner = Hyperband(
-            directory=os.path.join(outpath, "HyperBandx_{}_{}".format(loss, str(date.today()))),
+            directory=os.path.join(
+                outpath, "HyperBandx_{}_{}".format(loss, str(date.today()))
+            ),
             max_epochs=35,
             hyperband_iterations=hypertun_trials,
             factor=2,
@@ -553,7 +555,9 @@ def tune_search(
         )
     else:
         tuner = BayesianOptimization(
-            directory=os.path.join(outpath, "BayOpt_{}_{}".format(loss, str(date.today()))),
+            directory=os.path.join(
+                outpath, "BayOpt_{}_{}".format(loss, str(date.today()))
+            ),
             max_trials=hypertun_trials,
             **hpt_params
         )
@@ -577,7 +581,7 @@ def tune_search(
         epochs=n_epochs,
         validation_data=(Xvals, yvals),
         verbose=1,
-        batch_size=32,
+        batch_size=64,
         callbacks=callbacks,
     )
 
