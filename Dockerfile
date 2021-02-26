@@ -1,5 +1,7 @@
 FROM continuumio/anaconda3
 COPY . /deepof
+COPY Pipfile .
+COPY Pipfile.lock .
 RUN apt-get update
 RUN apt-get install -y libgl1-mesa-dev
 RUN pip install pipenv
