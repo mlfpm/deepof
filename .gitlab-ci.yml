@@ -6,7 +6,7 @@ test:
 
   image:
     name: lucasmiranda42/deepof
-    entrypoint: ["pipenv", "shell"]
+    entrypoint: ["pipenv", "run"]
 
   variables:
     CI: ""
