@@ -5,10 +5,10 @@ test:
   stage: test
   image: lucasmiranda42/deepof
   script:
-    - conda install coverage
-    - coverage run --source deepof -m pytest
-    - coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
-    - coverage xml -o deepof_cov.xml
+    - docker exec -it deepof pipenv run conda install coverage
+    - docker exec -it deepof pipenv run coverage run --source deepof -m pytest
+    - docker exec -it deepof pipenv run coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
+    - docker exec -it deepof pipenv run coverage xml -o deepof_cov.xml
   artifacts:
     reports:
       cobertura: deepof_cov.xml
