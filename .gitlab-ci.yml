@@ -5,7 +5,6 @@ test:
   stage: test
   image:
     name: lucasmiranda42/deepof
-    entrypoint: ["pipenv shell"]
 
   script:
     - pipenv run coverage run --source deepof -m pytest
