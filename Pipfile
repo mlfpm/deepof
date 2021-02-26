@@ -3,14 +3,6 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
-[dev-packages]
-coverage = "*"
-dash = "*"
-hypothesis = "*"
-keras-tuner = "*"
-kerastuner-tensorboard-logger = "*"
-pytest = "*"
-
 [packages]
 joblib = "*"
 matplotlib = "*"
@@ -29,6 +21,14 @@ tensorflow-probability = "*"
 tensorflow = "*"
 tqdm = "*"
 umap-learn = "*"
+
+[dev-packages]
+coverage = "*"
+dash = "*"
+hypothesis = "*"
+keras-tuner = "*"
+kerastuner-tensorboard-logger = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.8"
