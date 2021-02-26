@@ -7,6 +7,7 @@ test:
     name: lucasmiranda42/deepof
 
   script:
+    - apt-get update
     - apt-get install -y which
     - pipenv run coverage run --source deepof -m pytest
     - pipenv run coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
