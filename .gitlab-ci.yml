@@ -6,7 +6,7 @@ test:
 
   image:
     name: lucasmiranda42/deepof
-    entrypoint: "pipenv run coverage run --source deepof -m pytest"
+    entrypoint: ["pipenv", "run", "coverage", "run", "--source", "deepof", "-m", "pytest"]
 
   variables:
     CI: ""
