@@ -9,9 +9,6 @@ test:
     name: lucasmiranda42/deepof
     entrypoint: ["pipenv", "run"]
 
-  variables:
-    CI: ""
-
   script:
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/utils.py,deepof/preprocess.py,deepof/model_utils.py,deepof/pose_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
@@ -24,8 +21,7 @@ test:
 deploy:
 
   image:
-    name: lucasmiranda42/deepof
-    entrypoint: [ "pipenv", "run" ]
-  
+    name: continuumio/anaconda3
+
   script:
     - pip install deepof
