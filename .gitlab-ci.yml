@@ -22,5 +22,10 @@ test:
       cobertura: deepof_cov.xml
 
 deploy:
+
+  image:
+    name: lucasmiranda42/deepof
+    entrypoint: [ "pipenv", "run" ]
+  
   script:
     - pip install deepof
