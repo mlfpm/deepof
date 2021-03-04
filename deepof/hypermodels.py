@@ -96,7 +96,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         input_shape: tuple,
         encoding: int,
         entropy_reg_weight: float = 0.0,
-        huber_delta: float = 1.0,
         kl_warmup_epochs: int = 0,
         learn_rate: float = 1e-3,
         loss: str = "ELBO+MMD",
@@ -111,7 +110,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.input_shape = input_shape
         self.encoding = encoding
         self.entropy_reg_weight = entropy_reg_weight
-        self.huber_delta = huber_delta
         self.kl_warmup_epochs = kl_warmup_epochs
         self.learn_rate = learn_rate
         self.loss = loss
@@ -185,7 +183,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             },
             encoding=self.encoding,
             entropy_reg_weight=self.entropy_reg_weight,
-            huber_delta=self.huber_delta,
             kl_warmup_epochs=self.kl_warmup_epochs,
             loss=self.loss,
             mmd_warmup_epochs=self.mmd_warmup_epochs,
