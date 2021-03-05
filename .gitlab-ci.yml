@@ -18,6 +18,8 @@ test:
     reports:
       cobertura: deepof_cov.xml
 
+  retry: 3
+
 deploy:
 
   image:
@@ -25,3 +27,5 @@ deploy:
 
   script:
     - pip install deepof
+
+  retry: 3
