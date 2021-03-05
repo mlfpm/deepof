@@ -4,6 +4,7 @@ stages:
 
 test:
   stage: test
+  retry: 2
 
   image:
     name: lucasmiranda42/deepof
@@ -18,14 +19,13 @@ test:
     reports:
       cobertura: deepof_cov.xml
 
-  retry: 3
-
 deploy:
+
+  stage: deploy
+  retry: 2
 
   image:
     name: continuumio/anaconda3
 
   script:
     - pip install deepof
-
-  retry: 3
