@@ -836,6 +836,13 @@ def tag_rulebased_frames(
         """Partial closure over cv2.putText to avoid code repetition"""
         return cv2.putText(frame, text, pos, font, 0.75, col, 2)
 
+    def conditional_flag():
+        """Returns a tag depending on a condition"""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return left_flag
+        else:
+            return right_flag
+
     def conditional_pos():
         """Returns a position depending on a condition"""
         if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
@@ -860,6 +867,11 @@ def tag_rulebased_frames(
         )
     )
 
+    # Keep track of space usage in the output video
+    # The flags are set to False as soon as the lower
+    # corners are occupied with text
+    left_flag, right_flag = True, True
+
     if debug:
         # Print arena for debugging
         cv2.ellipse(frame, arena[0], arena[1], arena[2], 0, 360, (0, 255, 0), 3)
@@ -880,28 +892,49 @@ def tag_rulebased_frames(
 
     if len(animal_ids) > 1:
 
-        if tag_dict["nose2nose"][fnum] and not tag_dict["sidebyside"][fnum]:
+        if tag_dict["nose2nose"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
-        if (
-            tag_dict[animal_ids[0] + "_nose2tail"][fnum]
-            and not tag_dict["sidereside"][fnum]
-        ):
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
+            write_on_frame("nose2body", corners["downleft"])
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
+            write_on_frame("nose2body", corners["downright"])
+            right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
             write_on_frame("Nose-Tail", corners["downleft"])
-        if (
-            tag_dict[animal_ids[1] + "_nose2tail"][fnum]
-            and not tag_dict["sidereside"][fnum]
-        ):
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
             write_on_frame("Nose-Tail", corners["downright"])
-        if tag_dict["sidebyside"][fnum]:
+            right_flag = False
+
+        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
             write_on_frame(
                 "Side-side",
                 conditional_pos(),
             )
-        if tag_dict["sidereside"][fnum]:
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
             write_on_frame(
                 "Side-Rside",
                 conditional_pos(),
             )
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
         # for _id, down_pos, up_pos in zipped_pos:
         #     if (
         #         tag_dict[_id + "_following"][fnum]
