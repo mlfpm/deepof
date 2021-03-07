@@ -859,14 +859,6 @@ def tag_rulebased_frames(
         else:
             return 150, 150, 255
 
-    zipped_pos = list(
-        zip(
-            animal_ids,
-            [corners["downleft"], corners["downright"]],
-            [corners["upleft"], corners["upright"]],
-        )
-    )
-
     # Keep track of space usage in the output video
     # The flags are set to False as soon as the lower
     # corners are occupied with text
@@ -935,7 +927,30 @@ def tag_rulebased_frames(
             else:
                 right_flag = False
 
-        # for _id, down_pos, up_pos in zipped_pos:
+    zipped_pos = list(
+        zip(
+            animal_ids,
+            [corners["downleft"], corners["downright"]],
+            [corners["upleft"], corners["upright"]],
+            [left_flag, right_flag],
+        )
+    )
+
+    for _id, down_pos, up_pos, flag in zipped_pos:
+
+        if flag:
+
+            if tag_dict[_id + undercond + "climbing"][fnum]:
+                write_on_frame("climbing", down_pos)
+            elif tag_dict[_id + undercond + "huddle"][fnum]:
+                write_on_frame("huddling", down_pos)
+            elif tag_dict[_id + undercond + "sniffing"][fnum]:
+                write_on_frame("sniffing", down_pos)
+            elif tag_dict[_id + undercond + "dig"][fnum]:
+                write_on_frame("digging", down_pos)
+            elif tag_dict[_id + undercond + "lookaround"][fnum]:
+                write_on_frame("lookaround", down_pos)
+
         #     if (
         #         tag_dict[_id + "_following"][fnum]
         #         and not tag_dict[_id + "_climbing"][fnum]
@@ -945,19 +960,6 @@ def tag_rulebased_frames(
         #             (int(w * 0.3 / 10), int(h / 10)),
         #             conditional_col(),
         #         )
-
-    for _id, down_pos, up_pos in zipped_pos:
-
-        if tag_dict[_id + undercond + "climbing"][fnum]:
-            write_on_frame("climbing", down_pos)
-        elif tag_dict[_id + undercond + "sniffing"][fnum]:
-            write_on_frame("sniffing", down_pos)
-        elif tag_dict[_id + undercond + "huddle"][fnum]:
-            write_on_frame("huddling", down_pos)
-        elif tag_dict[_id + undercond + "dig"][fnum]:
-            write_on_frame("digging", down_pos)
-        elif tag_dict[_id + undercond + "lookaround"][fnum]:
-            write_on_frame("lookaround", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
