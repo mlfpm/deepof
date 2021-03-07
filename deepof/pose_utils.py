@@ -51,9 +51,23 @@ def close_single_contact(
         - contact_array (np.array): True if the distance between the two specified points
         is less than tol, False otherwise"""
 
-    close_contact = (
-        np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
-    ) / arena_rel < tol
+    close_contact = None
+
+    if type(right) == str:
+        close_contact = (
+            np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
+        ) / arena_rel < tol
+
+    elif type(right) == list:
+        close_contact = np.any(
+            [
+                (np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) * arena_abs)
+                / arena_rel
+                < tol
+                for r in right
+            ],
+            axis=0,
+        )
 
     return close_contact
 
@@ -634,15 +648,33 @@ def rule_based_tagging(
     # Dictionary with motives per frame
     tag_dict = {}
 
+    # Bulk body parts
+    main_body = [
+        "Left_ear",
+        "Right_ear",
+        "Spine_1",
+        "Center",
+        "Spine_2",
+        "Left_fhip",
+        "Right_fhip",
+        "Left_bhip",
+        "Right_bhip",
+    ]
+
     def onebyone_contact(bparts: List):
         """Returns a smooth boolean array with 1to1 contacts between two mice"""
         nonlocal coords, animal_ids, params, arena_abs, arena
+
+        try:
+            right = animal_ids[1] + bparts[-1]
+        except TypeError:
+            right = [animal_ids[1] + "_" + suffix for suffix in bparts[-1]]
 
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 coords,
                 animal_ids[0] + bparts[0],
-                animal_ids[1] + bparts[-1],
+                right,
                 params["close_contact_tol"],
                 arena_abs,
                 arena[1][1],
@@ -698,6 +730,18 @@ def rule_based_tagging(
         )
         tag_dict[animal_ids[1] + "_nose2tail"] = onebyone_contact(
             bparts=["_Tail_base", "_Nose"]
+        )
+        tag_dict[animal_ids[0] + "_nose2body"] = onebyone_contact(
+            bparts=[
+                "_Nose",
+                main_body,
+            ]
+        )
+        tag_dict[animal_ids[1] + "_nose2body"] = onebyone_contact(
+            bparts=[
+                "_Nose",
+                main_body,
+            ]
         )
 
         for _id in animal_ids:
