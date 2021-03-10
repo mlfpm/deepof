@@ -337,11 +337,11 @@ class SEQ_2_SEQ_GMVAE:
             "bidirectional_merge": "concat",
             "clipvalue": 1.0,
             "dense_activation": "relu",
-            "dense_layers_per_branch": 1,
+            "dense_layers_per_branch": 5,
             "dropout_rate": 1e-3,
             "learning_rate": 1e-3,
-            "units_conv": 160,
-            "units_dense2": 120,
+            "units_conv": 32,
+            "units_dense2": 32,
             "units_lstm": 300,
         }
 
@@ -548,9 +548,11 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E2(encoder)
         encoder = BatchNormalization()(encoder)
-        #encoder = Model_E3(encoder)
-        #encoder = BatchNormalization()(encoder)
+        encoder = Model_E3(encoder)
+        encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
+        encoder = Sequential(Model_E4)(encoder)
+        encoder = BatchNormalization()(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(
@@ -661,9 +663,11 @@ class SEQ_2_SEQ_GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        #generator = Model_D2(g)
-        #generator = Model_B2(generator)
-        generator = Model_D3(g)
+        generator = Sequential(Model_D1)(g)
+        generator = Model_B1(generator)
+        generator = Model_D2(generator)
+        generator = Model_B2(generator)
+        generator = Model_D3(generator)
         generator = Model_D4(generator)
         generator = Model_B3(generator)
         generator = Model_D5(generator)
@@ -693,7 +697,13 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.predictor > 0:
             # Define and instantiate predictor
-            predictor = Model_P1(z)
+            predictor = Dense(
+                self.DENSE_2,
+                activation=self.dense_activation,
+                kernel_initializer=he_uniform(),
+            )(z)
+            predictor = BatchNormalization()(predictor)
+            predictor = Model_P1(predictor)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(input_shape[1])(predictor)
             predictor = Model_P2(predictor)
