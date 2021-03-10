@@ -23,22 +23,23 @@ pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 rule deepof_experiments:
     input:
+        # expand(
+        #     os.path.join(
+        #         outpath,
+        #         "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
+        #     ),
+        #     loss=losses,
+        #     k=cluster_numbers,
+        #     enc=encodings,
+        # ),
         expand(
-            os.path.join(
-                outpath,
-                "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
-            ),
-            loss=losses,
-            k=cluster_numbers,
-            enc=encodings,
-        ), # expand(
-         #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
-         #     "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
-         #     loss=losses,
-         #     encs=encodings,
-         #     k=cluster_numbers,
-         #     latreg=latent_reg,
-         # )
+             "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
+             "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
+             loss=losses,
+             encs=encodings,
+             k=cluster_numbers,
+             latreg=latent_reg,
+         )
          # expand(
          #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
          #     "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
@@ -78,60 +79,60 @@ rule coarse_hyperparameter_tuning:
         "--hpt-trials 1"
 
 
-# rule latent_regularization_experiments:
-#     input:
-#         data_path=ancient("/psycl/g/mpsstatgen/lucas/DLC/DLC_models/deepof_single_topview/"),
-#     output:
-#         trained_models=os.path.join(
-#             outpath,
-#             "latent_regularization_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
-#         ),
-#     shell:
-#         "pipenv run python -m deepof.train_model "
-#         "--train-path {input.data_path} "
-#         "--val-num 5 "
-#         "--components {wildcards.k} "
-#         "--input-type coords "
-#         "--predictor 0 "
-#         "--phenotype-classifier 0 "
-#         "--variational True "
-#         "--latent-reg {wildcards.latreg} "
-#         "--loss {wildcards.loss} "
-#         "--kl-warmup 20 "
-#         "--mmd-warmup 20 "
-#         "--montecarlo-kl 10 "
-#         "--encoding-size {wildcards.encs} "
-#         "--batch-size 256 "
-#         "--window-size 24 "
-#         "--window-step 12 "
-#         "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
-#         "--output-path {outpath}latent_regularization_experiments"
-#
-#
-# rule explore_phenotype_classification:
-#     input:
-#         data_path="/psycl/g/mpsstatgen/lucas/DLC/DLC_models/deepof_single_topview/",
-#     output:
-#         trained_models=os.path.join(
-#             outpath,
-#             "pheno_classification_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
-#         ),
-#     shell:
-#         "pipenv run python -m deepof.train_model "
-#         "--train-path {input.data_path} "
-#         "--val-num 15 "
-#         "--components {wildcards.k} "
-#         "--input-type coords "
-#         "--predictor 0 "
-#         "--phenotype-classifier {wildcards.phenos} "
-#         "--variational True "
-#         "--loss {wildcards.loss} "
-#         "--kl-warmup 20 "
-#         "--mmd-warmup 20 "
-#         "--montecarlo-kl 10 "
-#         "--encoding-size {wildcards.encs} "
-#         "--batch-size 256 "
-#         "--window-size 11 "
-#         "--window-step 11 "
-#         "--stability-check 3  "
-#         "--output-path {outpath}pheno_classification_experiments"
+rule latent_regularization_experiments:
+    input:
+        data_path=ancient("/psycl/g/mpsstatgen/lucas/DLC/DLC_models/deepof_single_topview/"),
+    output:
+        trained_models=os.path.join(
+            outpath,
+            "latent_regularization_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
+        ),
+    shell:
+        "pipenv run python -m deepof.train_model "
+        "--train-path {input.data_path} "
+        "--val-num 5 "
+        "--components {wildcards.k} "
+        "--input-type coords "
+        "--predictor 0 "
+        "--phenotype-classifier 0 "
+        "--variational True "
+        "--latent-reg {wildcards.latreg} "
+        "--loss {wildcards.loss} "
+        "--kl-warmup 20 "
+        "--mmd-warmup 20 "
+        "--montecarlo-kl 10 "
+        "--encoding-size {wildcards.encs} "
+        "--batch-size 256 "
+        "--window-size 24 "
+        "--window-step 12 "
+        "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
+        "--output-path {outpath}latent_regularization_experiments"
+
+
+rule explore_phenotype_classification:
+    input:
+        data_path="/psycl/g/mpsstatgen/lucas/DLC/DLC_models/deepof_single_topview/",
+    output:
+        trained_models=os.path.join(
+            outpath,
+            "pheno_classification_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
+        ),
+    shell:
+        "pipenv run python -m deepof.train_model "
+        "--train-path {input.data_path} "
+        "--val-num 15 "
+        "--components {wildcards.k} "
+        "--input-type coords "
+        "--predictor 0 "
+        "--phenotype-classifier {wildcards.phenos} "
+        "--variational True "
+        "--loss {wildcards.loss} "
+        "--kl-warmup 20 "
+        "--mmd-warmup 20 "
+        "--montecarlo-kl 10 "
+        "--encoding-size {wildcards.encs} "
+        "--batch-size 256 "
+        "--window-size 11 "
+        "--window-step 11 "
+        "--stability-check 3  "
+        "--output-path {outpath}pheno_classification_experiments"
