@@ -313,7 +313,7 @@ class SEQ_2_SEQ_GMVAE:
                 ),
                 components_distribution=tfd.MultivariateNormalDiag(
                     loc=tf.Variable(
-                        tf.random.normal(
+                        Orthogonal()(
                             [self.number_of_components, self.ENCODING],
                             name="prior_means",
                         )
