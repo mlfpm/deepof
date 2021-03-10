@@ -548,8 +548,8 @@ class SEQ_2_SEQ_GMVAE:
         encoder = BatchNormalization()(encoder)
         encoder = Model_E2(encoder)
         encoder = BatchNormalization()(encoder)
-        encoder = Model_E3(encoder)
-        encoder = BatchNormalization()(encoder)
+        #encoder = Model_E3(encoder)
+        #encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
@@ -661,9 +661,9 @@ class SEQ_2_SEQ_GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        generator = Model_D2(g)
-        generator = Model_B2(generator)
-        generator = Model_D3(generator)
+        #generator = Model_D2(g)
+        #generator = Model_B2(generator)
+        generator = Model_D3(g)
         generator = Model_D4(generator)
         generator = Model_B3(generator)
         generator = Model_D5(generator)
