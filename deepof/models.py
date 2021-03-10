@@ -584,6 +584,7 @@ class SEQ_2_SEQ_GMVAE:
             )
             // 2,
             activation=None,
+            initializer=Orthogonal(),
         )(encoder)
 
         z_gauss_var = Dense(
