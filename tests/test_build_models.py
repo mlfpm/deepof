@@ -57,7 +57,6 @@ def test_SEQ_2_SEQ_GMVAE_build(
         phenotype_prediction=True,
         overlap_loss=True,
         entropy_reg_weight=entropy_reg_weight,
-        initialiser_iters=1,
     ).build(
         input_shape=(
             100,
