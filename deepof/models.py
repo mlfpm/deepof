@@ -247,7 +247,6 @@ class SEQ_2_SEQ_GMVAE:
         compile_model: bool = True,
         encoding: int = 16,
         entropy_reg_weight: float = 0.0,
-        initialiser_iters: int = int(1),
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO",
         mmd_warmup_epochs: int = 20,
@@ -277,7 +276,6 @@ class SEQ_2_SEQ_GMVAE:
         self.lstm_unroll = True
         self.compile = compile_model
         self.entropy_reg_weight = entropy_reg_weight
-        self.initialiser_iters = initialiser_iters
         self.kl_warmup = kl_warmup_epochs
         self.loss = loss
         self.mc_kl = montecarlo_kl
@@ -315,8 +313,8 @@ class SEQ_2_SEQ_GMVAE:
                     loc=tf.Variable(
                         Orthogonal()(
                             [self.number_of_components, self.ENCODING],
-                            name="prior_means",
-                        )
+                        ),
+                        name="prior_means",
                     ),
                     scale_diag=tfp.util.TransformedVariable(
                         tf.ones([self.number_of_components, self.ENCODING]),
@@ -553,8 +551,6 @@ class SEQ_2_SEQ_GMVAE:
         encoder = Model_E3(encoder)
         encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
-        # encoder = Sequential(Model_E4)(encoder)
-        # encoder = BatchNormalization()(encoder)
 
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(
@@ -578,7 +574,7 @@ class SEQ_2_SEQ_GMVAE:
             )
             // 2,
             activation=None,
-            initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values computed from the labels
+            kernel_initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values computed from the labels
         )(encoder)
 
         z_gauss_var = Dense(
@@ -665,8 +661,6 @@ class SEQ_2_SEQ_GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        # generator = Sequential(Model_D1)(g)
-        # generator = Model_B1(generator)
         generator = Model_D2(g)
         generator = Model_B2(generator)
         generator = Model_D3(generator)
@@ -699,13 +693,7 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.predictor > 0:
             # Define and instantiate predictor
-            predictor = Dense(
-                self.DENSE_2,
-                activation=self.dense_activation,
-                kernel_initializer=he_uniform(),
-            )(z)
-            predictor = BatchNormalization()(predictor)
-            predictor = Model_P1(predictor)
+            predictor = Model_P1(z)
             predictor = BatchNormalization()(predictor)
             predictor = RepeatVector(input_shape[1])(predictor)
             predictor = Model_P2(predictor)
