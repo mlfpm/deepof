@@ -27,21 +27,6 @@ tfpl = tfp.layers
 tfd = tfp.distributions
 
 
-@settings(deadline=None)
-@given(
-    shape=st.tuples(
-        st.integers(min_value=5, max_value=10), st.integers(min_value=5, max_value=10)
-    )
-)
-def test_far_away_uniform_initialiser(shape):
-    far = deepof.model_utils.far_away_uniform_initialiser(shape, 0, 15, 1000)
-    random = tf.random.uniform(shape, 0, 15)
-    assert far.shape == shape
-    assert tf.abs(tf.norm(tf.math.subtract(far[1:], far[:1]))) > tf.abs(
-        tf.norm(tf.math.subtract(random[1:], random[:1]))
-    )
-
-
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     tensor=arrays(

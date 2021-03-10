@@ -306,12 +306,6 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the Variational Autoencoder prior distribution"""
 
         if self.prior == "standard_normal":
-            # init_means = deepof.model_utils.far_away_uniform_initialiser(
-            #     shape=(self.number_of_components, self.ENCODING),
-            #     minval=0,
-            #     maxval=5,
-            #     iters=self.initialiser_iters,
-            # )
 
             self.prior = tfd.MixtureSameFamily(
                 mixture_distribution=tfd.categorical.Categorical(
@@ -584,7 +578,7 @@ class SEQ_2_SEQ_GMVAE:
             )
             // 2,
             activation=None,
-            initializer=Orthogonal(), # An alternative is a constant initializer with a matrix of values computed from the labels
+            initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values computed from the labels
         )(encoder)
 
         z_gauss_var = Dense(

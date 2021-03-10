@@ -69,44 +69,6 @@ def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     plt.ylabel("Loss")
 
 
-@tf.function
-def far_away_uniform_initialiser(
-    shape: tuple, minval: int = 0, maxval: int = 15, iters: int = 100000
-) -> tf.Tensor:
-    """
-    Returns a uniformly initialised matrix in which the columns are as far as possible
-
-        Parameters:
-            - shape (tuple): shape of the object to generate.
-            - minval (int): Minimum value of the uniform distribution from which to sample
-            - maxval (int): Maximum value of the uniform distribution from which to sample
-            - iters (int): the algorithm generates values at random and keeps those runs that
-            are the farthest apart. Increasing this parameter will lead to more accurate,
-            results while making the function run slowlier.
-
-        Returns:
-            - init (tf.Tensor): tensor of the specified shape in which the column vectors
-             are as far as possible
-
-    """
-
-    init = tf.random.uniform(shape, minval, maxval)
-    init_dist = tf.abs(tf.norm(tf.math.subtract(init[1:], init[:1])))
-    i = 0
-
-    while tf.less(i, iters):
-        temp = tf.random.uniform(shape, minval, maxval)
-        dist = tf.abs(tf.norm(tf.math.subtract(temp[1:], temp[:1])))
-
-        if dist > init_dist:
-            init_dist = dist
-            init = temp
-
-        i += 1
-
-    return init
-
-
 def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     """
 

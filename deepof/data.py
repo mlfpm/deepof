@@ -485,6 +485,7 @@ class coordinates:
         align: bool = False,
         align_inplace: bool = False,
         propagate_labels: bool = False,
+        propagate_annotations: Dict = False,
     ) -> Table_dict:
         """
         Returns a table_dict object with the coordinates of each animal as values.
@@ -503,6 +504,9 @@ class coordinates:
                 - align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to
                 the selected body part with the y axis, for all time points.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                are propagated through the training dataset. This can be used for initialising the weights of the
+                clusters in the latent space, in a way that each cluster is related to a different annotation.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -603,6 +607,13 @@ class coordinates:
             for key, tab in tabs.items():
                 tab.loc[:, "pheno"] = self._exp_conditions[key]
 
+        if propagate_annotations:
+            annotations = list(propagate_annotations.values())[0].columns
+
+            for key, tab in tabs.items():
+                for ann in annotations:
+                    tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
         return table_dict(
             tabs,
             "coords",
@@ -611,10 +622,15 @@ class coordinates:
             center=center,
             polar=polar,
             propagate_labels=propagate_labels,
+            propagate_annotations=bool(propagate_annotations),
         )
 
     def get_distances(
-        self, speed: int = 0, length: str = None, propagate_labels: bool = False
+        self,
+        speed: int = 0,
+        length: str = None,
+        propagate_labels: bool = False,
+        propagate_annotations: Dict = False,
     ) -> Table_dict:
         """
         Returns a table_dict object with the distances between body parts animal as values.
@@ -625,6 +641,9 @@ class coordinates:
                 - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
                 of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                are propagated through the training dataset. This can be used for initialising the weights of the
+                clusters in the latent space, in a way that each cluster is related to a different annotation.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -649,7 +668,19 @@ class coordinates:
                 for key, tab in tabs.items():
                     tab.loc[:, "pheno"] = self._exp_conditions[key]
 
-            return table_dict(tabs, propagate_labels=propagate_labels, typ="dists")
+            if propagate_annotations:
+                annotations = list(propagate_annotations.values())[0].columns
+
+                for key, tab in tabs.items():
+                    for ann in annotations:
+                        tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+            return table_dict(
+                tabs,
+                propagate_labels=propagate_labels,
+                propagate_annotations=bool(propagate_annotations),
+                typ="dists",
+            )
 
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
@@ -661,6 +692,7 @@ class coordinates:
         speed: int = 0,
         length: str = None,
         propagate_labels: bool = False,
+        propagate_annotations: Dict = False,
     ) -> Table_dict:
         """
         Returns a table_dict object with the angles between body parts animal as values.
@@ -672,6 +704,9 @@ class coordinates:
                 - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
                 of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                are propagated through the training dataset. This can be used for initialising the weights of the
+                clusters in the latent space, in a way that each cluster is related to a different annotation.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -698,7 +733,19 @@ class coordinates:
                 for key, tab in tabs.items():
                     tab["pheno"] = self._exp_conditions[key]
 
-            return table_dict(tabs, propagate_labels=propagate_labels, typ="angles")
+            if propagate_annotations:
+                annotations = list(propagate_annotations.values())[0].columns
+
+                for key, tab in tabs.items():
+                    for ann in annotations:
+                        tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+            return table_dict(
+                tabs,
+                propagate_labels=propagate_labels,
+                propagate_annotations=bool(propagate_annotations),
+                typ="angles",
+            )
 
         raise ValueError(
             "Angles not computed. Read the documentation for more details"
@@ -906,6 +953,7 @@ class table_dict(dict):
         center: str = None,
         polar: bool = None,
         propagate_labels: bool = False,
+        propagate_annotations: bool = False,
     ):
         super().__init__(tabs)
         self._type = typ
@@ -914,6 +962,7 @@ class table_dict(dict):
         self._arena = arena
         self._arena_dims = arena_dims
         self._propagate_labels = propagate_labels
+        self._propagate_annotations = propagate_annotations
 
     def filter_videos(self, keys: list) -> Table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
@@ -1239,5 +1288,5 @@ def merge_tables(*args):
 #   - with the current implementation, preprocess can't fully work on merged table_dict instances.
 #   While some operations (mainly alignment) should be carried out before merging, others require
 #   the whole dataset to function properly.
-#   - Understand how keras handles NA values. Decide whether to do nothing, to mask them or to impute them using
-#   a clear outlier (e.g. -9999)
+#   - For now, propagate_annotations is optional and requires the user to actively pass a data frame with traits.
+#   - If this gives good results, we'll make it default or give a boolean option that requires less effort
