@@ -334,7 +334,7 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "bidirectional_merge": "ave",
+            "bidirectional_merge": "concat",
             "clipvalue": 1.0,
             "dense_activation": "relu",
             "dense_layers_per_branch": 1,
