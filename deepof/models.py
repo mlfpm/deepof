@@ -602,7 +602,7 @@ class SEQ_2_SEQ_GMVAE:
             z_gauss = deepof.model_utils.Cluster_overlap(
                 self.ENCODING,
                 self.number_of_components,
-                loss=np.max(0, self.overlap_loss),
+                loss=tf.maximum(0, self.overlap_loss).numpy(),
             )(z_gauss)
 
         z = tfpl.DistributionLambda(
