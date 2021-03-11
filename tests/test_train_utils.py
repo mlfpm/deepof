@@ -56,7 +56,7 @@ def test_get_callbacks(
     pheno_class,
     loss,
 ):
-    runID, tbc, cycle1c, cpc = deepof.train_utils.get_callbacks(
+    runID, tbc, knn, cycle1c, cpc = deepof.train_utils.get_callbacks(
         X_train,
         batch_size,
         variational,
@@ -71,6 +71,7 @@ def test_get_callbacks(
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
     assert type(cpc) == tf.keras.callbacks.ModelCheckpoint
+    assert type(knn) == deepof.model_utils.knn_cluster_purity
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 

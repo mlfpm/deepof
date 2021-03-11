@@ -870,6 +870,8 @@ class coordinates:
         variational: bool = True,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
+        knn_neighbors: int = 100,
+        knn_samples: int = 10000,
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
@@ -930,6 +932,8 @@ class coordinates:
             variational=variational,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
+            knn_neighbors=knn_neighbors,
+            knn_samples=knn_samples,
         )
 
         # returns a list of trained tensorflow models

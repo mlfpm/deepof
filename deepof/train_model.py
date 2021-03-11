@@ -109,6 +109,20 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--knn-neighbors",
+    "-knn",
+    help="Neighbors to take into account to compute KNN cluster purity",
+    default=100,
+    type=int,
+)
+parser.add_argument(
+    "--knn-samples",
+    "-knns",
+    help="Samples to use to compute KNN cluster purity",
+    default=10000,
+    type=int,
+)
+parser.add_argument(
     "--latent-reg",
     "-lreg",
     help="Sets the strategy to regularize the latent mixture of Gaussians. "
@@ -226,6 +240,8 @@ hparams = args.hyperparameters if args.hyperparameters is not None else {}
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
+knn_neighbors = args.knn_neighbors
+knn_samples = args.knn_samples
 latent_reg = args.latent_reg
 loss = args.loss
 mmd_wu = args.mmd_warmup
@@ -367,6 +383,8 @@ if not tune:
         variational=variational,
         reg_cat_clusters=("categorical" in latent_reg),
         reg_cluster_variance=("variance" in latent_reg),
+        knn_neighbors=knn_neighbors,
+        knn_samples=knn_samples,
     )
 
 else:
@@ -374,11 +392,13 @@ else:
 
     hyp = "S2SGMVAE" if variational else "S2SAE"
 
-    run_ID, tensorboard_callback, onecycle = get_callbacks(
+    run_ID, tensorboard_callback, knn, onecycle = get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
         cp=False,
         variational=variational,
+        knn_samples=knn_samples,
+        knn_neighbors=knn_neighbors,
         phenotype_class=pheno_class,
         predictor=predictor,
         loss=loss,
@@ -403,6 +423,7 @@ else:
         callbacks=[
             tensorboard_callback,
             onecycle,
+            knn,
             CustomStopper(
                 monitor="val_loss",
                 patience=5,
