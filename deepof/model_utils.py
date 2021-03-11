@@ -370,7 +370,7 @@ class MMDiscrepancyLayer(Layer):
 class Cluster_overlap(Layer):
     """
     Identity layer that measures the overlap between the components of the latent Gaussian Mixture
-    using a specified metric (KNN-purity, MMD)
+    using the average inter-cluster MMD as a metric
     """
 
     def __init__(self, lat_dims, n_components, loss=False, samples=10, *args, **kwargs):
