@@ -334,15 +334,15 @@ class SEQ_2_SEQ_GMVAE:
         """Sets the default parameters for the model. Overwritable with a dictionary"""
 
         defaults = {
-            "bidirectional_merge": "concat",
+            "bidirectional_merge": "ave",
             "clipvalue": 1.0,
             "dense_activation": "relu",
-            "dense_layers_per_branch": 5,
-            "dropout_rate": 1e-3,
-            "learning_rate": 1e-3,
-            "units_conv": 32,
+            "dense_layers_per_branch": 1,
+            "dropout_rate": 0.15,
+            "learning_rate": 1e-4,
+            "units_conv": 64,
             "units_dense2": 32,
-            "units_lstm": 300,
+            "units_lstm": 128,
         }
 
         for k, v in params.items():
@@ -599,7 +599,7 @@ class SEQ_2_SEQ_GMVAE:
             z_gauss = deepof.model_utils.Dead_neuron_control()(z_gauss)
 
         if self.overlap_loss:
-            z_gauss = deepof.model_utils.Gaussian_mixture_overlap(
+            z_gauss = deepof.model_utils.Cluster_overlap(
                 self.ENCODING,
                 self.number_of_components,
                 loss=self.overlap_loss,

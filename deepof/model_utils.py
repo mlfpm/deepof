@@ -367,10 +367,10 @@ class MMDiscrepancyLayer(Layer):
         return z
 
 
-class Gaussian_mixture_overlap(Layer):
+class Cluster_overlap(Layer):
     """
     Identity layer that measures the overlap between the components of the latent Gaussian Mixture
-    using a specified metric (MMD, Wasserstein, Fischer-Rao)
+    using a specified metric (KNN-purity, MMD)
     """
 
     def __init__(self, lat_dims, n_components, loss=False, samples=10, *args, **kwargs):
@@ -378,7 +378,7 @@ class Gaussian_mixture_overlap(Layer):
         self.n_components = n_components
         self.loss = loss
         self.samples = samples
-        super(Gaussian_mixture_overlap, self).__init__(*args, **kwargs)
+        super(Cluster_overlap, self).__init__(*args, **kwargs)
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""

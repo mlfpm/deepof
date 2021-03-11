@@ -46,28 +46,6 @@ class CustomStopper(tf.keras.callbacks.EarlyStopping):
             super().on_epoch_end(epoch, logs)
 
 
-def load_hparams(hparams):
-    """Loads hyperparameters from a custom dictionary pickled on disc.
-    Thought to be used with the output of hyperparameter_tuning.py"""
-
-    if hparams is not None:
-        with open(hparams, "rb") as handle:
-            hparams = pickle.load(handle)
-    else:
-        hparams = {
-            "bidirectional_merge": "ave",
-            "clipvalue": 1.0,
-            "dense_activation": "relu",
-            "dense_layers_per_branch": 1,
-            "dropout_rate": 1e-3,
-            "learning_rate": 1e-3,
-            "units_conv": 160,
-            "units_dense2": 120,
-            "units_lstm": 300,
-        }
-    return hparams
-
-
 def load_treatments(train_path):
     """Loads a dictionary containing the treatments per individual,
     to be loaded as metadata in the coordinates class"""

@@ -222,7 +222,7 @@ hypertun_trials = args.hpt_trials
 encoding_size = args.encoding_size
 exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
 gaussian_filter = args.gaussian_filter
-hparams = args.hyperparameters
+hparams = args.hyperparameters if args.hyperparameters is not None else {}
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
@@ -261,7 +261,6 @@ assert input_type in [
 ], "Invalid input type. Type python model_training.py -h for help."
 
 # Loads model hyperparameters and treatment conditions, if available
-hparams = load_hparams(hparams)
 treatment_dict = load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
@@ -352,7 +351,7 @@ if not tune:
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
         encoding_size=encoding_size,
-        hparams=hparams,
+        hparams={},
         kl_warmup=kl_wu,
         log_history=True,
         log_hparams=True,
