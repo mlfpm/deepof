@@ -576,7 +576,8 @@ class SEQ_2_SEQ_GMVAE:
             )
             // 2,
             activation=None,
-            kernel_initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values computed from the labels
+            kernel_initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values
+            # computed from the labels, we could also initialize the prior this way, and update it every N epochs
         )(encoder)
 
         z_gauss_var = Dense(
