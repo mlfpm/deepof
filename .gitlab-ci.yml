@@ -4,7 +4,7 @@ stages:
 
 test:
   stage: test
-  retry: 2
+  retry: 0
 
   image:
     name: lucasmiranda42/deepof
