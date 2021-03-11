@@ -557,6 +557,7 @@ class SEQ_2_SEQ_GMVAE:
         # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(
             self.number_of_components,
+            name="cluster_assignment",
             activation="softmax",
             kernel_regularizer=(
                 tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01)

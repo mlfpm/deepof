@@ -208,8 +208,8 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
         """ Passes samples through the encoder and computes cluster purity on the latent embedding """
 
         # Get encoer and grouper from full model
-        encoder =
-        grouper =
+        encoder = 0
+        grouper = 0
 
         # Use encoder and grouper to predict on trial data
         encoding = encoder.predict(self.trial_data)
