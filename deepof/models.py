@@ -575,6 +575,7 @@ class SEQ_2_SEQ_GMVAE:
                 self.ENCODING * self.number_of_components
             )
             // 2,
+            name="cluster_means",
             activation=None,
             kernel_initializer=Orthogonal(),  # An alternative is a constant initializer with a matrix of values
             # computed from the labels, we could also initialize the prior this way, and update it every N epochs
@@ -585,6 +586,7 @@ class SEQ_2_SEQ_GMVAE:
                 self.ENCODING * self.number_of_components
             )
             // 2,
+            name="cluster_variances",
             activation=None,
             activity_regularizer=(
                 tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None

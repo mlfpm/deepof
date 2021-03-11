@@ -186,6 +186,38 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
         self.iteration += 1
         K.set_value(self.model.optimizer.lr, rate)
 
+    def on_epoch_end(self, epoch, logs=None):
+        """Add current learning rate as a metric, to check whether scheduling is working properly"""
+        pass
+
+
+class knn_cluster_purity(tf.keras.callbacks.Callback):
+    """
+
+    Cluster purity callback. Computes assignment purity over K nearest neighbors in the latent space
+
+    """
+
+    def __init__(self, trial_data, k=5):
+        super().__init__()
+        self.trial_data = trial_data
+        self.k = k
+
+    # noinspection PyMethodOverriding,PyTypeChecker
+    def on_epoch_end(self, batch: int, logs):
+        """ Passes samples through the encoder and computes cluster purity on the latent embedding """
+
+        # Get encoer and grouper from full model
+        encoder =
+        grouper =
+
+        # Use encoder and grouper to predict on trial data
+        encoding = encoder.predict(self.trial_data)
+        groups = grouper.predict(self.trial_data)
+
+        #
+
+
 
 class uncorrelated_features_constraint(Constraint):
     """
