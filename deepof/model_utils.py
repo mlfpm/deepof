@@ -189,11 +189,7 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
     def on_batch_end(self, epoch, logs=None):
         """Add current learning rate as a metric, to check whether scheduling is working properly"""
 
-        self.add_metric(
-            self.last_rate,
-            aggregation="mean",
-            name="learning_rate",
-        )
+        return self.last_rate
 
 
 class knn_cluster_purity(tf.keras.callbacks.Callback):
@@ -256,11 +252,7 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
                 * np.max(groups[sample])
             )
 
-        self.add_metric(
-            self.purity_vector,
-            aggregation="mean",
-            name="knn_cluster_purity",
-        )
+        return purity_vector.mean()
 
 
 class uncorrelated_features_constraint(Constraint):
