@@ -116,6 +116,7 @@ def get_callbacks(
         k=knn_neighbors,
         samples=knn_samples,
         validation_data=X_val,
+        log_dir=os.path.join(outpath, "metrics"),
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(

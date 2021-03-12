@@ -239,8 +239,6 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
                 self.model.layers[0].input, cluster_assignment.output
             )
 
-            print(self.validation_data)
-
             # Use encoder and grouper to predict on validation data
             encoding = encoder.predict(self.validation_data)
             groups = grouper.predict(self.validation_data)
