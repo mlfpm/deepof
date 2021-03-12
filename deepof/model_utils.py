@@ -257,6 +257,7 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
             knn = NearestNeighbors().fit(encoding)
 
             # Iterate over samples and compute purity over k neighbours
+            self.samples = np.min([self.samples, encoding.shape[0]])
             random_idxs = np.random.choice(
                 range(encoding.shape[0]), self.samples, replace=False
             )
