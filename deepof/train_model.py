@@ -394,6 +394,7 @@ else:
 
     run_ID, tensorboard_callback, knn, onecycle = get_callbacks(
         X_train=X_train,
+        X_val=(X_val if X_val.shape != (0,) else None),
         batch_size=batch_size,
         cp=False,
         variational=variational,

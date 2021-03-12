@@ -71,6 +71,7 @@ def get_callbacks(
     phenotype_class: float,
     predictor: float,
     loss: str,
+    X_val: np.array = None,
     cp: bool = False,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
@@ -114,6 +115,7 @@ def get_callbacks(
     knn = deepof.model_utils.knn_cluster_purity(
         k=knn_neighbors,
         samples=knn_samples,
+        validation_data=X_val,
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
@@ -283,6 +285,7 @@ def autoencoder_fitting(
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
         X_train=X_train,
+        X_val=(X_val if X_val.shape != (0,) else None),
         batch_size=batch_size,
         cp=save_checkpoints,
         variational=variational,
