@@ -4,7 +4,7 @@ stages:
 
 test:
   stage: test
-  retry: 0
+  retry: 1
 
   image:
     name: lucasmiranda42/deepof
@@ -22,7 +22,7 @@ test:
 deploy:
 
   stage: deploy
-  retry: 2
+  retry: 1
 
   image:
     name: continuumio/anaconda3
