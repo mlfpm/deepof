@@ -160,18 +160,19 @@ def test_tune_search(
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
-            X_train,
-            batch_size,
-            hypermodel == "S2SGMVAE",
-            0,
-            predictor,
-            loss,
-            False,
-            True,
-            True,
-            None,
+            X_train=X_train,
+            batch_size=batch_size,
+            variational=(hypermodel == "S2SGMVAE"),
+            phenotype_class=0,
+            predictor=predictor,
+            loss=loss,
+            X_val=X_train,
+            cp=False,
+            reg_cat_clusters=True,
+            reg_cluster_variance=True,
             knn_neighbors=10,
             knn_samples=10,
+            logparam=None,
         )
     )[1:]
 
