@@ -195,7 +195,9 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
 
         with writer.as_default():
             tf.summary.scalar(
-                "learning_rate", data=self.model.optimizer.lr, step=epoch,
+                "learning_rate",
+                data=self.model.optimizer.lr,
+                step=epoch,
             )
 
 
@@ -206,11 +208,12 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
 
     """
 
-    def __init__(self, validation_data=None, k=100, samples=10000):
+    def __init__(self, validation_data=None, k=100, samples=10000, log_dir="."):
         super().__init__()
         self.validation_data = validation_data
         self.k = k
         self.samples = samples
+        self.log_dir = log_dir
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_epoch_end(self, epoch, logs=None):
@@ -266,9 +269,13 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
                     * np.max(groups[sample])
                 )
 
-            tf.summary.scalar(
-                "knn_cluster_purity", data=purity_vector.mean(), step=epoch,
-            )
+            writer = tf.summary.create_file_writer(self.log_dir)
+            with writer.as_default():
+                tf.summary.scalar(
+                    "knn_cluster_purity",
+                    data=purity_vector.mean(),
+                    step=epoch,
+                )
 
 
 class uncorrelated_features_constraint(Constraint):

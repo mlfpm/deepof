@@ -119,7 +119,7 @@ def get_callbacks(
     onecycle = deepof.model_utils.one_cycle_scheduler(
         X_train.shape[0] // batch_size * 250,
         max_rate=0.005,
-        log_dir=os.path.join(outpath, "metrics")
+        log_dir=os.path.join(outpath, "metrics"),
     )
 
     callbacks = [run_ID, tensorboard_callback, knn, onecycle]
