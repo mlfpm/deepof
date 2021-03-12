@@ -117,6 +117,8 @@ def test_autoencoder_fitting(
         phenotype_class=pheno_class,
         predictor=predictor,
         variational=variational,
+        knn_neighbors=10,
+        knn_samples=10,
     )
 
 
@@ -168,6 +170,8 @@ def test_tune_search(
             True,
             True,
             None,
+            knn_neighbors=10,
+            knn_samples=10,
         )
     )[1:]
 

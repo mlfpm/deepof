@@ -209,8 +209,11 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
 
     """
 
-    def __init__(self, validation_data=None, k=100, samples=10000, log_dir="."):
+    def __init__(
+        self, variational=True, validation_data=None, k=100, samples=10000, log_dir="."
+    ):
         super().__init__()
+        self.variational = variational
         self.validation_data = validation_data
         self.k = k
         self.samples = samples
@@ -220,7 +223,7 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         """ Passes samples through the encoder and computes cluster purity on the latent embedding """
 
-        if self.validation_data is not None:
+        if self.validation_data is not None and self.variational:
 
             # Get encoer and grouper from full model
             cluster_means = [
