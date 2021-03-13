@@ -37,7 +37,6 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     mmd_warmup_epochs=st.integers(min_value=0, max_value=5),
     montecarlo_kl=st.integers(min_value=1, max_value=10),
     number_of_components=st.integers(min_value=1, max_value=5),
-    entropy_reg_weight=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_SEQ_2_SEQ_GMVAE_build(
     loss,
@@ -56,7 +55,6 @@ def test_SEQ_2_SEQ_GMVAE_build(
         predictor=True,
         phenotype_prediction=True,
         overlap_loss=True,
-        entropy_reg_weight=entropy_reg_weight,
     ).build(
         input_shape=(
             100,
