@@ -10,6 +10,7 @@ Functions and general utilities for the deepof tensorflow models. See documentat
 
 from itertools import combinations
 from typing import Any, Tuple
+from scipy.stats import entropy
 from sklearn.metrics import pairwise_distances
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
@@ -210,7 +211,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self, variational=True, validation_data=None, r=2e-4, samples=10000, log_dir="."
+        self, variational=True, validation_data=None, r=0.75, samples=10000, log_dir="."
     ):
         super().__init__()
         self.variational = variational
@@ -226,8 +227,10 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
         if self.validation_data is not None and self.variational:
 
             # Get encoer and grouper from full model
-            cluster_means = [
-                layer for layer in self.model.layers if layer.name == "cluster_means"
+            latent_distribution = [
+                layer
+                for layer in self.model.layers
+                if layer.name == "latent_distribution"
             ][0]
             cluster_assignment = [
                 layer
@@ -236,7 +239,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             ][0]
 
             encoder = tf.keras.models.Model(
-                self.model.layers[0].input, cluster_means.output
+                self.model.layers[0].input, latent_distribution.output
             )
             grouper = tf.keras.models.Model(
                 self.model.layers[0].input, cluster_assignment.output
@@ -245,12 +248,6 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             # Use encoder and grouper to predict on validation data
             encoding = encoder.predict(self.validation_data)
             groups = grouper.predict(self.validation_data)
-
-            # Multiply encodings by groups, to get a weighted version of the matrix
-            encoding = (
-                encoding
-                * tf.tile(groups, [1, encoding.shape[1] // groups.shape[1]]).numpy()
-            )
             hard_groups = groups.argmax(axis=1)
 
             # compute pairwise distances on latent space
@@ -262,22 +259,24 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 range(encoding.shape[0]), self.samples, replace=False
             )
             purity_vector = np.zeros(self.samples)
+            purity_weights = np.zeros(self.samples)
 
             for i, sample in enumerate(random_idxs):
 
                 neighborhood = pdist[sample] < self.r
                 z = groups[neighborhood]
-                neigh_entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=self.axis)
 
-                purity_vector[i] = (
-                    neigh_entropy / np.sum(neighborhood)
-                )
+                # Compute Shannon entropy across samples
+                neigh_entropy = entropy(z)
+
+                purity_vector[i] = neigh_entropy
+                purity_weights[i] = np.sum(neighborhood)
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():
                 tf.summary.scalar(
                     "neighborhood_cluster_purity",
-                    data=purity_vector.mean(),
+                    data=np.average(purity_vector, weights=purity_weights),
                     step=epoch,
                 )
 
@@ -539,36 +538,3 @@ class Dead_neuron_control(Layer):
         )
 
         return target
-
-
-class Entropy_regulariser(Layer):
-    """
-    Identity layer that adds cluster weight entropy to the loss function
-    """
-
-    def __init__(self, weight=1.0, axis=1, *args, **kwargs):
-        self.weight = weight
-        self.axis = axis
-        super(Entropy_regulariser, self).__init__(*args, **kwargs)
-
-    def get_config(self):  # pragma: no cover
-        """Updates Constraint metadata"""
-
-        config = super().get_config().copy()
-        config.update({"weight": self.weight})
-        config.update({"axis": self.axis})
-
-    def call(self, z, **kwargs):
-        """Updates Layer's call method"""
-
-        # axis=1 increases the entropy of a cluster across instances
-        # axis=0 increases the entropy of the assignment for a given instance
-        entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=self.axis)
-
-        # Adds metric that monitors dead neurons in the latent space
-        self.add_metric(entropy, aggregation="mean", name="-weight_entropy")
-
-        if self.weight > 0:
-            self.add_loss(self.weight * K.sum(entropy), inputs=[z])
-
-        return z

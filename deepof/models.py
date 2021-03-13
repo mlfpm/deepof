@@ -246,7 +246,6 @@ class SEQ_2_SEQ_GMVAE:
         batch_size: int = 256,
         compile_model: bool = True,
         encoding: int = 6,
-        entropy_reg_weight: float = 0.0,
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO",
         mmd_warmup_epochs: int = 20,
@@ -275,7 +274,6 @@ class SEQ_2_SEQ_GMVAE:
         self.learn_rate = self.hparams["learning_rate"]
         self.lstm_unroll = True
         self.compile = compile_model
-        self.entropy_reg_weight = entropy_reg_weight
         self.kl_warmup = kl_warmup_epochs
         self.loss = loss
         self.mc_kl = montecarlo_kl
@@ -566,11 +564,6 @@ class SEQ_2_SEQ_GMVAE:
             ),
         )(encoder)
 
-        if self.entropy_reg_weight > 0:
-            z_cat = deepof.model_utils.Entropy_regulariser(self.entropy_reg_weight)(
-                z_cat
-            )
-
         z_gauss_mean = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
@@ -627,6 +620,9 @@ class SEQ_2_SEQ_GMVAE:
             ),
             convert_to_tensor_fn="sample",
         )([z_cat, z_gauss])
+
+        # Dummy layer with no parameters, to retrieve the previous tensor
+        z = tf.keras.layers.Lambda(lambda x: x, name="latent_distribution")(z)
 
         # Define and control custom loss functions
         kl_warmup_callback = False
