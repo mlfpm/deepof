@@ -266,11 +266,11 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             for i, sample in enumerate(random_idxs):
 
                 neighborhood = pdist[sample] < self.r
+                z = groups[neighborhood]
+                neigh_entropy = K.sum(tf.multiply(z + 1e-5, tf.math.log(z) + 1e-5), axis=self.axis)
 
                 purity_vector[i] = (
-                    np.sum(hard_groups[neighborhood] == hard_groups[sample])
-                    / np.sum(neighborhood)
-                    * np.max(groups[sample])
+                    neigh_entropy / np.sum(neighborhood)
                 )
 
             writer = tf.summary.create_file_writer(self.log_dir)
