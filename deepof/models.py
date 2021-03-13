@@ -245,7 +245,7 @@ class SEQ_2_SEQ_GMVAE:
         architecture_hparams: dict = {},
         batch_size: int = 256,
         compile_model: bool = True,
-        encoding: int = 16,
+        encoding: int = 6,
         entropy_reg_weight: float = 0.0,
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO",

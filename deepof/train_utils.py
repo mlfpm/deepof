@@ -112,7 +112,7 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    knn = deepof.model_utils.knn_cluster_purity(
+    knn = deepof.model_utils.neighbor_cluster_purity(
         k=knn_neighbors,
         samples=knn_samples,
         validation_data=X_val,

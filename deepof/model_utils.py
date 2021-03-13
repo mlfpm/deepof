@@ -202,7 +202,7 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
             )
 
 
-class knn_cluster_purity(tf.keras.callbacks.Callback):
+class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     """
 
     Cluster entropy callback. Computes assignment local entropy over a neighborhood of radius r in the latent space
@@ -210,7 +210,7 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self, variational=True, validation_data=None, r=100, samples=10000, log_dir="."
+        self, variational=True, validation_data=None, r=2e-4, samples=10000, log_dir="."
     ):
         super().__init__()
         self.variational = variational
@@ -269,7 +269,7 @@ class knn_cluster_purity(tf.keras.callbacks.Callback):
 
                 purity_vector[i] = (
                     np.sum(hard_groups[neighborhood] == hard_groups[sample])
-                    / self.k
+                    / np.sum(neighborhood)
                     * np.max(groups[sample])
                 )
 
