@@ -13,6 +13,7 @@ from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
+import deepof.models
 import deepof.model_utils
 import numpy as np
 import tensorflow as tf
@@ -272,13 +273,13 @@ def test_neighbor_cluster_purity():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
 
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
+    test_model = deepof.models.SEQ_2_SEQ_GMVAE()
     test_model.build(X.shape)
 
-    test_model.fit(X, y, callbacks=deepof.model_utils.neighbor_cluster_purity())
+    test_model.fit(
+        X,
+        y,
+        callbacks=deepof.model_utils.neighbor_cluster_purity(
+            validation_data=X, variational=True
+        ),
+    )
