@@ -44,7 +44,6 @@ def test_SEQ_2_SEQ_GMVAE_build(
     mmd_warmup_epochs,
     montecarlo_kl,
     number_of_components,
-    entropy_reg_weight,
 ):
     deepof.models.SEQ_2_SEQ_GMVAE(
         loss=loss,
