@@ -252,31 +252,12 @@ def test_dead_neuron_control():
     assert tf.keras.callbacks.History == type(fit)
 
 
-# noinspection PyUnresolvedReferences
-def test_entropy_regulariser():
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-    test_model.add(deepof.model_utils.Entropy_regulariser(1.0))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.keras.callbacks.History
-
-
 def test_find_learning_rate():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
 
     test_model = tf.keras.Sequential()
     test_model.add(tf.keras.layers.Dense(1))
-    test_model.add(deepof.model_utils.Entropy_regulariser(1.0))
 
     test_model.compile(
         loss=tf.keras.losses.binary_crossentropy,
