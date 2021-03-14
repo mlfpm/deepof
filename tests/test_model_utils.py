@@ -266,3 +266,19 @@ def test_find_learning_rate():
     test_model.build(X.shape)
 
     deepof.model_utils.find_learning_rate(test_model, X, y)
+
+
+def test_neighbor_cluster_purity():
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
+    )
+    test_model.build(X.shape)
+
+    test_model.fit(X, y, callbacks=deepof.model_utils.neighbor_cluster_purity())
