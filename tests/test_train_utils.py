@@ -117,7 +117,7 @@ def test_autoencoder_fitting(
         phenotype_class=pheno_class,
         predictor=predictor,
         variational=variational,
-        entropy_neighbors=0.75,
+        entropy_radius=0.75,
         entropy_samples=10,
     )
 

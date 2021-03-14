@@ -264,7 +264,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             for i, sample in enumerate(random_idxs):
 
                 neighborhood = pdist[sample] < self.r
-                z = groups[neighborhood]
+                z = hard_groups[neighborhood]
 
                 # Compute Shannon entropy across samples
                 neigh_entropy = entropy(z)
