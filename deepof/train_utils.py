@@ -75,8 +75,8 @@ def get_callbacks(
     cp: bool = False,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
-    knn_samples: int = 10000,
-    knn_neighbors: int = 100,
+    entropy_samples: int = 10000,
+    entropy_radius: float = 0.75,
     logparam: dict = None,
     outpath: str = ".",
 ) -> List[Union[Any]]:
@@ -112,9 +112,9 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    knn = deepof.model_utils.neighbor_cluster_purity(
-        k=knn_neighbors,
-        samples=knn_samples,
+    entropy = deepof.model_utils.neighbor_cluster_purity(
+        r=entropy_radius,
+        samples=entropy_samples,
         validation_data=X_val,
         log_dir=os.path.join(outpath, "metrics", run_ID),
         variational=variational,
@@ -126,7 +126,7 @@ def get_callbacks(
         log_dir=os.path.join(outpath, "metrics", run_ID),
     )
 
-    callbacks = [run_ID, tensorboard_callback, knn, onecycle]
+    callbacks = [run_ID, tensorboard_callback, entropy, onecycle]
 
     if cp:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -264,8 +264,8 @@ def autoencoder_fitting(
     variational: bool,
     reg_cat_clusters: bool,
     reg_cluster_variance: bool,
-    knn_neighbors: int,
-    knn_samples: int,
+    entropy_radius: float,
+    entropy_samples: int,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -294,8 +294,8 @@ def autoencoder_fitting(
         phenotype_class=phenotype_class,
         predictor=predictor,
         loss=loss,
-        knn_neighbors=knn_neighbors,
-        knn_samples=knn_samples,
+        entropy_radius=entropy_radius,
+        entropy_samples=entropy_samples,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         logparam=logparam,
