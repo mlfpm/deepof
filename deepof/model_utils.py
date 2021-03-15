@@ -211,12 +211,12 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self, variational=True, validation_data=None, r=0.75, samples=10000, log_dir="."
+        self, r, variational=True, validation_data=None, samples=10000, log_dir="."
     ):
         super().__init__()
+        self.r = r
         self.variational = variational
         self.validation_data = validation_data
-        self.r = r  # Make radius default depend on encoding dimensions
         self.samples = samples
         self.log_dir = log_dir
 

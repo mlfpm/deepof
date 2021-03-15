@@ -403,7 +403,7 @@ else:
         phenotype_class=pheno_class,
         predictor=predictor,
         loss=loss,
-        logparam=None,
+        logparam=logparam,
         outpath=output_path,
     )
 

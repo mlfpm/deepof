@@ -75,8 +75,8 @@ def get_callbacks(
     cp: bool = False,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
-    entropy_samples: int = 10000,
-    entropy_radius: float = 0.75,
+    entropy_samples: int = 15000,
+    entropy_radius: float = None,
     logparam: dict = None,
     outpath: str = ".",
 ) -> List[Union[Any]]:
@@ -113,7 +113,13 @@ def get_callbacks(
     )
 
     entropy = deepof.model_utils.neighbor_cluster_purity(
-        r=entropy_radius,
+        r=(
+            entropy_radius
+            if entropy_radius is not None
+            else 0.15 * logparam["encoding"]
+            - 0.18  # equation derived empirically to keep neighbor number constant.
+            # See examples/set_default_entropy_radius.ipynb for details
+        ),
         samples=entropy_samples,
         validation_data=X_val,
         log_dir=os.path.join(outpath, "metrics", run_ID),
