@@ -666,6 +666,11 @@ def rule_based_tagging(
         nonlocal coords, animal_ids, params, arena_abs, arena
 
         try:
+            left = animal_ids[0] + bparts[0]
+        except TypeError:
+            left = [animal_ids[0] + "_" + suffix for suffix in bparts[0]]
+
+        try:
             right = animal_ids[1] + bparts[-1]
         except TypeError:
             right = [animal_ids[1] + "_" + suffix for suffix in bparts[-1]]
@@ -673,8 +678,8 @@ def rule_based_tagging(
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 coords,
-                animal_ids[0] + bparts[0],
-                right,
+                (left if type(left) != list else right),
+                (right if type(left) != list else left),
                 params["close_contact_tol"],
                 arena_abs,
                 arena[1][1],
@@ -739,8 +744,8 @@ def rule_based_tagging(
         )
         tag_dict[animal_ids[1] + "_nose2body"] = onebyone_contact(
             bparts=[
-                "_Nose",
                 main_body,
+                "_Nose",
             ]
         )
 
@@ -830,7 +835,7 @@ def tag_rulebased_frames(
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
 
-    arena, h, w = arena
+    arena, w, h = arena
 
     def write_on_frame(text, pos, col=(255, 255, 255)):
         """Partial closure over cv2.putText to avoid code repetition"""
