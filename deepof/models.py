@@ -621,9 +621,6 @@ class SEQ_2_SEQ_GMVAE:
             convert_to_tensor_fn="sample",
         )([z_cat, z_gauss])
 
-        # Dummy layer with no parameters, to retrieve the previous tensor
-        z = tf.keras.layers.Lambda(lambda x: x, name="latent_distribution")(z)
-
         # Define and control custom loss functions
         kl_warmup_callback = False
         if "ELBO" in self.loss:
@@ -660,6 +657,9 @@ class SEQ_2_SEQ_GMVAE:
             z = deepof.model_utils.MMDiscrepancyLayer(
                 batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
             )(z)
+
+        # Dummy layer with no parameters, to retrieve the previous tensor
+        z = tf.keras.layers.Lambda(lambda x: x, name="latent_distribution")(z)
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
