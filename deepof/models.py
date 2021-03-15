@@ -252,7 +252,7 @@ class SEQ_2_SEQ_GMVAE:
         montecarlo_kl: int = 1,
         neuron_control: bool = False,
         number_of_components: int = 1,
-        overlap_loss: float = -1.0,
+        overlap_loss: float = 0.0,
         phenotype_prediction: float = 0.0,
         predictor: float = 0.0,
         reg_cat_clusters: bool = False,
@@ -599,7 +599,7 @@ class SEQ_2_SEQ_GMVAE:
             z_gauss = deepof.model_utils.Cluster_overlap(
                 self.ENCODING,
                 self.number_of_components,
-                loss=tf.maximum(0.0, self.overlap_loss).numpy(),
+                loss=self.overlap_loss,
             )(z_gauss)
 
         z = tfpl.DistributionLambda(
