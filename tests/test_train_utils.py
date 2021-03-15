@@ -67,7 +67,7 @@ def test_get_callbacks(
         True,
         True,
         None,
-        entropy_radius=0.5
+        entropy_radius=0.5,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
