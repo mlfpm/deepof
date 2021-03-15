@@ -278,7 +278,7 @@ def test_neighbor_cluster_purity():
     gmvaep.fit(
         X,
         X,
-        callbacks=deepof.model_utils.neighbor_cluster_purity(
+        callbacks=deepof.model_utils.neighbor_cluster_purity(r=0.5,
             validation_data=X, variational=True
         ),
     )
