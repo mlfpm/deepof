@@ -542,7 +542,6 @@ def tune_search(
         ),
         "objective": "val_mae",
         "project_name": project_name,
-        "seed": 42,
         "tune_new_entries": True,
     }
 
@@ -584,7 +583,7 @@ def tune_search(
         epochs=n_epochs,
         validation_data=(Xvals, yvals),
         verbose=1,
-        batch_size=64,
+        batch_size=(1 if hypermodel=="S2SAE" else 64),
         callbacks=callbacks,
     )
 
