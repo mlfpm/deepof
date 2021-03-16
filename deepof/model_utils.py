@@ -284,7 +284,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 neighbor_number[i] = np.sum(neighborhood)
 
             # Compute weights multiplying neighbor number and target confidence
-            purity_weights = neighbor_number * max_groups
+            purity_weights = neighbor_number * max_groups[random_idxs]
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():

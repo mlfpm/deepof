@@ -870,7 +870,6 @@ class coordinates:
         variational: bool = True,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
-        entropy_radius: float = 0.75,
         entropy_samples: int = 10000,
     ) -> Tuple:
         """
@@ -932,7 +931,6 @@ class coordinates:
             variational=variational,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
-            entropy_radius=entropy_radius,
             entropy_samples=entropy_samples,
         )
 

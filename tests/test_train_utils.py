@@ -57,16 +57,17 @@ def test_get_callbacks(
     loss,
 ):
     runID, tbc, entropy, cycle1c, cpc = deepof.train_utils.get_callbacks(
-        X_train,
-        batch_size,
-        variational,
-        pheno_class,
-        predictor,
-        loss,
-        True,
-        True,
-        True,
-        None,
+        X_train=X_train,
+        batch_size=batch_size,
+        variational=variational,
+        phenotype_class=pheno_class,
+        predictor=predictor,
+        loss=loss,
+        X_val=X_train,
+        cp=True,
+        reg_cat_clusters=False,
+        reg_cluster_variance=False,
+        logparam={"encoding": 2, "k": 15},
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
@@ -117,7 +118,6 @@ def test_autoencoder_fitting(
         phenotype_class=pheno_class,
         predictor=predictor,
         variational=variational,
-        entropy_radius=0.75,
         entropy_samples=10,
     )
 
@@ -171,7 +171,7 @@ def test_tune_search(
             reg_cat_clusters=True,
             reg_cluster_variance=True,
             entropy_samples=10,
-            logparam=None,
+            logparam={"encoding": 2, "k": 15},
         )
     )[1:]
 
