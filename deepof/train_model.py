@@ -399,7 +399,6 @@ else:
         cp=False,
         variational=variational,
         entropy_samples=entropy_samples,
-        entropy_radius=entropy_radius,
         phenotype_class=pheno_class,
         predictor=predictor,
         loss=loss,

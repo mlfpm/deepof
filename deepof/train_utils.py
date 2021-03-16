@@ -76,7 +76,6 @@ def get_callbacks(
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
     entropy_samples: int = 15000,
-    entropy_radius: float = None,
     logparam: dict = None,
     outpath: str = ".",
 ) -> List[Union[Any]]:
@@ -113,13 +112,7 @@ def get_callbacks(
     )
 
     entropy = deepof.model_utils.neighbor_cluster_purity(
-        r=(
-            entropy_radius
-            if entropy_radius is not None
-            else 0.15 * logparam["encoding"]
-            - 0.18  # equation derived empirically to keep neighbor number constant.
-            # See examples/set_default_entropy_radius.ipynb for details
-        ),
+        encoding_dim=logparam["encoding"],
         samples=entropy_samples,
         validation_data=X_val,
         log_dir=os.path.join(outpath, "metrics", run_ID),
@@ -270,7 +263,6 @@ def autoencoder_fitting(
     variational: bool,
     reg_cat_clusters: bool,
     reg_cluster_variance: bool,
-    entropy_radius: float,
     entropy_samples: int,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
@@ -300,7 +292,6 @@ def autoencoder_fitting(
         phenotype_class=phenotype_class,
         predictor=predictor,
         loss=loss,
-        entropy_radius=entropy_radius,
         entropy_samples=entropy_samples,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,

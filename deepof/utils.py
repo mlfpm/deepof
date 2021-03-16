@@ -572,9 +572,9 @@ def circular_arena_recognition(frame: np.array) -> np.array:
     ellipse_params = cv2.fitEllipse(cnts[0])
     center_coordinates = tuple([int(i) for i in ellipse_params[0]])
     axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
-    angle = ellipse_params[2]
+    ellipse_angle = ellipse_params[2]
 
-    return center_coordinates, axes_length, angle
+    return center_coordinates, axes_length, ellipse_angle
 
 
 def rolling_speed(

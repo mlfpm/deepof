@@ -270,7 +270,7 @@ def test_find_learning_rate():
 
 
 def test_neighbor_cluster_purity():
-    X = np.random.uniform(0, 10, [1500, 5, 6])
+    X = np.random.normal(0, 1, [1500, 25, 6])
 
     test_model = deepof.models.SEQ_2_SEQ_GMVAE()
     gmvaep = test_model.build(X.shape)[3]
@@ -279,6 +279,6 @@ def test_neighbor_cluster_purity():
         X,
         X,
         callbacks=deepof.model_utils.neighbor_cluster_purity(
-            r=0.5, validation_data=X, variational=True
+            encoding_dim=6, validation_data=X, variational=True
         ),
     )

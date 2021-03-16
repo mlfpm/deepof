@@ -211,10 +211,20 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self, r, variational=True, validation_data=None, samples=10000, log_dir="."
+        self,
+        encoding_dim,
+        variational=True,
+        validation_data=None,
+        samples=10000,
+        log_dir=".",
     ):
         super().__init__()
-        self.r = r
+        self.enc = encoding_dim
+        self.r = (
+            -0.14220132706202965 * np.log2(validation_data.shape[0])
+            + 0.17189696892334544 * self.enc
+            + 1.6940295848037952
+        )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
         self.variational = variational
         self.validation_data = validation_data
         self.samples = samples
@@ -249,6 +259,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             encoding = encoder.predict(self.validation_data)
             groups = grouper.predict(self.validation_data)
             hard_groups = groups.argmax(axis=1)
+            max_groups = groups.max(axis=1)
 
             # compute pairwise distances on latent space
             pdist = pairwise_distances(encoding)
@@ -259,7 +270,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 range(encoding.shape[0]), self.samples, replace=False
             )
             purity_vector = np.zeros(self.samples)
-            purity_weights = np.zeros(self.samples)
+            neighbor_number = np.zeros(self.samples)
 
             for i, sample in enumerate(random_idxs):
 
@@ -270,13 +281,26 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 neigh_entropy = entropy(z)
 
                 purity_vector[i] = neigh_entropy
-                purity_weights[i] = np.sum(neighborhood)
+                neighbor_number[i] = np.sum(neighborhood)
+
+            # Compute weights multiplying neighbor number and target confidence
+            purity_weights = neighbor_number * max_groups
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():
                 tf.summary.scalar(
                     "neighborhood_cluster_purity",
                     data=np.average(purity_vector, weights=purity_weights),
+                    step=epoch,
+                )
+                tf.summary.scalar(
+                    "average_neighbors_in_radius",
+                    data=np.average(neighbor_number),
+                    step=epoch,
+                )
+                tf.summary.scalar(
+                    "average_confidence_in_selected_cluster",
+                    data=np.average(max_groups),
                     step=epoch,
                 )
 

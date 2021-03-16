@@ -67,7 +67,6 @@ def test_get_callbacks(
         True,
         True,
         None,
-        entropy_radius=0.5,
     )
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
@@ -171,7 +170,6 @@ def test_tune_search(
             cp=False,
             reg_cat_clusters=True,
             reg_cluster_variance=True,
-            entropy_radius=0.75,
             entropy_samples=10,
             logparam=None,
         )
