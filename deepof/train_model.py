@@ -109,13 +109,6 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--entropy-radius",
-    "-entr",
-    help="radius of the neighborhood used to compute cluster purity",
-    default=100,
-    type=int,
-)
-parser.add_argument(
     "--entropy-samples",
     "-ents",
     help="Samples to use to compute cluster purity",
@@ -240,7 +233,6 @@ hparams = args.hyperparameters if args.hyperparameters is not None else {}
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
-entropy_radius = args.entropy_radius
 entropy_samples = args.entropy_samples
 latent_reg = args.latent_reg
 loss = args.loss
@@ -383,7 +375,6 @@ if not tune:
         variational=variational,
         reg_cat_clusters=("categorical" in latent_reg),
         reg_cluster_variance=("variance" in latent_reg),
-        entropy_radius=entropy_radius,
         entropy_samples=entropy_samples,
     )
 
