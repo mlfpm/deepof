@@ -177,7 +177,7 @@ def test_get_rule_based_annotation():
     assert prun._type == "rule-based"
 
 
-@settings(deadline=None)
+@settings(max_examples=10, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
