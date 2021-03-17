@@ -102,6 +102,7 @@ def get_callbacks(
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         ("_latreg={}".format(latreg)),
+        ("_minneigh={}".format(entropy_min_n)),
         (datetime.now().strftime("%Y%m%d-%H%M%S")),
     )
 
