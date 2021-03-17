@@ -212,11 +212,12 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
 
     def __init__(
         self,
-        encoding_dim,
-        variational=True,
-        validation_data=None,
-        samples=10000,
-        log_dir=".",
+        encoding_dim: int,
+        variational: bool = True,
+        validation_data: np.ndarray = None,
+        samples: int = 10000,
+        log_dir: str = ".",
+        min_n: int = 2,
     ):
         super().__init__()
         self.enc = encoding_dim
@@ -229,6 +230,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
         self.validation_data = validation_data
         self.samples = samples
         self.log_dir = log_dir
+        self.min_n = min_n
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_epoch_end(self, epoch, logs=None):
@@ -283,8 +285,16 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 purity_vector[i] = neigh_entropy
                 neighbor_number[i] = np.sum(neighborhood)
 
+            # Compute a mask to keep only examples with a minimum of self.min_n neighbors
+            mask = neighbor_number >= self.min_n
+
+            # Filter all relevant vectors using the mask
+            purity_vector = purity_vector[mask]
+            neighbor_number = neighbor_number[mask]
+            max_groups = max_groups[random_idxs][mask]
+
             # Compute weights multiplying neighbor number and target confidence
-            purity_weights = neighbor_number * max_groups[random_idxs]
+            purity_weights = neighbor_number * max_groups
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():
