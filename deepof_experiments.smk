@@ -18,6 +18,7 @@ losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [25]  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["none", "categorical", "variance", "categorical+variance"]
+entropy_min_n = [2,5,8,12]
 pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 
@@ -34,11 +35,12 @@ rule deepof_experiments:
         # ),
         expand(
              "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
-             "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_final_weights.h5",
+             "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_entropymink={entmin}_final_weights.h5",
              loss=losses,
              encs=encodings,
              k=cluster_numbers,
              latreg=latent_reg,
+             entmin=entropy_min_n,
          )
          # expand(
          #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
