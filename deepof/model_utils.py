@@ -278,9 +278,9 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 z = hard_groups[neighborhood]
 
                 # Compute Shannon entropy across samples
-                neigh_entropy = entropy(z)
+                neigh_entropy = entropy(np.bincount(z))
 
-                purity_vector[i] = neigh_entropy if not np.isnan(neigh_entropy) else 0.0
+                purity_vector[i] = neigh_entropy
                 neighbor_number[i] = np.sum(neighborhood)
 
             # Compute weights multiplying neighbor number and target confidence
