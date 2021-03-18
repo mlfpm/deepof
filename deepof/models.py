@@ -623,16 +623,19 @@ class SEQ_2_SEQ_GMVAE:
         )([z_cat, z_gauss])
 
         # Define and control custom loss functions
-        kl_warmup_callback = False
         if "ELBO" in self.loss:
+
+            warm_up_iters = tf.cast(
+                self.kl_warmup * (input_shape[0] / self.batch_size), tf.int64
+            )
 
             # noinspection PyCallingNonCallable
             z = deepof.model_utils.KLDivergenceLayer(
-                self.prior,
+                distribution_b=self.prior,
                 test_points_fn=lambda q: q.sample(self.mc_kl),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
-                warm_up_iters=self.kl_warmup,
+                warm_up_iters=warm_up_iters,
             )(z)
 
         mmd_warmup_callback = False
@@ -754,7 +757,6 @@ class SEQ_2_SEQ_GMVAE:
             generator,
             grouper,
             gmvaep,
-            kl_warmup_callback,
             mmd_warmup_callback,
         )
 

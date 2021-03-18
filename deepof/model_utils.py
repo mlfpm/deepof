@@ -221,16 +221,17 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     ):
         super().__init__()
         self.enc = encoding_dim
-        self.r = (
-            -0.14220132706202965 * np.log2(validation_data.shape[0])
-            + 0.17189696892334544 * self.enc
-            + 1.6940295848037952
-        )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
         self.variational = variational
         self.validation_data = validation_data
         self.samples = samples
         self.log_dir = log_dir
         self.min_n = min_n
+        if self.validation_data is not None:
+            self.r = (
+                -0.14220132706202965 * np.log2(validation_data.shape[0])
+                + 0.17189696892334544 * self.enc
+                + 1.6940295848037952
+            )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_epoch_end(self, epoch, logs=None):
@@ -438,7 +439,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self.is_placeholder = True
         self._iters = iters
         self._warm_up_iters = warm_up_iters
-        self._regularizer._weight = K.min(self._iters / self._warm_up_iters, 1)
+        self._regularizer._weight = K.min([self._iters / self._warm_up_iters, 1.0])
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
