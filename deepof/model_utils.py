@@ -470,19 +470,21 @@ class MMDiscrepancyLayer(Layer):
     to the final model loss.
     """
 
-    def __init__(self, batch_size, prior, beta=1.0, *args, **kwargs):
+    def __init__(self, batch_size, prior, iters, warm_up_iters, *args, **kwargs):
+        super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
         self.is_placeholder = True
         self.batch_size = batch_size
-        self.beta = beta
         self.prior = prior
-        super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
+        self._iters = iters
+        self._warm_up_iters = warm_up_iters
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
-        config.update({"beta": self.beta})
+        config.update({"iters": self._iters})
+        config.update({"warmup_iters": self._warm_up_iters})
         config.update({"prior": self.prior})
         return config
 
@@ -490,11 +492,15 @@ class MMDiscrepancyLayer(Layer):
         """Updates Layer's call method"""
 
         true_samples = self.prior.sample(self.batch_size)
+        mmd_weight = tf.cast(
+            K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+        )
+
         # noinspection PyTypeChecker
-        mmd_batch = self.beta * compute_mmd((true_samples, z))
+        mmd_batch = mmd_weight * compute_mmd((true_samples, z))
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
-        self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
+        self.add_metric(mmd_weight, aggregation="mean", name="mmd_rate")
 
         return z
 

@@ -639,20 +639,18 @@ class SEQ_2_SEQ_GMVAE:
                 warm_up_iters=warm_up_iters,
             )(z)
 
-        mmd_warmup_callback = False
         if "MMD" in self.loss:
 
-            mmd_beta = deepof.model_utils.K.variable(1.0, name="mmd_beta")
-            mmd_beta._trainable = False
-            if self.mmd_warmup:
-                mmd_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
-                        mmd_beta, deepof.model_utils.K.min([epoch / self.mmd_warmup, 1])
-                    )
-                )
+            warm_up_iters = tf.cast(
+                self.mmd_warmup * (input_shape[0] // self.batch_size + 1),
+                tf.int64,
+            )
 
             z = deepof.model_utils.MMDiscrepancyLayer(
-                batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
+                batch_size=self.batch_size,
+                prior=self.prior,
+                iters=self.optimizer.iterations,
+                warm_up_iters=warm_up_iters,
             )(z)
 
         # Dummy layer with no parameters, to retrieve the previous tensor
@@ -758,7 +756,6 @@ class SEQ_2_SEQ_GMVAE:
             generator,
             grouper,
             gmvaep,
-            mmd_warmup_callback,
         )
 
     @prior.setter
