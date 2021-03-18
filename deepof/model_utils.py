@@ -445,13 +445,23 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
 
         config = super().get_config().copy()
         config.update({"is_placeholder": self.is_placeholder})
+        config.update({"_iters": self._iters})
+        config.update({"_warm_up_iters": self._warm_up_iters})
         return config
 
     def call(self, distribution_a):
         """Updates Layer's call method"""
 
-        self._regularizer._weight = K.min([self._iters / self._warm_up_iters, 1.0])
-        kl_batch = self._regularizer(distribution_a)
+        # Define and update KL weight for warmup
+        if self._warm_up_iters > 0:
+            kl_weight = tf.cast(
+                K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+            )
+        else:
+            kl_weight = tf.cast(1.0, tf.float32)
+
+        kl_batch = kl_weight * self._regularizer(distribution_a)
+
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
             kl_batch,
@@ -459,7 +469,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
             name="kl_divergence",
         )
         # noinspection PyProtectedMember
-        self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")
+        self.add_metric(kl_weight, aggregation="mean", name="kl_rate")
 
         return distribution_a
 
@@ -483,8 +493,8 @@ class MMDiscrepancyLayer(Layer):
 
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
-        config.update({"iters": self._iters})
-        config.update({"warmup_iters": self._warm_up_iters})
+        config.update({"_iters": self._iters})
+        config.update({"_warmup_iters": self._warm_up_iters})
         config.update({"prior": self.prior})
         return config
 
@@ -492,12 +502,17 @@ class MMDiscrepancyLayer(Layer):
         """Updates Layer's call method"""
 
         true_samples = self.prior.sample(self.batch_size)
-        mmd_weight = tf.cast(
-            K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
-        )
 
-        # noinspection PyTypeChecker
+        # Define and update MMD weight for warmup
+        if self._warm_up_iters > 0:
+            mmd_weight = tf.cast(
+                K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+            )
+        else:
+            mmd_weight = tf.cast(1.0, tf.float32)
+
         mmd_batch = mmd_weight * compute_mmd((true_samples, z))
+
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
         self.add_metric(mmd_weight, aggregation="mean", name="mmd_rate")

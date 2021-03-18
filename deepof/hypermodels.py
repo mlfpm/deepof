@@ -168,7 +168,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             lstm_units_1,
         ) = self.get_hparams(hp)
 
-        gmvaep, kl_warmup_callback, mmd_warmup_callback = deepof.models.SEQ_2_SEQ_GMVAE(
+        gmvaep = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams={
                 "bidirectional_merge": "ave",
                 "clipvalue": clipvalue,
@@ -187,7 +187,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             overlap_loss=self.overlap_loss,
             phenotype_prediction=self.pheno_class,
             predictor=self.predictor,
-        ).build(self.input_shape)[3:]
+        ).build(self.input_shape)[-1]
 
         return gmvaep
 

@@ -625,7 +625,7 @@ class SEQ_2_SEQ_GMVAE:
         # Define and control custom loss functions
         if "ELBO" in self.loss:
 
-            warm_up_iters = tf.cast(
+            kl_warm_up_iters = tf.cast(
                 self.kl_warmup * (input_shape[0] // self.batch_size + 1),
                 tf.int64,
             )
@@ -636,12 +636,12 @@ class SEQ_2_SEQ_GMVAE:
                 test_points_fn=lambda q: q.sample(self.mc_kl),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
-                warm_up_iters=warm_up_iters,
+                warm_up_iters=kl_warm_up_iters,
             )(z)
 
         if "MMD" in self.loss:
 
-            warm_up_iters = tf.cast(
+            mmd_warm_up_iters = tf.cast(
                 self.mmd_warmup * (input_shape[0] // self.batch_size + 1),
                 tf.int64,
             )
@@ -650,7 +650,7 @@ class SEQ_2_SEQ_GMVAE:
                 batch_size=self.batch_size,
                 prior=self.prior,
                 iters=self.optimizer.iterations,
-                warm_up_iters=warm_up_iters,
+                warm_up_iters=mmd_warm_up_iters,
             )(z)
 
         # Dummy layer with no parameters, to retrieve the previous tensor
@@ -767,4 +767,3 @@ class SEQ_2_SEQ_GMVAE:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
 #       - Explore expanding the event dims of the final reconstruction layer
-#       - Gaussian Mixture as output layer? One component per bodypart (makes sense?)
