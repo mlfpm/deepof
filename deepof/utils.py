@@ -567,9 +567,10 @@ def circular_arena_recognition(frame: np.array) -> np.array:
 
     # Find contours in the processed image
     cnts, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    main_cnt = np.argmax([len(c) for c in cnts])
 
     # Detect the main ellipse containing the arena
-    ellipse_params = cv2.fitEllipse(cnts[0])
+    ellipse_params = cv2.fitEllipse(cnts[main_cnt])
     center_coordinates = tuple([int(i) for i in ellipse_params[0]])
     axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
     ellipse_angle = ellipse_params[2]
