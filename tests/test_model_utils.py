@@ -179,8 +179,9 @@ def test_KLDivergenceLayer():
         weight=1.0,
     )(x)
     kl_deepof = deepof.model_utils.KLDivergenceLayer(
-        prior,
-        weight=1.0,
+        distribution_b=prior,
+        iters=1,
+        warm_up_iters=0
     )(x)
     test_model = tf.keras.Model(i, [kl_canon, kl_deepof])
 
