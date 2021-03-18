@@ -433,9 +433,12 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     to the final model loss.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.is_placeholder = True
+    def __init__(self, iters, warm_up_iters, *args, **kwargs):
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
+        self.is_placeholder = True
+        self._iters = iters
+        self._warm_up_iters = warm_up_iters
+        self._regularizer._weight = K.min(self._iters / self._warm_up_iters, 1)
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""

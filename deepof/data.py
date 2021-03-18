@@ -871,7 +871,7 @@ class coordinates:
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         entropy_samples: int = 10000,
-        entropy_min_n:int = 5,
+        entropy_min_n: int = 5,
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.

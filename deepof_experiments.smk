@@ -110,8 +110,9 @@ rule latent_regularization_experiments:
         "--batch-size 256 "
         "--window-size 24 "
         "--window-step 12 "
-        # "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
+
         "--output-path {outpath}latent_regularization_experiments"
+        # "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
 
 
 rule explore_phenotype_classification:
