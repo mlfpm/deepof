@@ -332,7 +332,6 @@ def autoencoder_fitting(
             generator,
             grouper,
             ae,
-            kl_warmup_callback,
             mmd_warmup_callback,
         ) = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams=({} if hparams is None else hparams),
@@ -395,9 +394,6 @@ def autoencoder_fitting(
                 ),
             ]
 
-            if "ELBO" in loss and kl_warmup > 0:
-                # noinspection PyUnboundLocalVariable
-                callbacks_.append(kl_warmup_callback)
             if "MMD" in loss and mmd_warmup > 0:
                 # noinspection PyUnboundLocalVariable
                 callbacks_.append(mmd_warmup_callback)

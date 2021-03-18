@@ -439,7 +439,6 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self.is_placeholder = True
         self._iters = iters
         self._warm_up_iters = warm_up_iters
-        self._regularizer._weight = K.min([self._iters / self._warm_up_iters, 1.0])
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
@@ -451,6 +450,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     def call(self, distribution_a):
         """Updates Layer's call method"""
 
+        self._regularizer._weight = K.min([self._iters / self._warm_up_iters, 1.0])
         kl_batch = self._regularizer(distribution_a)
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
