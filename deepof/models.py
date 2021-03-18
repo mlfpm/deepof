@@ -280,6 +280,7 @@ class SEQ_2_SEQ_GMVAE:
         self.mmd_warmup = mmd_warmup_epochs
         self.neuron_control = neuron_control
         self.number_of_components = number_of_components
+        self.optimizer = Nadam(lr=self.learn_rate, clipvalue=self.clipvalue)
         self.overlap_loss = overlap_loss
         self.phenotype_prediction = phenotype_prediction
         self.predictor = predictor
@@ -622,44 +623,38 @@ class SEQ_2_SEQ_GMVAE:
         )([z_cat, z_gauss])
 
         # Define and control custom loss functions
-        kl_warmup_callback = False
         if "ELBO" in self.loss:
 
-            kl_beta = deepof.model_utils.K.variable(1.0, name="kl_beta")
-            kl_beta._trainable = False
-            if self.kl_warmup:
-                kl_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
-                        kl_beta, deepof.model_utils.K.min([epoch / self.kl_warmup, 1])
-                    )
-                )
+            kl_warm_up_iters = tf.cast(
+                self.kl_warmup * (input_shape[0] // self.batch_size + 1),
+                tf.int64,
+            )
 
             # noinspection PyCallingNonCallable
             z = deepof.model_utils.KLDivergenceLayer(
-                self.prior,
+                distribution_b=self.prior,
                 test_points_fn=lambda q: q.sample(self.mc_kl),
                 test_points_reduce_axis=0,
-                weight=kl_beta,
+                iters=self.optimizer.iterations,
+                warm_up_iters=kl_warm_up_iters,
             )(z)
 
-        mmd_warmup_callback = False
         if "MMD" in self.loss:
 
-            mmd_beta = deepof.model_utils.K.variable(1.0, name="mmd_beta")
-            mmd_beta._trainable = False
-            if self.mmd_warmup:
-                mmd_warmup_callback = LambdaCallback(
-                    on_epoch_begin=lambda epoch, logs: deepof.model_utils.K.set_value(
-                        mmd_beta, deepof.model_utils.K.min([epoch / self.mmd_warmup, 1])
-                    )
-                )
+            mmd_warm_up_iters = tf.cast(
+                self.mmd_warmup * (input_shape[0] // self.batch_size + 1),
+                tf.int64,
+            )
 
             z = deepof.model_utils.MMDiscrepancyLayer(
-                batch_size=self.batch_size, prior=self.prior, beta=mmd_beta
+                batch_size=self.batch_size,
+                prior=self.prior,
+                iters=self.optimizer.iterations,
+                warm_up_iters=mmd_warm_up_iters,
             )(z)
 
         # Dummy layer with no parameters, to retrieve the previous tensor
-        z = tf.keras.layers.Lambda(lambda x: x, name="latent_distribution")(z)
+        z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
@@ -749,10 +744,7 @@ class SEQ_2_SEQ_GMVAE:
         if self.compile:
             gmvaep.compile(
                 loss=model_losses,
-                optimizer=Nadam(
-                    lr=self.learn_rate,
-                    clipvalue=self.clipvalue,
-                ),
+                optimizer=self.optimizer,
                 metrics=model_metrics,
                 loss_weights=loss_weights,
             )
@@ -764,8 +756,6 @@ class SEQ_2_SEQ_GMVAE:
             generator,
             grouper,
             gmvaep,
-            kl_warmup_callback,
-            mmd_warmup_callback,
         )
 
     @prior.setter
@@ -777,4 +767,3 @@ class SEQ_2_SEQ_GMVAE:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
 #       - Explore expanding the event dims of the final reconstruction layer
-#       - Gaussian Mixture as output layer? One component per bodypart (makes sense?)

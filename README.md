@@ -3,6 +3,7 @@
 [![Maintainability](https://api.codeclimate.com/v1/badges/c8c92dd2cb077c1beaa3/maintainability)](https://codeclimate.com/github/lucasmiranda42/deepof)
 [![Maintainability](https://img.shields.io/badge/release-v0.1.4-informational)](https://pypi.org/project/deepof/)
 [![Maintainability](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
+[![Maintainability](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 
 # DeepOF
 ### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)

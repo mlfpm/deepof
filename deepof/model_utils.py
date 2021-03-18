@@ -221,16 +221,17 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
     ):
         super().__init__()
         self.enc = encoding_dim
-        self.r = (
-            -0.14220132706202965 * np.log2(validation_data.shape[0])
-            + 0.17189696892334544 * self.enc
-            + 1.6940295848037952
-        )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
         self.variational = variational
         self.validation_data = validation_data
         self.samples = samples
         self.log_dir = log_dir
         self.min_n = min_n
+        if self.validation_data is not None:
+            self.r = (
+                -0.14220132706202965 * np.log2(validation_data.shape[0])
+                + 0.17189696892334544 * self.enc
+                + 1.6940295848037952
+            )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_epoch_end(self, epoch, logs=None):
@@ -433,21 +434,34 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     to the final model loss.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.is_placeholder = True
+    def __init__(self, iters, warm_up_iters, *args, **kwargs):
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
+        self.is_placeholder = True
+        self._iters = iters
+        self._warm_up_iters = warm_up_iters
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
         config.update({"is_placeholder": self.is_placeholder})
+        config.update({"_iters": self._iters})
+        config.update({"_warm_up_iters": self._warm_up_iters})
         return config
 
     def call(self, distribution_a):
         """Updates Layer's call method"""
 
-        kl_batch = self._regularizer(distribution_a)
+        # Define and update KL weight for warmup
+        if self._warm_up_iters > 0:
+            kl_weight = tf.cast(
+                K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+            )
+        else:
+            kl_weight = tf.cast(1.0, tf.float32)
+
+        kl_batch = kl_weight * self._regularizer(distribution_a)
+
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
             kl_batch,
@@ -455,7 +469,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
             name="kl_divergence",
         )
         # noinspection PyProtectedMember
-        self.add_metric(self._regularizer._weight, aggregation="mean", name="kl_rate")
+        self.add_metric(kl_weight, aggregation="mean", name="kl_rate")
 
         return distribution_a
 
@@ -466,19 +480,21 @@ class MMDiscrepancyLayer(Layer):
     to the final model loss.
     """
 
-    def __init__(self, batch_size, prior, beta=1.0, *args, **kwargs):
+    def __init__(self, batch_size, prior, iters, warm_up_iters, *args, **kwargs):
+        super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
         self.is_placeholder = True
         self.batch_size = batch_size
-        self.beta = beta
         self.prior = prior
-        super(MMDiscrepancyLayer, self).__init__(*args, **kwargs)
+        self._iters = iters
+        self._warm_up_iters = warm_up_iters
 
     def get_config(self):  # pragma: no cover
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
-        config.update({"beta": self.beta})
+        config.update({"_iters": self._iters})
+        config.update({"_warmup_iters": self._warm_up_iters})
         config.update({"prior": self.prior})
         return config
 
@@ -486,11 +502,20 @@ class MMDiscrepancyLayer(Layer):
         """Updates Layer's call method"""
 
         true_samples = self.prior.sample(self.batch_size)
-        # noinspection PyTypeChecker
-        mmd_batch = self.beta * compute_mmd((true_samples, z))
+
+        # Define and update MMD weight for warmup
+        if self._warm_up_iters > 0:
+            mmd_weight = tf.cast(
+                K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+            )
+        else:
+            mmd_weight = tf.cast(1.0, tf.float32)
+
+        mmd_batch = mmd_weight * compute_mmd((true_samples, z))
+
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
-        self.add_metric(self.beta, aggregation="mean", name="mmd_rate")
+        self.add_metric(mmd_weight, aggregation="mean", name="mmd_rate")
 
         return z
 

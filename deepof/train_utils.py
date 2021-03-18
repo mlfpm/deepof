@@ -327,14 +327,7 @@ def autoencoder_fitting(
         return_list = (encoder, decoder, ae)
 
     else:
-        (
-            encoder,
-            generator,
-            grouper,
-            ae,
-            kl_warmup_callback,
-            mmd_warmup_callback,
-        ) = deepof.models.SEQ_2_SEQ_GMVAE(
+        (encoder, generator, grouper, ae,) = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams=({} if hparams is None else hparams),
             batch_size=batch_size,
             compile_model=True,
@@ -350,9 +343,7 @@ def autoencoder_fitting(
             predictor=predictor,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
-        ).build(
-            X_train.shape
-        )
+        ).build(X_train.shape)
         return_list = (encoder, generator, grouper, ae)
 
     if pretrained:
@@ -394,13 +385,6 @@ def autoencoder_fitting(
                     start_epoch=max(kl_warmup, mmd_warmup),
                 ),
             ]
-
-            if "ELBO" in loss and kl_warmup > 0:
-                # noinspection PyUnboundLocalVariable
-                callbacks_.append(kl_warmup_callback)
-            if "MMD" in loss and mmd_warmup > 0:
-                # noinspection PyUnboundLocalVariable
-                callbacks_.append(mmd_warmup_callback)
 
             Xs, ys = [X_train], [X_train]
             Xvals, yvals = [X_val], [X_val]
