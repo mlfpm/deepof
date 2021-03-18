@@ -39,6 +39,8 @@ The main module with which you'll interact is called ```deepof.data```. Let's im
 ```
 import deepof.data
 my_project = deepof.data.project(path="./my_project",
+                                 arena_type="circular", # type of the filmed arena. So far, only "circular" is valid
+                                 arena_dims=[380],      # diameter of the arena in milimeters
                                  smooth_alpha=0.99)
 ```
 This command will create a ```deepof.data.project``` object storing all the necessary information to start. The ```smooth_alpha```
