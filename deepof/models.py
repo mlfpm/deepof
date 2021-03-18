@@ -626,7 +626,7 @@ class SEQ_2_SEQ_GMVAE:
         if "ELBO" in self.loss:
 
             warm_up_iters = tf.cast(
-                self.kl_warmup * (input_shape[0] / self.batch_size),
+                self.kl_warmup * (input_shape[0] // self.batch_size + 1),
                 tf.int64,
             )
 
