@@ -109,10 +109,10 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--entropy-min-n",
+    "--entropy-knn",
     "-entminn",
-    help="Minimum number of neighbors in radius to take a sample into account when computing entropy",
-    default=5,
+    help="number of nearest neighbors to take into account when computing latent space entropy",
+    default=100,
     type=int,
 )
 parser.add_argument(
@@ -240,7 +240,7 @@ hparams = args.hyperparameters if args.hyperparameters is not None else {}
 input_type = args.input_type
 k = args.components
 kl_wu = args.kl_warmup
-entropy_min_n = args.entropy_min_n
+entropy_knn = args.entropy_knn
 entropy_samples = args.entropy_samples
 latent_reg = args.latent_reg
 loss = args.loss
@@ -384,7 +384,7 @@ if not tune:
         reg_cat_clusters=("categorical" in latent_reg),
         reg_cluster_variance=("variance" in latent_reg),
         entropy_samples=entropy_samples,
-        entropy_min_n=entropy_min_n,
+        entropy_knn=entropy_knn,
     )
 
 else:
@@ -399,7 +399,7 @@ else:
         cp=False,
         variational=variational,
         entropy_samples=entropy_samples,
-        entropy_min_n=entropy_min_n,
+        entropy_knn=entropy_knn,
         phenotype_class=pheno_class,
         predictor=predictor,
         loss=loss,

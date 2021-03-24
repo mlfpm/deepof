@@ -72,7 +72,7 @@ def test_get_callbacks(
     assert type(runID) == str
     assert type(tbc) == tf.keras.callbacks.TensorBoard
     assert type(cpc) == tf.keras.callbacks.ModelCheckpoint
-    assert type(entropy) == deepof.model_utils.neighbor_cluster_purity
+    assert type(entropy) == deepof.model_utils.neighbor_latent_entropy
     assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
 
 

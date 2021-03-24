@@ -203,10 +203,11 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
             )
 
 
-class neighbor_cluster_purity(tf.keras.callbacks.Callback):
+class neighbor_latent_entropy(tf.keras.callbacks.Callback):
     """
 
-    Cluster entropy callback. Computes assignment local entropy over a neighborhood of radius r in the latent space
+    Latent space entropy callback. Computes the entropy of cluster assignment across k nearest neighbors of a subset
+    of samples in the latent space.
 
     """
 

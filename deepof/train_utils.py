@@ -76,7 +76,7 @@ def get_callbacks(
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
     entropy_samples: int = 15000,
-    entropy_min_n: int = 5,
+    entropy_knn: int = 100,
     logparam: dict = None,
     outpath: str = ".",
 ) -> List[Union[Any]]:
@@ -102,7 +102,7 @@ def get_callbacks(
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         ("_latreg={}".format(latreg)),
-        ("_minneigh={}".format(entropy_min_n)),
+        ("entknn={}".format(entropy_knn)),
         (datetime.now().strftime("%Y%m%d-%H%M%S")),
     )
 
@@ -113,13 +113,13 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    entropy = deepof.model_utils.neighbor_cluster_purity(
+    entropy = deepof.model_utils.neighbor_latent_entropy(
         encoding_dim=logparam["encoding"],
+        k=entropy_knn,
         samples=entropy_samples,
         validation_data=X_val,
         log_dir=os.path.join(outpath, "metrics", run_ID),
         variational=variational,
-        min_n=entropy_min_n,
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
@@ -267,7 +267,7 @@ def autoencoder_fitting(
     reg_cat_clusters: bool,
     reg_cluster_variance: bool,
     entropy_samples: int,
-    entropy_min_n: int,
+    entropy_knn: int,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -297,7 +297,7 @@ def autoencoder_fitting(
         predictor=predictor,
         loss=loss,
         entropy_samples=entropy_samples,
-        entropy_min_n=entropy_min_n,
+        entropy_knn=entropy_knn,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         logparam=logparam,

@@ -871,7 +871,7 @@ class coordinates:
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         entropy_samples: int = 10000,
-        entropy_min_n: int = 5,
+        entropy_knn: int = 100,
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
@@ -933,7 +933,7 @@ class coordinates:
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
             entropy_samples=entropy_samples,
-            entropy_min_n=entropy_min_n,
+            entropy_knn=entropy_knn,
         )
 
         # returns a list of trained tensorflow models
