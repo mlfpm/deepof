@@ -11,7 +11,7 @@ Functions and general utilities for the deepof tensorflow models. See documentat
 from itertools import combinations
 from typing import Any, Tuple
 from scipy.stats import entropy
-from sklearn.metrics import pairwise_distances
+from sklearn.neighbors import NearestNeighbors
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
@@ -215,23 +215,17 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
         encoding_dim: int,
         variational: bool = True,
         validation_data: np.ndarray = None,
+        k: int = 100,
         samples: int = 10000,
         log_dir: str = ".",
-        min_n: int = 2,
     ):
         super().__init__()
         self.enc = encoding_dim
         self.variational = variational
         self.validation_data = validation_data
+        self.k = k
         self.samples = samples
         self.log_dir = log_dir
-        self.min_n = min_n
-        if self.validation_data is not None:
-            self.r = (
-                -0.14220132706202965 * np.log2(validation_data.shape[0])
-                + 0.17189696892334544 * self.enc
-                + 1.6940295848037952
-            )  # Empirically derived from data. See examples/set_default_entropy_radius.ipynb for details
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_epoch_end(self, epoch, logs=None):
@@ -265,7 +259,7 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
             max_groups = groups.max(axis=1)
 
             # compute pairwise distances on latent space
-            pdist = pairwise_distances(encoding)
+            knn = NearestNeighbors().fit(encoding)
 
             # Iterate over samples and compute purity across neighbourhood
             self.samples = np.min([self.samples, encoding.shape[0]])
@@ -273,40 +267,26 @@ class neighbor_cluster_purity(tf.keras.callbacks.Callback):
                 range(encoding.shape[0]), self.samples, replace=False
             )
             purity_vector = np.zeros(self.samples)
-            neighbor_number = np.zeros(self.samples)
 
             for i, sample in enumerate(random_idxs):
 
-                neighborhood = pdist[sample] < self.r
+                neighborhood = knn.kneighbors(
+                    encoding[sample][np.newaxis, :], self.k, return_distance=False
+                ).flatten()
+
                 z = hard_groups[neighborhood]
 
                 # Compute Shannon entropy across samples
                 neigh_entropy = entropy(np.bincount(z))
 
+                # Add result to pre allocated array
                 purity_vector[i] = neigh_entropy
-                neighbor_number[i] = np.sum(neighborhood)
-
-            # Compute a mask to keep only examples with a minimum of self.min_n neighbors
-            mask = neighbor_number >= self.min_n
-
-            # Filter all relevant vectors using the mask
-            purity_vector = purity_vector[mask]
-            neighbor_number = neighbor_number[mask]
-            max_groups = max_groups[random_idxs][mask]
-
-            # Compute weights multiplying neighbor number and target confidence
-            purity_weights = neighbor_number * max_groups
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():
                 tf.summary.scalar(
-                    "neighborhood_cluster_purity",
-                    data=np.average(purity_vector, weights=purity_weights),
-                    step=epoch,
-                )
-                tf.summary.scalar(
-                    "average_neighbors_in_radius",
-                    data=np.average(neighbor_number),
+                    "average_neighborhood_cluster_entropy",
+                    data=np.average(purity_vector, weights=max_groups[random_idxs]),
                     step=epoch,
                 )
                 tf.summary.scalar(

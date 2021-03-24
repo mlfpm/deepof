@@ -281,6 +281,6 @@ def test_neighbor_cluster_purity():
         X,
         X,
         callbacks=deepof.model_utils.neighbor_cluster_purity(
-            min_n=2, encoding_dim=6, validation_data=X, variational=True
+            k=10, encoding_dim=6, validation_data=X, variational=True
         ),
     )
