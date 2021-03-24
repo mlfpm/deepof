@@ -119,6 +119,7 @@ def test_autoencoder_fitting(
         predictor=predictor,
         variational=variational,
         entropy_samples=10,
+        entropy_knn=5,
     )
 
 
@@ -171,6 +172,7 @@ def test_tune_search(
             reg_cat_clusters=True,
             reg_cluster_variance=True,
             entropy_samples=10,
+            entropy_knn=5,
             logparam={"encoding": 2, "k": 15},
         )
     )[1:]
