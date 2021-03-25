@@ -46,7 +46,7 @@ def autocorr(x, t=1):
     )
 )
 def test_str2bool(v):
-    assert type(str2bool(v)) == bool
+    assert isinstance(str2bool(v), bool)
 
 
 @settings(deadline=None)
@@ -417,10 +417,10 @@ def test_recognize_arena_and_subfunctions(indexes):
     assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")) == 3
     assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")[0]) == 3
     assert (
-        type(recognize_arena(videos, vid_index, path, recoglimit, "circular")[1]) == int
+        isinstance(recognize_arena(videos, vid_index, path, recoglimit, "circular")[1], int)
     )
     assert (
-        type(recognize_arena(videos, vid_index, path, recoglimit, "circular")[2]) == int
+        isinstance(recognize_arena(videos, vid_index, path, recoglimit, "circular")[2], int)
     )
 
 
@@ -538,14 +538,14 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
         assert len(trans) == 2
 
         if return_graph:
-            assert type(trans[0]) == nx.Graph
+            assert isinstance(trans[0], nx.Graph)
         else:
-            assert type(trans[0]) == np.ndarray
+            assert isinstance(trans[0], np.ndarray)
 
-        assert type(trans[1]) == np.ndarray
+        assert isinstance(trans[1], np.ndarray)
 
     else:
         if return_graph:
-            assert type(trans) == nx.Graph
+            assert isinstance(trans, nx.Graph)
         else:
-            assert type(trans) == np.ndarray
+            assert isinstance(trans, np.ndarray)
