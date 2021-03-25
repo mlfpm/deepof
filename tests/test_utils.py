@@ -14,9 +14,14 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from itertools import combinations
 from scipy.spatial import distance
-from deepof.data import *
-from deepof.utils import *
+import deepof.data
+import deepof.utils
+import networkx as nx
+import numpy as np
+import os
+import pandas as pd
 
 
 # AUXILIARY FUNCTIONS #
@@ -46,7 +51,7 @@ def autocorr(x, t=1):
     )
 )
 def test_str2bool(v):
-    assert isinstance(str2bool(v), bool)
+    assert isinstance(deepof.utils.str2bool(v), bool)
 
 
 @settings(deadline=None)
@@ -82,8 +87,8 @@ def test_likelihood_qc(mult, dframe, threshold):
     )
     dframe.columns = idx
 
-    filt1 = likelihood_qc(dframe, thresh1)
-    filt2 = likelihood_qc(dframe, thresh2)
+    filt1 = deepof.utils.likelihood_qc(dframe, thresh1)
+    filt2 = deepof.utils.likelihood_qc(dframe, thresh2)
 
     assert np.sum(filt1) <= dframe.shape[0]
     assert np.sum(filt2) <= dframe.shape[0]
@@ -106,7 +111,7 @@ def test_likelihood_qc(mult, dframe, threshold):
     )
 )
 def test_bp2polar(tab):
-    polar = bp2polar(tab)
+    polar = deepof.utils.bp2polar(tab)
     assert np.allclose(polar["rho"], np.sqrt(tab["X"] ** 2 + tab["y"] ** 2))
     assert np.allclose(polar["phi"], np.arctan2(tab["y"], tab["X"]))
 
@@ -135,7 +140,7 @@ def test_tab2polar(mult, cartdf):
     )
     cart_df.columns = idx
 
-    assert cart_df.shape == tab2polar(cart_df).shape
+    assert cart_df.shape == deepof.utils.tab2polar(cart_df).shape
 
 
 @settings(deadline=None)
@@ -153,7 +158,7 @@ def test_tab2polar(mult, cartdf):
 )
 def test_compute_dist(pair_array, arena_abs, arena_rel):
     assert np.allclose(
-        compute_dist(pair_array, arena_abs, arena_rel),
+        deepof.utils.compute_dist(pair_array, arena_abs, arena_rel),
         pd.DataFrame(distance.cdist(pair_array[:, :2], pair_array[:, 2:]).diagonal())
         * arena_abs
         / arena_rel,
@@ -181,7 +186,7 @@ def test_bpart_distance(cordarray):
     )
     cord_df.columns = idx
 
-    bpart = bpart_distance(cord_df)
+    bpart = deepof.utils.bpart_distance(cord_df)
 
     assert bpart.shape[0] == cord_df.shape[0]
     assert bpart.shape[1] == len(list(combinations(range(cord_df.shape[1] // 2), 2)))
@@ -211,9 +216,7 @@ def test_angle(abc):
         )
         angles.append(ang)
 
-    print(angle(a, b, c), np.array(angles))
-
-    assert np.allclose(angle(a, b, c), np.array(angles))
+    assert np.allclose(deepof.utils.angle(a, b, c), np.array(angles))
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -231,7 +234,7 @@ def test_angle(abc):
     )
 )
 def test_angle_trio(array):
-    assert len(angle_trio(array)) == 3
+    assert len(deepof.utils.angle_trio(array)) == 3
 
 
 @settings(max_examples=10, deadline=None)
@@ -248,9 +251,9 @@ def test_angle_trio(array):
     )
 )
 def test_rotate(p):
-    assert np.allclose(rotate(p, 2 * np.pi), p)
-    assert np.allclose(rotate(p, np.pi), -p)
-    assert np.allclose(rotate(p, 0), p)
+    assert np.allclose(deepof.utils.rotate(p, 2 * np.pi), p)
+    assert np.allclose(deepof.utils.rotate(p, np.pi), -p)
+    assert np.allclose(deepof.utils.rotate(p, 0), p)
 
 
 @settings(deadline=None)
@@ -270,7 +273,7 @@ def test_rotate(p):
 )
 def test_align_trajectories(data, mode_idx):
     mode = ["center", "all", "none"][mode_idx]
-    aligned = align_trajectories(data, mode)
+    aligned = deepof.utils.align_trajectories(data, mode)
     assert aligned.shape == data.shape
     if mode == "center":
         assert np.allclose(aligned[:, (data.shape[1] - 1) // 2, 0], 0)
@@ -283,7 +286,7 @@ def test_align_trajectories(data, mode_idx):
 @settings(deadline=None)
 @given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=1000))))
 def test_smooth_boolean_array(a):
-    smooth = smooth_boolean_array(a)
+    smooth = deepof.utils.smooth_boolean_array(a)
 
     def trans(x):
         """In situ function for computing boolean transitions"""
@@ -312,7 +315,7 @@ def test_rolling_window(a, window):
         st.integers(min_value=1, max_value=10).map(lambda x: x * window_step)
     )
 
-    rolled_shape = rolling_window(a, window_size, window_step).shape
+    rolled_shape = deepof.utils.rolling_window(a, window_size, window_step).shape
 
     assert len(rolled_shape) == len(a.shape) + 1
     assert rolled_shape[1] == window_size
@@ -343,8 +346,8 @@ def test_smooth_mult_trajectory(alpha, series):
 
     series *= +np.random.normal(0, 1, len(series))
 
-    smoothed1 = smooth_mult_trajectory(series, alpha1)
-    smoothed2 = smooth_mult_trajectory(series, alpha2)
+    smoothed1 = deepof.utils.smooth_mult_trajectory(series, alpha1)
+    smoothed2 = deepof.utils.smooth_mult_trajectory(series, alpha2)
 
     assert autocorr(smoothed1) >= autocorr(series)
     assert autocorr(smoothed2) >= autocorr(series)
@@ -355,7 +358,7 @@ def test_smooth_mult_trajectory(alpha, series):
 @given(mode=st.one_of(st.just("and"), st.just("or")))
 def test_interpolate_outliers(mode):
 
-    prun = project(
+    prun = deepof.data.project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -367,7 +370,7 @@ def test_interpolate_outliers(mode):
     lkhood = prun.get_quality()
     coords_name = list(coords.keys())[0]
 
-    interp = interpolate_outliers(
+    interp = deepof.utils.interpolate_outliers(
         coords[coords_name],
         lkhood[coords_name],
         0.999,
@@ -378,7 +381,7 @@ def test_interpolate_outliers(mode):
     )
 
     assert (
-        full_outlier_mask(
+        deepof.utils.full_outlier_mask(
             interp,
             lkhood[coords_name],
             likelihood_tolerance=0.9,
@@ -389,7 +392,7 @@ def test_interpolate_outliers(mode):
         )
         .sum()
         .sum()
-        < full_outlier_mask(
+        < deepof.utils.full_outlier_mask(
             coords[coords_name],
             lkhood[coords_name],
             likelihood_tolerance=0.9,
@@ -413,14 +416,34 @@ def test_recognize_arena_and_subfunctions(indexes):
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
-    assert recognize_arena(videos, vid_index, path, recoglimit, "")[0] == 0
-    assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")) == 3
-    assert len(recognize_arena(videos, vid_index, path, recoglimit, "circular")[0]) == 3
+    assert deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "")[0] == 0
     assert (
-        isinstance(recognize_arena(videos, vid_index, path, recoglimit, "circular")[1], int)
+        len(
+            deepof.utils.recognize_arena(
+                videos, vid_index, path, recoglimit, "circular"
+            )
+        )
+        == 3
     )
     assert (
-        isinstance(recognize_arena(videos, vid_index, path, recoglimit, "circular")[2], int)
+        len(
+            deepof.utils.recognize_arena(
+                videos, vid_index, path, recoglimit, "circular"
+            )[0]
+        )
+        == 3
+    )
+    assert isinstance(
+        deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "circular")[
+            1
+        ],
+        int,
+    )
+    assert isinstance(
+        deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "circular")[
+            2
+        ],
+        int,
     )
 
 
@@ -454,8 +477,8 @@ def test_rolling_speed(dframe, sampler):
     )
     dframe.columns = idx
 
-    speeds1 = rolling_speed(dframe, 5, 10, order1)
-    speeds2 = rolling_speed(dframe, 5, 10, order2)
+    speeds1 = deepof.utils.rolling_speed(dframe, 5, 10, order1)
+    speeds2 = deepof.utils.rolling_speed(dframe, 5, 10, order2)
 
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
@@ -483,7 +506,7 @@ def test_rolling_speed(dframe, sampler):
 )
 def test_gmm_compute(x, n_components, cv_type):
     cv_type = ["spherical", "tied", "diag", "full"][cv_type]
-    assert len(gmm_compute(x, n_components, cv_type)) == 2
+    assert len(deepof.utils.gmm_compute(x, n_components, cv_type)) == 2
 
 
 @settings(
@@ -511,7 +534,9 @@ def test_gmm_model_selection(x, sampler):
     )
     assert (
         len(
-            gmm_model_selection(pd.DataFrame(x), n_component_range, part_size, n_runs=1)
+            deepof.utils.gmm_model_selection(
+                pd.DataFrame(x), n_component_range, part_size, n_runs=1
+            )
         )
         == 3
     )
@@ -530,7 +555,7 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
         ).filter(lambda x: len(set(x)) != 1)
     )
 
-    trans = cluster_transition_matrix(
+    trans = deepof.utils.cluster_transition_matrix(
         cluster_sequence, nclusts, autocorrelation, return_graph
     )
 
