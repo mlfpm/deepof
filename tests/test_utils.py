@@ -424,7 +424,10 @@ def test_recognize_arena_and_subfunctions(indexes):
     )
 
 
-@settings(deadline=None)
+@settings(
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     dframe=data_frames(
         index=range_indexes(min_size=50),
