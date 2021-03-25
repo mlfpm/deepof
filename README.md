@@ -1,9 +1,9 @@
-[![Maintainability](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg)](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines)
-[![Maintainability](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg)](https://coverage.readthedocs.io/en/coverage-5.3/)
-[![Maintainability](https://api.codeclimate.com/v1/badges/c8c92dd2cb077c1beaa3/maintainability)](https://codeclimate.com/github/lucasmiranda42/deepof)
-[![Maintainability](https://img.shields.io/badge/release-v0.1.4-informational)](https://pypi.org/project/deepof/)
-[![Maintainability](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
-[![Maintainability](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
+[![Pipeline](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg)](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines)
+[![Coverage](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg)](https://coverage.readthedocs.io/en/coverage-5.3/)
+[![CodeFactor](https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge)](https://www.codefactor.io/repository/github/lucasmiranda42/deepof)
+[![Version](https://img.shields.io/badge/release-v0.1.4-informational)](https://pypi.org/project/deepof/)
+[![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
+[![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 
 # DeepOF
 ### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
