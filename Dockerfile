@@ -1,4 +1,4 @@
-FROM continuumio/anaconda3:latest
+FROM continuumio/anaconda3:2019.10
 COPY Pipfile .
 COPY Pipfile.lock .
 RUN apt-get update \
