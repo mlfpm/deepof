@@ -121,7 +121,7 @@ def test_climb_wall(center, axes, angle, tol):
         climb_wall("", arena, prun["test"], tol1, nose="Nose")
 
 
-@settings(deadline=None)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     pos_dframe=data_frames(
         index=range_indexes(min_size=5),

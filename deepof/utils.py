@@ -556,13 +556,13 @@ def circular_arena_recognition(frame: np.array) -> np.array:
 
     # Convert image to greyscale, threshold it, blur it and apply open-close operations
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 90, 255, 0)
+    ret, thresh = cv2.threshold(gray_image, 255 // 2, 255, 0)
     frame = cv2.medianBlur(thresh, 9)
     frame = cv2.morphologyEx(
-        frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
+        frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (50, 50))
     )
     frame = cv2.morphologyEx(
-        frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
+        frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (50, 50))
     )
 
     # Find contours in the processed image
