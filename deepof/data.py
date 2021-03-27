@@ -99,6 +99,11 @@ class project:
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
+
+        assert len(self.videos) == len(
+            self.tables
+        ), "Unequal number of videos and tables. Please check your file structure"
+
         self.angles = True
         self.animal_ids = animal_ids
         self.arena = arena
