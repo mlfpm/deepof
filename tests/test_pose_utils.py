@@ -16,6 +16,9 @@ from hypothesis.extra.pandas import range_indexes, columns, data_frames
 import deepof.data
 import deepof.pose_utils
 import matplotlib.figure
+import numpy as np
+import os
+import pandas as pd
 import pytest
 import string
 
