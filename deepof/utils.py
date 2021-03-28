@@ -557,7 +557,7 @@ def circular_arena_recognition(frame: np.array) -> np.array:
 
     # Convert image to greyscale and threshold it
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 255 // 5, 255, 0)
+    ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
 
     # Find contours in the processed image
     cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
