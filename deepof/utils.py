@@ -545,7 +545,8 @@ def recognize_arena(
 
 
 def circular_arena_recognition(frame: np.array) -> np.array:
-    """Returns x,y position of the center and the radius of the recognised arena
+    """Returns x,y position of the center, the lengths of the major and minor axes,
+    and the angle of the recognised arena
 
     Parameters:
         - frame (np.array): numpy.array representing an individual frame of a video
@@ -554,19 +555,12 @@ def circular_arena_recognition(frame: np.array) -> np.array:
         - circles (np.array): 3-element-array containing x,y positions of the center
         of the arena, and a third value indicating the radius"""
 
-    # Convert image to greyscale, threshold it, blur it and apply open-close operations
+    # Convert image to greyscale and threshold it
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 90, 255, 0)
-    frame = cv2.medianBlur(thresh, 9)
-    frame = cv2.morphologyEx(
-        frame, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
-    )
-    frame = cv2.morphologyEx(
-        frame, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (80, 80))
-    )
+    ret, thresh = cv2.threshold(gray_image, 255 // 5, 255, 0)
 
     # Find contours in the processed image
-    cnts, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     main_cnt = np.argmax([len(c) for c in cnts])
 
     # Detect the main ellipse containing the arena
