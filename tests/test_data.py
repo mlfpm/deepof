@@ -22,12 +22,12 @@ import pytest
 
 @settings(deadline=None)
 @given(
-    table_type=st.integers(min_value=0, max_value=2),
+    table_type=st.integers(min_value=0, max_value=1),
     arena_type=st.integers(min_value=0, max_value=1),
 )
 def test_project_init(table_type, arena_type):
 
-    table_type = [".h5", ".csv", ".foo"][table_type]
+    table_type = [".h5", ".csv"][table_type]
     arena_type = ["circular", "foo"][arena_type]
 
     if arena_type == "foo":
@@ -53,11 +53,6 @@ def test_project_init(table_type, arena_type):
         assert type(prun) == deepof.data.project
         assert type(prun.load_tables(verbose=True)) == tuple
         assert type(prun.get_scale) == np.ndarray
-        print(prun)
-
-    elif table_type == ".foo" and arena_type != "foo":
-        with pytest.raises(NotImplementedError):
-            prun.load_tables(verbose=True)
 
 
 def test_project_properties():
