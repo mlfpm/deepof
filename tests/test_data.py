@@ -50,9 +50,9 @@ def test_project_init(table_type, arena_type):
 
     if table_type != ".foo" and arena_type != "foo":
 
-        assert type(prun) == deepof.data.project
-        assert type(prun.load_tables(verbose=True)) == tuple
-        assert type(prun.get_scale) == np.ndarray
+        assert isinstance(prun, deepof.data.project)
+        assert isinstance(prun.load_tables(verbose=True), tuple)
+        assert isinstance(prun.get_scale, np.ndarray)
 
 
 def test_project_properties():
@@ -103,7 +103,7 @@ def test_get_distances(nodes, ego):
     prun.ego = ego
     prun = prun.get_distances(prun.load_tables()[0], verbose=True)
 
-    assert type(prun) == dict
+    assert isinstance(prun, dict)
 
 
 @settings(deadline=None)
@@ -128,7 +128,7 @@ def test_get_angles(nodes, ego):
     prun.ego = ego
     prun = prun.get_angles(prun.load_tables()[0], verbose=True)
 
-    assert type(prun) == dict
+    assert isinstance(prun, dict)
 
 
 @settings(deadline=None)
@@ -153,7 +153,7 @@ def test_run(nodes, ego):
     prun.ego = ego
     prun = prun.run(verbose=True)
 
-    assert type(prun) == deepof.data.coordinates
+    assert isinstance(prun, deepof.data.coordinates)
 
 
 def test_get_rule_based_annotation():
@@ -168,7 +168,7 @@ def test_get_rule_based_annotation():
 
     prun = prun.rule_based_annotation()
 
-    assert type(prun) == deepof.data.table_dict
+    assert isinstance(prun, deepof.data.table_dict)
     assert prun._type == "rule-based"
 
 
@@ -233,14 +233,14 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     # deepof.coordinates testing
 
-    assert type(coords) == deepof.data.table_dict
-    assert type(speeds) == deepof.data.table_dict
-    assert type(distances) == deepof.data.table_dict
-    assert type(angles) == deepof.data.table_dict
-    assert type(prun.get_videos()) == list
+    assert isinstance(coords, deepof.data.table_dict)
+    assert isinstance(speeds, deepof.data.table_dict)
+    assert isinstance(distances, deepof.data.table_dict)
+    assert isinstance(angles, deepof.data.table_dict)
+    assert isinstance(prun.get_videos(), list)
     assert prun.get_exp_conditions is not None
-    assert type(prun.get_quality()) == defaultdict
-    assert type(prun.get_arenas) == tuple
+    assert isinstance(prun.get_quality(), defaultdict)
+    assert isinstance(prun.get_arenas, tuple)
 
     # deepof.table_dict testing
 
@@ -256,12 +256,12 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1))
     )
     assert len(tset) == 4
-    assert type(tset[0]) == np.ndarray
+    assert isinstance(tset[0], np.ndarray)
 
     if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
 
         assert (
-            type(table.plot_heatmaps(bodyparts=["Spine_1"])) == matplotlib.figure.Figure
+            isinstance(table.plot_heatmaps(bodyparts=["Spine_1"]), matplotlib.figure.Figure)
         )
 
         align = sampler.draw(
@@ -284,10 +284,10 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         align=align,
     )
 
-    assert type(prep[0]) == np.ndarray
+    assert isinstance(prep[0], np.ndarray)
 
     # deepof dimensionality reduction testing
 
-    assert type(table.random_projection(n_components=2, sample=50)) == tuple
-    assert type(table.pca(n_components=2, sample=50)) == tuple
-    assert type(table.tsne(n_components=2, sample=50)) == tuple
+    assert isinstance(table.random_projection(n_components=2, sample=50), tuple)
+    assert isinstance(table.pca(n_components=2, sample=50), tuple)
+    assert isinstance(table.tsne(n_components=2, sample=50), tuple)

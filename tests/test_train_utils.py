@@ -24,13 +24,11 @@ import tensorflow as tf
 def test_load_treatments():
     assert deepof.train_utils.load_treatments(".") is None
     assert (
-        type(
+        isinstance(
             deepof.train_utils.load_treatments(
                 os.path.join("tests", "test_examples", "test_single_topview", "Others")
-            )
-        )
-        == dict
-    )
+            ), dict
+    ))
 
 
 @given(
@@ -69,11 +67,11 @@ def test_get_callbacks(
         reg_cluster_variance=False,
         logparam={"encoding": 2, "k": 15},
     )
-    assert type(runID) == str
-    assert type(tbc) == tf.keras.callbacks.TensorBoard
-    assert type(cpc) == tf.keras.callbacks.ModelCheckpoint
-    assert type(entropy) == deepof.model_utils.neighbor_latent_entropy
-    assert type(cycle1c) == deepof.model_utils.one_cycle_scheduler
+    assert isinstance(runID, str)
+    assert isinstance(tbc, tf.keras.callbacks.TensorBoard)
+    assert isinstance(cpc, tf.keras.callbacks.ModelCheckpoint)
+    assert isinstance(entropy, deepof.model_utils.neighbor_latent_entropy)
+    assert isinstance(cycle1c, deepof.model_utils.one_cycle_scheduler)
 
 
 @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])

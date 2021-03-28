@@ -44,7 +44,7 @@ def test_compute_mmd(tensor):
     mmd_kernel = deepof.model_utils.compute_mmd(tuple([tensor1, tensor2]))
     null_kernel = deepof.model_utils.compute_mmd(tuple([tensor1, tensor1]))
 
-    assert type(mmd_kernel) == EagerTensor
+    assert isinstance(mmd_kernel, EagerTensor)
     assert null_kernel == 0
 
 
@@ -53,7 +53,7 @@ def test_one_cycle_scheduler():
     cycle1 = deepof.model_utils.one_cycle_scheduler(
         iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
     )
-    assert type(cycle1._interpolate(1, 2, 0.2, 0.5)) == float
+    assert isinstance(cycle1._interpolate(1, 2, 0.2, 0.5), float)
 
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
@@ -72,7 +72,7 @@ def test_one_cycle_scheduler():
     )
 
     fit = test_model.fit(X, y, callbacks=[onecycle], epochs=10, batch_size=100)
-    assert type(fit) == tf.keras.callbacks.History
+    assert isinstance(fit, tf.keras.callbacks.History)
     assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
     assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
 
@@ -102,7 +102,7 @@ def test_uncorrelated_features_constraint():
         )
 
         fit = test_model.fit(X, y, epochs=25, batch_size=100)
-        assert type(fit) == tf.keras.callbacks.History
+        assert isinstance(fit, tf.keras.callbacks.History)
 
         correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
 
@@ -124,7 +124,7 @@ def test_MCDropout():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.keras.callbacks.History
+    assert isinstance(fit, tf.keras.callbacks.History)
 
 
 # noinspection PyUnresolvedReferences
@@ -145,7 +145,7 @@ def test_dense_transpose():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert type(fit) == tf.keras.callbacks.History
+    assert isinstance(fit, tf.keras.callbacks.History)
 
 
 # noinspection PyCallingNonCallable,PyUnresolvedReferences
@@ -189,7 +189,7 @@ def test_KLDivergenceLayer():
     )
 
     fit = test_model.fit(X, [y, y], epochs=1, batch_size=100)
-    assert tf.keras.callbacks.History == type(fit)
+    assert isinstance(fit, tf.keras.callbacks.History)
     assert test_model.losses[0] == test_model.losses[1]
 
 
@@ -234,7 +234,7 @@ def test_MMDiscrepancyLayer():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert tf.keras.callbacks.History == type(fit)
+    assert isinstance(fit, tf.keras.callbacks.History)
 
 
 # noinspection PyUnresolvedReferences
@@ -252,7 +252,7 @@ def test_dead_neuron_control():
     )
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100)
-    assert tf.keras.callbacks.History == type(fit)
+    assert isinstance(fit, tf.keras.callbacks.History)
 
 
 def test_find_learning_rate():

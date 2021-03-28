@@ -40,8 +40,8 @@ import warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
-Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
+Coordinates = deepof.utils.Newisinstance("Coordinates", deepof.utils.Any)
+Table_dict = deepof.utils.Newisinstance("Table_dict", deepof.utils.Any)
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
@@ -549,7 +549,7 @@ class coordinates:
                             - self._scales[i][1] / 2
                         )
 
-        elif type(center) == str and center != "arena":
+        elif isinstance(center, str) and center != "arena":
 
             for i, (key, value) in enumerate(tabs.items()):
 
@@ -583,7 +583,7 @@ class coordinates:
             for key, tab in tabs.items():
                 tabs[key].index = pd.timedelta_range(
                     "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                ).astype("timedelta64[s]")
+                ).asisinstance("timedelta64[s]")
 
         if align:
             assert (
@@ -667,7 +667,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype("timedelta64[s]")
+                    ).asisinstance("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -732,7 +732,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype("timedelta64[s]")
+                    ).asisinstance("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -833,7 +833,7 @@ class coordinates:
                 )
                 pbar.update(1)
 
-            if type(video_output) == list:
+            if isinstance(video_output, list):
                 vid_idxs = video_output
             elif video_output == "all":
                 vid_idxs = list(self._tables.keys())

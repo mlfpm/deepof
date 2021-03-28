@@ -26,7 +26,7 @@ from typing import Tuple, Any, List, Union, NewType
 # DEFINE CUSTOM ANNOTATED TYPES #
 
 
-Coordinates = NewType("Coordinates", Any)
+Coordinates = Newisinstance("Coordinates", Any)
 
 
 # CONNECTIVITY FOR DLC MODELS
@@ -750,7 +750,7 @@ def cluster_transition_matrix(
 
     # Stores all possible transitions between clusters
     clusters = [str(i) for i in range(nclusts)]
-    cluster_sequence = cluster_sequence.astype(str)
+    cluster_sequence = cluster_sequence.asisinstance(str)
 
     trans = {t: 0 for t in product(clusters, clusters)}
     k = len(clusters)

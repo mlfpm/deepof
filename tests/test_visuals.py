@@ -33,17 +33,15 @@ def test_plot_heatmap(bparts):
     )
 
     assert (
-        type(
+        isinstance(
             deepof.visuals.plot_heatmap(
                 prun["test"],
                 bparts,
                 tuple([-100, 100]),
                 tuple([-100, 100]),
                 dpi=200,
-            )
-        )
-        == matplotlib.figure.Figure
-    )
+            ), matplotlib.figure.Figure
+    ))
 
 
 def test_model_comparison_plot():
@@ -64,10 +62,9 @@ def test_model_comparison_plot():
     )
 
     assert (
-        type(
+        isinstance(
             deepof.visuals.model_comparison_plot(
                 gmm_run[0], gmm_run[1], range(1, 3), cov_plot="full"
-            )
-        )
-        == matplotlib.figure.Figure
-    )
+            ),
+        matplotlib.figure.Figure
+    ))

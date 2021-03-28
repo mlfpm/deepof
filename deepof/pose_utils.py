@@ -25,7 +25,7 @@ import warnings
 warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 
 # Create custom string type
-Coordinates = NewType("Coordinates", Any)
+Coordinates = Newisinstance("Coordinates", Any)
 
 
 def close_single_contact(
@@ -53,12 +53,12 @@ def close_single_contact(
 
     close_contact = None
 
-    if type(right) == str:
+    if isinstance(right, str):
         close_contact = (
             np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
         ) / arena_rel < tol
 
-    elif type(right) == list:
+    elif isinstance(right, list):
         close_contact = np.any(
             [
                 (np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) * arena_abs)
@@ -528,7 +528,7 @@ def max_behaviour(
 
     speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
 
-    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype("float")
+    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).asisinstance("float")
     win_array = behaviour_dframe.rolling(window_size, center=True).sum()
     if stepped:
         win_array = win_array[::window_size]
@@ -678,8 +678,8 @@ def rule_based_tagging(
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 coords,
-                (left if type(left) != list else right),
-                (right if type(left) != list else left),
+                (left if not isinstance(left, list) else right),
+                (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
                 arena_abs,
                 arena[1][1],

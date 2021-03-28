@@ -291,11 +291,11 @@ def test_single_behaviour_analysis(sampler):
     )
 
     assert len(out) == 1 if (stat_tests == 0 and plot == 0) else len(out) >= 2
-    assert type(out[0]) == dict
+    assert isinstance(out[0], dict)
     if plot:
-        assert np.any(np.array([type(i) for i in out]) == matplotlib.figure.Figure)
+        assert np.any(np.array([isinstance(i, matplotlib.figure.Figure) for i in out]))
     if stat_tests:
-        assert type(out[0]) == dict
+        assert isinstance(out[0], dict)
 
 
 @settings(
@@ -321,18 +321,18 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
     maxbe1 = max_behaviour(behaviour_dframe, wsize1, stepped)
     maxbe2 = max_behaviour(behaviour_dframe, wsize2, stepped)
 
-    assert type(maxbe1) == np.ndarray
-    assert type(maxbe2) == np.ndarray
+    assert isinstance(maxbe1, np.ndarray)
+    assert isinstance(maxbe2, np.ndarray)
     if not stepped:
-        assert type(maxbe1[wsize1 // 2 + 1]) == str
-        assert type(maxbe1[wsize2 // 2 + 1]) == str
+        assert isinstance(maxbe1[wsize1 // 2 + 1], str)
+        assert isinstance(maxbe1[wsize2 // 2 + 1], str)
         assert maxbe1[wsize1 // 2 + 1] in behaviour_dframe.columns
         assert maxbe2[wsize2 // 2 + 1] in behaviour_dframe.columns
         assert len(maxbe1) >= len(maxbe2)
 
 
 def test_get_hparameters():
-    assert type(get_hparameters()) == dict
+    assert isinstance(get_hparameters(), dict)
     assert get_hparameters({"speed_pause": 20})["speed_pause"] == 20
 
 
@@ -376,5 +376,5 @@ def test_rule_based_tagging(multi_animal, video_output):
         video_output=video_output, frame_limit=50
     )
 
-    assert type(hardcoded_tags) == deepof.data.table_dict
+    assert isinstance(hardcoded_tags, deepof.data.table_dict)
     assert list(hardcoded_tags.values())[0].shape[1] == (21 if multi_animal else 6)
