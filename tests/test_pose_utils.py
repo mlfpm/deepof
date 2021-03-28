@@ -13,8 +13,8 @@ from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
-from deepof.pose_utils import *
 import deepof.data
+import deepof.pose_utils
 import matplotlib.figure
 import pytest
 import string
@@ -41,7 +41,9 @@ def test_close_single_contact(pos_dframe, tol):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = close_single_contact(pos_dframe, "bpart1", "bpart2", tol, 1, 1)
+    close_contact = deepof.pose_utils.close_single_contact(
+        pos_dframe, "bpart1", "bpart2", tol, 1, 1
+    )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
 
@@ -72,7 +74,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = close_double_contact(
+    close_contact = deepof.pose_utils.close_double_contact(
         pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
     )
     assert close_contact.dtype == bool
@@ -110,15 +112,19 @@ def test_climb_wall(center, axes, angle, tol):
         .get_coords()
     )
 
-    climb1 = climb_wall("circular", arena, prun["test"], tol1, nose="Nose")
-    climb2 = climb_wall("circular", arena, prun["test"], tol2, nose="Nose")
+    climb1 = deepof.pose_utils.climb_wall(
+        "circular", arena, prun["test"], tol1, nose="Nose"
+    )
+    climb2 = deepof.pose_utils.climb_wall(
+        "circular", arena, prun["test"], tol2, nose="Nose"
+    )
 
     assert climb1.dtype == bool
     assert climb2.dtype == bool
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        climb_wall("", arena, prun["test"], tol1, nose="Nose")
+        deepof.pose_utils.climb_wall("", arena, prun["test"], tol1, nose="Nose")
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -169,14 +175,14 @@ def test_single_animal_traits(pos_dframe, tol_forward, tol_speed, animal_id):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    hudd = huddle(
+    hudd = deepof.pose_utils.huddle(
         pos_dframe,
         pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
         tol_forward,
         tol_speed,
         animal_id,
     )
-    digging = dig(
+    digging = deepof.pose_utils.dig(
         pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
         pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
         tol_speed,
@@ -230,7 +236,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     position_dframe.columns = pos_idx
     distance_dframe.columns = [c for c in combinations(bparts, 2) if c[0][0] != c[1][0]]
 
-    follow = following_path(
+    follow = deepof.pose_utils.following_path(
         distance_dframe,
         position_dframe,
         follower="A",
@@ -280,7 +286,7 @@ def test_single_behaviour_analysis(sampler):
 
     plot = sampler.draw(st.integers(min_value=0, max_value=200))
 
-    out = single_behaviour_analysis(
+    out = deepof.pose_utils.single_behaviour_analysis(
         behaviours[0],
         treatment_dict,
         behavioural_dict,
@@ -318,8 +324,8 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
     wsize1 = window_size.draw(st.integers(min_value=5, max_value=50))
     wsize2 = window_size.draw(st.integers(min_value=wsize1, max_value=50))
 
-    maxbe1 = max_behaviour(behaviour_dframe, wsize1, stepped)
-    maxbe2 = max_behaviour(behaviour_dframe, wsize2, stepped)
+    maxbe1 = deepof.pose_utils.max_behaviour(behaviour_dframe, wsize1, stepped)
+    maxbe2 = deepof.pose_utils.max_behaviour(behaviour_dframe, wsize2, stepped)
 
     assert isinstance(maxbe1, np.ndarray)
     assert isinstance(maxbe2, np.ndarray)
@@ -332,8 +338,8 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 
 def test_get_hparameters():
-    assert isinstance(get_hparameters(), dict)
-    assert get_hparameters({"speed_pause": 20})["speed_pause"] == 20
+    assert isinstance(deepof.pose_utils.get_hparameters(), dict)
+    assert deepof.pose_utils.get_hparameters({"speed_pause": 20})["speed_pause"] == 20
 
 
 @settings(deadline=None)
@@ -342,8 +348,11 @@ def test_get_hparameters():
     h=st.integers(min_value=300, max_value=500),
 )
 def test_frame_corners(w, h):
-    assert len(frame_corners(w, h)) == 4
-    assert frame_corners(w, h, {"downright": "test"})["downright"] == "test"
+    assert len(deepof.pose_utils.frame_corners(w, h)) == 4
+    assert (
+        deepof.pose_utils.frame_corners(w, h, {"downright": "test"})["downright"]
+        == "test"
+    )
 
 
 @settings(deadline=None)

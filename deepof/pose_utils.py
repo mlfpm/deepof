@@ -25,7 +25,7 @@ import warnings
 warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 
 # Create custom string type
-Coordinates = Newisinstance("Coordinates", Any)
+Coordinates = NewType("Coordinates", Any)
 
 
 def close_single_contact(

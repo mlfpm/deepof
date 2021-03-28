@@ -11,10 +11,11 @@ Testing module for deepof.visuals
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-from deepof.utils import *
 import deepof.data
+import deepof.utils
 import deepof.visuals
 import matplotlib.figure
+import os
 
 
 @settings(deadline=None)
@@ -32,16 +33,16 @@ def test_plot_heatmap(bparts):
         .get_coords()
     )
 
-    assert (
-        isinstance(
-            deepof.visuals.plot_heatmap(
-                prun["test"],
-                bparts,
-                tuple([-100, 100]),
-                tuple([-100, 100]),
-                dpi=200,
-            ), matplotlib.figure.Figure
-    ))
+    assert isinstance(
+        deepof.visuals.plot_heatmap(
+            prun["test"],
+            bparts,
+            tuple([-100, 100]),
+            tuple([-100, 100]),
+            dpi=200,
+        ),
+        matplotlib.figure.Figure,
+    )
 
 
 def test_model_comparison_plot():
@@ -57,14 +58,13 @@ def test_model_comparison_plot():
         .get_coords()
     )
 
-    gmm_run = gmm_model_selection(
+    gmm_run = deepof.utils.gmm_model_selection(
         prun["test"], n_components_range=range(1, 3), n_runs=1, part_size=100
     )
 
-    assert (
-        isinstance(
-            deepof.visuals.model_comparison_plot(
-                gmm_run[0], gmm_run[1], range(1, 3), cov_plot="full"
-            ),
-        matplotlib.figure.Figure
-    ))
+    assert isinstance(
+        deepof.visuals.model_comparison_plot(
+            gmm_run[0], gmm_run[1], range(1, 3), cov_plot="full"
+        ),
+        matplotlib.figure.Figure,
+    )

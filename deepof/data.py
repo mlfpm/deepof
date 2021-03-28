@@ -40,8 +40,8 @@ import warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-Coordinates = deepof.utils.Newisinstance("Coordinates", deepof.utils.Any)
-Table_dict = deepof.utils.Newisinstance("Table_dict", deepof.utils.Any)
+Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
+Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 

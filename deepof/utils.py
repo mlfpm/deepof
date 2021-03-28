@@ -26,7 +26,7 @@ from typing import Tuple, Any, List, Union, NewType
 # DEFINE CUSTOM ANNOTATED TYPES #
 
 
-Coordinates = Newisinstance("Coordinates", Any)
+Coordinates = NewType("Coordinates", Any)
 
 
 # CONNECTIVITY FOR DLC MODELS

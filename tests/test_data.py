@@ -260,8 +260,8 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
 
-        assert (
-            isinstance(table.plot_heatmaps(bodyparts=["Spine_1"]), matplotlib.figure.Figure)
+        assert isinstance(
+            table.plot_heatmaps(bodyparts=["Spine_1"]), matplotlib.figure.Figure
         )
 
         align = sampler.draw(
