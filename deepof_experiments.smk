@@ -55,16 +55,14 @@ rule deepof_experiments:
 
 rule elliptical_arena_detector:
     input:
-        vid_path="./supplementary_notebooks/",
-        log_path="./logs/",
-        out_path="./trained_models/",
+        to_exec="supplementary_notebooks/regognise_elliptical_arena_blank.ipynb",
     output:
         exec="supplementary_notebooks/regognise_elliptical_arena.ipynb",
     shell:
-        "papermill supplementary_notebooks/regognise_elliptical_arena_blank.ipynb "
-        "-p vid_path {input.vid_path} "
-        "-p log_path {input.log_path} "
-        "-p out_path {input.out_path} "
+        "papermill {input.to_exec} "
+        "-p vid_path './supplementary_notebooks' "
+        "-p log_path ./logs' "
+        "-p out_path './logs' "
         "{output.exec}"
 
 
