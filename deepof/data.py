@@ -583,7 +583,7 @@ class coordinates:
             for key, tab in tabs.items():
                 tabs[key].index = pd.timedelta_range(
                     "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                ).asisinstance("timedelta64[s]")
+                ).astype("timedelta64[s]")
 
         if align:
             assert (
@@ -667,7 +667,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).asisinstance("timedelta64[s]")
+                    ).astype("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -732,7 +732,7 @@ class coordinates:
                 for key, tab in tabs.items():
                     tabs[key].index = pd.timedelta_range(
                         "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).asisinstance("timedelta64[s]")
+                    ).astype("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():

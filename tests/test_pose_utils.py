@@ -13,6 +13,7 @@ from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from itertools import combinations
 import deepof.data
 import deepof.pose_utils
 import matplotlib.figure

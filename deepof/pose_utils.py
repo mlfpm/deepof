@@ -528,7 +528,7 @@ def max_behaviour(
 
     speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
 
-    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).asisinstance("float")
+    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype("float")
     win_array = behaviour_dframe.rolling(window_size, center=True).sum()
     if stepped:
         win_array = win_array[::window_size]

@@ -750,7 +750,7 @@ def cluster_transition_matrix(
 
     # Stores all possible transitions between clusters
     clusters = [str(i) for i in range(nclusts)]
-    cluster_sequence = cluster_sequence.asisinstance(str)
+    cluster_sequence = cluster_sequence.astype(str)
 
     trans = {t: 0 for t in product(clusters, clusters)}
     k = len(clusters)
