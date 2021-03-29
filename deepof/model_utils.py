@@ -287,9 +287,7 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
             with writer.as_default():
                 tf.summary.scalar(
                     "average_neighborhood_cluster_entropy",
-                    data=np.average(
-                        purity_vector,
-                        weights=max_groups[random_idxs]),
+                    data=np.average(purity_vector, weights=max_groups[random_idxs]),
                     step=epoch,
                 )
                 tf.summary.scalar(
