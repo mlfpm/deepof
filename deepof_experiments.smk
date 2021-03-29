@@ -61,7 +61,7 @@ rule elliptical_arena_detector:
     shell:
         "papermill {input.to_exec} "
         "-p vid_path './supplementary_notebooks/' "
-        "-p log_path ./logs/' "
+        "-p log_path './logs/' "
         "-p out_path './trained_models/' "
         "{output.exec}"
 
