@@ -24,6 +24,7 @@ pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 rule deepof_experiments:
     input:
+        "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena.ipynb",
         # expand(
         #     os.path.join(
         #         outpath,
@@ -33,15 +34,15 @@ rule deepof_experiments:
         #     k=cluster_numbers,
         #     enc=encodings,
         # ),
-        expand(
-            "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
-            "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_entropyknn={entknn}_final_weights.h5",
-            loss=losses,
-            encs=encodings,
-            k=cluster_numbers,
-            latreg=latent_reg,
-            entknn=entropy_knn,
-        ),
+        # expand(
+        #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/latent_regularization_experiments/trained_weights/"
+        #     "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_entropyknn={entknn}_final_weights.h5",
+        #     loss=losses,
+        #     encs=encodings,
+        #     k=cluster_numbers,
+        #     latreg=latent_reg,
+        #     entknn=entropy_knn,
+        # ),
         # expand(
         #     "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/pheno_classification_experiments/trained_weights/"
         #     "GMVAE_loss={loss}_encoding={encs}_k={k}_pheno={phenos}_run_1_final_weights.h5",
@@ -50,6 +51,21 @@ rule deepof_experiments:
         #     k=cluster_numbers,
         #     phenos=pheno_weights,
         # ),
+
+
+rule elliptical_arena_detector:
+    input:
+        vid_path="./supplementary_notebooks/",
+        log_path="./logs/",
+        out_path="./trained_models/",
+    output:
+        exec="supplementary_notebooks/regognise_elliptical_arena.ipynb",
+    shell:
+        "papermill supplementary_notebooks/regognise_elliptical_arena.ipynb "
+        "-p vid_path {input.vid_path} "
+        "-p log_path {input.log_path} "
+        "-p out_path {input.out_path} "
+        "{output.exec}"
 
 
 rule coarse_hyperparameter_tuning:
