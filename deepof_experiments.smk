@@ -24,7 +24,7 @@ pheno_weights = [0.01, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 100.0]
 
 rule deepof_experiments:
     input:
-        "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena.ipynb",
+        "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
         # expand(
         #     os.path.join(
         #         outpath,
@@ -55,9 +55,9 @@ rule deepof_experiments:
 
 rule elliptical_arena_detector:
     input:
-        to_exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena_blank.ipynb",
+        to_exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena_blank.ipynb",
     output:
-        exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena.ipynb",
+        exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
     shell:
         "papermill {input.to_exec} "
         "-p vid_path './supplementary_notebooks/' "
