@@ -61,7 +61,7 @@ rule elliptical_arena_detector:
     output:
         exec="supplementary_notebooks/regognise_elliptical_arena.ipynb",
     shell:
-        "papermill supplementary_notebooks/regognise_elliptical_arena.ipynb "
+        "papermill supplementary_notebooks/regognise_elliptical_arena_blank.ipynb "
         "-p vid_path {input.vid_path} "
         "-p log_path {input.log_path} "
         "-p out_path {input.out_path} "
