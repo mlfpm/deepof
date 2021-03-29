@@ -1,0 +1,1 @@
+{"units_conv": 256, "units_lstm": 256, "units_dense2": 64, "dropout_rate": 0.25, "encoding": 16, "learning_rate": 0.001}

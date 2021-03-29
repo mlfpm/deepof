@@ -22,7 +22,7 @@ import tensorflow as tf
 
 
 def test_load_treatments():
-    assert deepof.train_utils.load_treatments(".") is None
+    assert deepof.train_utils.load_treatments("tests") is None
     assert isinstance(
         deepof.train_utils.load_treatments(
             os.path.join("tests", "test_examples", "test_single_topview", "Others")

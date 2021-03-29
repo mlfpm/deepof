@@ -17,9 +17,9 @@ from tensorboard.plugins.hparams import api as hp
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
 import deepof.model_utils
+import json
 import numpy as np
 import os
-import pickle
 import tensorflow as tf
 
 # Ignore warning with no downstream effect
@@ -53,11 +53,11 @@ def load_treatments(train_path):
         with open(
             os.path.join(
                 train_path,
-                [i for i in os.listdir(train_path) if i.endswith(".pkl")][0],
+                [i for i in os.listdir(train_path) if i.endswith(".json")][0],
             ),
-            "rb",
+            "r",
         ) as handle:
-            treatment_dict = pickle.load(handle)
+            treatment_dict = json.load(handle)
     except IndexError:
         treatment_dict = None
 
