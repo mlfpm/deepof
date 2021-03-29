@@ -55,14 +55,14 @@ rule deepof_experiments:
 
 rule elliptical_arena_detector:
     input:
-        to_exec="supplementary_notebooks/regognise_elliptical_arena_blank.ipynb",
+        to_exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena_blank.ipynb",
     output:
-        exec="supplementary_notebooks/regognise_elliptical_arena.ipynb",
+        exec="/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/regognise_elliptical_arena.ipynb",
     shell:
         "papermill {input.to_exec} "
-        "-p vid_path './supplementary_notebooks' "
-        "-p log_path ./logs' "
-        "-p out_path './logs' "
+        "-p vid_path './supplementary_notebooks/' "
+        "-p log_path ./logs/' "
+        "-p out_path './trained_models/' "
         "{output.exec}"
 
 
