@@ -588,12 +588,15 @@ def circular_arena_recognition(
 
     if detection_mode == "rule-based":
 
-        # Convert image to greyscale and threshold it
+        # Convert image to grayscale, threshold it and close it with a 5x5 kernel
+        kernel = np.ones((5, 5))
         gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
+        for _ in range(5):
+            thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
-        # Find contours in the processed image
-        cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        # Obtain contours from the image, and retain the largest one
+        cnts, _ = cv2.findContours(thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS)
         main_cnt = np.argmax([len(c) for c in cnts])
 
         # Detect the main ellipse containing the arena
