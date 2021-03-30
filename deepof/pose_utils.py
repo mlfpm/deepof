@@ -19,6 +19,7 @@ import os
 import pandas as pd
 import regex as re
 import seaborn as sns
+import tensorflow as tf
 import warnings
 
 # Ignore warning with no downstream effect
@@ -1051,7 +1052,7 @@ def rule_based_video(
         recog_limit,
         coordinates._arena,
         detection_mode=coordinates._arena_detection,
-        cnn_model=self._ellipse_detection_model,
+        cnn_model=coordinates._ellipse_detection_model,
     )
     corners = frame_corners(h, w)
 
