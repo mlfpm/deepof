@@ -10,15 +10,16 @@ Functions and general utilities for the deepof tensorflow models. See documentat
 
 from itertools import combinations
 from typing import Any, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+import tensorflow_probability as tfp
 from scipy.stats import entropy
 from sklearn.neighbors import NearestNeighbors
 from tensorflow.keras import backend as K
 from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
-import matplotlib.pyplot as plt
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
 
 tfd = tfp.distributions
 tfpl = tfp.layers
@@ -44,7 +45,7 @@ class exponential_learning_rate(tf.keras.callbacks.Callback):
 
 
 def find_learning_rate(
-    model, X, y, epochs=1, batch_size=32, min_rate=10 ** -5, max_rate=10
+        model, X, y, epochs=1, batch_size=32, min_rate=10 ** -5, max_rate=10
 ):
     """Trains the provided model for an epoch with an exponentially increasing learning rate"""
 
@@ -123,9 +124,9 @@ def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:
     y_kernel = compute_kernel(y, y)
     xy_kernel = compute_kernel(x, y)
     mmd = (
-        tf.reduce_mean(x_kernel)
-        + tf.reduce_mean(y_kernel)
-        - 2 * tf.reduce_mean(xy_kernel)
+            tf.reduce_mean(x_kernel)
+            + tf.reduce_mean(y_kernel)
+            - 2 * tf.reduce_mean(xy_kernel)
     )
     return mmd
 
@@ -140,13 +141,13 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self,
-        iterations: int,
-        max_rate: float,
-        start_rate: float = None,
-        last_iterations: int = None,
-        last_rate: float = None,
-        log_dir: str = ".",
+            self,
+            iterations: int,
+            max_rate: float,
+            start_rate: float = None,
+            last_iterations: int = None,
+            last_rate: float = None,
+            log_dir: str = ".",
     ):
         super().__init__()
         self.iterations = iterations
@@ -212,13 +213,13 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
     """
 
     def __init__(
-        self,
-        encoding_dim: int,
-        variational: bool = True,
-        validation_data: np.ndarray = None,
-        k: int = 100,
-        samples: int = 10000,
-        log_dir: str = ".",
+            self,
+            encoding_dim: int,
+            variational: bool = True,
+            validation_data: np.ndarray = None,
+            k: int = 100,
+            samples: int = 10000,
+            log_dir: str = ".",
     ):
         super().__init__()
         self.enc = encoding_dim
@@ -270,7 +271,6 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
             purity_vector = np.zeros(self.samples)
 
             for i, sample in enumerate(random_idxs):
-
                 neighborhood = knn.kneighbors(
                     encoding[sample][np.newaxis, :], self.k, return_distance=False
                 ).flatten()
@@ -531,7 +531,7 @@ class Cluster_overlap(Layer):
         dists = []
         for k in range(self.n_components):
             locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
+            scales = tf.keras.activations.softplus(target[..., self.lat_dims:, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])

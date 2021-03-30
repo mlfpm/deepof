@@ -9,9 +9,11 @@ deep autoencoder models for unsupervised pose detection
 """
 
 from typing import Any, Dict, Tuple
+
+import tensorflow as tf
+import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
-from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
@@ -19,9 +21,8 @@ from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Nadam
+
 import deepof.model_utils
-import tensorflow as tf
-import tensorflow_probability as tfp
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -33,9 +34,9 @@ class SEQ_2_SEQ_AE:
     """  Simple sequence to sequence autoencoder implemented with tf.keras """
 
     def __init__(
-        self,
-        architecture_hparams: Dict = {},
-        huber_delta: float = 1.0,
+            self,
+            architecture_hparams: Dict = {},
+            huber_delta: float = 1.0,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.CONV_filters = self.hparams["units_conv"]
@@ -170,8 +171,8 @@ class SEQ_2_SEQ_AE:
         )
 
     def build(
-        self,
-        input_shape: tuple,
+            self,
+            input_shape: tuple,
     ) -> Tuple[Any, Any, Any]:
         """Builds the tf.keras model"""
 
@@ -241,22 +242,22 @@ class SEQ_2_SEQ_GMVAE:
     """  Gaussian Mixture Variational Autoencoder for pose motif elucidation.  """
 
     def __init__(
-        self,
-        architecture_hparams: dict = {},
-        batch_size: int = 256,
-        compile_model: bool = True,
-        encoding: int = 6,
-        kl_warmup_epochs: int = 20,
-        loss: str = "ELBO",
-        mmd_warmup_epochs: int = 20,
-        montecarlo_kl: int = 1,
-        neuron_control: bool = False,
-        number_of_components: int = 1,
-        overlap_loss: float = 0.0,
-        phenotype_prediction: float = 0.0,
-        predictor: float = 0.0,
-        reg_cat_clusters: bool = False,
-        reg_cluster_variance: bool = False,
+            self,
+            architecture_hparams: dict = {},
+            batch_size: int = 256,
+            compile_model: bool = True,
+            encoding: int = 6,
+            kl_warmup_epochs: int = 20,
+            loss: str = "ELBO",
+            mmd_warmup_epochs: int = 20,
+            montecarlo_kl: int = 1,
+            neuron_control: bool = False,
+            number_of_components: int = 1,
+            overlap_loss: float = 0.0,
+            phenotype_prediction: float = 0.0,
+            predictor: float = 0.0,
+            reg_cat_clusters: bool = False,
+            reg_cluster_variance: bool = False,
     ):
         self.hparams = self.get_hparams(architecture_hparams)
         self.batch_size = batch_size
@@ -289,7 +290,7 @@ class SEQ_2_SEQ_GMVAE:
         self.reg_cluster_variance = reg_cluster_variance
 
         assert (
-            "ELBO" in self.loss or "MMD" in self.loss
+                "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     @property
@@ -612,7 +613,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]) + 1e-5,
+                            scale=softplus(gauss[1][..., self.ENCODING:, k]) + 1e-5,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -624,7 +625,6 @@ class SEQ_2_SEQ_GMVAE:
 
         # Define and control custom loss functions
         if "ELBO" in self.loss:
-
             kl_warm_up_iters = tf.cast(
                 self.kl_warmup * (input_shape[0] // self.batch_size + 1),
                 tf.int64,
@@ -640,7 +640,6 @@ class SEQ_2_SEQ_GMVAE:
             )(z)
 
         if "MMD" in self.loss:
-
             mmd_warm_up_iters = tf.cast(
                 self.mmd_warmup * (input_shape[0] // self.batch_size + 1),
                 tf.int64,
@@ -761,7 +760,6 @@ class SEQ_2_SEQ_GMVAE:
     @prior.setter
     def prior(self, value):
         self._prior = value
-
 
 # TODO:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)

@@ -8,19 +8,20 @@ Simple utility functions used in deepof example scripts. These are not part of t
 
 """
 
+import json
+import os
 from datetime import date, datetime
+from typing import Tuple, Union, Any, List
+
+import numpy as np
+import tensorflow as tf
 from kerastuner import BayesianOptimization, Hyperband
-from kerastuner import HyperParameters
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from sklearn.metrics import roc_auc_score
 from tensorboard.plugins.hparams import api as hp
-from typing import Tuple, Union, Any, List
+
 import deepof.hypermodels
 import deepof.model_utils
-import json
-import numpy as np
-import os
-import tensorflow as tf
 
 # Ignore warning with no downstream effect
 tf.get_logger().setLevel("ERROR")
@@ -51,11 +52,11 @@ def load_treatments(train_path):
     to be loaded as metadata in the coordinates class"""
     try:
         with open(
-            os.path.join(
-                train_path,
-                [i for i in os.listdir(train_path) if i.endswith(".json")][0],
-            ),
-            "r",
+                os.path.join(
+                    train_path,
+                    [i for i in os.listdir(train_path) if i.endswith(".json")][0],
+                ),
+                "r",
         ) as handle:
             treatment_dict = json.load(handle)
     except IndexError:
@@ -65,20 +66,20 @@ def load_treatments(train_path):
 
 
 def get_callbacks(
-    X_train: np.array,
-    batch_size: int,
-    variational: bool,
-    phenotype_class: float,
-    predictor: float,
-    loss: str,
-    X_val: np.array = None,
-    cp: bool = False,
-    reg_cat_clusters: bool = False,
-    reg_cluster_variance: bool = False,
-    entropy_samples: int = 15000,
-    entropy_knn: int = 100,
-    logparam: dict = None,
-    outpath: str = ".",
+        X_train: np.array,
+        batch_size: int,
+        variational: bool,
+        phenotype_class: float,
+        predictor: float,
+        loss: str,
+        X_val: np.array = None,
+        cp: bool = False,
+        reg_cat_clusters: bool = False,
+        reg_cluster_variance: bool = False,
+        entropy_samples: int = 15000,
+        entropy_knn: int = 100,
+        logparam: dict = None,
+        outpath: str = ".",
 ) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
     - run_ID: run name, with coarse parameter details;
@@ -196,14 +197,14 @@ def log_hyperparameters(phenotype_class: float, rec: str):
 
 # noinspection PyUnboundLocalVariable
 def tensorboard_metric_logging(
-    run_dir: str,
-    hpms: Any,
-    ae: Any,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-    phenotype_class: float,
-    predictor: float,
-    rec: str,
+        run_dir: str,
+        hpms: Any,
+        ae: Any,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        phenotype_class: float,
+        predictor: float,
+        rec: str,
 ):
     """Autoencoder metric logging in tensorboard"""
 
@@ -245,29 +246,29 @@ def tensorboard_metric_logging(
 
 
 def autoencoder_fitting(
-    preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    batch_size: int,
-    encoding_size: int,
-    epochs: int,
-    hparams: dict,
-    kl_warmup: int,
-    log_history: bool,
-    log_hparams: bool,
-    loss: str,
-    mmd_warmup: int,
-    montecarlo_kl: int,
-    n_components: int,
-    output_path: str,
-    phenotype_class: float,
-    predictor: float,
-    pretrained: str,
-    save_checkpoints: bool,
-    save_weights: bool,
-    variational: bool,
-    reg_cat_clusters: bool,
-    reg_cluster_variance: bool,
-    entropy_samples: int,
-    entropy_knn: int,
+        preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        batch_size: int,
+        encoding_size: int,
+        epochs: int,
+        hparams: dict,
+        kl_warmup: int,
+        log_history: bool,
+        log_hparams: bool,
+        loss: str,
+        mmd_warmup: int,
+        montecarlo_kl: int,
+        n_components: int,
+        output_path: str,
+        phenotype_class: float,
+        predictor: float,
+        pretrained: str,
+        save_checkpoints: bool,
+        save_weights: bool,
+        variational: bool,
+        reg_cat_clusters: bool,
+        reg_cluster_variance: bool,
+        entropy_samples: int,
+        entropy_knn: int,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -312,7 +313,7 @@ def autoencoder_fitting(
         logparams, metrics = log_hyperparameters(phenotype_class, rec)
 
         with tf.summary.create_file_writer(
-            os.path.join(output_path, "hparams", run_ID)
+                os.path.join(output_path, "hparams", run_ID)
         ).as_default():
             hp.hparams_config(
                 hparams=logparams,
@@ -362,14 +363,14 @@ def autoencoder_fitting(
                 verbose=1,
                 validation_data=(X_val, X_val),
                 callbacks=cbacks
-                + [
-                    CustomStopper(
-                        monitor="val_loss",
-                        patience=5,
-                        restore_best_weights=True,
-                        start_epoch=max(kl_warmup, mmd_warmup),
-                    ),
-                ],
+                          + [
+                              CustomStopper(
+                                  monitor="val_loss",
+                                  patience=5,
+                                  restore_best_weights=True,
+                                  start_epoch=max(kl_warmup, mmd_warmup),
+                              ),
+                          ],
             )
 
             if save_weights:
@@ -439,23 +440,23 @@ def autoencoder_fitting(
 
 
 def tune_search(
-    data: List[np.array],
-    encoding_size: int,
-    hypertun_trials: int,
-    hpt_type: str,
-    hypermodel: str,
-    k: int,
-    kl_warmup_epochs: int,
-    loss: str,
-    mmd_warmup_epochs: int,
-    overlap_loss: float,
-    phenotype_class: float,
-    predictor: float,
-    project_name: str,
-    callbacks: List,
-    n_epochs: int = 30,
-    n_replicas: int = 1,
-    outpath: str = ".",
+        data: List[np.array],
+        encoding_size: int,
+        hypertun_trials: int,
+        hpt_type: str,
+        hypermodel: str,
+        k: int,
+        kl_warmup_epochs: int,
+        loss: str,
+        mmd_warmup_epochs: int,
+        overlap_loss: float,
+        phenotype_class: float,
+        predictor: float,
+        project_name: str,
+        callbacks: List,
+        n_epochs: int = 30,
+        n_replicas: int = 1,
+        outpath: str = ".",
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
 
@@ -494,7 +495,7 @@ def tune_search(
 
     if hypermodel == "S2SAE":  # pragma: no cover
         assert (
-            predictor == 0.0 and phenotype_class == 0.0
+                predictor == 0.0 and phenotype_class == 0.0
         ), "Prediction branches are only available for variational models. See documentation for more details"
         batch_size = 1
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=X_train.shape)

@@ -8,19 +8,21 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 
 """
 
+import os
+import warnings
 from itertools import combinations
-from scipy import stats
 from typing import Any, List, NewType
+
 import cv2
-import deepof.utils
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
 import regex as re
 import seaborn as sns
 import tensorflow as tf
-import warnings
+from scipy import stats
+
+import deepof.utils
 
 # Ignore warning with no downstream effect
 warnings.filterwarnings("ignore", message="All-NaN slice encountered")
@@ -30,12 +32,12 @@ Coordinates = NewType("Coordinates", Any)
 
 
 def close_single_contact(
-    pos_dframe: pd.DataFrame,
-    left: str,
-    right: str,
-    tol: float,
-    arena_abs: int,
-    arena_rel: int,
+        pos_dframe: pd.DataFrame,
+        left: str,
+        right: str,
+        tol: float,
+        arena_abs: int,
+        arena_rel: int,
 ) -> np.array:
     """Returns a boolean array that's True if the specified body parts are closer than tol.
 
@@ -56,8 +58,8 @@ def close_single_contact(
 
     if isinstance(right, str):
         close_contact = (
-            np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
-        ) / arena_rel < tol
+                                np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
+                        ) / arena_rel < tol
 
     elif isinstance(right, list):
         close_contact = np.any(
@@ -74,15 +76,15 @@ def close_single_contact(
 
 
 def close_double_contact(
-    pos_dframe: pd.DataFrame,
-    left1: str,
-    left2: str,
-    right1: str,
-    right2: str,
-    tol: float,
-    arena_abs: int,
-    arena_rel: int,
-    rev: bool = False,
+        pos_dframe: pd.DataFrame,
+        left1: str,
+        left2: str,
+        right1: str,
+        right2: str,
+        tol: float,
+        arena_abs: int,
+        arena_rel: int,
+        rev: bool = False,
 ) -> np.array:
     """Returns a boolean array that's True if the specified body parts are closer than tol.
 
@@ -104,25 +106,25 @@ def close_double_contact(
 
     if rev:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
-            < tol
-        ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
-            < tol
-        )
+                                 (np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1) * arena_abs)
+                                 / arena_rel
+                                 < tol
+                         ) & (
+                                 (np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1) * arena_abs)
+                                 / arena_rel
+                                 < tol
+                         )
 
     else:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
-            < tol
-        ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
-            < tol
-        )
+                                 (np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1) * arena_abs)
+                                 / arena_rel
+                                 < tol
+                         ) & (
+                                 (np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1) * arena_abs)
+                                 / arena_rel
+                                 < tol
+                         )
 
     return double_contact
 
@@ -150,12 +152,12 @@ def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
 
 
 def climb_wall(
-    arena_type: str,
-    arena: np.array,
-    pos_dict: pd.DataFrame,
-    tol: float,
-    nose: str,
-    centered_data: bool = False,
+        arena_type: str,
+        arena: np.array,
+        pos_dict: pd.DataFrame,
+        tol: float,
+        nose: str,
+        centered_data: bool = False,
 ) -> np.array:
     """Returns True if the specified mouse is climbing the wall
 
@@ -195,16 +197,16 @@ def climb_wall(
 
 
 def sniff_object(
-    speed_dframe: pd.DataFrame,
-    arena_type: str,
-    arena: np.array,
-    pos_dict: pd.DataFrame,
-    tol: float,
-    tol_speed: float,
-    nose: str,
-    centered_data: bool = False,
-    object: str = "arena",
-    animal_id: str = "",
+        speed_dframe: pd.DataFrame,
+        arena_type: str,
+        arena: np.array,
+        pos_dict: pd.DataFrame,
+        tol: float,
+        tol_speed: float,
+        nose: str,
+        centered_data: bool = False,
+        object: str = "arena",
+        animal_id: str = "",
 ):
     """Returns True if the specified mouse is sniffing an object
 
@@ -267,11 +269,11 @@ def sniff_object(
 
 
 def huddle(
-    pos_dframe: pd.DataFrame,
-    speed_dframe: pd.DataFrame,
-    tol_forward: float,
-    tol_speed: float,
-    animal_id: str = "",
+        pos_dframe: pd.DataFrame,
+        speed_dframe: pd.DataFrame,
+        tol_forward: float,
+        tol_speed: float,
+        animal_id: str = "",
 ) -> np.array:
     """Returns true when the mouse is huddling using simple rules.
 
@@ -292,18 +294,18 @@ def huddle(
         animal_id += "_"
 
     forward = (
-        np.linalg.norm(
-            pos_dframe[animal_id + "Left_bhip"] - pos_dframe[animal_id + "Left_fhip"],
-            axis=1,
-        )
-        < tol_forward
-    ) | (
-        np.linalg.norm(
-            pos_dframe[animal_id + "Right_bhip"] - pos_dframe[animal_id + "Right_fhip"],
-            axis=1,
-        )
-        < tol_forward
-    )
+                      np.linalg.norm(
+                          pos_dframe[animal_id + "Left_bhip"] - pos_dframe[animal_id + "Left_fhip"],
+                          axis=1,
+                      )
+                      < tol_forward
+              ) | (
+                      np.linalg.norm(
+                          pos_dframe[animal_id + "Right_bhip"] - pos_dframe[animal_id + "Right_fhip"],
+                          axis=1,
+                      )
+                      < tol_forward
+              )
 
     speed = speed_dframe[animal_id + "Center"] < tol_speed
     hudd = forward & speed
@@ -312,11 +314,11 @@ def huddle(
 
 
 def dig(
-    speed_dframe: pd.DataFrame,
-    likelihood_dframe: pd.DataFrame,
-    tol_speed: float,
-    tol_likelihood: float,
-    animal_id: str = "",
+        speed_dframe: pd.DataFrame,
+        likelihood_dframe: pd.DataFrame,
+        tol_speed: float,
+        tol_likelihood: float,
+        animal_id: str = "",
 ):
     """Returns true when the mouse is digging using simple rules.
 
@@ -343,11 +345,11 @@ def dig(
 
 
 def look_around(
-    speed_dframe: pd.DataFrame,
-    likelihood_dframe: pd.DataFrame,
-    tol_speed: float,
-    tol_likelihood: float,
-    animal_id: str = "",
+        speed_dframe: pd.DataFrame,
+        likelihood_dframe: pd.DataFrame,
+        tol_speed: float,
+        tol_likelihood: float,
+        animal_id: str = "",
 ):
     """Returns true when the mouse is digging using simple rules.
 
@@ -376,12 +378,12 @@ def look_around(
 
 
 def following_path(
-    distance_dframe: pd.DataFrame,
-    position_dframe: pd.DataFrame,
-    follower: str,
-    followed: str,
-    frames: int = 20,
-    tol: float = 0,
+        distance_dframe: pd.DataFrame,
+        position_dframe: pd.DataFrame,
+        follower: str,
+        followed: str,
+        frames: int = 20,
+        tol: float = 0,
 ) -> np.array:
     """For multi animal videos only. Returns True if 'follower' is closer than tol to the path that
     followed has walked over the last specified number of frames
@@ -412,15 +414,15 @@ def following_path(
 
     # Check that the animals are oriented follower's nose -> followed's tail
     right_orient1 = (
-        distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
-        < distance_dframe[
-            tuple(sorted([follower + "_Tail_base", followed + "_Tail_base"]))
-        ]
+            distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
+            < distance_dframe[
+                tuple(sorted([follower + "_Tail_base", followed + "_Tail_base"]))
+            ]
     )
 
     right_orient2 = (
-        distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
-        < distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Nose"]))]
+            distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
+            < distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Nose"]))]
     )
 
     follow = np.all(
@@ -432,13 +434,13 @@ def following_path(
 
 
 def single_behaviour_analysis(
-    behaviour_name: str,
-    treatment_dict: dict,
-    behavioural_dict: dict,
-    plot: int = 0,
-    stat_tests: bool = True,
-    save: str = None,
-    ylim: float = None,
+        behaviour_name: str,
+        treatment_dict: dict,
+        behavioural_dict: dict,
+        plot: int = 0,
+        stat_tests: bool = True,
+        save: str = None,
+        ylim: float = None,
 ) -> list:
     """Given the name of the behaviour, a dictionary with the names of the groups to compare, and a dictionary
     with the actual tags, outputs a box plot and a series of significance tests amongst the groups
@@ -493,13 +495,13 @@ def single_behaviour_analysis(
         for i in combinations(treatment_dict.keys(), 2):
             # Solves issue with automatically generated examples
             if np.any(
-                np.array(
-                    [
-                        beh_dict[i[0]] == beh_dict[i[1]],
-                        np.var(beh_dict[i[0]]) == 0,
-                        np.var(beh_dict[i[1]]) == 0,
-                    ]
-                )
+                    np.array(
+                        [
+                            beh_dict[i[0]] == beh_dict[i[1]],
+                            np.var(beh_dict[i[0]]) == 0,
+                            np.var(beh_dict[i[1]]) == 0,
+                        ]
+                    )
             ):
                 stat_dict[i] = "Identical sources. Couldn't run"
             else:
@@ -512,7 +514,7 @@ def single_behaviour_analysis(
 
 
 def max_behaviour(
-    behaviour_dframe: pd.DataFrame, window_size: int = 10, stepped: bool = False
+        behaviour_dframe: pd.DataFrame, window_size: int = 10, stepped: bool = False
 ) -> np.array:
     """Returns the most frequent behaviour in a window of window_size frames
 
@@ -596,19 +598,19 @@ def frame_corners(w, h, corners: dict = {}):
 
 # noinspection PyDefaultArgument,PyProtectedMember
 def rule_based_tagging(
-    tracks: List,
-    videos: List,
-    coordinates: Coordinates,
-    coords: Any,
-    dists: Any,
-    speeds: Any,
-    vid_index: int,
-    arena_type: str,
-    arena_detection_mode: str,
-    ellipse_detection_model: tf.keras.models.Model = None,
-    recog_limit: int = 100,
-    path: str = os.path.join("."),
-    params: dict = {},
+        tracks: List,
+        videos: List,
+        coordinates: Coordinates,
+        coords: Any,
+        dists: Any,
+        speeds: Any,
+        vid_index: int,
+        arena_type: str,
+        arena_detection_mode: str,
+        ellipse_detection_model: tf.keras.models.Model = None,
+        recog_limit: int = 100,
+        path: str = os.path.join("."),
+        params: dict = {},
 ) -> pd.DataFrame:
     """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
     video displaying the information in real time
@@ -828,18 +830,18 @@ def rule_based_tagging(
 
 
 def tag_rulebased_frames(
-    frame,
-    font,
-    frame_speeds,
-    animal_ids,
-    corners,
-    tag_dict,
-    fnum,
-    undercond,
-    hparams,
-    arena,
-    debug,
-    coords,
+        frame,
+        font,
+        frame_speeds,
+        animal_ids,
+        corners,
+        tag_dict,
+        fnum,
+        undercond,
+        hparams,
+        arena,
+        debug,
+        coords,
 ):
     """Helper function for rule_based_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
@@ -995,16 +997,16 @@ def tag_rulebased_frames(
 
 # noinspection PyProtectedMember,PyDefaultArgument
 def rule_based_video(
-    coordinates: Coordinates,
-    tracks: List,
-    videos: List,
-    vid_index: int,
-    tag_dict: pd.DataFrame,
-    frame_limit: int = np.inf,
-    recog_limit: int = 100,
-    path: str = os.path.join("."),
-    params: dict = {},
-    debug: bool = False,
+        coordinates: Coordinates,
+        tracks: List,
+        videos: List,
+        vid_index: int,
+        tag_dict: pd.DataFrame,
+        frame_limit: int = np.inf,
+        recog_limit: int = 100,
+        path: str = os.path.join("."),
+        params: dict = {},
+        debug: bool = False,
 ) -> True:
     """Renders a version of the input video with all rule-based taggings in place.
 
@@ -1078,8 +1080,8 @@ def rule_based_video(
         # Capture speeds
         try:
             if (
-                list(frame_speeds.values())[0] == -np.inf
-                or fnum % params["speed_pause"] == 0
+                    list(frame_speeds.values())[0] == -np.inf
+                    or fnum % params["speed_pause"] == 0
             ):
                 for _id in animal_ids:
                     frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
@@ -1122,7 +1124,6 @@ def rule_based_video(
     cv2.destroyAllWindows()
 
     return True
-
 
 # TODO:
 #    - Is border sniffing anything you might consider interesting?

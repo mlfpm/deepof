@@ -10,11 +10,8 @@ usage: python -m examples.model_training -h
 """
 
 from deepof.data import *
-from deepof.models import *
-from deepof.utils import *
 from deepof.train_utils import *
-from tensorboard.plugins.hparams import api as hp
-from sklearn.metrics import roc_auc_score
+from deepof.utils import *
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -80,7 +77,7 @@ parser.add_argument(
     "--hyperparameter-tuning",
     "-tune",
     help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
-    "See documentation for details",
+         "See documentation for details",
     type=str,
     default=False,
 )
@@ -88,7 +85,7 @@ parser.add_argument(
     "--hyperparameters",
     "-hp",
     help="Path pointing to a pickled dictionary of network hyperparameters. "
-    "Thought to be used with the output of hyperparameter tuning",
+         "Thought to be used with the output of hyperparameter tuning",
     type=str,
     default=None,
 )
@@ -96,8 +93,8 @@ parser.add_argument(
     "--input-type",
     "-d",
     help="Select an input type for the autoencoder hypermodels. "
-    "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle."
-    "Defaults to coords.",
+         "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle."
+         "Defaults to coords.",
     type=str,
     default="dists",
 )
@@ -126,8 +123,8 @@ parser.add_argument(
     "--latent-reg",
     "-lreg",
     help="Sets the strategy to regularize the latent mixture of Gaussians. "
-    "It has to be one of none, categorical (an elastic net penalty is applied to the categorical distribution),"
-    "variance (l2 penalty to the variance of the clusters) or categorical+variance. Defaults to none.",
+         "It has to be one of none, categorical (an elastic net penalty is applied to the categorical distribution),"
+         "variance (l2 penalty to the variance of the clusters) or categorical+variance. Defaults to none.",
     default="none",
     type=str,
 )
@@ -135,7 +132,7 @@ parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
-    "It has to be one of ELBO+MMD, ELBO or MMD. Defaults to ELBO+MMD",
+         "It has to be one of ELBO+MMD, ELBO or MMD. Defaults to ELBO+MMD",
     default="ELBO+MMD",
     type=str,
 )
@@ -185,7 +182,7 @@ parser.add_argument(
     "--predictor",
     "-pred",
     help="Activates the prediction branch of the variational Seq 2 Seq model with the specified weight. "
-    "Defaults to 0.0 (inactive)",
+         "Defaults to 0.0 (inactive)",
     default=0.0,
     type=float,
 )
@@ -193,7 +190,7 @@ parser.add_argument(
     "--smooth-alpha",
     "-sa",
     help="Sets the exponential smoothing factor to apply to the input data. "
-    "Float between 0 and 1 (lower is more smooting)",
+         "Float between 0 and 1 (lower is more smooting)",
     type=float,
     default=0.99,
 )
@@ -439,11 +436,11 @@ else:
 
     # Saves the best hyperparameters
     with open(
-        os.path.join(
-            output_path,
-            "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()),
-        ),
-        "wb",
+            os.path.join(
+                output_path,
+                "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()),
+            ),
+            "wb",
     ) as handle:
         pickle.dump(
             best_hyperparameters.values, handle, protocol=pickle.HIGHEST_PROTOCOL

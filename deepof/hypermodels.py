@@ -8,10 +8,11 @@ keras hypermodels for hyperparameter tuning of deep autoencoders
 
 """
 
-from kerastuner import HyperModel
-import deepof.models
-import deepof.model_utils
 import tensorflow_probability as tfp
+from kerastuner import HyperModel
+
+import deepof.model_utils
+import deepof.models
 
 tfd = tfp.distributions
 tfpl = tfp.layers
@@ -92,18 +93,18 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
     """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE"""
 
     def __init__(
-        self,
-        input_shape: tuple,
-        encoding: int,
-        kl_warmup_epochs: int = 0,
-        learn_rate: float = 1e-3,
-        loss: str = "ELBO+MMD",
-        mmd_warmup_epochs: int = 0,
-        number_of_components: int = 10,
-        overlap_loss: float = False,
-        phenotype_predictor: float = 0.0,
-        predictor: float = 0.0,
-        prior: str = "standard_normal",
+            self,
+            input_shape: tuple,
+            encoding: int,
+            kl_warmup_epochs: int = 0,
+            learn_rate: float = 1e-3,
+            loss: str = "ELBO+MMD",
+            mmd_warmup_epochs: int = 0,
+            number_of_components: int = 10,
+            overlap_loss: float = False,
+            phenotype_predictor: float = 0.0,
+            predictor: float = 0.0,
+            prior: str = "standard_normal",
     ):
         super().__init__()
         self.input_shape = input_shape
@@ -119,7 +120,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.prior = prior
 
         assert (
-            "ELBO" in self.loss or "MMD" in self.loss
+                "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     def get_hparams(self, hp):
@@ -190,7 +191,6 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         ).build(self.input_shape)[-1]
 
         return gmvaep
-
 
 # TODO:
 #    - We can add as many parameters as we want to the hypermodel!

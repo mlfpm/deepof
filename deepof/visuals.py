@@ -8,25 +8,25 @@ General plotting functions for the deepof package
 
 """
 
+from itertools import cycle
+from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from itertools import cycle
-from typing import List
 
 
 # PLOTTING FUNCTIONS #
 
 
 def plot_heatmap(
-    dframe: pd.DataFrame,
-    bodyparts: List,
-    xlim: tuple,
-    ylim: tuple,
-    save: str = False,
-    dpi: int = 200,
+        dframe: pd.DataFrame,
+        bodyparts: List,
+        xlim: tuple,
+        ylim: tuple,
+        save: str = False,
+        dpi: int = 200,
 ) -> plt.figure:
     """Returns a heatmap of the movement of a specific bodypart in the arena.
     If more than one bodypart is passed, it returns one subplot for each
@@ -73,13 +73,13 @@ def plot_heatmap(
 
 
 def model_comparison_plot(
-    bic: list,
-    m_bic: list,
-    n_components_range: range,
-    cov_plot: str,
-    save: str = False,
-    cv_types: tuple = ("spherical", "tied", "diag", "full"),
-    dpi: int = 200,
+        bic: list,
+        m_bic: list,
+        n_components_range: range,
+        cov_plot: str,
+        save: str = False,
+        cv_types: tuple = ("spherical", "tied", "diag", "full"),
+        dpi: int = 200,
 ) -> plt.figure:
     """
 
@@ -119,7 +119,7 @@ def model_comparison_plot(
         bars.append(
             spl.bar(
                 xpos,
-                m_bic[i * len(n_components_range) : (i + 1) * len(n_components_range)],
+                m_bic[i * len(n_components_range): (i + 1) * len(n_components_range)],
                 color=color,
                 width=0.2,
             )
@@ -128,9 +128,9 @@ def model_comparison_plot(
     spl.set_xticks(n_components_range)
     plt.title("BIC score per model")
     xpos = (
-        np.mod(m_bic.argmin(), len(n_components_range))
-        + 0.5
-        + 0.2 * np.floor(m_bic.argmin() / len(n_components_range))
+            np.mod(m_bic.argmin(), len(n_components_range))
+            + 0.5
+            + 0.2 * np.floor(m_bic.argmin() / len(n_components_range))
     )
     # noinspection PyArgumentList
     spl.text(xpos, m_bic.min() * 0.97 + 0.1 * m_bic.max(), "*", fontsize=14)
