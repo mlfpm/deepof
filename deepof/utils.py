@@ -146,7 +146,7 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_dist(
-        pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
+    pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
     """Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
 
@@ -169,7 +169,7 @@ def compute_dist(
 
 
 def bpart_distance(
-        dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
+    dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
     """Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
@@ -208,7 +208,7 @@ def angle(a: np.array, b: np.array, c: np.array) -> np.array:
     bc = c - b
 
     cosine_angle = np.einsum("...i,...i", ba, bc) / (
-            np.linalg.norm(ba, axis=1) * np.linalg.norm(bc, axis=1)
+        np.linalg.norm(ba, axis=1) * np.linalg.norm(bc, axis=1)
     )
     ang = np.arccos(cosine_angle)
 
@@ -231,7 +231,7 @@ def angle_trio(bpart_array: np.array) -> np.array:
 
 
 def rotate(
-        p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
+    p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:
     """Returns a numpy.array with the initial values rotated by angles radians
 
@@ -363,12 +363,12 @@ def moving_average(time_series: pd.Series, N: int = 5):
 
 
 def mask_outliers(
-        time_series: pd.DataFrame,
-        likelihood: pd.DataFrame,
-        likelihood_tolerance: float,
-        lag: int,
-        n_std: int,
-        mode: str,
+    time_series: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
+    lag: int,
+    n_std: int,
+    mode: str,
 ):
     """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers
 
@@ -404,13 +404,13 @@ def mask_outliers(
 
 
 def full_outlier_mask(
-        experiment: pd.DataFrame,
-        likelihood: pd.DataFrame,
-        likelihood_tolerance: float,
-        exclude: str,
-        lag: int,
-        n_std: int,
-        mode: str,
+    experiment: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
+    exclude: str,
+    lag: int,
+    n_std: int,
+    mode: str,
 ):
     """Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
     replaced by a boolean mask, where True indicates an outlier
@@ -455,14 +455,14 @@ def full_outlier_mask(
 
 
 def interpolate_outliers(
-        experiment: pd.DataFrame,
-        likelihood: pd.DataFrame,
-        likelihood_tolerance: float,
-        exclude: str = "",
-        lag: int = 5,
-        n_std: int = 3,
-        mode: str = "or",
-        limit: int = 10,
+    experiment: pd.DataFrame,
+    likelihood: pd.DataFrame,
+    likelihood_tolerance: float,
+    exclude: str = "",
+    lag: int = 5,
+    n_std: int = 3,
+    mode: str = "or",
+    limit: int = 10,
 ):
     """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
@@ -496,13 +496,13 @@ def interpolate_outliers(
 
 
 def recognize_arena(
-        videos: list,
-        vid_index: int,
-        path: str = ".",
-        recoglimit: int = 100,
-        arena_type: str = "circular",
-        detection_mode: str = "cnn",
-        cnn_model: tf.keras.models.Model = None,
+    videos: list,
+    vid_index: int,
+    path: str = ".",
+    recoglimit: int = 100,
+    arena_type: str = "circular",
+    detection_mode: str = "cnn",
+    cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
     """Returns numpy.array with information about the arena recognised from the first frames
     of the video. WARNING: estimates won't be reliable if the camera moves along the video.
@@ -567,9 +567,9 @@ def recognize_arena(
 
 
 def circular_arena_recognition(
-        frame: np.array,
-        detection_mode: str = "cnn",
-        cnn_model: tf.keras.models.Model = None,
+    frame: np.array,
+    detection_mode: str = "cnn",
+    cnn_model: tf.keras.models.Model = None,
 ) -> np.array:
     """Returns x,y position of the center, the lengths of the major and minor axes,
     and the angle of the recognised arena
@@ -596,7 +596,9 @@ def circular_arena_recognition(
             thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
         # Obtain contours from the image, and retain the largest one
-        cnts, _ = cv2.findContours(thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS)
+        cnts, _ = cv2.findContours(
+            thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS
+        )
         main_cnt = np.argmax([len(c) for c in cnts])
 
         # Detect the main ellipse containing the arena
@@ -635,13 +637,13 @@ def circular_arena_recognition(
 
 
 def rolling_speed(
-        dframe: pd.DatetimeIndex,
-        window: int = 3,
-        rounds: int = 3,
-        deriv: int = 1,
-        center: str = None,
-        shift: int = 2,
-        typ: str = "coords",
+    dframe: pd.DatetimeIndex,
+    window: int = 3,
+    rounds: int = 3,
+    deriv: int = 1,
+    center: str = None,
+    shift: int = 2,
+    typ: str = "coords",
 ) -> pd.DataFrame:
     """Returns the average speed over n frames in pixels per frame
 
@@ -674,14 +676,14 @@ def rolling_speed(
         features = 2 if der == 0 and typ == "coords" else 1
 
         distances = (
-                np.concatenate(
-                    [
-                        np.array(dframe).reshape([-1, features], order="C"),
-                        np.array(dframe.shift(shift)).reshape([-1, features], order="C"),
-                    ],
-                    axis=1,
-                )
-                / shift
+            np.concatenate(
+                [
+                    np.array(dframe).reshape([-1, features], order="C"),
+                    np.array(dframe.shift(shift)).reshape([-1, features], order="C"),
+                ],
+                axis=1,
+            )
+            / shift
         )
 
         distances = np.array(compute_dist(distances))
@@ -729,12 +731,12 @@ def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
 
 
 def gmm_model_selection(
-        x: pd.DataFrame,
-        n_components_range: range,
-        part_size: int,
-        n_runs: int = 100,
-        n_cores: int = False,
-        cv_types: Tuple = ("spherical", "tied", "diag", "full"),
+    x: pd.DataFrame,
+    n_components_range: range,
+    part_size: int,
+    n_runs: int = 100,
+    n_cores: int = False,
+    cv_types: Tuple = ("spherical", "tied", "diag", "full"),
 ) -> Tuple[List[list], List[np.ndarray], Union[int, Any]]:
     """Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
     a vector with the median BICs and an object with the overall best model
@@ -791,10 +793,10 @@ def gmm_model_selection(
 
 
 def cluster_transition_matrix(
-        cluster_sequence: np.array,
-        nclusts: int,
-        autocorrelation: bool = True,
-        return_graph: bool = False,
+    cluster_sequence: np.array,
+    nclusts: int,
+    autocorrelation: bool = True,
+    return_graph: bool = False,
 ) -> Tuple[Union[nx.Graph, Any], np.ndarray]:
     """Computes the transition matrix between clusters and the autocorrelation in the sequence.
 
@@ -842,6 +844,7 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
+
 
 # TODO:
 #    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)

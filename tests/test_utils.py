@@ -407,42 +407,51 @@ def test_interpolate_outliers(mode):
 
 
 @settings(deadline=None)
-@given(indexes=st.data())
-def test_recognize_arena_and_subfunctions(indexes):
+@given(
+    indexes=st.data(), detection_type=st.one_of(st.just("rule-based"), st.just("cnn"))
+)
+def test_recognize_arena_and_subfunctions(indexes, detection_type):
 
     path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
+    cnn_path = os.path.join("deepof", "trained_models")
+    cnn_model = os.path.join(
+        cnn_path, [i for i in os.listdir(cnn_path) if i.startswith("elliptic")][0]
+    )
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
-    assert deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "")[0] == 0
     assert (
-        len(
-            deepof.utils.recognize_arena(
-                videos, vid_index, path, recoglimit, "circular"
-            )
-        )
-        == 3
+        deepof.utils.recognize_arena(
+            videos,
+            vid_index,
+            path,
+            recoglimit,
+            "",
+            detection_mode=detection_type,
+            cnn_model=cnn_model,
+        )[0]
+        == 0
     )
-    assert (
-        len(
-            deepof.utils.recognize_arena(
-                videos, vid_index, path, recoglimit, "circular"
-            )[0]
-        )
-        == 3
+
+    arena = deepof.utils.recognize_arena(
+        videos,
+        vid_index,
+        path,
+        recoglimit,
+        "circular",
+        detection_mode=detection_type,
+        cnn_model=cnn_model,
     )
+    assert len(arena) == 3
+    assert len(arena[0]) == 3
     assert isinstance(
-        deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "circular")[
-            1
-        ],
+        arena[1],
         int,
     )
     assert isinstance(
-        deepof.utils.recognize_arena(videos, vid_index, path, recoglimit, "circular")[
-            2
-        ],
+        arena[2],
         int,
     )
 
