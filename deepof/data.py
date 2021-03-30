@@ -63,7 +63,7 @@ class project:
             self,
             animal_ids: List = tuple([""]),
             arena: str = "circular",
-            arena_detection: str = "cnn",
+            arena_detection: str = "rule-based",
             arena_dims: tuple = (1,),
             enable_iterative_imputation: bool = None,
             exclude_bodyparts: List = tuple([""]),
