@@ -22,6 +22,7 @@ import networkx as nx
 import numpy as np
 import os
 import pandas as pd
+import tensorflow as tf
 
 
 # AUXILIARY FUNCTIONS #
@@ -418,22 +419,10 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
     cnn_model = os.path.join(
         cnn_path, [i for i in os.listdir(cnn_path) if i.startswith("elliptic")][0]
     )
+    cnn_model = tf.keras.models.load_model(cnn_model)
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
-
-    assert (
-        deepof.utils.recognize_arena(
-            videos,
-            vid_index,
-            path,
-            recoglimit,
-            "",
-            detection_mode=detection_type,
-            cnn_model=cnn_model,
-        )[0]
-        == 0
-    )
 
     arena = deepof.utils.recognize_arena(
         videos,
