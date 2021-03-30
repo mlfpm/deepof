@@ -16,6 +16,7 @@ import numpy as np
 import os
 import pandas as pd
 import regex as re
+import tensorflow as tf
 from copy import deepcopy
 from itertools import combinations, product
 from joblib import Parallel, delayed
@@ -499,6 +500,8 @@ def recognize_arena(
     path: str = ".",
     recoglimit: int = 100,
     arena_type: str = "circular",
+    detection_mode: str = "cnn",
+    cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
     """Returns numpy.array with information about the arena recognised from the first frames
     of the video. WARNING: estimates won't be reliable if the camera moves along the video.
@@ -506,9 +509,14 @@ def recognize_arena(
         Parameters:
             - videos (list): relative paths of the videos to analise
             - vid_index (int): element of videos to use
-            - path (string): full path of the directory where the videos are
+            - path (str): full path of the directory where the videos are
             - recoglimit (int): number of frames to use for position estimates
             - arena_type (string): arena type; must be one of ['circular']
+            - detection_mode (str): algorithm to use to detect the arena. "cnn" uses a
+            pretrained model based on ResNet50 to predict the ellipse parameters from
+            the image. "rule-based" uses a simpler (and faster, but more prone to errors)
+            image segmentation approach.
+            - cnn_model (tf.keras.models.Model): model to use if detection_mode=="cnn"
 
         Returns:
             - arena (np.array): 1D-array containing information about the arena.
@@ -531,7 +539,9 @@ def recognize_arena(
         if arena_type == "circular":
 
             # Detect arena and extract positions
-            temp_center, temp_axes, temp_angle = circular_arena_recognition(frame)
+            temp_center, temp_axes, temp_angle = circular_arena_recognition(
+                frame, detection_mode=detection_mode, cnn_model=cnn_model
+            )
             temp_arena = np.array([[*temp_center, *temp_axes, temp_angle]])
 
             # Set if not assigned, else concat and return the median
@@ -555,31 +565,68 @@ def recognize_arena(
     return arena, h, w
 
 
-def circular_arena_recognition(frame: np.array) -> np.array:
+def circular_arena_recognition(
+    frame: np.array,
+    detection_mode: str = "cnn",
+    cnn_model: tf.keras.models.Model = None,
+) -> np.array:
     """Returns x,y position of the center, the lengths of the major and minor axes,
     and the angle of the recognised arena
 
     Parameters:
         - frame (np.array): numpy.array representing an individual frame of a video
+        - detection_mode (str): algorithm to use to detect the arena. "cnn" uses a
+        pretrained model based on ResNet50 to predict the ellipse parameters from
+        the image. "rule-based" uses a simpler (and faster, but more prone to errors)
+        image segmentation approach.
+        - cnn_model (tf.keras.models.Model): model to use if detection_mode=="cnn"
 
     Returns:
         - circles (np.array): 3-element-array containing x,y positions of the center
         of the arena, and a third value indicating the radius"""
 
-    # Convert image to greyscale and threshold it
-    gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
+    if detection_mode == "rule-based":
 
-    # Find contours in the processed image
-    cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    main_cnt = np.argmax([len(c) for c in cnts])
+        # Convert image to greyscale and threshold it
+        gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
 
-    # Detect the main ellipse containing the arena
-    ellipse_params = cv2.fitEllipse(cnts[main_cnt])
-    center_coordinates = tuple([int(i) for i in ellipse_params[0]])
-    axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
-    ellipse_angle = ellipse_params[2]
+        # Find contours in the processed image
+        cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        main_cnt = np.argmax([len(c) for c in cnts])
 
+        # Detect the main ellipse containing the arena
+        ellipse_params = cv2.fitEllipse(cnts[main_cnt])
+
+        # Parameters to return
+        center_coordinates = tuple([int(i) for i in ellipse_params[0]])
+        axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
+        ellipse_angle = ellipse_params[2]
+
+    elif detection_mode == "cnn":
+
+        input_shape = tuple(cnn_model.input.shape[1:-1])
+        image_temp = cv2.resize(frame, input_shape)
+        image_temp = image_temp / 255
+
+        # Detect the main ellipse containing the arena
+        predicted_arena = cnn_model.predict(image_temp[np.newaxis, :])[0]
+
+        # Parameters to return
+        center_coordinates = tuple(
+            (predicted_arena[:2] * image.shape[:2][::-1] / input_shape).astype(int)
+        )
+        axes_length = tuple(
+            (predicted_arena[2:4] * image.shape[:2][::-1] / input_shape).astype(int)
+        )
+        ellipse_angle = predicted_arena[4]
+
+    else:
+        raise ValueError(
+            "Invalid detection mode. Select between 'cnn' and 'rule-based'"
+        )
+
+    # noinspection PyUnboundLocalVariable
     return center_coordinates, axes_length, ellipse_angle
 
 

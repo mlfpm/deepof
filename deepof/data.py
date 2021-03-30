@@ -18,6 +18,7 @@ from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
 from typing import Dict, List, Tuple, Union
 from multiprocessing import cpu_count
+from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer
@@ -34,6 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+import tensorflow as tf
 import warnings
 
 # Remove excessive logging from tensorflow
@@ -42,6 +44,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 # DEFINE CUSTOM ANNOTATED TYPES #
 Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
 Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
+
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
@@ -58,6 +61,7 @@ class project:
         self,
         animal_ids: List = tuple([""]),
         arena: str = "circular",
+        arena_detection: str = "cnn",
         arena_dims: tuple = (1,),
         enable_iterative_imputation: bool = None,
         exclude_bodyparts: List = tuple([""]),
@@ -73,10 +77,13 @@ class project:
         video_format: str = ".mp4",
     ):
 
+        # Set working paths
         self.path = path
         self.video_path = os.path.join(self.path, "Videos")
         self.table_path = os.path.join(self.path, "Tables")
+        self.trained_path = resource_filename(__name__, "trained_models")
 
+        # Detect files to load from disk
         self.table_format = table_format
         if self.table_format == "autodetect":
             ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
@@ -84,7 +91,6 @@ class project:
                 self.table_format = ".h5"
             elif ".csv" in ex:
                 self.table_format = ".csv"
-
         self.videos = sorted(
             [
                 vid
@@ -99,15 +105,29 @@ class project:
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
-
         assert len(self.videos) == len(
             self.tables
         ), "Unequal number of videos and tables. Please check your file structure"
 
-        self.angles = True
-        self.animal_ids = animal_ids
+        # Loads arena details and (if needed) detection models
         self.arena = arena
         self.arena_dims = arena_dims
+        self.ellipse_detection = None
+        if arena == "circular" and arena_detection == "cnn":
+
+            self.ellipse_detection = tf.keras.models.load_model(
+                [
+                    os.path.join(self.trained_path, i)
+                    for i in os.listdir(self.trained_path)
+                    if i.startswith("elliptical")
+                ][0]
+            )
+
+        self.scales = self.get_scale
+
+        # Set the rest of the init parameters
+        self.angles = True
+        self.animal_ids = animal_ids
         self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
@@ -115,7 +135,6 @@ class project:
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
-        self.scales = self.get_scale
         self.smooth_alpha = smooth_alpha
         self.subset_condition = None
         self.video_format = video_format
@@ -173,7 +192,6 @@ class project:
 
             scales = []
             for vid_index, _ in enumerate(self.videos):
-
                 ellipse = deepof.utils.recognize_arena(
                     self.videos,
                     vid_index,
@@ -798,7 +816,6 @@ class coordinates:
         speeds = self.get_coords(speed=1)
 
         for key in tqdm(self._tables.keys()):
-
             video = [vid for vid in self._videos if key + "DLC" in vid][0]
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
                 list(self._tables.keys()),
@@ -1005,7 +1022,6 @@ class table_dict(dict):
             warnings.warn("Heatmaps look better if you center the data")
 
         if self._arena == "circular":
-
             heatmaps = deepof.visuals.plot_heatmap(
                 list(self.values())[i],
                 bodyparts,
