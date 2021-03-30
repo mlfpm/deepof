@@ -603,6 +603,8 @@ def rule_based_tagging(
     speeds: Any,
     vid_index: int,
     arena_type: str,
+    arena_detection_mode: str,
+    ellipse_detection_model: tf.keras.models.Model = None,
     recog_limit: int = 100,
     path: str = os.path.join("."),
     params: dict = {},
@@ -642,7 +644,13 @@ def rule_based_tagging(
     likelihoods = coordinates.get_quality()[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
     arena, h, w = deepof.utils.recognize_arena(
-        videos, vid_index, path, recog_limit, coordinates._arena
+        videos,
+        vid_index,
+        path,
+        recog_limit,
+        coordinates._arena,
+        arena_detection_mode,
+        ellipse_detection_model,
     )
 
     # Dictionary with motives per frame
@@ -1037,7 +1045,13 @@ def rule_based_video(
         vid_name = tracks[vid_index]
 
     arena, h, w = deepof.utils.recognize_arena(
-        videos, vid_index, path, recog_limit, coordinates._arena
+        videos,
+        vid_index,
+        path,
+        recog_limit,
+        coordinates._arena,
+        detection_mode=coordinates._arena_detection,
+        cnn_model=self._ellipse_detection_model,
     )
     corners = frame_corners(h, w)
 

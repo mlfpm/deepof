@@ -614,10 +614,10 @@ def circular_arena_recognition(
 
         # Parameters to return
         center_coordinates = tuple(
-            (predicted_arena[:2] * image.shape[:2][::-1] / input_shape).astype(int)
+            (predicted_arena[:2] * frame.shape[:2][::-1] / input_shape).astype(int)
         )
         axes_length = tuple(
-            (predicted_arena[2:4] * image.shape[:2][::-1] / input_shape).astype(int)
+            (predicted_arena[2:4] * frame.shape[:2][::-1] / input_shape).astype(int)
         )
         ellipse_angle = predicted_arena[4]
 
