@@ -497,7 +497,7 @@ def recognize_arena(
     videos: list,
     vid_index: int,
     path: str = ".",
-    recoglimit: int = 1,
+    recoglimit: int = 100,
     arena_type: str = "circular",
 ) -> Tuple[np.array, int, int]:
     """Returns numpy.array with information about the arena recognised from the first frames
@@ -519,7 +519,7 @@ def recognize_arena(
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     # Loop over the first frames in the video to get resolution and center of the arena
-    arena, fnum, h, w = False, 0, None, None
+    arena, fnum, h, w = None, 0, None, None
 
     while cap.isOpened() and fnum < recoglimit:
         ret, frame = cap.read()
@@ -531,7 +531,14 @@ def recognize_arena(
         if arena_type == "circular":
 
             # Detect arena and extract positions
-            arena = circular_arena_recognition(frame)
+            temp_center, temp_axes, temp_angle = circular_arena_recognition(frame)
+            temp_arena = np.array([[*temp_center, *temp_axes, temp_angle]])
+
+            # Set if not assigned, else concat and return the median
+            if arena is None:
+                arena = temp_arena
+            else:
+                arena = np.concatenate([arena, temp_arena], axis=0)
 
             if h is None and w is None:
                 w, h = frame.shape[0], frame.shape[1]
@@ -540,6 +547,10 @@ def recognize_arena(
 
     cap.release()
     cv2.destroyAllWindows()
+
+    # Compute the median across frames and return to tuple format for downstream compatibility
+    arena = np.median(arena, axis=0)
+    arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
 
     return arena, h, w
 

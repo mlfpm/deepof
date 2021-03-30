@@ -603,7 +603,7 @@ def rule_based_tagging(
     speeds: Any,
     vid_index: int,
     arena_type: str,
-    recog_limit: int = 1,
+    recog_limit: int = 100,
     path: str = os.path.join("."),
     params: dict = {},
 ) -> pd.DataFrame:
@@ -619,7 +619,7 @@ def rule_based_tagging(
         - speeds (deepof.preprocessing.table_dict): table_dict with already processed speeds
         - vid_index (int): index in videos of the experiment to annotate
         - path (str): directory in which the experimental data is stored
-        - recog_limit (int): number of frames to use for arena recognition (1 by default)
+        - recog_limit (int): number of frames to use for arena recognition (100 by default)
         - params (dict): dictionary to overwrite the default values of the parameters of the functions
         that the rule-based pose estimation utilizes. See documentation for details.
 
@@ -992,7 +992,7 @@ def rule_based_video(
     vid_index: int,
     tag_dict: pd.DataFrame,
     frame_limit: int = np.inf,
-    recog_limit: int = 1,
+    recog_limit: int = 100,
     path: str = os.path.join("."),
     params: dict = {},
     debug: bool = False,
@@ -1009,7 +1009,7 @@ def rule_based_video(
         - fps (float): frames per second of the analysed video. Same as input by default
         - path (str): directory in which the experimental data is stored
         - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
-        - recog_limit (int): number of frames to use for arena recognition (1 by default)
+        - recog_limit (int): number of frames to use for arena recognition (100 by default)
         - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
         that the rule-based pose estimation utilizes. Values can be:
             - speed_pause (int): size of the rolling window to use when computing speeds
