@@ -407,7 +407,7 @@ def test_interpolate_outliers(mode):
     )
 
 
-@settings(deadline=None)
+@settings(deadline=None, max_examples=10)
 @given(
     indexes=st.data(), detection_type=st.one_of(st.just("rule-based"), st.just("cnn"))
 )
