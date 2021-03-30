@@ -492,6 +492,11 @@ def interpolate_outliers(
         method="linear", limit=limit, limit_direction="both", inplace=True
     )
 
+    # Add original frames to what happens before lag
+    interpolated_exp = pd.concat(
+        [experiment.iloc[:lag, :], interpolated_exp.iloc[lag:, :]]
+    )
+
     return interpolated_exp
 
 
