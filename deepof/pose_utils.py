@@ -824,7 +824,7 @@ def rule_based_tagging(
             )
         )
 
-    tag_df = pd.DataFrame(tag_dict)
+    tag_df = pd.DataFrame(tag_dict).fillna(0)
 
     return tag_df
 
