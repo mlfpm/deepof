@@ -985,28 +985,20 @@ def tag_rulebased_frames(
 # noinspection PyProtectedMember,PyDefaultArgument
 def rule_based_video(
     coordinates: Coordinates,
-    tracks: List,
-    videos: List,
-    vid_index: int,
     tag_dict: pd.DataFrame,
+    vid_index: int,
     frame_limit: int = np.inf,
-    path: str = os.path.join("."),
-    params: dict = {},
     debug: bool = False,
+    params: dict = {},
 ) -> True:
     """Renders a version of the input video with all rule-based taggings in place.
 
     Parameters:
-        - tracks (list): list containing experiment IDs as strings
-        - videos (list): list of videos to load, in the same order as tracks
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
         - debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in
         the output video
-        - vid_index (int): index in videos of the experiment to annotate
-        - fps (float): frames per second of the analysed video. Same as input by default
-        - path (str): directory in which the experimental data is stored
+        - vid_index: for internal usage only; index of the video to tag in coordinates._videos
         - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
-        - recog_limit (int): number of frames to use for arena recognition (100 by default)
         - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
         that the rule-based pose estimation utilizes. Values can be:
             - speed_pause (int): size of the rolling window to use when computing speeds
@@ -1017,13 +1009,19 @@ def rule_based_video(
             in order to report a detection
             - huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
             - huddle_speed (int): maximum speed to report a huddle detection
+            - fps (float): frames per second of the analysed video. Same as input by default
+
 
     Returns:
         True
 
     """
 
-    # DATA OBTENTION AND PREPARATION
+    # Extract useful information from coordinates object
+    tracks = list(coordinates._tables.keys())
+    videos = coordinates._videos
+    path = os.path.join(coordinates._path, "Videos")
+
     params = get_hparameters(params)
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""

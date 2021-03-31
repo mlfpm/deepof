@@ -851,13 +851,10 @@ class coordinates:
 
                 deepof.pose_utils.rule_based_video(
                     self,
-                    tracks=list(self._tables.keys()),
-                    videos=self._videos,
-                    vid_index=list(self._tables.keys()).index(idx),
                     tag_dict=tag_dict[idx],
+                    vid_index=list(self._tables.keys()).index(idx),
                     debug=debug,
                     frame_limit=frame_limit,
-                    path=os.path.join(self._path, "Videos"),
                     params=params,
                 )
                 pbar.update(1)
