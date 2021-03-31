@@ -13,7 +13,7 @@ from typing import Any, Dict, Tuple
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
-from tensorflow.keras.activations import softplus
+from tensorflow.keras.activations import relu
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, Orthogonal
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
@@ -613,7 +613,7 @@ class SEQ_2_SEQ_GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=softplus(gauss[1][..., self.ENCODING :, k]) + 1e-5,
+                            scale=relu(gauss[1][..., self.ENCODING :, k]) + 1e-5,
                         ),
                         reinterpreted_batch_ndims=1,
                     )
