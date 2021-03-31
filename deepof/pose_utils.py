@@ -609,15 +609,11 @@ def rule_based_tagging(
     video displaying the information in real time
 
     Parameters:
-        - tracks (list): list containing experiment IDs as strings
-        - videos (list): list of videos to load, in the same order as tracks
         - coordinates (deepof.data.coordinates): coordinates object containing the project information
         - coords (deepof.data.table_dict): table_dict with already processed coordinates
         - dists (deepof.data.table_dict): table_dict with already processed distances
         - speeds (deepof.data.table_dict): table_dict with already processed speeds
-        - vid_index (int): index in videos of the experiment to annotate
-        - path (str): directory in which the experimental data is stored
-        - recog_limit (int): number of frames to use for arena recognition (100 by default)
+        - video (str): string name of the experiment to tag
         - params (dict): dictionary to overwrite the default values of the parameters of the functions
         that the rule-based pose estimation utilizes. See documentation for details.
 
@@ -994,7 +990,6 @@ def rule_based_video(
     vid_index: int,
     tag_dict: pd.DataFrame,
     frame_limit: int = np.inf,
-    recog_limit: int = 100,
     path: str = os.path.join("."),
     params: dict = {},
     debug: bool = False,
@@ -1038,15 +1033,8 @@ def rule_based_video(
     except IndexError:
         vid_name = tracks[vid_index]
 
-    arena, h, w = deepof.utils.recognize_arena(
-        videos,
-        vid_index,
-        path,
-        recog_limit,
-        coordinates._arena,
-        detection_mode=coordinates._arena_detection,
-        cnn_model=coordinates._ellipse_detection_model,
-    )
+    arena_params = coordinates._arena_params[vid_index]
+    h, w = coordinates._video_resolution[vid_index]
     corners = frame_corners(h, w)
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
@@ -1091,7 +1079,7 @@ def rule_based_video(
             fnum,
             undercond,
             params,
-            (arena, h, w),
+            (arena_params, h, w),
             debug,
             coordinates.get_coords(center=False)[vid_name],
         )

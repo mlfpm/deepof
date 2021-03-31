@@ -125,7 +125,7 @@ class project:
                 ][0]
             )
 
-        self.scales, self.arena_params = self.get_scale
+        self.scales, self.arena_params, self.video_resolution = self.get_arena
 
         # Set the rest of the init parameters
         self.angles = True
@@ -187,34 +187,36 @@ class project:
         return self._angles
 
     @property
-    def get_scale(self) -> np.array:
+    def get_arena(self) -> np.array:
         """Returns the arena as recognised from the videos"""
 
         scales = []
         arena_params = []
+        video_resolution = []
 
         if self.arena in ["circular"]:
 
             for vid_index, _ in enumerate(self.videos):
-                ellipse = deepof.utils.recognize_arena(
+                ellipse, h, w = deepof.utils.recognize_arena(
                     self.videos,
                     vid_index,
                     path=self.video_path,
                     arena_type=self.arena,
                     detection_mode=self.arena_detection,
                     cnn_model=self.ellipse_detection,
-                )[0]
+                )
 
                 scales.append(
                     list(np.array([ellipse[0][0], ellipse[0][1], ellipse[1][1] * 2]))
                     + list(self.arena_dims)
                 )
                 arena_params.append(ellipse)
+                video_resolution.append((h, w))
 
         else:
             raise NotImplementedError("arenas must be set to one of: 'circular'")
 
-        return np.array(scales), arena_params
+        return np.array(scales), arena_params, video_resolution
 
     def load_tables(self, verbose: bool = False) -> deepof.utils.Tuple:
         """Loads videos and tables into dictionaries"""
@@ -447,6 +449,7 @@ class project:
             arena_params=self.arena_params,
             tables=tables,
             videos=self.videos,
+            video_resolution=self.video_resolution,
         )
 
     @subset_condition.setter
@@ -484,7 +487,8 @@ class coordinates:
         scales: np.array,
         arena_params: List,
         tables: dict,
-        videos: list,
+        videos: List,
+        video_resolution: List,
         angles: dict = None,
         animal_ids: List = tuple([""]),
         distances: dict = None,
@@ -501,6 +505,7 @@ class coordinates:
         self._scales = scales
         self._tables = tables
         self._videos = videos
+        self._video_resolution = video_resolution
         self.angles = angles
         self.distances = distances
 
@@ -851,7 +856,6 @@ class coordinates:
                     tag_dict=tag_dict[idx],
                     debug=debug,
                     frame_limit=frame_limit,
-                    recog_limit=1,
                     path=os.path.join(self._path, "Videos"),
                     params=params,
                 )

@@ -565,7 +565,7 @@ def recognize_arena(
     cv2.destroyAllWindows()
 
     # Compute the median across frames and return to tuple format for downstream compatibility
-    arena = np.median(arena, axis=0)
+    arena = np.mean(arena, axis=0)
     arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
 
     return arena, h, w
