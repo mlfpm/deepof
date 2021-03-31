@@ -824,6 +824,7 @@ class coordinates:
         video_output: bool = False,
         frame_limit: int = np.inf,
         debug: bool = False,
+        n_jobs: int = 1,
     ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
@@ -870,9 +871,8 @@ class coordinates:
                     "Video output must be either 'all' or a list with the names of the videos to render"
                 )
 
-            njobs = cpu_count() // 2
             pbar = tqdm(total=len(vid_idxs))
-            with parallel_backend("threading", n_jobs=njobs):
+            with parallel_backend("threading", n_jobs=n_jobs):
                 Parallel()(delayed(output_video)(key) for key in vid_idxs)
             pbar.close()
 
