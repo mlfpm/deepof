@@ -125,7 +125,7 @@ class project:
                 ][0]
             )
 
-        self.scales = self.get_scale
+        self.scales, self.arena_params = self.get_scale
 
         # Set the rest of the init parameters
         self.angles = True
@@ -190,9 +190,11 @@ class project:
     def get_scale(self) -> np.array:
         """Returns the arena as recognised from the videos"""
 
+        scales = []
+        arena_params = []
+
         if self.arena in ["circular"]:
 
-            scales = []
             for vid_index, _ in enumerate(self.videos):
                 ellipse = deepof.utils.recognize_arena(
                     self.videos,
@@ -204,14 +206,15 @@ class project:
                 )[0]
 
                 scales.append(
-                    list(np.array([ellipse[0][0], ellipse[0][1], ellipse[1][1]]) * 2)
+                    list(np.array([ellipse[0][0], ellipse[0][1], ellipse[1][1] * 2]))
                     + list(self.arena_dims)
                 )
+                arena_params.append(ellipse)
 
         else:
             raise NotImplementedError("arenas must be set to one of: 'circular'")
 
-        return np.array(scales)
+        return np.array(scales), arena_params
 
     def load_tables(self, verbose: bool = False) -> deepof.utils.Tuple:
         """Loads videos and tables into dictionaries"""
@@ -441,9 +444,9 @@ class project:
             path=self.path,
             quality=quality,
             scales=self.scales,
+            arena_params=self.arena_params,
             tables=tables,
             videos=self.videos,
-            ellipse_detection=self.ellipse_detection,
         )
 
     @subset_condition.setter
@@ -479,18 +482,18 @@ class coordinates:
         path: str,
         quality: dict,
         scales: np.array,
+        arena_params: List,
         tables: dict,
         videos: list,
         angles: dict = None,
         animal_ids: List = tuple([""]),
         distances: dict = None,
         exp_conditions: dict = None,
-        ellipse_detection: tf.keras.models.Model = None,
     ):
         self._animal_ids = animal_ids
         self._arena = arena
         self._arena_detection = arena_detection
-        self._ellipse_detection_model = ellipse_detection
+        self._arena_params = arena_params
         self._arena_dims = arena_dims
         self._exp_conditions = exp_conditions
         self._path = path
@@ -820,26 +823,18 @@ class coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
-        # noinspection PyTypeChecker
         coords = self.get_coords(center=False)
         dists = self.get_distances()
         speeds = self.get_coords(speed=1)
 
+        # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
-            video = [vid for vid in self._videos if key + "DLC" in vid][0]
             tag_dict[key] = deepof.pose_utils.rule_based_tagging(
-                list(self._tables.keys()),
-                self._videos,
                 self,
-                coords,
-                dists,
-                speeds,
-                self._videos.index(video),
-                arena_type=self._arena,
-                arena_detection_mode=self._arena_detection,
-                ellipse_detection_model=self._ellipse_detection_model,
-                recog_limit=1,
-                path=os.path.join(self._path, "Videos"),
+                coords=coords,
+                dists=dists,
+                speeds=speeds,
+                video=[vid for vid in self._videos if key + "DLC" in vid][0],
                 params=params,
             )
 

@@ -598,18 +598,11 @@ def frame_corners(w, h, corners: dict = {}):
 
 # noinspection PyDefaultArgument,PyProtectedMember
 def rule_based_tagging(
-    tracks: List,
-    videos: List,
     coordinates: Coordinates,
     coords: Any,
     dists: Any,
     speeds: Any,
-    vid_index: int,
-    arena_type: str,
-    arena_detection_mode: str,
-    ellipse_detection_model: tf.keras.models.Model = None,
-    recog_limit: int = 100,
-    path: str = os.path.join("."),
+    video: str,
     params: dict = {},
 ) -> pd.DataFrame:
     """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
@@ -618,10 +611,10 @@ def rule_based_tagging(
     Parameters:
         - tracks (list): list containing experiment IDs as strings
         - videos (list): list of videos to load, in the same order as tracks
-        - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
-        - coords (deepof.preprocessing.table_dict): table_dict with already processed coordinates
-        - dists (deepof.preprocessing.table_dict): table_dict with already processed distances
-        - speeds (deepof.preprocessing.table_dict): table_dict with already processed speeds
+        - coordinates (deepof.data.coordinates): coordinates object containing the project information
+        - coords (deepof.data.table_dict): table_dict with already processed coordinates
+        - dists (deepof.data.table_dict): table_dict with already processed distances
+        - speeds (deepof.data.table_dict): table_dict with already processed speeds
         - vid_index (int): index in videos of the experiment to annotate
         - path (str): directory in which the experimental data is stored
         - recog_limit (int): number of frames to use for arena recognition (100 by default)
@@ -631,6 +624,13 @@ def rule_based_tagging(
     Returns:
         - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
         value is a boolean indicating trait detection at a given time"""
+
+    # Extract useful information from coordinates object
+    tracks = list(coordinates._tables.keys())
+    vid_index = coordinates._videos.index(video)
+
+    arena_params = coordinates._arena_params[vid_index]
+    arena_type = coordinates._arena
 
     params = get_hparameters(params)
     animal_ids = coordinates._animal_ids
@@ -646,15 +646,6 @@ def rule_based_tagging(
     speeds = speeds[vid_name]
     likelihoods = coordinates.get_quality()[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
-    arena, h, w = deepof.utils.recognize_arena(
-        videos,
-        vid_index,
-        path,
-        recog_limit,
-        coordinates._arena,
-        arena_detection_mode,
-        ellipse_detection_model,
-    )
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -674,7 +665,7 @@ def rule_based_tagging(
 
     def onebyone_contact(bparts: List):
         """Returns a smooth boolean array with 1to1 contacts between two mice"""
-        nonlocal coords, animal_ids, params, arena_abs, arena
+        nonlocal coords, animal_ids, params, arena_abs, arena_params
 
         try:
             left = animal_ids[0] + bparts[0]
@@ -693,14 +684,14 @@ def rule_based_tagging(
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
                 arena_abs,
-                arena[1][1],
+                arena_params[1][1],
             )
         )
 
     def twobytwo_contact(rev):
         """Returns a smooth boolean array with side by side contacts between two mice"""
 
-        nonlocal coords, animal_ids, params, arena_abs, arena
+        nonlocal coords, animal_ids, params, arena_abs, arena_params
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
                 coords,
@@ -711,7 +702,7 @@ def rule_based_tagging(
                 params["side_contact_tol"],
                 rev=rev,
                 arena_abs=arena_abs,
-                arena_rel=arena[1][1],
+                arena_rel=arena_params[1][1],
             )
         )
 
@@ -776,7 +767,7 @@ def rule_based_tagging(
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
             climb_wall(
                 arena_type,
-                arena,
+                arena_params,
                 coords,
                 params["climb_tol"],
                 _id + undercond + "Nose",
@@ -786,7 +777,7 @@ def rule_based_tagging(
             sniff_object(
                 speeds,
                 arena_type,
-                arena,
+                arena_params,
                 coords,
                 params["climb_tol"],
                 params["huddle_speed"],
