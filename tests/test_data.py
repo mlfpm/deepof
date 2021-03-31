@@ -52,7 +52,7 @@ def test_project_init(table_type, arena_type):
 
         assert isinstance(prun, deepof.data.project)
         assert isinstance(prun.load_tables(verbose=True), tuple)
-        assert isinstance(prun.get_scale, np.ndarray)
+        assert isinstance(prun.get_arena, tuple)
 
 
 def test_project_properties():
