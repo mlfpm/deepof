@@ -7,9 +7,9 @@
 
 <br>
 
-<p align="center">
+<div align="center">
   <img width="200" height="200" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/Logos/deepOF_logo_w_text.png">
-</p>
+</div>
 
 ### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
 #
