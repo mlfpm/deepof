@@ -20,7 +20,7 @@ unsupervised way! Both of these can be used within the package, for example, to 
 compare user-defined experimental groups.
 
 ### How do I start?
-##### Installation: 
+##### Installation:
 open a terminal (with python>3.6 installed) and type: 
 ``` pip install deepof ```
 
