@@ -5,9 +5,10 @@
 [![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 
-<img src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/Logos/deepOF_logo_w_text.png" alt="deepOF_logo" width="200" class="center"/>
+<p class="aligncenter">
+    <img src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/Logos/deepOF_logo_w_text.png" alt="deepOF_logo" width="200"/>
+</p>
 
-# DeepOF
 ### A suite for postprocessing time-series extracted from videos of freely moving animals using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
 #
 
