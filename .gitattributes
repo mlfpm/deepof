@@ -1,1 +1,1 @@
-deepof/trained_models/elliptical_arena_detection_20210331-005020.tf filter=lfs diff=lfs merge=lfs -text
+deepof/trained_models/elliptical_arena_detection_20210331-005020.tf/variables/variables.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
