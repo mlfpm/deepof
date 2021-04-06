@@ -997,6 +997,7 @@ class table_dict(dict):
         self._arena_dims = arena_dims
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
+        self._scaler = None
 
     def filter_videos(self, keys: list) -> Table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
@@ -1156,15 +1157,15 @@ class table_dict(dict):
                 print("Scaling data...")
 
             if scale == "standard":
-                scaler = StandardScaler()
+                self._scaler = StandardScaler()
             elif scale == "minmax":
-                scaler = MinMaxScaler()
+                self._scaler = MinMaxScaler()
             else:
                 raise ValueError(
                     "Invalid scaler. Select one of standard, minmax or None"
                 )  # pragma: no cover
 
-            X_train = scaler.fit_transform(
+            X_train = self._scaler.fit_transform(
                 X_train.reshape(-1, X_train.shape[-1])
             ).reshape(X_train.shape)
 
@@ -1173,7 +1174,7 @@ class table_dict(dict):
                 assert np.allclose(np.nan_to_num(np.std(X_train), nan=1), 1)
 
             if test_videos:
-                X_test = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
+                X_test = self._scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
                     X_test.shape
                 )
 
