@@ -1158,6 +1158,7 @@ class table_dict(dict):
 
             if scale == "standard":
                 self._scaler = StandardScaler()
+
             elif scale == "minmax":
                 self._scaler = MinMaxScaler()
             else:
@@ -1165,18 +1166,20 @@ class table_dict(dict):
                     "Invalid scaler. Select one of standard, minmax or None"
                 )  # pragma: no cover
 
-            X_train = self._scaler.fit_transform(
-                X_train.reshape(-1, X_train.shape[-1])
-            ).reshape(X_train.shape)
+            X_train_flat = X_train.reshape(-1, X_train.shape[-1])
+
+            self._scaler.fit(X_train_flat)
+
+            X_train = self._scaler.transform(X_train_flat).reshape(X_train.shape)
 
             if scale == "standard":
-                assert np.allclose(np.nan_to_num(np.mean(X_train), nan=0), 0)
-                assert np.allclose(np.nan_to_num(np.std(X_train), nan=1), 1)
+                assert np.all(np.nan_to_num(np.mean(X_train), nan=0) < 0.1)
+                assert np.all(np.nan_to_num(np.std(X_train), nan=1) > 0.9)
 
             if test_videos:
-                X_test = self._scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
-                    X_test.shape
-                )
+                X_test = self._scaler.transform(
+                    X_test.reshape(-1, X_test.shape[-1])
+                ).reshape(X_test.shape)
 
             if verbose:
                 print("Done!")
