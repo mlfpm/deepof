@@ -624,7 +624,7 @@ class SEQ_2_SEQ_GMVAE:
             name="encoding_distribution",
         )([z_cat, z_gauss])
 
-        encode_to_distribution = Model(x, z, name="SEQ_2_SEQ_trained_distribution")
+        posterior = Model(x, z, name="SEQ_2_SEQ_trained_distribution")
 
         # Define and control custom loss functions
         if "ELBO" in self.loss:
@@ -679,7 +679,7 @@ class SEQ_2_SEQ_GMVAE:
         )(generator)
 
         # define individual branches as models
-        encode_to_vector = Model(x, z, name="SEQ_2_SEQ_VEncoder")
+        encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
         generator = Model(g, x_decoded_mean, name="vae_reconstruction")
 
         def log_loss(x_true, p_x_q_given_z):
@@ -687,7 +687,7 @@ class SEQ_2_SEQ_GMVAE:
             the output distribution"""
             return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
 
-        model_outs = [generator(encode_to_vector.outputs)]
+        model_outs = [generator(encoder.outputs)]
         model_losses = [log_loss]
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
@@ -736,9 +736,9 @@ class SEQ_2_SEQ_GMVAE:
             loss_weights.append(self.phenotype_prediction)
 
         # define grouper and end-to-end autoencoder model
-        grouper = Model(encode_to_vector.inputs, z_cat, name="Deep_Gaussian_Mixture_clustering")
+        grouper = Model(encoder.inputs, z_cat, name="Deep_Gaussian_Mixture_clustering")
         gmvaep = Model(
-            inputs=encode_to_vector.inputs,
+            inputs=encoder.inputs,
             outputs=model_outs,
             name="SEQ_2_SEQ_GMVAE",
         )
@@ -754,11 +754,12 @@ class SEQ_2_SEQ_GMVAE:
         gmvaep.build(input_shape)
 
         return (
-            encode_to_vector,
-            encode_to_distribution,
+            encoder,
             generator,
             grouper,
             gmvaep,
+            self.prior,
+            posterior,
         )
 
     @prior.setter
