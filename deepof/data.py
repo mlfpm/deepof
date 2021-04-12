@@ -1076,9 +1076,9 @@ class table_dict(dict):
             X_train = np.concatenate(list(raw_data))
 
         if self._propagate_labels:
-            X_train, y_train = X_train[:, :-1], X_train[:, -1]
+            X_train, y_train = X_train[:, :-1], X_train[:, -1][:, np.newaxis]
             try:
-                X_test, y_test = X_test[:, :-1], X_test[:, -1]
+                X_test, y_test = X_test[:, :-1], X_test[:, -1][:, np.newaxis]
             except IndexError:
                 pass
 
