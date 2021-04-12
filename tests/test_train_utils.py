@@ -54,7 +54,7 @@ def test_get_callbacks(
     pheno_class,
     loss,
 ):
-    runID, tbc, entropy, cycle1c, cpc = deepof.train_utils.get_callbacks(
+    callbacks = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
         variational=variational,
@@ -67,11 +67,16 @@ def test_get_callbacks(
         reg_cluster_variance=False,
         logparam={"encoding": 2, "k": 15},
     )
-    assert isinstance(runID, str)
-    assert isinstance(tbc, tf.keras.callbacks.TensorBoard)
-    assert isinstance(cpc, tf.keras.callbacks.ModelCheckpoint)
-    assert isinstance(entropy, deepof.model_utils.neighbor_latent_entropy)
-    assert isinstance(cycle1c, deepof.model_utils.one_cycle_scheduler)
+    assert np.any([isinstance(i, str) for i in callbacks])
+    assert np.any(
+        [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
+    )
+    assert np.any(
+        [isinstance(i, deepof.model_utils.neighbor_latent_entropy) for i in callbacks]
+    )
+    assert np.any(
+        [isinstance(i, deepof.model_utils.one_cycle_scheduler) for i in callbacks]
+    )
 
 
 @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
