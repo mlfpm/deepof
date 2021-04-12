@@ -328,7 +328,7 @@ def autoencoder_fitting(
         return_list = (encoder, decoder, ae)
 
     else:
-        (encoder, generator, grouper, ae,) = deepof.models.SEQ_2_SEQ_GMVAE(
+        (encoder, generator, grouper, ae, prior, posterior) = deepof.models.SEQ_2_SEQ_GMVAE(
             architecture_hparams=({} if hparams is None else hparams),
             batch_size=batch_size,
             compile_model=True,
