@@ -137,7 +137,7 @@ def test_autoencoder_fitting(
     ),
     batch_size=st.integers(min_value=128, max_value=512),
     encoding_size=st.integers(min_value=1, max_value=16),
-    hpt_type=st.one_of(st.just("bayopt"), st.just("hypermodel")),
+    hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),

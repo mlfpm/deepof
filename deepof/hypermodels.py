@@ -188,7 +188,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             overlap_loss=self.overlap_loss,
             phenotype_prediction=self.pheno_class,
             predictor=self.predictor,
-        ).build(self.input_shape)[-1]
+        ).build(self.input_shape)[-3]
 
         return gmvaep
 
