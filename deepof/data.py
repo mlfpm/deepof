@@ -1092,6 +1092,11 @@ class table_dict(dict):
             except ValueError:
                 X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
 
+            # Convert speed to a boolean value. Is the animal moving?
+            y_train[:, -1] = (
+                y_train[:, -1] > deepof.pose_utils.get_hparameters()["huddle_speed"]
+            )
+
             try:
                 try:
                     X_test, y_test = X_test[:, :-n_annot], np.concatenate(
@@ -1099,6 +1104,12 @@ class table_dict(dict):
                     )
                 except ValueError:
                     X_test, y_test = X_test[:, :-n_annot], X_test[:, -n_annot:]
+
+                # Convert speed to a boolean value. Is the animal moving?
+                y_test[:, -1] = (
+                    y_test[:, -1] > deepof.pose_utils.get_hparameters()["huddle_speed"]
+                )
+
             except IndexError:
                 pass
 

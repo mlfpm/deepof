@@ -559,7 +559,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "follow_frames": 10,
         "follow_tol": 5,
         "huddle_forward": 15,
-        "huddle_speed": 1,
+        "huddle_speed": 2,
         "nose_likelihood": 0.85,
         "fps": 24,
     }
@@ -782,7 +782,6 @@ def rule_based_tagging(
                 animal_id=_id,
             )
         )
-        tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
                 coords,
@@ -810,6 +809,9 @@ def rule_based_tagging(
                 animal_id=_id,
             )
         )
+        # NOTE: It's important that speeds remain the last columns.
+        # Preprocessing for weakly supervised autoencoders relies on this
+        tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
 
     tag_df = pd.DataFrame(tag_dict).fillna(0)
 
