@@ -546,8 +546,8 @@ class coordinates:
                 the selected body part with the y axis, for all time points.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
-                are propagated through the training dataset. This can be used for initialising the weights of the
-                clusters in the latent space, in a way that each cluster is related to a different annotation.
+                are propagated through the training dataset. This can be used for regularising the latent space based
+                on already known traits.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -683,8 +683,8 @@ class coordinates:
                 of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
-                are propagated through the training dataset. This can be used for initialising the weights of the
-                clusters in the latent space, in a way that each cluster is related to a different annotation.
+                are propagated through the training dataset. This can be used for regularising the latent space based
+                on already known traits.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -746,8 +746,8 @@ class coordinates:
                 of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
-                are propagated through the training dataset. This can be used for initialising the weights of the
-                clusters in the latent space, in a way that each cluster is related to a different annotation.
+                are propagated through the training dataset. This can be used for regularising the latent space based
+                on already known traits.
 
             Returns:
                 tab_dict (Table_dict): table_dict object containing all the computed information
@@ -1067,7 +1067,7 @@ class table_dict(dict):
                 range(len(raw_data)), test_videos, replace=False
             )
 
-        y_train, X_test, y_test = [], [], []
+        y_train, X_test, y_test = np.array([]), np.array([]), np.array([])
         if test_videos > 0:
             X_test = np.concatenate(raw_data[test_index])
             X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
@@ -1079,28 +1079,43 @@ class table_dict(dict):
             X_train, y_train = X_train[:, :-1], X_train[:, -1]
             try:
                 X_test, y_test = X_test[:, :-1], X_test[:, -1]
-            except TypeError:
+            except IndexError:
                 pass
 
         if self._propagate_annotations:
             n_annot = list(self._propagate_annotations.values())[0].shape[1]
-            propagated_annots = X_train[:, -n_annot:]
-            X_train = X_train[:, :-n_annot]
+
             try:
-                X_test = X_test[:, :-n_annot]
-            except TypeError:
+                X_train, y_train = X_train[:, :-n_annot], np.concatenate(
+                    [y_train, X_train[:, -n_annot:]]
+                )
+            except ValueError:
+                X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
+
+            try:
+                try:
+                    X_test, y_test = X_test[:, :-n_annot], np.concatenate(
+                        [y_test, X_test[:, -n_annot:]]
+                    )
+                except ValueError:
+                    X_test, y_test = X_test[:, :-n_annot], X_test[:, -n_annot:]
+            except IndexError:
                 pass
 
-        if encode_labels:
+        if self._propagate_labels and encode_labels:
             le = LabelEncoder()
-            y_train = le.fit_transform(y_train)
-            y_test = le.transform(y_test)
+            y_train[:, 0] = le.fit_transform(y_train[:, 0])
+            try:
+                y_test[:, 0] = le.transform(y_test[:, 0])
+            except IndexError:
+                pass
 
-        try:
-            # noinspection PyUnboundLocalVariable
-            return X_train, y_train, X_test, y_test, propagated_annots
-        except NameError:
-            return X_train, y_train, X_test, y_test
+        return (
+            X_train.astype(float),
+            y_train.astype(float),
+            X_test.astype(float),
+            y_test.astype(float),
+        )
 
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
