@@ -191,9 +191,3 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         ).build(self.input_shape)[-3]
 
         return gmvaep
-
-
-# TODO:
-#    - We can add as many parameters as we want to the hypermodel!
-#    with this implementation, predictor, warmup, loss and even number of components can be tuned using BayOpt
-#    - Number of dense layers close to the latent space as a hyperparameter (!)
