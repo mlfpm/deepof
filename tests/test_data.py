@@ -203,6 +203,9 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=0, max_value=5))
     propagate = sampler.draw(st.booleans())
+    propagate_annots = sampler.draw(
+        st.one_of(st.just(prun.rule_based_annotation()), st.just(False))
+    )
 
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
@@ -211,6 +214,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         align=algn,
         align_inplace=inplace,
         propagate_labels=propagate,
+        propagate_annotations=propagate_annots,
     )
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
@@ -218,17 +222,20 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=speed,
         propagate_labels=propagate,
+        propagate_annotations=propagate_annots,
     )
     distances = prun.get_distances(
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
         propagate_labels=propagate,
+        propagate_annotations=propagate_annots,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
         propagate_labels=propagate,
+        propagate_annotations=propagate_annots,
     )
 
     # deepof.coordinates testing
