@@ -53,6 +53,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
         number_of_components=number_of_components,
         next_sequence_prediction=True,
         phenotype_prediction=True,
+        rule_based_prediction=True,
         overlap_loss=True,
     ).build(
         input_shape=(
