@@ -51,7 +51,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
         mmd_warmup_epochs=mmd_warmup_epochs,
         montecarlo_kl=montecarlo_kl,
         number_of_components=number_of_components,
-        predictor=True,
+        next_sequence_prediction=True,
         phenotype_prediction=True,
         overlap_loss=True,
     ).build(
