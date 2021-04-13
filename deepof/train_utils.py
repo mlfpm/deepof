@@ -536,6 +536,9 @@ def tune_search(
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
             rule_based_prediction=rule_based_prediction,
+            rule_based_features=(
+                y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
+            ),
         )
 
     else:

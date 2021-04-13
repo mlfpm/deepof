@@ -105,6 +105,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         next_sequence_prediction: float = 0.0,
         phenotype_prediction: float = 0.0,
         rule_based_prediction: float = 0.0,
+        rule_based_features: int = 6,
         prior: str = "standard_normal",
     ):
         super().__init__()
@@ -119,6 +120,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
         self.rule_based_prediction = rule_based_prediction
+        self.rule_based_features = rule_based_features
         self.prior = prior
 
         assert (
@@ -191,6 +193,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             next_sequence_prediction=self.next_sequence_prediction,
             phenotype_prediction=self.phenotype_prediction,
             rule_based_prediction=self.rule_based_prediction,
+            rule_based_features=self.rule_based_features
         ).build(self.input_shape)[-3]
 
         return gmvaep
