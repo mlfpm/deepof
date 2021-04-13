@@ -750,6 +750,7 @@ class SEQ_2_SEQ_GMVAE:
 
         if self.rule_based_prediction > 0:
             rule_pred = Model_RC1(z)
+
             rule_pred = Dense(
                 tfpl.IndependentBernoulli.params_size(self.rule_based_features)
             )(rule_pred)
