@@ -518,7 +518,7 @@ def tune_search(
 
     if hypermodel == "S2SAE":  # pragma: no cover
         assert (
-                next_sequence_prediction == 0.0 and phenotype_prediction == 0.0
+            next_sequence_prediction == 0.0 and phenotype_prediction == 0.0
         ), "Prediction branches are only available for variational models. See documentation for more details"
         batch_size = 1
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=X_train.shape)

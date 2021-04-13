@@ -193,7 +193,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             next_sequence_prediction=self.next_sequence_prediction,
             phenotype_prediction=self.phenotype_prediction,
             rule_based_prediction=self.rule_based_prediction,
-            rule_based_features=self.rule_based_features
+            rule_based_features=self.rule_based_features,
         ).build(self.input_shape)[-3]
 
         return gmvaep
