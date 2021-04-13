@@ -800,3 +800,4 @@ class SEQ_2_SEQ_GMVAE:
 #       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
 #       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
 #       - Explore expanding the event dims of the final reconstruction layer
+#       - Think about gradient penalty to avoid mode collapse (as in WGAN-GP)
