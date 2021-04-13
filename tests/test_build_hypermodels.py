@@ -51,5 +51,5 @@ def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
         ),
         loss=loss,
         number_of_components=number_of_components,
-        predictor=True,
+        next_sequence_prediction=True,
     ).build(hp=HyperParameters())

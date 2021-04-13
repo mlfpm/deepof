@@ -472,8 +472,9 @@ def tune_search(
     loss: str,
     mmd_warmup_epochs: int,
     overlap_loss: float,
-    phenotype_class: float,
-    predictor: float,
+    next_sequence_prediction: float,
+    phenotype_prediction: float,
+    rule_based_prediction: float,
     project_name: str,
     callbacks: List,
     n_epochs: int = 30,
@@ -517,7 +518,7 @@ def tune_search(
 
     if hypermodel == "S2SAE":  # pragma: no cover
         assert (
-            predictor == 0.0 and phenotype_class == 0.0
+                next_sequence_prediction == 0.0 and phenotype_prediction == 0.0
         ), "Prediction branches are only available for variational models. See documentation for more details"
         batch_size = 1
         hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=X_train.shape)
@@ -532,8 +533,9 @@ def tune_search(
             mmd_warmup_epochs=mmd_warmup_epochs,
             number_of_components=k,
             overlap_loss=overlap_loss,
-            phenotype_predictor=phenotype_class,
-            predictor=predictor,
+            next_sequence_prediction=next_sequence_prediction,
+            phenotype_prediction=phenotype_prediction,
+            rule_based_prediction=rule_based_prediction,
         )
 
     else:
@@ -574,11 +576,19 @@ def tune_search(
     Xs, ys = [X_train], [X_train]
     Xvals, yvals = [X_val], [X_val]
 
-    if predictor > 0.0:
+    if next_sequence_prediction > 0.0:
         Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
         Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
-    if phenotype_class > 0.0:
+    if phenotype_prediction > 0.0:
+        ys += [y_train[:, 0]]
+        yvals += [y_val[:, 0]]
+
+        # Remove the used column (phenotype) from both y arrays
+        y_train = y_train[:, 1:]
+        y_val = y_val[:, 1:]
+
+    if rule_based_prediction > 0.0:
         ys += [y_train]
         yvals += [y_val]
 

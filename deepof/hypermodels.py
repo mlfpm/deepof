@@ -102,8 +102,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         mmd_warmup_epochs: int = 0,
         number_of_components: int = 10,
         overlap_loss: float = False,
-        phenotype_predictor: float = 0.0,
-        predictor: float = 0.0,
+        next_sequence_prediction: float = 0.0,
+        phenotype_prediction: float = 0.0,
+        rule_based_prediction: float = 0.0,
         prior: str = "standard_normal",
     ):
         super().__init__()
@@ -115,8 +116,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
         self.mmd_warmup_epochs = mmd_warmup_epochs
         self.number_of_components = number_of_components
         self.overlap_loss = overlap_loss
-        self.pheno_class = phenotype_predictor
-        self.predictor = predictor
+        self.next_sequence_prediction = next_sequence_prediction
+        self.phenotype_prediction = phenotype_prediction
+        self.rule_based_prediction = rule_based_prediction
         self.prior = prior
 
         assert (
@@ -186,8 +188,9 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             mmd_warmup_epochs=self.mmd_warmup_epochs,
             number_of_components=k,
             overlap_loss=self.overlap_loss,
-            phenotype_prediction=self.pheno_class,
-            next_sequence_prediction=self.predictor,
+            next_sequence_prediction=self.next_sequence_prediction,
+            phenotype_prediction=self.phenotype_prediction,
+            rule_based_prediction=self.rule_based_prediction,
         ).build(self.input_shape)[-3]
 
         return gmvaep

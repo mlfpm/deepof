@@ -415,8 +415,8 @@ else:
         loss=loss,
         mmd_warmup_epochs=mmd_wu,
         overlap_loss=overlap_loss,
-        phenotype_class=pheno_class,
-        predictor=predictor,
+        phenotype_prediction=pheno_class,
+        next_sequence_prediction=predictor,
         project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
