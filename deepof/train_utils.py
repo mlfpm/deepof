@@ -256,7 +256,9 @@ def tensorboard_metric_logging(
 
         if phenotype_prediction:
             idx = next(idx_generator)
-            pheno_acc = tf.keras.metrics.binary_accuracy(y_val[idx], tf.squeeze(outputs[idx]))
+            pheno_acc = tf.keras.metrics.binary_accuracy(
+                y_val[idx], tf.squeeze(outputs[idx])
+            )
             pheno_auc = tf.keras.metrics.AUC()
             pheno_auc.update_state(y_val[idx], outputs[idx])
             pheno_auc = pheno_auc.result().numpy()
