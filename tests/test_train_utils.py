@@ -85,10 +85,10 @@ def test_get_callbacks(
 @settings(max_examples=1, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    next_sequence_prediction=st.one_of(st.just(1.0), st.just(1.0)),
-    phenotype_prediction=st.one_of(st.just(1.0), st.just(1.0)),
-    rule_based_prediction=st.one_of(st.just(1.0), st.just(1.0)),
-    variational=st.one_of(st.just(True), st.just(True)),
+    next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    rule_based_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    variational=st.one_of(st.just(True), st.just(False)),
 )
 def test_autoencoder_fitting(
     loss,
