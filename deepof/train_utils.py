@@ -433,8 +433,8 @@ def autoencoder_fitting(
                 ),
             ]
 
-            Xs, ys = [X_train], [X_train]
-            Xvals, yvals = [X_val], [X_val]
+            Xs, ys = X_train, [X_train]
+            Xvals, yvals = X_val, [X_val]
 
             if next_sequence_prediction > 0.0:
                 Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
