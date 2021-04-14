@@ -81,6 +81,7 @@ def get_callbacks(
     entropy_knn: int = 100,
     logparam: dict = None,
     outpath: str = ".",
+    run: int = False,
 ) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
     - run_ID: run name, with coarse parameter details;
@@ -117,7 +118,8 @@ def get_callbacks(
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         ("_latreg={}".format(latreg)),
-        ("entknn={}".format(entropy_knn)),
+        ("_entknn={}".format(entropy_knn)),
+        ("_run={}".format(run) if run else ""),
         (datetime.now().strftime("%Y%m%d-%H%M%S")),
     )
 

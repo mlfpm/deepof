@@ -15,10 +15,10 @@ import os
 
 outpath = "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 
-losses = ["ELBO" , "MMD", "ELBO+MMD"]
-encodings =  [6] # [2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = [25] # [1, 5, 10, 15, 20, 25]
-latent_reg = ["none"] # ["none", "categorical", "variance", "categorical+variance"]
+losses = ["ELBO", "MMD", "ELBO+MMD"]
+encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = [25]  # [1, 5, 10, 15, 20, 25]
+latent_reg = ["none"]  # ["none", "categorical", "variance", "categorical+variance"]
 entropy_knn = [100]
 next_sequence_pred_weights = [0.0, 0.15, 0.30]
 phenotype_pred_weights = [0.0, 0.15]
@@ -26,11 +26,11 @@ rule_based_pred_weights = [0.0, 0.15, 0.30]
 input_types = ["coords"]
 run = list(range(1, 11))
 
+
 rule deepof_experiments:
     input:
         # Elliptical arena detection
         # "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
-
         # Hyperparameter tuning
         # expand(
         #     os.path.join(
@@ -41,11 +41,19 @@ rule deepof_experiments:
         #     k=cluster_numbers,
         #     enc=encodings,
         # ),
-
         # Train a variety of models
         expand(
             "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/train_models/trained_weights/"
-            "GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_entropyknn={entknn}_final_weights.h5",
+            "GMVAE_NextSeqPred={nspredweight}_"
+            "PhenoPred={phenpredweight}_"
+            "RuleBasedPred={rulesweight}_"
+            "loss={loss}_"
+            "encoding={encs}_"
+            "k={k}_"
+            "latreg={latreg}_"
+            "entropyknn={entknn}_"
+            "run={run}_"
+            "final_weights.h5",
             input_type=input_types,
             loss=losses,
             encs=encodings,
@@ -57,6 +65,7 @@ rule deepof_experiments:
             rulesweight=rule_based_pred_weights,
             run=run,
         ),
+
 
 rule elliptical_arena_detector:
     input:
@@ -132,6 +141,4 @@ rule train_models:
         "--window-size 24 "
         "--window-step 12 "
         "--run {wildcards.run}"
-
-        "--output-path {outpath}latent_regularization_experiments"
-        # "--exclude-bodyparts Tail_base,Tail_1,Tail_2,Tail_tip "
+        "--output-path {outpath}train_models"
