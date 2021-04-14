@@ -231,6 +231,13 @@ parser.add_argument(
     type=int,
     default=5,
 )
+parser.add_argument(
+    "--run",
+    "-rid",
+    help="Sets the run ID of the experiment (for naming output files only). If 0 (default), uses a timestamp instead",
+    type=int,
+    default=0,
+)
 
 args = parser.parse_args()
 
@@ -264,6 +271,7 @@ val_num = args.val_num
 variational = bool(args.variational)
 window_size = args.window_size
 window_step = args.window_step
+run = args.run
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -395,6 +403,7 @@ if not tune:
         reg_cluster_variance=("variance" in latent_reg),
         entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
+        run=run,
     )
 
 else:
@@ -416,6 +425,7 @@ else:
         loss=loss,
         logparam=logparam,
         outpath=output_path,
+        run=run,
     )
 
     best_hyperparameters, best_model = tune_search(

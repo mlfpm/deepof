@@ -99,28 +99,16 @@ def get_callbacks(
 
     run_ID = "{}{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
-        (
-            "_NextSeqPred={}".format(next_sequence_prediction)
-            if next_sequence_prediction > 0 and variational
-            else ""
-        ),
-        (
-            "_PhenoPred={}".format(phenotype_prediction)
-            if phenotype_prediction > 0
-            else ""
-        ),
-        (
-            "_RuleBasedPred={}".format(rule_based_prediction)
-            if rule_based_prediction > 0
-            else ""
-        ),
+        ("_NextSeqPred={}".format(next_sequence_prediction) if variational else ""),
+        ("_PhenoPred={}".format(phenotype_prediction) if variational else ""),
+        ("_RuleBasedPred={}".format(rule_based_prediction) if variational else ""),
         ("_loss={}".format(loss) if variational else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         ("_latreg={}".format(latreg)),
         ("_entknn={}".format(entropy_knn)),
         ("_run={}".format(run) if run else ""),
-        (datetime.now().strftime("%Y%m%d-%H%M%S")),
+        ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
     )
 
     log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
@@ -305,6 +293,7 @@ def autoencoder_fitting(
     reg_cluster_variance: bool,
     entropy_samples: int,
     entropy_knn: int,
+    run: int = run,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -340,6 +329,7 @@ def autoencoder_fitting(
         reg_cluster_variance=reg_cluster_variance,
         logparam=logparam,
         outpath=output_path,
+        run=run,
     )
     if not log_history:
         cbacks = cbacks[1:]
@@ -459,8 +449,8 @@ def autoencoder_fitting(
                 y_val = y_val[:, 1:]
 
             if rule_based_prediction > 0.0:
-                ys += [y_train[-Xs.shape[0]:]]
-                yvals += [y_val[-Xs.shape[0]:]]
+                ys += [y_train[-Xs.shape[0] :]]
+                yvals += [y_val[-Xs.shape[0] :]]
 
             ae.fit(
                 x=Xs,

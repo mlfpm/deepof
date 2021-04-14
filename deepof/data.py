@@ -903,6 +903,7 @@ class coordinates:
         reg_cluster_variance: bool = False,
         entropy_samples: int = 10000,
         entropy_knn: int = 100,
+        run: int = 0,
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
@@ -966,6 +967,7 @@ class coordinates:
             reg_cluster_variance=reg_cluster_variance,
             entropy_samples=entropy_samples,
             entropy_knn=entropy_knn,
+            run=run,
         )
 
         # returns a list of trained tensorflow models
