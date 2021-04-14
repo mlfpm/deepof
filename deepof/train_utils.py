@@ -293,7 +293,7 @@ def autoencoder_fitting(
     reg_cluster_variance: bool,
     entropy_samples: int,
     entropy_knn: int,
-    run: int = run,
+    run: int = 0,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
