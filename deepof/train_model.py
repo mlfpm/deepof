@@ -190,7 +190,7 @@ parser.add_argument(
     "--rule-based-prediction",
     "-rbpred",
     help="Activates the rule-based trait prediction branch of the variational Seq 2 Seq model "
-         "with the specified weight Defaults to 0.0 (inactive)",
+    "with the specified weight Defaults to 0.0 (inactive)",
     default=0.0,
     type=float,
 )
@@ -291,10 +291,12 @@ logparam = {
     "k": k,
     "loss": loss,
 }
+if next_sequence_prediction:
+    logparam["next_sequence_prediction_weight"] = next_sequence_prediction
 if phenotype_prediction:
-    logparam["pheno_weight"] = phenotype_prediction
+    logparam["phenotype_prediction_weight"] = phenotype_prediction
 if rule_based_prediction:
-    logparam["rule_weight"] = rule_based_prediction
+    logparam["rule_based_prediction_weight"] = rule_based_prediction
 
 # noinspection PyTypeChecker
 project_coords = project(
