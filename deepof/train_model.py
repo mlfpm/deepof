@@ -293,6 +293,8 @@ logparam = {
 }
 if phenotype_prediction:
     logparam["pheno_weight"] = phenotype_prediction
+if rule_based_prediction:
+    logparam["rule_weight"] = rule_based_prediction
 
 # noinspection PyTypeChecker
 project_coords = project(
@@ -382,8 +384,9 @@ if not tune:
         montecarlo_kl=mc_kl,
         n_components=k,
         output_path=output_path,
-        phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        rule_based_prediction=rule_base_prediction,
         save_checkpoints=False,
         save_weights=True,
         variational=variational,
@@ -406,8 +409,9 @@ else:
         variational=variational,
         entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
-        phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        rule_based_prediction=rule_base_prediction,
         loss=loss,
         logparam=logparam,
         outpath=output_path,
@@ -424,8 +428,9 @@ else:
         loss=loss,
         mmd_warmup_epochs=mmd_wu,
         overlap_loss=overlap_loss,
-        phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        rule_based_prediction=rule_base_prediction,
         project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
