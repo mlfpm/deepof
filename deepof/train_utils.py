@@ -355,6 +355,14 @@ def autoencoder_fitting(
                 metrics=metrics,
             )
 
+    # Gets the number of rule-based features
+    try:
+        rule_based_features = (
+            y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
+        )
+    except IndexError:
+        rule_based_features = 0
+
     # Build models
     if not variational:
         encoder, decoder, ae = deepof.models.SEQ_2_SEQ_AE(
@@ -385,9 +393,7 @@ def autoencoder_fitting(
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
             rule_based_prediction=rule_based_prediction,
-            rule_based_features=(
-                y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
-            ),
+            rule_based_features=rule_based_features,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
         ).build(
@@ -443,16 +449,16 @@ def autoencoder_fitting(
                 Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
             if phenotype_prediction > 0.0:
-                ys += [y_train[:, 0]]
-                yvals += [y_val[:, 0]]
+                ys += [y_train[-Xs.shape[0] :, 0]]
+                yvals += [y_val[-Xs.shape[0] :, 0]]
 
                 # Remove the used column (phenotype) from both y arrays
                 y_train = y_train[:, 1:]
                 y_val = y_val[:, 1:]
 
             if rule_based_prediction > 0.0:
-                ys += [y_train]
-                yvals += [y_val]
+                ys += [y_train[-Xs.shape[0]:]]
+                yvals += [y_val[-Xs.shape[0]:]]
 
             ae.fit(
                 x=Xs,

@@ -267,10 +267,6 @@ window_step = args.window_step
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
-if not val_num:
-    raise ValueError(
-        "Set a valid data path / validation number for the validation to run"
-    )
 
 assert input_type in [
     "coords",
@@ -324,6 +320,9 @@ coords = project_coords.get_coords(
     align=animal_id + undercond + "Spine_1",
     align_inplace=True,
     propagate_labels=(phenotype_prediction > 0),
+    propagate_annotations=(
+        False if not rule_based_prediction else project_coords.rule_based_annotation()
+    ),
 )
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
@@ -363,7 +362,7 @@ X_train, y_train, X_val, y_val = batch_preprocess(input_dict_train[input_type])
 
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
-if phenotype_prediction > 0:
+if any([phenotype_prediction, rule_based_prediction]):
     print("Training set label shape:", y_train.shape)
     print("Validation set label shape:", y_val.shape)
 
@@ -388,7 +387,7 @@ if not tune:
         output_path=output_path,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
-        rule_based_prediction=rule_base_prediction,
+        rule_based_prediction=rule_based_prediction,
         save_checkpoints=False,
         save_weights=True,
         variational=variational,
