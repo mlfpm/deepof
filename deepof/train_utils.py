@@ -98,9 +98,21 @@ def get_callbacks(
 
     run_ID = "{}{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
-        ("_NextSeqPred={}".format(next_sequence_prediction) if next_sequence_prediction > 0 and variational else ""),
-        ("_PhenoPred={}".format(phenotype_prediction) if phenotype_prediction > 0 else ""),
-        ("_RuleBasedPred={}".format(rule_based_prediction) if rule_based_prediction > 0 else ""),
+        (
+            "_NextSeqPred={}".format(next_sequence_prediction)
+            if next_sequence_prediction > 0 and variational
+            else ""
+        ),
+        (
+            "_PhenoPred={}".format(phenotype_prediction)
+            if phenotype_prediction > 0
+            else ""
+        ),
+        (
+            "_RuleBasedPred={}".format(rule_based_prediction)
+            if rule_based_prediction > 0
+            else ""
+        ),
         ("_loss={}".format(loss) if variational else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
@@ -204,47 +216,72 @@ def tensorboard_metric_logging(
     ae: Any,
     X_val: np.ndarray,
     y_val: np.ndarray,
-    phenotype_class: float,
-    predictor: float,
+    next_sequence_prediction: float,
+    phenotype_prediction: float,
+    rule_based_prediction: float,
     rec: str,
 ):
     """Autoencoder metric logging in tensorboard"""
 
     output = ae.predict(X_val)
-    if phenotype_class or predictor:
-        reconstruction = output[0]
-        prediction = output[1]
-        pheno = output[-1]
+
+    if any([next_sequence_prediction, phenotype_prediction, rule_based_prediction]):
+        reconstruction_pred, reconstruction_true = output[0], y_val[0]
+        nextseq_pred, nextseq_true = output[1], y_val[1]
+        pheno_pred, pheno_true = output[2], y_val[2]
+        rules_pred, rules_true = output[3], y_val[3]
     else:
         reconstruction = output
 
     with tf.summary.create_file_writer(run_dir).as_default():
         hp.hparams(hpms)  # record the values used in this trial
         val_mae = tf.reduce_mean(
-            tf.keras.metrics.mean_absolute_error(X_val, reconstruction)
+            tf.keras.metrics.mean_absolute_error(
+                reconstruction_pred, reconstruction_true
+            )
         )
         val_mse = tf.reduce_mean(
-            tf.keras.metrics.mean_squared_error(X_val, reconstruction)
+            tf.keras.metrics.mean_squared_error(
+                reconstruction_pred, reconstruction_true
+            )
         )
         tf.summary.scalar("val_{}mae".format(rec), val_mae, step=1)
         tf.summary.scalar("val_{}mse".format(rec), val_mse, step=1)
 
-        if predictor:
+        if next_sequence_prediction:
             pred_mae = tf.reduce_mean(
-                tf.keras.metrics.mean_absolute_error(X_val, prediction)
+                tf.keras.metrics.mean_absolute_error(nextseq_pred, nextseq_true)
             )
             pred_mse = tf.reduce_mean(
-                tf.keras.metrics.mean_squared_error(X_val, prediction)
+                tf.keras.metrics.mean_squared_error(nextseq_pred, nextseq_true)
             )
-            tf.summary.scalar("val_prediction_mae".format(rec), pred_mae, step=1)
-            tf.summary.scalar("val_prediction_mse".format(rec), pred_mse, step=1)
+            tf.summary.scalar(
+                "val_next_sequence_prediction_mae".format(rec), pred_mae, step=1
+            )
+            tf.summary.scalar(
+                "val_next_sequence_prediction_mse".format(rec), pred_mse, step=1
+            )
 
-        if phenotype_class:
-            pheno_acc = tf.keras.metrics.binary_accuracy(y_val, tf.squeeze(pheno))
-            pheno_auc = roc_auc_score(y_val, pheno)
+        if phenotype_prediction:
+            pheno_acc = tf.keras.metrics.binary_accuracy(
+                pheno_true, tf.squeeze(pheno_pred)
+            )
+            pheno_auc = tf.keras.metrics.AUC()
+            pheno_auc.update_state(pheno_true, pheno_pred)
+            pheno_auc = pheno_auc.result().numpy()
 
             tf.summary.scalar("phenotype_prediction_accuracy", pheno_acc, step=1)
             tf.summary.scalar("phenotype_prediction_auc", pheno_auc, step=1)
+
+        if rule_based_prediction:
+            rules_mae = tf.reduce_mean(
+                tf.keras.metrics.mean_absolute_error(rules_pred, rules_true)
+            )
+            rules_mse = tf.reduce_mean(
+                tf.keras.metrics.mean_squared_error(rules_pred, rules_true)
+            )
+            tf.summary.scalar("val_prediction_mae".format(rec), rules_mae, step=1)
+            tf.summary.scalar("val_prediction_mse".format(rec), rules_mse, step=1)
 
 
 def autoencoder_fitting(
@@ -451,14 +488,15 @@ def autoencoder_fitting(
             if log_hparams:
                 # Logparams to tensorboard
                 tensorboard_metric_logging(
-                    os.path.join(output_path, "hparams", run_ID),
-                    logparam,
-                    ae,
-                    Xvals,
-                    yvals[-1],
-                    phenotype_prediction,
-                    next_sequence_prediction,
-                    rec,
+                    run_dir=os.path.join(output_path, "hparams", run_ID),
+                    hpms=logparam,
+                    ae=ae,
+                    X_val=Xvals,
+                    y_val=yvals,
+                    next_sequence_prediction=next_sequence_prediction,
+                    phenotype_prediction=phenotype_prediction,
+                    rule_based_prediction=rule_based_prediction,
+                    rec=rec,
                 )
 
     return return_list

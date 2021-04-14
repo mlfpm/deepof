@@ -762,7 +762,10 @@ class SEQ_2_SEQ_GMVAE:
 
             model_outs.append(rule_pred)
             model_losses.append(log_loss)
-            model_metrics["rule_based_prediction"] = ["AUC", "accuracy"]
+            model_metrics["rule_based_prediction"] = [
+                "mae",
+                "mse",
+            ]
             loss_weights.append(self.rule_based_prediction)
 
         # define grouper and end-to-end autoencoder model

@@ -82,13 +82,13 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=1, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    next_sequence_prediction=st.one_of(st.just(1.0), st.just(0.0)),
-    phenotype_prediction=st.one_of(st.just(1.0), st.just(0.0)),
-    rule_based_prediction=st.one_of(st.just(1.0), st.just(0.0)),
-    variational=st.one_of(st.just(True), st.just(False)),
+    next_sequence_prediction=st.one_of(st.just(1.0), st.just(1.0)),
+    phenotype_prediction=st.one_of(st.just(1.0), st.just(1.0)),
+    rule_based_prediction=st.one_of(st.just(1.0), st.just(1.0)),
+    variational=st.one_of(st.just(True), st.just(True)),
 )
 def test_autoencoder_fitting(
     loss,
@@ -100,7 +100,9 @@ def test_autoencoder_fitting(
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
     if rule_based_prediction:
-        y_train = np.concatenate([y_train, np.random.uniform(0, 1, [20, 6])], axis=1)
+        y_train = np.concatenate(
+            [y_train, np.round(np.random.uniform(0, 1, [20, 6]), 1)], axis=1
+        )
 
     if next_sequence_prediction:
         y_train = y_train[1:]
@@ -191,7 +193,7 @@ def test_tune_search(
         )
     )[1:]
 
-    y_train = tf.random.uniform(shape=(X_train.shape[1],), maxval=1.0)
+    y_train = tf.random.uniform(shape=(X_train.shape[1], 1), maxval=1.0)
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
