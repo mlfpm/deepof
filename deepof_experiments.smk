@@ -31,6 +31,7 @@ rule deepof_experiments:
     input:
         # Elliptical arena detection
         # "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
+        #
         # Hyperparameter tuning
         # expand(
         #     os.path.join(
@@ -41,6 +42,7 @@ rule deepof_experiments:
         #     k=cluster_numbers,
         #     enc=encodings,
         # ),
+        #
         # Train a variety of models
         expand(
             outpath + "train_models/trained_weights/"
@@ -52,7 +54,7 @@ rule deepof_experiments:
             "encoding={encs}_"
             "k={k}_"
             "latreg={latreg}_"
-            "entropyknn={entknn}_"
+            "entknn={entknn}_"
             "run={run}_"
             "final_weights.h5",
             input_type=input_types,
@@ -126,7 +128,7 @@ rule train_models:
         "encoding={encs}_"
         "k={k}_"
         "latreg={latreg}_"
-        "entropyknn={entknn}_"
+        "entknn={entknn}_"
         "run={run}_"
         "final_weights.h5",
     shell:
