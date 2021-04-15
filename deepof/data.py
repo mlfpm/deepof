@@ -903,6 +903,7 @@ class coordinates:
         reg_cluster_variance: bool = False,
         entropy_samples: int = 10000,
         entropy_knn: int = 100,
+        input_type: str = False,
         run: int = 0,
     ) -> Tuple:
         """
@@ -967,6 +968,7 @@ class coordinates:
             reg_cluster_variance=reg_cluster_variance,
             entropy_samples=entropy_samples,
             entropy_knn=entropy_knn,
+            input_type=input_type,
             run=run,
         )
 

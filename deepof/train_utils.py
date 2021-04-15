@@ -74,6 +74,7 @@ def get_callbacks(
     rule_based_prediction: float,
     loss: str,
     X_val: np.array = None,
+    input_type: str = False,
     cp: bool = False,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
@@ -86,8 +87,10 @@ def get_callbacks(
     """Generates callbacks for model training, including:
     - run_ID: run name, with coarse parameter details;
     - tensorboard_callback: for real-time visualization;
-    - cp_callback: for checkpoint saving,
-    - onecycle: for learning rate scheduling"""
+    - cp_callback: for checkpoint saving;
+    - onecycle: for learning rate scheduling;
+    - entropy: neighborhood entropy in the latent space;
+    """
 
     latreg = "none"
     if reg_cat_clusters and not reg_cluster_variance:
@@ -99,6 +102,7 @@ def get_callbacks(
 
     run_ID = "{}{}{}{}{}{}{}_{}".format(
         ("GMVAE" if variational else "AE"),
+        ("_input_type={}".format(input_type) if input_type else "coords"),
         ("_NextSeqPred={}".format(next_sequence_prediction) if variational else ""),
         ("_PhenoPred={}".format(phenotype_prediction) if variational else ""),
         ("_RuleBasedPred={}".format(rule_based_prediction) if variational else ""),
@@ -293,6 +297,7 @@ def autoencoder_fitting(
     reg_cluster_variance: bool,
     entropy_samples: int,
     entropy_knn: int,
+    input_type: str,
     run: int = 0,
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
@@ -315,18 +320,19 @@ def autoencoder_fitting(
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
         X_train=X_train,
-        X_val=(X_val if X_val.shape != (0,) else None),
         batch_size=batch_size,
-        cp=save_checkpoints,
         variational=variational,
-        next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
+        next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_based_prediction,
         loss=loss,
-        entropy_samples=entropy_samples,
-        entropy_knn=entropy_knn,
+        input_type=input_type,
+        X_val=(X_val if X_val.shape != (0,) else None),
+        cp=save_checkpoints,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
+        entropy_samples=entropy_samples,
+        entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
         run=run,

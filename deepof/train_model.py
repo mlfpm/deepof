@@ -403,6 +403,7 @@ if not tune:
         reg_cluster_variance=("variance" in latent_reg),
         entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
+        input_type=input_type,
         run=run,
     )
 
@@ -413,16 +414,17 @@ else:
 
     run_ID, tensorboard_callback, entropy, onecycle = get_callbacks(
         X_train=X_train,
-        X_val=(X_val if X_val.shape != (0,) else None),
         batch_size=batch_size,
-        cp=False,
         variational=variational,
-        entropy_samples=entropy_samples,
-        entropy_knn=entropy_knn,
-        next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
+        next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_base_prediction,
         loss=loss,
+        X_val=(X_val if X_val.shape != (0,) else None),
+        input_type=input_type,
+        cp=False,
+        entropy_samples=entropy_samples,
+        entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
         run=run,
