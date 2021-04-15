@@ -71,7 +71,9 @@ def test_one_cycle_scheduler():
         max_rate=0.005,
     )
 
-    fit = test_model.fit(X, y, callbacks=[onecycle], epochs=10, batch_size=100)
+    fit = test_model.fit(
+        X, y, callbacks=[onecycle], epochs=10, batch_size=100, verbose=0
+    )
     assert isinstance(fit, tf.keras.callbacks.History)
     assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
     assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
@@ -101,7 +103,7 @@ def test_uncorrelated_features_constraint():
             optimizer=tf.keras.optimizers.SGD(),
         )
 
-        fit = test_model.fit(X, y, epochs=25, batch_size=100)
+        fit = test_model.fit(X, y, epochs=25, batch_size=100, verbose=0)
         assert isinstance(fit, tf.keras.callbacks.History)
 
         correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
@@ -123,7 +125,7 @@ def test_MCDropout():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
@@ -144,7 +146,7 @@ def test_dense_transpose():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
@@ -188,7 +190,7 @@ def test_KLDivergenceLayer():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, [y, y], epochs=1, batch_size=100)
+    fit = test_model.fit(X, [y, y], epochs=1, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
     assert test_model.losses[0] == test_model.losses[1]
 
@@ -233,7 +235,7 @@ def test_MMDiscrepancyLayer():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
@@ -251,7 +253,7 @@ def test_dead_neuron_control():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100)
+    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
@@ -281,6 +283,6 @@ def test_neighbor_latent_entropy():
         X,
         X,
         callbacks=deepof.model_utils.neighbor_latent_entropy(
-            k=10, encoding_dim=6, validation_data=X, variational=True
+            k=10, encoding_dim=6, validation_data=X, variational=True, verbose=0
         ),
     )
