@@ -44,7 +44,8 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath + "train_models/trained_weights/"
-            "GMVAE_NextSeqPred={nspredweight}_"
+            "GMVAE_input_type={input_type}_"
+            "NextSeqPred={nspredweight}_"
             "PhenoPred={phenpredweight}_"
             "RuleBasedPred={rulesweight}_"
             "loss={loss}_"
@@ -117,7 +118,8 @@ rule train_models:
         ),
     output:
         trained_models=outpath + "train_models/trained_weights/"
-        "GMVAE_NextSeqPred={nspredweight}_"
+        "GMVAE_input_type={input_type}_"
+        "NextSeqPred={nspredweight}_"
         "PhenoPred={phenpredweight}_"
         "RuleBasedPred={rulesweight}_"
         "loss={loss}_"
