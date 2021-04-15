@@ -331,7 +331,7 @@ class project:
 
             for k, value in tab_dict.items():
                 imputed = IterativeImputer(
-                    max_iter=100, skip_complete=True
+                    max_iter=5, skip_complete=True
                 ).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
