@@ -283,6 +283,6 @@ def test_neighbor_latent_entropy():
         X,
         X,
         callbacks=deepof.model_utils.neighbor_latent_entropy(
-            k=10, encoding_dim=6, validation_data=X, variational=True, verbose=0
+            k=10, encoding_dim=6, validation_data=X, variational=True,
         ),
     )
