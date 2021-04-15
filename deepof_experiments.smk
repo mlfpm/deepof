@@ -43,8 +43,7 @@ rule deepof_experiments:
         # ),
         # Train a variety of models
         expand(
-            outpath + 
-            "train_models/trained_weights/"
+            outpath + "train_models/trained_weights/"
             "GMVAE_NextSeqPred={nspredweight}_"
             "PhenoPred={phenpredweight}_"
             "RuleBasedPred={rulesweight}_"
@@ -119,7 +118,7 @@ rule train_models:
     output:
         trained_models=os.path.join(
             outpath,
-            "/trained_weights/"
+            "trained_weights/"
             "GMVAE_NextSeqPred={nspredweight}_"
             "PhenoPred={phenpredweight}_"
             "RuleBasedPred={rulesweight}_"
