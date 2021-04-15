@@ -116,20 +116,17 @@ rule train_models:
             "/psycl/g/mpsstatgen/lucas/DLC/DLC_models/deepof_single_topview/"
         ),
     output:
-        trained_models=os.path.join(
-            outpath,
-            "trained_weights/"
-            "GMVAE_NextSeqPred={nspredweight}_"
-            "PhenoPred={phenpredweight}_"
-            "RuleBasedPred={rulesweight}_"
-            "loss={loss}_"
-            "encoding={encs}_"
-            "k={k}_"
-            "latreg={latreg}_"
-            "entropyknn={entknn}_"
-            "run={run}_"
-            "final_weights.h5",
-        ),
+        trained_models=outpath + "train_models/trained_weights/"
+        "GMVAE_NextSeqPred={nspredweight}_"
+        "PhenoPred={phenpredweight}_"
+        "RuleBasedPred={rulesweight}_"
+        "loss={loss}_"
+        "encoding={encs}_"
+        "k={k}_"
+        "latreg={latreg}_"
+        "entropyknn={entknn}_"
+        "run={run}_"
+        "final_weights.h5",
     shell:
         "pipenv run python -m deepof.train_model "
         "--train-path {input.data_path} "
