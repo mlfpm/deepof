@@ -149,5 +149,5 @@ rule train_models:
         "--batch-size 256 "
         "--window-size 24 "
         "--window-step 12 "
-        "--run {wildcards.run}"
+        "--run {wildcards.run} "
         "--output-path {outpath}train_models"
