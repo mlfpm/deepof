@@ -118,7 +118,17 @@ rule train_models:
     output:
         trained_models=os.path.join(
             outpath,
-            "latent_regularization_experiments/trained_weights/GMVAE_loss={loss}_encoding={encs}_k={k}_latreg={latreg}_entropyknn={entknn}_final_weights.h5",
+            "/trained_weights/"
+            "GMVAE_NextSeqPred={nspredweight}_"
+            "PhenoPred={phenpredweight}_"
+            "RuleBasedPred={rulesweight}_"
+            "loss={loss}_"
+            "encoding={encs}_"
+            "k={k}_"
+            "latreg={latreg}_"
+            "entropyknn={entknn}_"
+            "run={run}_"
+            "final_weights.h5",
         ),
     shell:
         "pipenv run python -m deepof.train_model "
