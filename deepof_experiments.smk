@@ -15,7 +15,7 @@ import os
 
 outpath = "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 
-losses = ["ELBO", "MMD", "ELBO+MMD"]
+losses = ["ELBO"] #, "MMD", "ELBO+MMD"]
 encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [25]  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["none"]  # ["none", "categorical", "variance", "categorical+variance"]
