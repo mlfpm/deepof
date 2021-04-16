@@ -341,11 +341,11 @@ class SEQ_2_SEQ_GMVAE:
             "bidirectional_merge": "concat",
             "clipvalue": 1.0,
             "dense_activation": "relu",
-            "dense_layers_per_branch": 1,
+            "dense_layers_per_branch": 3,
             "dropout_rate": 0.05,
             "learning_rate": 1e-3,
             "units_conv": 64,
-            "units_dense2": 64,
+            "units_dense2": 32,
             "units_lstm": 128,
         }
 
@@ -399,23 +399,15 @@ class SEQ_2_SEQ_GMVAE:
             use_bias=True,
         )
 
-        # Nested list comprehension adding a series of dense and batch norm layers
         Model_E4 = [
-            i
-            for s in [
-                [
-                    Dense(
-                        self.DENSE_2,
-                        activation=self.dense_activation,
-                        # kernel_constraint=UnitNorm(axis=0),
-                        kernel_initializer=he_uniform(),
-                        use_bias=True,
-                    ),
-                    BatchNormalization(),
-                ]
-                for _ in range(self.dense_layers_per_branch)
-            ]
-            for i in s
+            Dense(
+                self.DENSE_2,
+                activation=self.dense_activation,
+                # kernel_constraint=UnitNorm(axis=0),
+                kernel_initializer=he_uniform(),
+                use_bias=True,
+            )
+            for _ in range(self.dense_layers_per_branch)
         ]
 
         # Decoder layers

@@ -23,6 +23,7 @@ entropy_knn = [100]
 next_sequence_pred_weights = [0.0, 0.15]
 phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0, 0.15]
+window_lengths = range(11,56,11)
 input_types = ["coords"]
 run = list(range(1, 11))
 
@@ -47,6 +48,7 @@ rule deepof_experiments:
         expand(
             outpath + "train_models/trained_weights/"
             "GMVAE_input_type={input_type}_"
+            "window_size={window_size}_"
             "NextSeqPred={nspredweight}_"
             "PhenoPred={phenpredweight}_"
             "RuleBasedPred={rulesweight}_"
@@ -58,6 +60,7 @@ rule deepof_experiments:
             "run={run}_"
             "final_weights.h5",
             input_type=input_types,
+            window_size=window_lengths,
             loss=losses,
             encs=encodings,
             k=cluster_numbers,
@@ -121,6 +124,7 @@ rule train_models:
     output:
         trained_models=outpath + "train_models/trained_weights/"
         "GMVAE_input_type={input_type}_"
+        "window_size={window_size}_"
         "NextSeqPred={nspredweight}_"
         "PhenoPred={phenpredweight}_"
         "RuleBasedPred={rulesweight}_"
@@ -149,7 +153,7 @@ rule train_models:
         "--encoding-size {wildcards.encs} "
         "--entropy-knn {wildcards.entknn} "
         "--batch-size 256 "
-        "--window-size 24 "
-        "--window-step 12 "
+        "--window-size {window_size} "
+        "--window-step 11 "
         "--run {wildcards.run} "
         "--output-path {outpath}train_models"
