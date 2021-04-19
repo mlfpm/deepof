@@ -100,7 +100,7 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}".format(
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
         ("GMVAE" if variational else "AE"),
         ("_input_type={}".format(input_type) if input_type else "coords"),
         ("_window_size={}", format(X_train.shape[1])),
@@ -115,8 +115,6 @@ def get_callbacks(
         ("_run={}".format(run) if run else ""),
         ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
     )
-
-    print(run_ID)
 
     log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
     tensorboard_callback = tf.keras.callbacks.TensorBoard(

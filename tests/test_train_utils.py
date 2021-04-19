@@ -33,7 +33,7 @@ def test_load_treatments():
 
 @given(
     X_train=arrays(
-        shape=st.tuples(st.integers(min_value=1, max_value=1000)),
+        shape=st.tuples(st.integers(min_value=1, max_value=1000), st.just(24)),
         dtype=float,
         elements=st.floats(
             min_value=0.0,
