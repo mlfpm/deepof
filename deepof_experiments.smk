@@ -153,7 +153,7 @@ rule train_models:
         "--encoding-size {wildcards.encs} "
         "--entropy-knn {wildcards.entknn} "
         "--batch-size 256 "
-        "--window-size {window_size} "
+        "--window-size {wildcards.window_size} "
         "--window-step 11 "
         "--run {wildcards.run} "
         "--output-path {outpath}train_models"
