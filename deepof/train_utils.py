@@ -103,7 +103,7 @@ def get_callbacks(
     run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
         ("GMVAE" if variational else "AE"),
         ("_input_type={}".format(input_type) if input_type else "coords"),
-        ("_window_size={}", format(X_train.shape[1])),
+        ("_window_size={}".format(X_train.shape[1])),
         ("_NextSeqPred={}".format(next_sequence_prediction) if variational else ""),
         ("_PhenoPred={}".format(phenotype_prediction) if variational else ""),
         ("_RuleBasedPred={}".format(rule_based_prediction) if variational else ""),
