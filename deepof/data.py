@@ -882,7 +882,7 @@ class coordinates:
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         batch_size: int = 256,
         encoding_size: int = 4,
-        epochs: int = 35,
+        epochs: int = 50,
         hparams: dict = None,
         kl_warmup: int = 0,
         log_history: bool = True,
