@@ -426,8 +426,17 @@ def autoencoder_fitting(
                 ],
             )
 
+            if not os.path.exists(os.path.join(output_path, "trained_weights")):
+                os.makedirs(os.path.join(output_path, "trained_weights"))
+
             if save_weights:
-                ae.save_weights("{}_final_weights.h5".format(run_ID))
+                ae.save_weights(
+                    os.path.join(
+                        "{}".format(output_path),
+                        "trained_weights",
+                        "{}_final_weights.h5".format(run_ID),
+                    )
+                )
 
         else:
 
@@ -473,7 +482,7 @@ def autoencoder_fitting(
             )
 
             if not os.path.exists(os.path.join(output_path, "trained_weights")):
-                os.makedirs("trained_weights")
+                os.makedirs(os.path.join(output_path, "trained_weights"))
 
             if save_weights:
                 ae.save_weights(
