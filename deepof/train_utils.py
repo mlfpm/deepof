@@ -633,16 +633,16 @@ def tune_search(
         Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
     if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0]:, 0]]
-        yvals += [y_val[-Xvals.shape[0]:, 0]]
+        ys += [y_train[-Xs.shape[0] :, 0]]
+        yvals += [y_val[-Xvals.shape[0] :, 0]]
 
         # Remove the used column (phenotype) from both y arrays
         y_train = y_train[:, 1:]
         y_val = y_val[:, 1:]
 
     if rule_based_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0]:]]
-        yvals += [y_val[-Xvals.shape[0]:]]
+        ys += [y_train[-Xs.shape[0] :]]
+        yvals += [y_val[-Xvals.shape[0] :]]
 
     tuner.search(
         Xs,
