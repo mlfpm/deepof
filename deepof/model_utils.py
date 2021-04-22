@@ -415,7 +415,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
     to the final model loss.
     """
 
-    def __init__(self, iters, warm_up_iters, annealing_mode="sigmoid", *args, **kwargs):
+    def __init__(self, iters, warm_up_iters, annealing_mode, *args, **kwargs):
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
         self.is_placeholder = True
         self._iters = iters
@@ -476,7 +476,7 @@ class MMDiscrepancyLayer(Layer):
         prior,
         iters,
         warm_up_iters,
-        annealing_mode="sigmoid",
+        annealing_mode,
         *args,
         **kwargs
     ):

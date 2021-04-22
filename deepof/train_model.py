@@ -99,6 +99,13 @@ parser.add_argument(
     default="dists",
 )
 parser.add_argument(
+    "--kl-annealing-mode",
+    "-klam",
+    help="Weight annealing to use for ELBO loss. Can be one of 'linear' and 'sigmoid'",
+    default="linear",
+    type=str,
+)
+parser.add_argument(
     "--kl-warmup",
     "-klw",
     help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
@@ -134,6 +141,13 @@ parser.add_argument(
     help="Sets the loss function for the variational model. "
     "It has to be one of ELBO+MMD, ELBO or MMD. Defaults to ELBO+MMD",
     default="ELBO+MMD",
+    type=str,
+)
+parser.add_argument(
+    "--mmd-annealing-mode",
+    "-mmdam",
+    help="Weight annealing to use for MMD loss. Can be one of 'linear' and 'sigmoid'",
+    default="linear",
     type=str,
 )
 parser.add_argument(
@@ -251,11 +265,13 @@ gaussian_filter = args.gaussian_filter
 hparams = args.hyperparameters if args.hyperparameters is not None else {}
 input_type = args.input_type
 k = args.components
+kl_annealing_mode = args.kl_annealing_mode
 kl_wu = args.kl_warmup
 entropy_knn = args.entropy_knn
 entropy_samples = args.entropy_samples
 latent_reg = args.latent_reg
 loss = args.loss
+mmd_annealing_mode = args.mmd_annealing_mode
 mmd_wu = args.mmd_warmup
 mc_kl = args.montecarlo_kl
 neuron_control = args.neuron_control
@@ -385,10 +401,12 @@ if not tune:
         batch_size=batch_size,
         encoding_size=encoding_size,
         hparams={},
+        kl_annealing_mode=kl_annealing_mode,
         kl_warmup=kl_wu,
         log_history=True,
         log_hparams=True,
         loss=loss,
+        mmd_annealing_mode=mmd_annealing_mode,
         mmd_warmup=mmd_wu,
         montecarlo_kl=mc_kl,
         n_components=k,
