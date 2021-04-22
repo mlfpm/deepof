@@ -183,7 +183,10 @@ def test_KLDivergenceLayer(annealing_mode):
         weight=1.0,
     )(x)
     kl_deepof = deepof.model_utils.KLDivergenceLayer(
-        distribution_b=prior, iters=1, warm_up_iters=0, annealing_mode=annealing_mode,
+        distribution_b=prior,
+        iters=1,
+        warm_up_iters=0,
+        annealing_mode=annealing_mode,
     )(x)
     test_model = tf.keras.Model(i, [kl_canon, kl_deepof])
 
@@ -231,7 +234,7 @@ def test_MMDiscrepancyLayer(annealing_mode):
         prior=prior,
         iters=1,
         warm_up_iters=0,
-        annealing_mode=annealing_mode
+        annealing_mode=annealing_mode,
     )(x)
     test_model = tf.keras.Model(i, x)
 
