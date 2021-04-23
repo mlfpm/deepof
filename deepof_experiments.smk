@@ -23,7 +23,7 @@ entropy_knn = [100]
 next_sequence_pred_weights = [0.0, 0.15]
 phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0, 0.15]
-window_lengths = range(11,56,11)
+window_lengths = [22] # range(11,56,11)
 input_types = ["coords"]
 run = list(range(1, 11))
 
