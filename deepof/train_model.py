@@ -438,6 +438,8 @@ else:
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_base_prediction,
         loss=loss,
+        loss_warmup=kl_wu,
+        warmup_mode=kl_annealing_mode,
         X_val=(X_val if X_val.shape != (0,) else None),
         input_type=input_type,
         cp=False,

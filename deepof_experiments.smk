@@ -157,7 +157,7 @@ rule train_models:
         "--loss {wildcards.loss} "
         "--kl-annealing-mode {wildcards.warmup_mode} "
         "--kl-warmup {wildcards.warmup} "
-        "--mmd-annealing-mode sigmoid "
+        "--mmd-annealing-mode {wildcards.warmup_mode} "
         "--mmd-warmup {wildcards.warmup} "
         "--montecarlo-kl 10 "
         "--encoding-size {wildcards.encs} "
