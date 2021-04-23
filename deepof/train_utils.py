@@ -333,6 +333,8 @@ def autoencoder_fitting(
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_based_prediction,
         loss=loss,
+        loss_warmup=kl_warmup,
+        warmup_mode=kl_annealing_mode,
         input_type=input_type,
         X_val=(X_val if X_val.shape != (0,) else None),
         cp=save_checkpoints,
