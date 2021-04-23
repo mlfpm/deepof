@@ -102,7 +102,7 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
         ("GMVAE" if variational else "AE"),
         ("_input_type={}".format(input_type) if input_type else "coords"),
         ("_window_size={}".format(X_train.shape[1])),
@@ -110,8 +110,8 @@ def get_callbacks(
         ("_PhenoPred={}".format(phenotype_prediction) if variational else ""),
         ("_RuleBasedPred={}".format(rule_based_prediction) if variational else ""),
         ("_loss={}".format(loss) if variational else ""),
-        ("loss_warmup={}_".format(loss_warmup)),
-        ("warmup_mode={}_".format(warmup_mode)),
+        ("_loss_warmup={}".format(loss_warmup)),
+        ("_warmup_mode={}".format(warmup_mode)),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
         ("_latreg={}".format(latreg)),
