@@ -15,6 +15,8 @@ import os
 
 outpath = "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 
+warmup_epochs = [5, 10, 15, 20, 25]
+warmup_mode = ["linear", "sigmoid"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
@@ -23,7 +25,7 @@ entropy_knn = [100]
 next_sequence_pred_weights = [0.0, 0.15]
 phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0, 0.15]
-window_lengths = [22] # range(11,56,11)
+window_lengths = [22]  # range(11,56,11)
 input_types = ["coords"]
 run = list(range(1, 11))
 
@@ -53,6 +55,8 @@ rule deepof_experiments:
             "PhenoPred={phenpredweight}_"
             "RuleBasedPred={rulesweight}_"
             "loss={loss}_"
+            "loss_warmup={warmup}_"
+            "warmup_mode={warmup_mode}_"
             "encoding={encs}_"
             "k={k}_"
             "latreg={latreg}_"
@@ -62,6 +66,8 @@ rule deepof_experiments:
             input_type=input_types,
             window_size=window_lengths,
             loss=losses,
+            warmup=warmup_epochs,
+            warmup_mode=warmup_mode,
             encs=encodings,
             k=cluster_numbers,
             latreg=latent_reg,
@@ -129,6 +135,8 @@ rule train_models:
         "PhenoPred={phenpredweight}_"
         "RuleBasedPred={rulesweight}_"
         "loss={loss}_"
+        "loss_warmup={warmup}_"
+        "warmup_mode={warmup_mode}_"
         "encoding={encs}_"
         "k={k}_"
         "latreg={latreg}_"
@@ -147,8 +155,10 @@ rule train_models:
         "--variational True "
         "--latent-reg {wildcards.latreg} "
         "--loss {wildcards.loss} "
-        "--kl-warmup 30 "
-        "--mmd-warmup 30 "
+        "--kl-annealing-mode {wildcards.warmup_mode} "
+        "--kl-warmup {wildcards.warmup} "
+        "--mmd-annealing-mode sigmoid "
+        "--mmd-warmup {wildcards.warmup} "
         "--montecarlo-kl 10 "
         "--encoding-size {wildcards.encs} "
         "--entropy-knn {wildcards.entknn} "
