@@ -23,7 +23,7 @@ setuptools.setup(
     License="MIT",
     include_package_data=True,
     install_requires=[
-        "tensorflow",
+        "tensorflow>=2.4",
         "numpy",
         "pandas",
         "joblib",
