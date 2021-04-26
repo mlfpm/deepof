@@ -907,7 +907,6 @@ class coordinates:
         entropy_knn: int = 100,
         input_type: str = False,
         run: int = 0,
-        strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(),
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
@@ -975,7 +974,6 @@ class coordinates:
             entropy_knn=entropy_knn,
             input_type=input_type,
             run=run,
-            strategy=strategy,
         )
 
         # returns a list of trained tensorflow models
