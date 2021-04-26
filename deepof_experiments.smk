@@ -15,16 +15,16 @@ import os
 
 outpath = "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 
-warmup_epochs = [5, 10, 15, 20, 25]
-warmup_mode = ["linear", "sigmoid"]
+warmup_epochs = [15]
+warmup_mode = ["sigmoid"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["variance"]  # ["none", "categorical", "variance", "categorical+variance"]
 entropy_knn = [100]
-next_sequence_pred_weights = [0.0, 0.15]
+next_sequence_pred_weights = [0.15]
 phenotype_pred_weights = [0.0]
-rule_based_pred_weights = [0.0, 0.15]
+rule_based_pred_weights = [0.0]
 window_lengths = [22]  # range(11,56,11)
 input_types = ["coords"]
 run = list(range(1, 11))
