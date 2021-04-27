@@ -284,7 +284,7 @@ def test_find_learning_rate():
 def test_neighbor_latent_entropy():
     X = np.random.normal(0, 1, [1500, 25, 6])
 
-    test_model = deepof.models.SEQ_2_SEQ_GMVAE()
+    test_model = deepof.models.GMVAE()
     gmvaep = test_model.build(X.shape)[3]
 
     gmvaep.fit(

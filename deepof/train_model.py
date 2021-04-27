@@ -218,13 +218,6 @@ parser.add_argument(
     default=1,
 )
 parser.add_argument(
-    "--variational",
-    "-v",
-    help="Sets the model to train to a variational Bayesian autoencoder. Defaults to True",
-    default=True,
-    type=str2bool,
-)
-parser.add_argument(
     "--window-size",
     "-ws",
     help="Sets the sliding window size to be used when building both training and validation sets. Defaults to 15",
@@ -276,7 +269,6 @@ smooth_alpha = args.smooth_alpha
 train_path = os.path.abspath(args.train_path)
 tune = args.hyperparameter_tuning
 val_num = args.val_num
-variational = bool(args.variational)
 window_size = args.window_size
 window_step = args.window_step
 run = args.run
@@ -408,7 +400,6 @@ if not tune:
         rule_based_prediction=rule_based_prediction,
         save_checkpoints=False,
         save_weights=True,
-        variational=variational,
         reg_cat_clusters=("categorical" in latent_reg),
         reg_cluster_variance=("variance" in latent_reg),
         entropy_samples=entropy_samples,
@@ -419,13 +410,9 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-
-    hyp = "S2SGMVAE" if variational else "S2SAE"
-
     run_ID, tensorboard_callback, entropy, onecycle = get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
-        variational=variational,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_base_prediction,
@@ -456,7 +443,7 @@ else:
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
         rule_based_prediction=rule_base_prediction,
-        project_name="{}-based_{}_{}".format(input_type, hyp, tune.capitalize()),
+        project_name="{}-based_GMVAE_{}".format(input_type, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
             onecycle,
@@ -477,7 +464,7 @@ else:
     with open(
         os.path.join(
             output_path,
-            "{}-based_{}_{}_params.pickle".format(input_type, hyp, tune.capitalize()),
+            "{}-based_GMVAE_{}_params.pickle".format(input_type, tune.capitalize()),
         ),
         "wb",
     ) as handle:

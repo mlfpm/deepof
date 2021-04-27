@@ -42,7 +42,7 @@ def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
     loss,
     number_of_components,
 ):
-    deepof.hypermodels.SEQ_2_SEQ_GMVAE(
+    deepof.hypermodels.GMVAE(
         encoding=encoding_size,
         input_shape=(
             100,

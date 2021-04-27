@@ -900,7 +900,6 @@ class coordinates:
         pretrained: str = False,
         save_checkpoints: bool = False,
         save_weights: bool = True,
-        variational: bool = True,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         entropy_samples: int = 10000,
@@ -938,8 +937,6 @@ class coordinates:
             is appended to the latent space,
             aiming to predict what happens immediately next in the sequence, which can help with regularization.
             - pretrained (bool): If True, a pretrained set of weights is expected.
-            - variational (bool): If True (default) a variational autoencoder is used. If False,
-            a simple autoencoder is used for dimensionality reduction
 
         Returns:
             - return_list (tuple): List containing all relevant trained models for unsupervised prediction.
@@ -968,7 +965,6 @@ class coordinates:
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
             save_weights=save_weights,
-            variational=variational,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
             entropy_samples=entropy_samples,

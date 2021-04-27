@@ -18,78 +18,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
-class SEQ_2_SEQ_AE(HyperModel):
-    """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_AE"""
-
-    def __init__(self, input_shape):
-        super().__init__()
-        self.input_shape = input_shape
-
-    @staticmethod
-    def get_hparams(hp):
-        """Retrieve hyperparameters to tune"""
-
-        conv_filters = hp.Int(
-            "units_conv",
-            min_value=32,
-            max_value=256,
-            step=32,
-            default=256,
-        )
-        lstm_units_1 = hp.Int(
-            "units_lstm",
-            min_value=128,
-            max_value=512,
-            step=32,
-            default=256,
-        )
-        dense_2 = hp.Int(
-            "units_dense2",
-            min_value=32,
-            max_value=256,
-            step=32,
-            default=64,
-        )
-        dropout_rate = hp.Float(
-            "dropout_rate",
-            min_value=0.0,
-            max_value=0.5,
-            default=0.25,
-            step=0.05,
-        )
-        encoding = hp.Int(
-            "encoding",
-            min_value=16,
-            max_value=64,
-            step=8,
-            default=24,
-        )
-
-        return conv_filters, lstm_units_1, dense_2, dropout_rate, encoding
-
-    def build(self, hp):
-        """Overrides Hypermodel's build method"""
-
-        # HYPERPARAMETERS TO TUNE
-        conv_filters, lstm_units_1, dense_2, dropout_rate, encoding = self.get_hparams(
-            hp
-        )
-
-        # INSTANCIATED MODEL
-        model = deepof.models.SEQ_2_SEQ_AE(
-            architecture_hparams={
-                "units_conv": conv_filters,
-                "units_lstm": lstm_units_1,
-                "units_dense_2": dense_2,
-                "dropout_rate": dropout_rate,
-                "encoding": encoding,
-            }
-        ).build(self.input_shape)[2]
-
-        return model
-
-
-class SEQ_2_SEQ_GMVAE(HyperModel):
+class GMVAE(HyperModel):
     """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE"""
 
     def __init__(
@@ -173,7 +102,7 @@ class SEQ_2_SEQ_GMVAE(HyperModel):
             lstm_units_1,
         ) = self.get_hparams(hp)
 
-        gmvaep = deepof.models.SEQ_2_SEQ_GMVAE(
+        gmvaep = deepof.models.GMVAE(
             architecture_hparams={
                 "bidirectional_merge": "ave",
                 "clipvalue": clipvalue,

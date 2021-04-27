@@ -215,7 +215,6 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
     def __init__(
         self,
         encoding_dim: int,
-        variational: bool = True,
         validation_data: np.ndarray = None,
         k: int = 100,
         samples: int = 10000,
@@ -223,7 +222,6 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
     ):
         super().__init__()
         self.enc = encoding_dim
-        self.variational = variational
         self.validation_data = validation_data
         self.k = k
         self.samples = samples
@@ -233,7 +231,7 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         """ Passes samples through the encoder and computes cluster purity on the latent embedding """
 
-        if self.validation_data is not None and self.variational:
+        if self.validation_data is not None:
 
             # Get encoer and grouper from full model
             latent_distribution = [
@@ -536,10 +534,18 @@ class Cluster_overlap(Layer):
     using the average inter-cluster MMD as a metric
     """
 
-    def __init__(self, lat_dims, n_components, loss=False, samples=10, *args, **kwargs):
-        self.lat_dims = lat_dims
-        self.n_components = n_components
-        self.loss = loss
+    def __init__(
+        self,
+        encoding_dim: int,
+        k: int = 100,
+        loss_weight: float = False,
+        samples: int = 512,
+        *args,
+        **kwargs
+    ):
+        self.enc = encoding_dim
+        self.k = k
+        self.loss_weight = loss_weight
         self.samples = samples
         super(Cluster_overlap, self).__init__(*args, **kwargs)
 
@@ -547,9 +553,9 @@ class Cluster_overlap(Layer):
         """Updates Constraint metadata"""
 
         config = super().get_config().copy()
-        config.update({"lat_dims": self.lat_dims})
-        config.update({"n_components": self.n_components})
-        config.update({"loss": self.loss})
+        config.update({"enc": self.enc})
+        config.update({"k": self.k})
+        config.update({"loss_weight": self.loss_weight})
         config.update({"samples": self.samples})
         return config
 

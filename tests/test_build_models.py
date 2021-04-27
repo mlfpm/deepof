@@ -45,7 +45,7 @@ def test_SEQ_2_SEQ_GMVAE_build(
     montecarlo_kl,
     number_of_components,
 ):
-    deepof.models.SEQ_2_SEQ_GMVAE(
+    deepof.models.GMVAE(
         loss=loss,
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,

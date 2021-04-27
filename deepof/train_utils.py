@@ -68,7 +68,6 @@ def load_treatments(train_path):
 def get_callbacks(
     X_train: np.array,
     batch_size: int,
-    variational: bool,
     phenotype_prediction: float,
     next_sequence_prediction: float,
     rule_based_prediction: float,
@@ -103,13 +102,13 @@ def get_callbacks(
         latreg = "categorical+variance"
 
     run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
-        ("GMVAE" if variational else "AE"),
+        ("deepof_GMVAE"),
         ("_input_type={}".format(input_type) if input_type else "coords"),
         ("_window_size={}".format(X_train.shape[1])),
-        ("_NextSeqPred={}".format(next_sequence_prediction) if variational else ""),
-        ("_PhenoPred={}".format(phenotype_prediction) if variational else ""),
-        ("_RuleBasedPred={}".format(rule_based_prediction) if variational else ""),
-        ("_loss={}".format(loss) if variational else ""),
+        ("_NextSeqPred={}".format(next_sequence_prediction)),
+        ("_PhenoPred={}".format(phenotype_prediction)),
+        ("_RuleBasedPred={}".format(rule_based_prediction)),
+        ("_loss={}".format(loss)),
         ("_loss_warmup={}".format(loss_warmup)),
         ("_warmup_mode={}".format(warmup_mode)),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
@@ -133,7 +132,6 @@ def get_callbacks(
         samples=entropy_samples,
         validation_data=X_val,
         log_dir=os.path.join(outpath, "metrics", run_ID),
-        variational=variational,
     )
 
     onecycle = deepof.model_utils.one_cycle_scheduler(
@@ -299,7 +297,6 @@ def autoencoder_fitting(
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
-    variational: bool,
     reg_cat_clusters: bool,
     reg_cluster_variance: bool,
     entropy_samples: int,
@@ -342,7 +339,6 @@ def autoencoder_fitting(
     run_ID, *cbacks = get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
-        variational=variational,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_based_prediction,
@@ -384,159 +380,109 @@ def autoencoder_fitting(
     except IndexError:
         rule_based_features = 0
 
-    # Build models
-    if not variational:
-        encoder, decoder, ae = deepof.models.SEQ_2_SEQ_AE(
-            ({} if hparams is None else hparams)
+    # Build model
+    with strategy.scope():
+        (encoder, generator, grouper, ae, prior, posterior,) = deepof.models.GMVAE(
+            architecture_hparams=({} if hparams is None else hparams),
+            batch_size=batch_size * strategy.num_replicas_in_sync,
+            compile_model=True,
+            encoding=encoding_size,
+            kl_annealing_mode=kl_annealing_mode,
+            kl_warmup_epochs=kl_warmup,
+            loss=loss,
+            mmd_annealing_mode=mmd_annealing_mode,
+            mmd_warmup_epochs=mmd_warmup,
+            montecarlo_kl=montecarlo_kl,
+            number_of_components=n_components,
+            overlap_loss=False,
+            next_sequence_prediction=next_sequence_prediction,
+            phenotype_prediction=phenotype_prediction,
+            rule_based_prediction=rule_based_prediction,
+            rule_based_features=rule_based_features,
+            reg_cat_clusters=reg_cat_clusters,
+            reg_cluster_variance=reg_cluster_variance,
         ).build(X_train.shape)
-        return_list = (encoder, decoder, ae)
-
-    else:
-        with strategy.scope():
-            (
-                encoder,
-                generator,
-                grouper,
-                ae,
-                prior,
-                posterior,
-            ) = deepof.models.SEQ_2_SEQ_GMVAE(
-                architecture_hparams=({} if hparams is None else hparams),
-                batch_size=batch_size * strategy.num_replicas_in_sync,
-                compile_model=True,
-                encoding=encoding_size,
-                kl_annealing_mode=kl_annealing_mode,
-                kl_warmup_epochs=kl_warmup,
-                loss=loss,
-                mmd_annealing_mode=mmd_annealing_mode,
-                mmd_warmup_epochs=mmd_warmup,
-                montecarlo_kl=montecarlo_kl,
-                number_of_components=n_components,
-                overlap_loss=False,
-                next_sequence_prediction=next_sequence_prediction,
-                phenotype_prediction=phenotype_prediction,
-                rule_based_prediction=rule_based_prediction,
-                rule_based_features=rule_based_features,
-                reg_cat_clusters=reg_cat_clusters,
-                reg_cluster_variance=reg_cluster_variance,
-            ).build(
-                X_train.shape
-            )
-            return_list = (encoder, generator, grouper, ae)
+        return_list = (encoder, generator, grouper, ae)
 
     if pretrained:
         # If pretrained models are specified, load weights and return
         ae.load_weights(pretrained)
         return return_list
 
-    else:
-        if not variational:
+    callbacks_ = cbacks + [
+        CustomStopper(
+            monitor="val_loss",
+            patience=15,
+            restore_best_weights=True,
+            start_epoch=max(kl_warmup, mmd_warmup),
+        ),
+    ]
 
-            ae.fit(
-                x=X_train,
-                y=X_train,
-                epochs=epochs,
-                verbose=1,
-                validation_data=(X_val, X_val),
-                callbacks=cbacks
-                + [
-                    CustomStopper(
-                        monitor="val_loss",
-                        patience=15,
-                        restore_best_weights=True,
-                        start_epoch=max(kl_warmup, mmd_warmup),
-                    ),
-                ],
+    Xs, ys = X_train, [X_train]
+    Xvals, yvals = X_val, [X_val]
+
+    if next_sequence_prediction > 0.0:
+        Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
+        Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
+
+    if phenotype_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :, 0]]
+        yvals += [y_val[-Xvals.shape[0] :, 0]]
+
+        # Remove the used column (phenotype) from both y arrays
+        y_train = y_train[:, 1:]
+        y_val = y_val[:, 1:]
+
+    if rule_based_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :]]
+        yvals += [y_val[-Xvals.shape[0] :]]
+
+    # Convert data to tf.data.Dataset objects
+    train_dataset = (
+        tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
+        .batch(batch_size * strategy.num_replicas_in_sync)
+        .shuffle(buffer_size=X_train.shape[0])
+        .with_options(options)
+    )
+    val_dataset = (
+        tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
+        .batch(batch_size * strategy.num_replicas_in_sync)
+        .with_options(options)
+    )
+
+    ae.fit(
+        x=train_dataset,
+        epochs=epochs,
+        verbose=1,
+        validation_data=val_dataset,
+        callbacks=callbacks_,
+    )
+
+    if not os.path.exists(os.path.join(output_path, "trained_weights")):
+        os.makedirs(os.path.join(output_path, "trained_weights"))
+
+    if save_weights:
+        ae.save_weights(
+            os.path.join(
+                "{}".format(output_path),
+                "trained_weights",
+                "{}_final_weights.h5".format(run_ID),
             )
+        )
 
-            if not os.path.exists(os.path.join(output_path, "trained_weights")):
-                os.makedirs(os.path.join(output_path, "trained_weights"))
-
-            if save_weights:
-                ae.save_weights(
-                    os.path.join(
-                        "{}".format(output_path),
-                        "trained_weights",
-                        "{}_final_weights.h5".format(run_ID),
-                    )
-                )
-
-        else:
-
-            callbacks_ = cbacks + [
-                CustomStopper(
-                    monitor="val_loss",
-                    patience=15,
-                    restore_best_weights=True,
-                    start_epoch=max(kl_warmup, mmd_warmup),
-                ),
-            ]
-
-            Xs, ys = X_train, [X_train]
-            Xvals, yvals = X_val, [X_val]
-
-            if next_sequence_prediction > 0.0:
-                Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
-                Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
-
-            if phenotype_prediction > 0.0:
-                ys += [y_train[-Xs.shape[0] :, 0]]
-                yvals += [y_val[-Xvals.shape[0] :, 0]]
-
-                # Remove the used column (phenotype) from both y arrays
-                y_train = y_train[:, 1:]
-                y_val = y_val[:, 1:]
-
-            if rule_based_prediction > 0.0:
-                ys += [y_train[-Xs.shape[0] :]]
-                yvals += [y_val[-Xvals.shape[0] :]]
-
-            # Convert data to tf.data.Dataset objects
-            train_dataset = (
-                tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
-                .batch(batch_size * strategy.num_replicas_in_sync)
-                .shuffle(buffer_size=X_train.shape[0])
-                .with_options(options)
-            )
-            val_dataset = (
-                tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
-                .batch(batch_size * strategy.num_replicas_in_sync)
-                .with_options(options)
-            )
-
-            ae.fit(
-                x=train_dataset,
-                epochs=epochs,
-                verbose=1,
-                validation_data=val_dataset,
-                callbacks=callbacks_,
-            )
-
-            if not os.path.exists(os.path.join(output_path, "trained_weights")):
-                os.makedirs(os.path.join(output_path, "trained_weights"))
-
-            if save_weights:
-                ae.save_weights(
-                    os.path.join(
-                        "{}".format(output_path),
-                        "trained_weights",
-                        "{}_final_weights.h5".format(run_ID),
-                    )
-                )
-
-            if log_hparams:
-                # Logparams to tensorboard
-                tensorboard_metric_logging(
-                    run_dir=os.path.join(output_path, "hparams", run_ID),
-                    hpms=logparam,
-                    ae=ae,
-                    X_val=Xvals,
-                    y_val=yvals,
-                    next_sequence_prediction=next_sequence_prediction,
-                    phenotype_prediction=phenotype_prediction,
-                    rule_based_prediction=rule_based_prediction,
-                    rec=rec,
-                )
+    if log_hparams:
+        # Logparams to tensorboard
+        tensorboard_metric_logging(
+            run_dir=os.path.join(output_path, "hparams", run_ID),
+            hpms=logparam,
+            ae=ae,
+            X_val=Xvals,
+            y_val=yvals,
+            next_sequence_prediction=next_sequence_prediction,
+            phenotype_prediction=phenotype_prediction,
+            rule_based_prediction=rule_based_prediction,
+            rec=rec,
+        )
 
     return return_list
 
@@ -546,7 +492,6 @@ def tune_search(
     encoding_size: int,
     hypertun_trials: int,
     hpt_type: str,
-    hypermodel: str,
     k: int,
     kl_warmup_epochs: int,
     loss: str,
@@ -568,8 +513,6 @@ def tune_search(
         - test (np.array): dataset to validate the model on
         - hypertun_trials (int): number of Bayesian optimization iterations to run
         - hpt_type (str): specify one of Bayesian Optimization (bayopt) and Hyperband (hyperband)
-        - hypermodel (str): hypermodel to load. Must be one of S2SAE (plain autoencoder)
-        or S2SGMVAE (Gaussian Mixture Variational autoencoder).
         - k (int) number of components of the Gaussian Mixture
         - loss (str): one of [ELBO, MMD, ELBO+MMD]
         - overlap_loss (float): assigns as weight to an extra loss term which
@@ -596,33 +539,22 @@ def tune_search(
         "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
 
-    if hypermodel == "S2SAE":  # pragma: no cover
-        assert (
-            next_sequence_prediction == 0.0 and phenotype_prediction == 0.0
-        ), "Prediction branches are only available for variational models. See documentation for more details"
-        batch_size = 1
-        hypermodel = deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=X_train.shape)
-
-    elif hypermodel == "S2SGMVAE":
-        batch_size = 64
-        hypermodel = deepof.hypermodels.SEQ_2_SEQ_GMVAE(
-            input_shape=X_train.shape,
-            encoding=encoding_size,
-            kl_warmup_epochs=kl_warmup_epochs,
-            loss=loss,
-            mmd_warmup_epochs=mmd_warmup_epochs,
-            number_of_components=k,
-            overlap_loss=overlap_loss,
-            next_sequence_prediction=next_sequence_prediction,
-            phenotype_prediction=phenotype_prediction,
-            rule_based_prediction=rule_based_prediction,
-            rule_based_features=(
-                y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
-            ),
-        )
-
-    else:
-        return False
+    batch_size = 64
+    hypermodel = deepof.hypermodels.GMVAE(
+        input_shape=X_train.shape,
+        encoding=encoding_size,
+        kl_warmup_epochs=kl_warmup_epochs,
+        loss=loss,
+        mmd_warmup_epochs=mmd_warmup_epochs,
+        number_of_components=k,
+        overlap_loss=overlap_loss,
+        next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        rule_based_prediction=rule_based_prediction,
+        rule_based_features=(
+            y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
+        ),
+    )
 
     hpt_params = {
         "hypermodel": hypermodel,
