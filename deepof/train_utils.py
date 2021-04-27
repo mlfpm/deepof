@@ -326,7 +326,7 @@ def autoencoder_fitting(
     X_val_dataset = (
         tf.data.Dataset.from_tensor_slices(X_val)
         .with_options(options)
-        .batch(batch_size)
+        .batch(batch_size * strategy.num_replicas_in_sync)
     )
 
     # Defines what to log on tensorboard (useful for trying out different models)
