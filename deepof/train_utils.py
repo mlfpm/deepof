@@ -411,7 +411,6 @@ def autoencoder_fitting(
                 mmd_annealing_mode=mmd_annealing_mode,
                 mmd_warmup_epochs=mmd_warmup,
                 montecarlo_kl=montecarlo_kl,
-                neuron_control=False,
                 number_of_components=n_components,
                 overlap_loss=False,
                 next_sequence_prediction=next_sequence_prediction,

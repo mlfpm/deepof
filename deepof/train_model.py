@@ -165,13 +165,6 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--neuron-control",
-    "-nc",
-    help="If True, adds the proportion of dead neurons in the latent space as a metric",
-    type=str2bool,
-    default=False,
-)
-parser.add_argument(
     "--output-path",
     "-o",
     help="Sets the base directory where to output results. Default is the current directory",
@@ -274,7 +267,6 @@ loss = args.loss
 mmd_annealing_mode = args.mmd_annealing_mode
 mmd_wu = args.mmd_warmup
 mc_kl = args.montecarlo_kl
-neuron_control = args.neuron_control
 output_path = os.path.join(args.output_path)
 overlap_loss = args.overlap_loss
 next_sequence_prediction = float(args.next_sequence_prediction)

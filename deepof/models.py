@@ -253,7 +253,6 @@ class SEQ_2_SEQ_GMVAE:
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 20,
         montecarlo_kl: int = 1,
-        neuron_control: bool = False,
         number_of_components: int = 1,
         overlap_loss: float = 0.0,
         next_sequence_prediction: float = 0.0,
@@ -285,7 +284,6 @@ class SEQ_2_SEQ_GMVAE:
         self.mc_kl = montecarlo_kl
         self.mmd_annealing_mode = mmd_annealing_mode
         self.mmd_warmup = mmd_warmup_epochs
-        self.neuron_control = neuron_control
         self.number_of_components = number_of_components
         self.optimizer = Nadam(lr=self.learn_rate, clipvalue=self.clipvalue)
         self.overlap_loss = overlap_loss
@@ -627,10 +625,6 @@ class SEQ_2_SEQ_GMVAE:
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
-
-        # Identity layer controlling for dead neurons in the Gaussian Mixture posterior
-        if self.neuron_control:
-            z_gauss = deepof.model_utils.Dead_neuron_control()(z_gauss)
 
         if self.overlap_loss:
             z_gauss = deepof.model_utils.Cluster_overlap(

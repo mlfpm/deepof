@@ -587,23 +587,3 @@ class Cluster_overlap(Layer):
             self.add_loss(-intercomponent_mmd, inputs=[target])
 
         return target
-
-
-class Dead_neuron_control(Layer):
-    """
-    Identity layer that adds latent space and clustering stats
-    to the metrics compiled by the model
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(Dead_neuron_control, self).__init__(*args, **kwargs)
-
-    # noinspection PyMethodOverriding
-    def call(self, target, **kwargs):
-        """Updates Layer's call method"""
-        # Adds metric that monitors dead neurons in the latent space
-        self.add_metric(
-            tf.math.zero_fraction(target), aggregation="mean", name="dead_neurons"
-        )
-
-        return target
