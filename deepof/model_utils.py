@@ -564,9 +564,9 @@ class Cluster_overlap(Layer):
         """Updates Layer's call method"""
 
         dists = []
-        for k in range(self.n_components):
-            locs = (target[..., : self.lat_dims, k],)
-            scales = tf.keras.activations.softplus(target[..., self.lat_dims :, k])
+        for k in range(self.k):
+            locs = (target[..., : self.enc, k],)
+            scales = tf.keras.activations.softplus(target[..., self.enc :, k])
 
             dists.append(
                 tfd.BatchReshape(tfd.MultivariateNormalDiag(locs, scales), [-1])
@@ -589,7 +589,7 @@ class Cluster_overlap(Layer):
             -intercomponent_mmd, aggregation="mean", name="intercomponent_mmd"
         )
 
-        if self.loss:
+        if self.loss_weight:
             self.add_loss(-intercomponent_mmd, inputs=[target])
 
         return target
