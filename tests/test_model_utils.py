@@ -247,24 +247,6 @@ def test_MMDiscrepancyLayer(annealing_mode):
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
-# noinspection PyUnresolvedReferences
-def test_dead_neuron_control():
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-    test_model.add(deepof.model_utils.Dead_neuron_control())
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
-    assert isinstance(fit, tf.keras.callbacks.History)
-
-
 def test_find_learning_rate():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])

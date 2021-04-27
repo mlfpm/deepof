@@ -17,6 +17,7 @@ import tensorflow as tf
 
 tf.config.experimental_run_functions_eagerly(True)
 
+
 @settings(deadline=None, max_examples=10)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),

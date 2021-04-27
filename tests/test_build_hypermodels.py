@@ -18,6 +18,7 @@ import tensorflow as tf
 
 tf.config.experimental_run_functions_eagerly(True)
 
+
 @settings(deadline=None, max_examples=10)
 @given(
     encoding_size=st.integers(min_value=2, max_value=16),

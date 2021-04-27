@@ -9,9 +9,11 @@ usage: python -m examples.model_training -h
 
 """
 
-from deepof.data import *
-from deepof.train_utils import *
-from deepof.utils import *
+import argparse
+import os
+import deepof.data
+import deepof.train_utils
+import deepof.utils
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -63,7 +65,7 @@ parser.add_argument(
     "--gaussian-filter",
     "-gf",
     help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
-    type=str2bool,
+    type=deepof.utils.str2bool,
     default=False,
 )
 parser.add_argument(
@@ -175,7 +177,7 @@ parser.add_argument(
     "--overlap-loss",
     "-ol",
     help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
-    type=str2bool,
+    type=deepof.utils.str2bool,
     default=False,
 )
 parser.add_argument(
@@ -287,7 +289,7 @@ assert input_type in [
 ], "Invalid input type. Type python model_training.py -h for help."
 
 # Loads model hyperparameters and treatment conditions, if available
-treatment_dict = load_treatments(train_path)
+treatment_dict = deepof.train_utils.load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
 logparam = {
@@ -303,7 +305,7 @@ if rule_based_prediction:
     logparam["rule_based_prediction_weight"] = rule_based_prediction
 
 # noinspection PyTypeChecker
-project_coords = project(
+project_coords = deepof.data.project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),
@@ -334,10 +336,10 @@ coords = project_coords.get_coords(
 )
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
-coords_distances = merge_tables(coords, distances)
-coords_angles = merge_tables(coords, angles)
-dists_angles = merge_tables(distances, angles)
-coords_dist_angles = merge_tables(coords, distances, angles)
+coords_distances = deepof.data.merge_tables(coords, distances)
+coords_angles = deepof.data.merge_tables(coords, angles)
+dists_angles = deepof.data.merge_tables(distances, angles)
+coords_dist_angles = deepof.data.merge_tables(coords, distances, angles)
 
 
 def batch_preprocess(tab_dict):
@@ -410,7 +412,7 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-    run_ID, tensorboard_callback, entropy, onecycle = get_callbacks(
+    run_ID, tensorboard_callback, entropy, onecycle = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
         phenotype_prediction=phenotype_prediction,
@@ -429,7 +431,7 @@ else:
         run=run,
     )
 
-    best_hyperparameters, best_model = tune_search(
+    best_hyperparameters, best_model = deepof.train_utils.tune_search(
         data=[X_train, y_train, X_val, y_val],
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
@@ -447,7 +449,7 @@ else:
             tensorboard_callback,
             onecycle,
             entropy,
-            CustomStopper(
+            deepof.train_utils.CustomStopper(
                 monitor="val_loss",
                 patience=5,
                 restore_best_weights=True,
