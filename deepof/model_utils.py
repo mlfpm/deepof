@@ -287,7 +287,7 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
             with writer.as_default():
                 tf.summary.scalar(
                     "number_of_populated_clusters",
-                    data=len(set(hard_groups)),
+                    data=len(set(hard_groups[max_groups >= 0.25])),
                     step=epoch,
                 )
                 tf.summary.scalar(
