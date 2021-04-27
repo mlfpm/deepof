@@ -114,7 +114,7 @@ rule coarse_hyperparameter_tuning:
         "--kl-warmup 30 "
         "--mmd-warmup 30 "
         "--encoding-size {wildcards.enc} "
-        "--batch-size 256 "
+        "--batch-size 512 "
         "--window-size 24 "
         "--window-step 12 "
         "--output-path {outpath}coarse_hyperparameter_tuning "
