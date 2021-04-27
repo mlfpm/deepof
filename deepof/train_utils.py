@@ -443,7 +443,7 @@ def autoencoder_fitting(
                 + [
                     CustomStopper(
                         monitor="val_loss",
-                        patience=10,
+                        patience=15,
                         restore_best_weights=True,
                         start_epoch=max(kl_warmup, mmd_warmup),
                     ),
@@ -467,7 +467,7 @@ def autoencoder_fitting(
             callbacks_ = cbacks + [
                 CustomStopper(
                     monitor="val_loss",
-                    patience=5,
+                    patience=15,
                     restore_best_weights=True,
                     start_epoch=max(kl_warmup, mmd_warmup),
                 ),
