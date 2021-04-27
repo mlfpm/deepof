@@ -18,26 +18,13 @@ import tensorflow as tf
 
 tf.config.experimental_run_functions_eagerly(True)
 
-
-@settings(deadline=None, max_examples=10)
-@given(
-    input_shape=st.tuples(
-        st.integers(min_value=100, max_value=1000),
-        st.integers(min_value=5, max_value=15),
-        st.integers(min_value=5, max_value=15),
-    )
-)
-def test_SEQ_2_SEQ_AE_hypermodel_build(input_shape):
-    deepof.hypermodels.SEQ_2_SEQ_AE(input_shape=input_shape).build(hp=HyperParameters())
-
-
 @settings(deadline=None, max_examples=10)
 @given(
     encoding_size=st.integers(min_value=2, max_value=16),
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     number_of_components=st.integers(min_value=1, max_value=5),
 )
-def test_SEQ_2_SEQ_GMVAE_hypermodel_build(
+def test_GMVAE_hypermodel_build(
     encoding_size,
     loss,
     number_of_components,

@@ -45,12 +45,10 @@ def test_load_treatments():
     next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
     phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
     rule_based_prediction=st.floats(min_value=0.0, max_value=1.0),
-    variational=st.booleans(),
 )
 def test_get_callbacks(
     X_train,
     batch_size,
-    variational,
     next_sequence_prediction,
     phenotype_prediction,
     rule_based_prediction,
@@ -59,7 +57,6 @@ def test_get_callbacks(
     callbacks = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
-        variational=variational,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_based_prediction,
@@ -89,14 +86,12 @@ def test_get_callbacks(
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     rule_based_prediction=st.one_of(st.just(0.0), st.just(1.0)),
-    variational=st.one_of(st.just(True), st.just(False)),
 )
 def test_autoencoder_fitting(
     loss,
     next_sequence_prediction,
     phenotype_prediction,
     rule_based_prediction,
-    variational,
 ):
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
@@ -131,7 +126,6 @@ def test_autoencoder_fitting(
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
         rule_based_prediction=rule_based_prediction,
-        variational=variational,
         entropy_samples=10,
         entropy_knn=5,
     )
@@ -179,7 +173,6 @@ def test_tune_search(
         deepof.train_utils.get_callbacks(
             X_train=X_train,
             batch_size=batch_size,
-            variational=(hypermodel == "S2SGMVAE"),
             phenotype_prediction=phenotype_prediction,
             next_sequence_prediction=next_sequence_prediction,
             rule_based_prediction=rule_based_prediction,
@@ -202,7 +195,6 @@ def test_tune_search(
         encoding_size=encoding_size,
         hpt_type=hpt_type,
         hypertun_trials=1,
-        hypermodel=hypermodel,
         k=k,
         kl_warmup_epochs=0,
         loss=loss,

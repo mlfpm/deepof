@@ -17,19 +17,6 @@ import tensorflow as tf
 
 tf.config.experimental_run_functions_eagerly(True)
 
-
-@settings(deadline=None, max_examples=10)
-@given(
-    input_shape=st.tuples(
-        st.integers(min_value=100, max_value=1000),
-        st.integers(min_value=5, max_value=15),
-        st.integers(min_value=5, max_value=15),
-    )
-)
-def test_SEQ_2_SEQ_AE_build(input_shape):
-    deepof.models.SEQ_2_SEQ_AE().build(input_shape=input_shape)
-
-
 @settings(deadline=None, max_examples=10)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
@@ -38,7 +25,7 @@ def test_SEQ_2_SEQ_AE_build(input_shape):
     montecarlo_kl=st.integers(min_value=1, max_value=10),
     number_of_components=st.integers(min_value=1, max_value=5),
 )
-def test_SEQ_2_SEQ_GMVAE_build(
+def test_GMVAE_build(
     loss,
     kl_warmup_epochs,
     mmd_warmup_epochs,

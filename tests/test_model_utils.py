@@ -294,6 +294,5 @@ def test_neighbor_latent_entropy():
             k=10,
             encoding_dim=6,
             validation_data=X,
-            variational=True,
         ),
     )

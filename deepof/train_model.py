@@ -434,7 +434,6 @@ else:
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
-        hypermodel=hyp,
         k=k,
         kl_warmup_epochs=kl_wu,
         loss=loss,
