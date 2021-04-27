@@ -390,6 +390,13 @@ class GMVAE:
             ),
         )(encoder)
 
+        if self.overlap_loss:
+            z_cat = deepof.model_utils.Cluster_overlap(
+                self.ENCODING,
+                self.number_of_components,
+                loss_weight=self.overlap_loss,
+            )(z_cat)
+
         z_gauss_mean = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
@@ -416,13 +423,6 @@ class GMVAE:
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
 
         z_gauss = Reshape([2 * self.ENCODING, self.number_of_components])(z_gauss)
-
-        if self.overlap_loss:
-            z_gauss = deepof.model_utils.Cluster_overlap(
-                self.ENCODING,
-                self.number_of_components,
-                loss_weight=self.overlap_loss,
-            )(z_gauss)
 
         z = tfpl.DistributionLambda(
             make_distribution_fn=lambda gauss: tfd.mixture.Mixture(
