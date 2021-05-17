@@ -390,13 +390,6 @@ class GMVAE:
             ),
         )(encoder)
 
-        if self.overlap_loss:
-            z_cat = deepof.model_utils.Cluster_overlap(
-                self.ENCODING,
-                self.number_of_components,
-                loss_weight=self.overlap_loss,
-            )(z_cat)
-
         z_gauss_mean = Dense(
             tfpl.IndependentNormal.params_size(
                 self.ENCODING * self.number_of_components
@@ -481,6 +474,13 @@ class GMVAE:
 
         # Dummy layer with no parameters, to retrieve the previous tensor
         z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
+
+        if self.overlap_loss:
+            z = deepof.model_utils.ClusterOverlap(
+                self.ENCODING,
+                self.number_of_components,
+                loss_weight=self.overlap_loss,
+            )([z, z_cat])
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
