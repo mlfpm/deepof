@@ -473,13 +473,12 @@ class GMVAE:
         # Dummy layer with no parameters, to retrieve the previous tensor
         z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
 
-        if self.overlap_loss:
-            z = deepof.model_utils.ClusterOverlap(
-                self.batch_size,
-                self.ENCODING,
-                self.number_of_components,
-                loss_weight=self.overlap_loss,
-            )([z, z_cat])
+        z = deepof.model_utils.ClusterOverlap(
+            self.batch_size,
+            self.ENCODING,
+            self.number_of_components,
+            loss_weight=self.overlap_loss,
+        )([z, z_cat])
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
