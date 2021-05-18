@@ -612,19 +612,25 @@ class ClusterOverlap(Layer):
         )
 
         ### CANDIDATE FOR REMOVAL. EXPLORE HOW USEFUL THIS REALLY IS ###
-        neighbourhood_entropy = purity_vector  # * max_groups[random_idxs]
+        neighbourhood_entropy = purity_vector * tf.gather(
+            max_groups, tf.constant(random_idxs)
+        )
 
-        # self.add_metric(
-        #     len(set(hard_groups[max_groups >= self.min_confidence])),
-        #     aggregation="mean",
-        #     name="number_of_populated_clusters",
-        # )
-        #
-        # self.add_metric(
-        #     max_groups,
-        #     aggregation="mean",
-        #     name="average_confidence_in_selected_cluster",
-        # )
+        self.add_metric(
+            tf.shape(
+                tf.unique(
+                    tf.squeeze(tf.gather(hard_groups, tf.where(max_groups >= self.min_confidence)))
+                )
+            ),
+            aggregation="mean",
+            name="number_of_populated_clusters",
+        )
+
+        self.add_metric(
+            max_groups,
+            aggregation="mean",
+            name="average_confidence_in_selected_cluster",
+        )
 
         self.add_metric(
             neighbourhood_entropy, aggregation="mean", name="neighbourhood_entropy"
