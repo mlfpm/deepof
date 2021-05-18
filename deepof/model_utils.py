@@ -292,13 +292,12 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
                 range(encoding.shape[0]), self.samples, replace=False
             )
 
-            get_local_neighbourhood_entropy = partial(
-                get_neighbourhood_entropy,
-                tensor=encodings,
-                clusters=hard_groups,
-                k=self.k,
-                dtype=tf.dtypes.float32,
-            )
+            @tf.function
+            def get_local_neighbourhood_entropy(index):
+                return get_neighbourhood_entropy(
+                    index, tensor=encodings, clusters=hard_groups, k=self.k
+                )
+
             purity_vector = tf.map_fn(get_local_neighbourhood_entropy, random_idxs)
 
             writer = tf.summary.create_file_writer(self.log_dir)
@@ -596,13 +595,12 @@ class ClusterOverlap(Layer):
             tf.expand_dims(random_idxs / tf.reduce_sum(random_idxs), 0), self.samples
         )
 
-        get_local_neighbourhood_entropy = partial(
-            get_neighbourhood_entropy,
-            tensor=encodings,
-            clusters=hard_groups,
-            k=self.k,
-            dtype=tf.dtypes.float32,
-        )
+        @tf.function
+        def get_local_neighbourhood_entropy(index):
+            return get_neighbourhood_entropy(
+                index, tensor=encodings, clusters=hard_groups, k=self.k
+            )
+
         purity_vector = tf.map_fn(get_local_neighbourhood_entropy, random_idxs)
 
         ### CANDIDATE FOR REMOVAL. EXPLORE HOW USEFUL THIS REALLY IS ###
