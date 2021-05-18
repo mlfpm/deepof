@@ -295,10 +295,12 @@ class neighbor_latent_entropy(tf.keras.callbacks.Callback):
             @tf.function
             def get_local_neighbourhood_entropy(index):
                 return get_neighbourhood_entropy(
-                    index, tensor=encodings, clusters=hard_groups, k=self.k
+                    index, tensor=encoding, clusters=hard_groups, k=self.k
                 )
 
-            purity_vector = tf.map_fn(get_local_neighbourhood_entropy, random_idxs)
+            purity_vector = tf.map_fn(
+                get_local_neighbourhood_entropy, random_idxs, dtype=tf.dtypes.float32
+            )
 
             writer = tf.summary.create_file_writer(self.log_dir)
             with writer.as_default():
@@ -558,7 +560,7 @@ class ClusterOverlap(Layer):
         self,
         encoding_dim: int,
         k: int = 100,
-        loss_weight: float = False,
+        loss_weight: float = 0.0,
         samples: int = 512,
         *args,
         **kwargs
@@ -581,19 +583,19 @@ class ClusterOverlap(Layer):
         config.update({"samples": self.samples})
         return config
 
-    @tf.function
-    def call(self, encodings, categorical, **kwargs):
+    #@tf.function
+    def call(self, inputs, **kwargs):
         """Updates Layer's call method"""
+
+        encodings, categorical = inputs[0], inputs[1]
 
         hard_groups = tf.math.argmax(categorical, axis=1)
         max_groups = tf.reduce_max(categorical, axis=1)
 
         # Iterate over samples and compute purity across neighbourhood
-        self.samples = tf.reduce_min([self.samples, encodings.shape[0]])
-        random_idxs = range(encoding.shape[0])
-        random_idxs = tf.random.categorical(
-            tf.expand_dims(random_idxs / tf.reduce_sum(random_idxs), 0), self.samples
-        )
+        self.samples = tf.reduce_min([self.samples, tf.shape(encodings)[0]])
+        random_idxs = range(encodings.shape[0])
+        random_idxs = np.random.choice(random_idxs, self.samples)
 
         @tf.function
         def get_local_neighbourhood_entropy(index):
@@ -601,7 +603,9 @@ class ClusterOverlap(Layer):
                 index, tensor=encodings, clusters=hard_groups, k=self.k
             )
 
-        purity_vector = tf.map_fn(get_local_neighbourhood_entropy, random_idxs)
+        purity_vector = tf.map_fn(
+            get_local_neighbourhood_entropy, tf.constant(random_idxs), dtype=tf.dtypes.float32
+        )
 
         ### CANDIDATE FOR REMOVAL. EXPLORE HOW USEFUL THIS REALLY IS ###
         neighbourhood_entropy = purity_vector * max_groups[random_idxs]
@@ -623,6 +627,8 @@ class ClusterOverlap(Layer):
         )
 
         if self.loss_weight:
-            self.add_loss(neighbourhood_entropy, inputs=[target, categorical])
+            self.add_loss(
+                self.loss_weight * neighbourhood_entropy, inputs=[target, categorical]
+            )
 
         return encodings
