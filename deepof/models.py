@@ -426,9 +426,7 @@ class GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=1e-3
-                            + softplus(gauss[1][..., self.ENCODING :, k])
-                            + 1e-5,
+                            scale=1e-3 + softplus(gauss[1][..., self.ENCODING :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
