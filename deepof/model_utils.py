@@ -560,9 +560,9 @@ class ClusterOverlap(Layer):
         self,
         batch_size: int,
         encoding_dim: int,
-        k: int = 100,
+        k: int = 25,
         loss_weight: float = 0.0,
-        samples: int = 50,
+        samples: int = None,
         *args,
         **kwargs
     ):
@@ -572,6 +572,8 @@ class ClusterOverlap(Layer):
         self.loss_weight = loss_weight
         self.min_confidence = 0.25
         self.samples = samples
+        if self.samples is None:
+            self.samples = self.batch_size
         super(ClusterOverlap, self).__init__(*args, **kwargs)
 
     def get_config(self):  # pragma: no cover
@@ -595,8 +597,8 @@ class ClusterOverlap(Layer):
         max_groups = tf.reduce_max(categorical, axis=1)
 
         # Iterate over samples and compute purity across neighbourhood
-        self.samples = np.min([self.samples, self.batch_size])  # convert to numpy
-        random_idxs = range(self.batch_size)  # convert to batch size
+        self.samples = np.min([self.samples, self.batch_size])
+        random_idxs = range(self.batch_size)
         random_idxs = np.random.choice(random_idxs, self.samples)
 
         get_local_neighbourhood_entropy = partial(
@@ -628,9 +630,7 @@ class ClusterOverlap(Layer):
             neighbourhood_entropy, aggregation="mean", name="neighbourhood_entropy"
         )
 
-        # if self.loss_weight:
-        #     self.add_loss(
-        #         self.loss_weight * neighbourhood_entropy, inputs=inputs
-        #     )
+        if self.loss_weight:
+            self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
 
         return encodings
