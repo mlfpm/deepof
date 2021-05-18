@@ -324,7 +324,7 @@ def autoencoder_fitting(
     X_val_dataset = (
         tf.data.Dataset.from_tensor_slices(X_val)
         .with_options(options)
-        .batch(batch_size * strategy.num_replicas_in_sync)
+        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
     )
 
     # Defines what to log on tensorboard (useful for trying out different models)
@@ -441,13 +441,13 @@ def autoencoder_fitting(
     # Convert data to tf.data.Dataset objects
     train_dataset = (
         tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
-        .batch(batch_size * strategy.num_replicas_in_sync)
+        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .shuffle(buffer_size=X_train.shape[0])
         .with_options(options)
     )
     val_dataset = (
         tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
-        .batch(batch_size * strategy.num_replicas_in_sync)
+        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .with_options(options)
     )
 
