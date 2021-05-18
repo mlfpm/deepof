@@ -176,9 +176,9 @@ parser.add_argument(
 parser.add_argument(
     "--overlap-loss",
     "-ol",
-    help="If True, adds the negative MMD between all components of the latent Gaussian mixture to the loss function",
-    type=deepof.utils.str2bool,
-    default=False,
+    help="If > 0, adds a regularization term controlling for local cluster assignment entropy in the latent space",
+    type=float,
+    default=0,
 )
 parser.add_argument(
     "--next-sequence-prediction",
@@ -263,7 +263,7 @@ mmd_annealing_mode = args.mmd_annealing_mode
 mmd_wu = args.mmd_warmup
 mc_kl = args.montecarlo_kl
 output_path = os.path.join(args.output_path)
-overlap_loss = args.overlap_loss
+overlap_loss = float(args.overlap_loss)
 next_sequence_prediction = float(args.next_sequence_prediction)
 phenotype_prediction = float(args.phenotype_prediction)
 rule_based_prediction = float(args.rule_based_prediction)
@@ -397,6 +397,7 @@ if not tune:
         montecarlo_kl=mc_kl,
         n_components=k,
         output_path=output_path,
+        overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
         rule_based_prediction=rule_based_prediction,
