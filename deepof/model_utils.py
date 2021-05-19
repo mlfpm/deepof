@@ -602,7 +602,10 @@ class ClusterOverlap(Layer):
         random_idxs = np.random.choice(random_idxs, self.samples)
 
         get_local_neighbourhood_entropy = partial(
-            get_neighbourhood_entropy, tensor=encodings, clusters=hard_groups, k=self.k
+            get_neighbourhood_entropy,
+            tensor=encodings,
+            clusters=hard_groups,
+            k=self.k,
         )
 
         purity_vector = tf.map_fn(
