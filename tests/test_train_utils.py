@@ -45,6 +45,7 @@ def test_load_treatments():
     next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
     phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
     rule_based_prediction=st.floats(min_value=0.0, max_value=1.0),
+    overlap_loss=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_get_callbacks(
     X_train,
@@ -52,6 +53,7 @@ def test_get_callbacks(
     next_sequence_prediction,
     phenotype_prediction,
     rule_based_prediction,
+    overlap_loss,
     loss,
 ):
     callbacks = deepof.train_utils.get_callbacks(
@@ -60,6 +62,7 @@ def test_get_callbacks(
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         rule_based_prediction=rule_based_prediction,
+        overlap_loss=overlap_loss,
         loss=loss,
         X_val=X_train,
         input_type=False,
@@ -148,7 +151,6 @@ def test_autoencoder_fitting(
     batch_size=st.integers(min_value=128, max_value=512),
     encoding_size=st.integers(min_value=1, max_value=16),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    hypermodel=st.just("S2SGMVAE"),
     k=st.integers(min_value=1, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     overlap_loss=st.floats(min_value=0.0, max_value=1.0),
@@ -161,13 +163,12 @@ def test_tune_search(
     batch_size,
     encoding_size,
     hpt_type,
-    hypermodel,
     k,
     loss,
-    overlap_loss,
     next_sequence_prediction,
     phenotype_prediction,
     rule_based_prediction,
+    overlap_loss,
 ):
     callbacks = list(
         deepof.train_utils.get_callbacks(
@@ -182,6 +183,7 @@ def test_tune_search(
             cp=False,
             reg_cat_clusters=True,
             reg_cluster_variance=True,
+            overlap_loss=overlap_loss,
             entropy_samples=10,
             entropy_knn=5,
             logparam={"encoding": 2, "k": 15},

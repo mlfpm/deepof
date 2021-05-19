@@ -43,7 +43,7 @@ class GMVAE:
         loss: str = "ELBO",
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 20,
-        montecarlo_kl: int = 1,
+        montecarlo_kl: int = 10,
         number_of_components: int = 1,
         overlap_loss: float = 0.0,
         next_sequence_prediction: float = 0.0,
@@ -473,12 +473,13 @@ class GMVAE:
         # Dummy layer with no parameters, to retrieve the previous tensor
         z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
 
-        z = deepof.model_utils.ClusterOverlap(
-            self.batch_size,
-            self.ENCODING,
-            self.number_of_components,
-            loss_weight=self.overlap_loss,
-        )([z, z_cat])
+        if self.number_of_components > 1:
+            z = deepof.model_utils.ClusterOverlap(
+                self.batch_size,
+                self.ENCODING,
+                self.number_of_components,
+                loss_weight=self.overlap_loss,
+            )([z, z_cat])
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
