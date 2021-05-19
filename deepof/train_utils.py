@@ -71,6 +71,7 @@ def get_callbacks(
     phenotype_prediction: float,
     next_sequence_prediction: float,
     rule_based_prediction: float,
+    overlap_loss: float,
     loss: str,
     loss_warmup: int = 0,
     warmup_mode: str = "none",
@@ -101,14 +102,15 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
-        ("deepof_GMVAE"),
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
+        "deepof_GMVAE",
         ("_input_type={}".format(input_type) if input_type else "coords"),
         ("_window_size={}".format(X_train.shape[1])),
-        ("_NextSeqPred={}".format(next_sequence_prediction)),
-        ("_PhenoPred={}".format(phenotype_prediction)),
-        ("_RuleBasedPred={}".format(rule_based_prediction)),
+        ("_NSPred={}".format(next_sequence_prediction)),
+        ("_PPred={}".format(phenotype_prediction)),
+        ("_RBPred={}".format(rule_based_prediction)),
         ("_loss={}".format(loss)),
+        ("_overlap_loss={}".format(overlap_loss)),
         ("_loss_warmup={}".format(loss_warmup)),
         ("_warmup_mode={}".format(warmup_mode)),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
@@ -345,6 +347,7 @@ def autoencoder_fitting(
         rule_based_prediction=rule_based_prediction,
         loss=loss,
         loss_warmup=kl_warmup,
+        overlap_loss=overlap_loss,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
         X_val=(X_val_dataset if X_val.shape != (0,) else None),
