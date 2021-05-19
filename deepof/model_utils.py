@@ -623,11 +623,12 @@ class ClusterOverlap(Layer):
             tf.cast(
                 tf.shape(
                     tf.unique(
-                        tf.squeeze(
+                        tf.reshape(
                             tf.gather(
                                 tf.cast(hard_groups, tf.dtypes.float32),
                                 tf.where(max_groups >= self.min_confidence),
                             ),
+                            [-1],
                         ),
                     )[0],
                 )[0],
