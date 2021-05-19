@@ -617,12 +617,19 @@ class ClusterOverlap(Layer):
         )
 
         self.add_metric(
-            tf.shape(
-                tf.unique(
-                    tf.squeeze(tf.gather(hard_groups, tf.where(max_groups >= self.min_confidence)))
-                )
+            tf.cast(
+                tf.shape(
+                    tf.unique(
+                        tf.squeeze(
+                            tf.gather(
+                                tf.cast(hard_groups, tf.dtypes.float32),
+                                tf.where(max_groups >= self.min_confidence),
+                            ),
+                        ),
+                    )[0],
+                )[0],
+                tf.dtypes.float32,
             ),
-            aggregation="mean",
             name="number_of_populated_clusters",
         )
 
