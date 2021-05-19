@@ -157,7 +157,7 @@ rule train_models:
         "--rule-based-prediction {wildcards.rulesweight} "
         "--latent-reg {wildcards.latreg} "
         "--loss {wildcards.loss} "
-        "--overlap_loss {wildcards.overlap_loss} "
+        "--overlap-loss {wildcards.overlap_loss} "
         "--kl-annealing-mode {wildcards.warmup_mode} "
         "--kl-warmup {wildcards.warmup} "
         "--mmd-annealing-mode {wildcards.warmup_mode} "
