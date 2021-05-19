@@ -96,8 +96,10 @@ def test_autoencoder_fitting(
     phenotype_prediction,
     rule_based_prediction,
 ):
+
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
+
     if rule_based_prediction:
         y_train = np.concatenate(
             [y_train, np.round(np.random.uniform(0, 1, [20, 6]), 1)], axis=1
@@ -117,7 +119,7 @@ def test_autoencoder_fitting(
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,
-        batch_size=100,
+        batch_size=10,
         encoding_size=2,
         epochs=1,
         kl_warmup=1,

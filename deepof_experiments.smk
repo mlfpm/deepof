@@ -18,10 +18,11 @@ outpath = "/psycl/g/mpsstatgen/lucas/DLC/DLC_autoencoders/DeepOF/deepof/logs/"
 warmup_epochs = [15]
 warmup_mode = ["sigmoid"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
+overlap_loss = [0.1, 0.2, 0.5, 0.75, 1.]
 encodings = [6]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["variance"]  # ["none", "categorical", "variance", "categorical+variance"]
-entropy_knn = [100]
+entropy_knn = [10]
 next_sequence_pred_weights = [0.15]
 phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0]
@@ -51,10 +52,11 @@ rule deepof_experiments:
             outpath + "train_models/trained_weights/"
             "GMVAE_input_type={input_type}_"
             "window_size={window_size}_"
-            "NextSeqPred={nspredweight}_"
-            "PhenoPred={phenpredweight}_"
-            "RuleBasedPred={rulesweight}_"
+            "NSPred={nspredweight}_"
+            "PPred={phenpredweight}_"
+            "RBPred={rulesweight}_"
             "loss={loss}_"
+            "overlap_loss={overlap_loss}_"
             "loss_warmup={warmup}_"
             "warmup_mode={warmup_mode}_"
             "encoding={encs}_"
@@ -66,6 +68,7 @@ rule deepof_experiments:
             input_type=input_types,
             window_size=window_lengths,
             loss=losses,
+            overlap_loss=overlap_loss,
             warmup=warmup_epochs,
             warmup_mode=warmup_mode,
             encs=encodings,
@@ -134,6 +137,7 @@ rule train_models:
         "PhenoPred={phenpredweight}_"
         "RuleBasedPred={rulesweight}_"
         "loss={loss}_"
+        "overlap_loss={overlap_loss}_"                           
         "loss_warmup={warmup}_"
         "warmup_mode={warmup_mode}_"
         "encoding={encs}_"
@@ -153,6 +157,7 @@ rule train_models:
         "--rule-based-prediction {wildcards.rulesweight} "
         "--latent-reg {wildcards.latreg} "
         "--loss {wildcards.loss} "
+        "--overlap_loss {wildcards.overlap_loss} "
         "--kl-annealing-mode {wildcards.warmup_mode} "
         "--kl-warmup {wildcards.warmup} "
         "--mmd-annealing-mode {wildcards.warmup_mode} "
