@@ -50,6 +50,7 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath + "train_models/trained_weights/"
+            "deepof_"
             "GMVAE_input_type={input_type}_"
             "window_size={window_size}_"
             "NSPred={nspredweight}_"
@@ -131,6 +132,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath + "train_models/trained_weights/"
+        "deepof_"
         "GMVAE_input_type={input_type}_"
         "window_size={window_size}_"
         "NSPred={nspredweight}_"
