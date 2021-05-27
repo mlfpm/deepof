@@ -321,24 +321,3 @@ def test_find_learning_rate():
     test_model.build(X.shape)
 
     deepof.model_utils.find_learning_rate(test_model, X, y)
-
-
-def test_neighbor_latent_entropy():
-    X = np.random.normal(0, 1, [1500, 25, 6])
-
-    train_dataset = tf.data.Dataset.from_tensor_slices((X, X))
-    train_dataset = train_dataset.batch(256, drop_remainder=True)
-
-    test_model = deepof.models.GMVAE(number_of_components=10)
-    gmvaep = test_model.build(X.shape)[3]
-
-    gmvaep.fit(
-        train_dataset,
-        epochs=1,
-        callbacks=deepof.model_utils.neighbor_latent_entropy(
-            k=10,
-            encoding_dim=6,
-            samples=100,
-            validation_data=X,
-        ),
-    )
