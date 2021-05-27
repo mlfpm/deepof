@@ -128,21 +128,13 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    entropy = deepof.model_utils.neighbor_latent_entropy(
-        encoding_dim=logparam["encoding"],
-        k=entropy_knn,
-        samples=entropy_samples,
-        validation_data=X_val,
-        log_dir=os.path.join(outpath, "metrics", run_ID),
-    )
-
     onecycle = deepof.model_utils.one_cycle_scheduler(
         X_train.shape[0] // batch_size * 250,
         max_rate=0.005,
         log_dir=os.path.join(outpath, "metrics", run_ID),
     )
 
-    callbacks = [run_ID, tensorboard_callback, entropy, onecycle]
+    callbacks = [run_ID, tensorboard_callback, onecycle]
 
     if cp:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(
