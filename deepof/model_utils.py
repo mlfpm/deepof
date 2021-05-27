@@ -619,21 +619,23 @@ class ClusterOverlap(Layer):
             max_groups, tf.constant(random_idxs)
         )
 
-        self.add_metric(
-            tf.cast(
-                tf.shape(
-                    tf.unique(
-                        tf.reshape(
-                            tf.gather(
-                                tf.cast(hard_groups, tf.dtypes.float32),
-                                tf.where(max_groups >= self.min_confidence),
-                            ),
-                            [-1],
+        number_of_clusters = tf.cast(
+            tf.shape(
+                tf.unique(
+                    tf.reshape(
+                        tf.gather(
+                            tf.cast(hard_groups, tf.dtypes.float32),
+                            tf.where(max_groups >= self.min_confidence),
                         ),
-                    )[0],
+                        [-1],
+                    ),
                 )[0],
-                tf.dtypes.float32,
-            ),
+            )[0],
+            tf.dtypes.float32,
+        )
+
+        self.add_metric(
+            number_of_clusters,
             name="number_of_populated_clusters",
         )
 
@@ -648,6 +650,9 @@ class ClusterOverlap(Layer):
         )
 
         if self.loss_weight:
+            # minimize local entropy
             self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
+            # maximize number of clusters
+            self.add_loss(-self.loss_weight * tf.reduce_mean(number_of_clusters))
 
         return encodings
