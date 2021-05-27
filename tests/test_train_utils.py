@@ -76,9 +76,6 @@ def test_get_callbacks(
         [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
     )
     assert np.any(
-        [isinstance(i, deepof.model_utils.neighbor_latent_entropy) for i in callbacks]
-    )
-    assert np.any(
         [isinstance(i, deepof.model_utils.one_cycle_scheduler) for i in callbacks]
     )
 
