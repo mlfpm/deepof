@@ -564,6 +564,6 @@ class ClusterOverlap(Layer):
             # minimize local entropy
             self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
             # maximize number of clusters
-            self.add_loss(-self.loss_weight * tf.reduce_mean(number_of_clusters))
+            # self.add_loss(-self.loss_weight * tf.reduce_mean(number_of_clusters))
 
         return encodings
