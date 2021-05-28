@@ -28,7 +28,7 @@ phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0]
 window_lengths = [22]  # range(11,56,11)
 input_types = ["coords"]
-run = list(range(1, 4))
+run = list(range(1, 11))
 
 
 rule deepof_experiments:
