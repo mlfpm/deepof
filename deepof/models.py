@@ -475,9 +475,9 @@ class GMVAE:
 
         if self.number_of_components > 1:
             z = deepof.model_utils.ClusterOverlap(
-                self.batch_size,
-                self.ENCODING,
-                self.number_of_components,
+                batch_size=self.batch_size,
+                encoding_dim=self.ENCODING,
+                k=self.number_of_components,
                 loss_weight=self.overlap_loss,
             )([z, z_cat])
 
