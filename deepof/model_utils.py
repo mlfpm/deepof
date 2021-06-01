@@ -495,12 +495,12 @@ class ClusterOverlap(Layer):
         config.update({"samples": self.samples})
         return config
 
-    def call(self, inputs, training=None, **kwargs):
+    def call(self, inputs, **kwargs):
         """Updates Layer's call method"""
 
         encodings, categorical = inputs[0], inputs[1]
 
-        if training:
+        if tf.test.is_gpu_available():
 
             hard_groups = tf.math.argmax(categorical, axis=1)
             max_groups = tf.reduce_max(categorical, axis=1)
