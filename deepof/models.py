@@ -15,7 +15,7 @@ import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform, Orthogonal
+from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, LSTM
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
