@@ -155,8 +155,8 @@ class GMVAE:
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
             kernel_size=5,
-            strides=2,  # Increased strides to yield shorter sequences
-            padding="same",
+            strides=1,  # Increased strides to yield shorter sequences
+            padding="valid",
             activation=self.dense_activation,
             kernel_initializer=he_uniform(),
             use_bias=True,
