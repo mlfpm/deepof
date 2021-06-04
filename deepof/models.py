@@ -15,7 +15,7 @@ import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
 from tensorflow.keras.constraints import UnitNorm
-from tensorflow.keras.initializers import he_uniform
+from tensorflow.keras.initializers import he_uniform, random_uniform
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, GRU
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
@@ -155,7 +155,7 @@ class GMVAE:
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
             kernel_size=5,
-            strides=2, # Increased strides to yield shorter sequences
+            strides=2,  # Increased strides to yield shorter sequences
             padding="same",
             activation=self.dense_activation,
             kernel_initializer=he_uniform(),
@@ -398,6 +398,7 @@ class GMVAE:
             // 2,
             name="cluster_means",
             activation=None,
+            activity_regularizer=(tf.keras.regularizers.l1(10e-5)),
             kernel_initializer=he_uniform(),
         )(encoder)
 
@@ -411,6 +412,7 @@ class GMVAE:
             activity_regularizer=(
                 tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
             ),
+            kernel_initializer=random_uniform(),
         )(encoder)
 
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
