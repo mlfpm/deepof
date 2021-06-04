@@ -140,38 +140,6 @@ def test_one_cycle_scheduler():
 
 
 # noinspection PyUnresolvedReferences
-def test_uncorrelated_features_constraint():
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    correlations = []
-
-    for w in range(2):
-        test_model = tf.keras.Sequential()
-        test_model.add(
-            tf.keras.layers.Dense(
-                10,
-                kernel_constraint=tf.keras.constraints.UnitNorm(axis=1),
-                activity_regularizer=deepof.model_utils.uncorrelated_features_constraint(
-                    2, weightage=w
-                ),
-            )
-        )
-
-        test_model.compile(
-            loss=tf.keras.losses.binary_crossentropy,
-            optimizer=tf.keras.optimizers.SGD(),
-        )
-
-        fit = test_model.fit(X, y, epochs=25, batch_size=100, verbose=0)
-        assert isinstance(fit, tf.keras.callbacks.History)
-
-        correlations.append(np.mean(np.corrcoef(test_model.get_weights()[0])))
-
-    assert correlations[0] > correlations[1]
-
-
-# noinspection PyUnresolvedReferences
 def test_MCDropout():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])

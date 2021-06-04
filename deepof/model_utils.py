@@ -232,61 +232,6 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
             )
 
 
-class uncorrelated_features_constraint(Constraint):
-    """
-
-    tf.keras.constraints.Constraint subclass that forces a layer to have uncorrelated features.
-    Useful, among others, for auto encoder bottleneck layers
-
-    """
-
-    def __init__(self, encoding_dim, weightage=1.0):
-        self.encoding_dim = encoding_dim
-        self.weightage = weightage
-
-    def get_config(self):  # pragma: no cover
-        """Updates Constraint metadata"""
-
-        config = super().get_config().copy()
-        config.update({"encoding_dim": self.encoding_dim, "weightage": self.weightage})
-        return config
-
-    def get_covariance(self, x):
-        """Computes the covariance of the elements of the passed layer"""
-
-        x_centered_list = []
-
-        for i in range(self.encoding_dim):
-            x_centered_list.append(x[:, i] - K.mean(x[:, i]))
-
-        x_centered = tf.stack(x_centered_list)
-        covariance = K.dot(x_centered, K.transpose(x_centered)) / tf.cast(
-            x_centered.get_shape()[0], tf.float32
-        )
-
-        return covariance
-
-    # Constraint penalty
-    # noinspection PyUnusedLocal
-    def uncorrelated_feature(self, x):
-        """Adds a penalty on feature correlation, forcing more independent sets of weights"""
-
-        if self.encoding_dim <= 1:  # pragma: no cover
-            return 0.0
-        else:
-            output = K.sum(
-                K.square(
-                    self.covariance
-                    - tf.math.multiply(self.covariance, tf.eye(self.encoding_dim))
-                )
-            )
-            return output
-
-    def __call__(self, x):
-        self.covariance = self.get_covariance(x)
-        return self.weightage * self.uncorrelated_feature(x)
-
-
 # Custom Layers
 class MCDropout(tf.keras.layers.Dropout):
     """Equivalent to tf.keras.layers.Dropout, but with training mode enabled at prediction time.
