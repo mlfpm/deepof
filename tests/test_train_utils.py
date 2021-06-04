@@ -139,7 +139,7 @@ def test_autoencoder_fitting(
         dtype=float,
         shape=st.tuples(
             st.integers(min_value=10, max_value=100),
-            st.integers(min_value=2, max_value=15),
+            st.integers(min_value=10, max_value=15),
             st.integers(min_value=2, max_value=10),
         ),
         elements=st.floats(
