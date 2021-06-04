@@ -52,11 +52,11 @@ def load_treatments(train_path):
     to be loaded as metadata in the coordinates class"""
     try:
         with open(
-            os.path.join(
-                train_path,
-                [i for i in os.listdir(train_path) if i.endswith(".json")][0],
-            ),
-            "r",
+                os.path.join(
+                    train_path,
+                    [i for i in os.listdir(train_path) if i.endswith(".json")][0],
+                ),
+                "r",
         ) as handle:
             treatment_dict = json.load(handle)
     except IndexError:
@@ -66,25 +66,25 @@ def load_treatments(train_path):
 
 
 def get_callbacks(
-    X_train: np.array,
-    batch_size: int,
-    phenotype_prediction: float,
-    next_sequence_prediction: float,
-    rule_based_prediction: float,
-    overlap_loss: float,
-    loss: str,
-    loss_warmup: int = 0,
-    warmup_mode: str = "none",
-    X_val: np.array = None,
-    input_type: str = False,
-    cp: bool = False,
-    reg_cat_clusters: bool = False,
-    reg_cluster_variance: bool = False,
-    entropy_samples: int = 15000,
-    entropy_knn: int = 100,
-    logparam: dict = None,
-    outpath: str = ".",
-    run: int = False,
+        X_train: np.array,
+        batch_size: int,
+        phenotype_prediction: float,
+        next_sequence_prediction: float,
+        rule_based_prediction: float,
+        overlap_loss: float,
+        loss: str,
+        loss_warmup: int = 0,
+        warmup_mode: str = "none",
+        X_val: np.array = None,
+        input_type: str = False,
+        cp: bool = False,
+        reg_cat_clusters: bool = False,
+        reg_cluster_variance: bool = False,
+        entropy_samples: int = 15000,
+        entropy_knn: int = 100,
+        logparam: dict = None,
+        outpath: str = ".",
+        run: int = False,
 ) -> List[Union[Any]]:
     """Generates callbacks for model training, including:
     - run_ID: run name, with coarse parameter details;
@@ -202,15 +202,15 @@ def log_hyperparameters(phenotype_class: float, rec: str):
 
 # noinspection PyUnboundLocalVariable
 def tensorboard_metric_logging(
-    run_dir: str,
-    hpms: Any,
-    ae: Any,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    rule_based_prediction: float,
-    rec: str,
+        run_dir: str,
+        hpms: Any,
+        ae: Any,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        next_sequence_prediction: float,
+        phenotype_prediction: float,
+        rule_based_prediction: float,
+        rec: str,
 ):
     """Autoencoder metric logging in tensorboard"""
 
@@ -270,35 +270,35 @@ def tensorboard_metric_logging(
 
 
 def autoencoder_fitting(
-    preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    batch_size: int,
-    encoding_size: int,
-    epochs: int,
-    hparams: dict,
-    kl_annealing_mode: str,
-    kl_warmup: int,
-    log_history: bool,
-    log_hparams: bool,
-    loss: str,
-    mmd_annealing_mode: str,
-    mmd_warmup: int,
-    montecarlo_kl: int,
-    n_components: int,
-    output_path: str,
-    overlap_loss: float,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    rule_based_prediction: float,
-    pretrained: str,
-    save_checkpoints: bool,
-    save_weights: bool,
-    reg_cat_clusters: bool,
-    reg_cluster_variance: bool,
-    entropy_samples: int,
-    entropy_knn: int,
-    input_type: str,
-    run: int = 0,
-    strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(),
+        preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        batch_size: int,
+        encoding_size: int,
+        epochs: int,
+        hparams: dict,
+        kl_annealing_mode: str,
+        kl_warmup: int,
+        log_history: bool,
+        log_hparams: bool,
+        loss: str,
+        mmd_annealing_mode: str,
+        mmd_warmup: int,
+        montecarlo_kl: int,
+        n_components: int,
+        output_path: str,
+        overlap_loss: float,
+        next_sequence_prediction: float,
+        phenotype_prediction: float,
+        rule_based_prediction: float,
+        pretrained: str,
+        save_checkpoints: bool,
+        save_weights: bool,
+        reg_cat_clusters: bool,
+        reg_cluster_variance: bool,
+        entropy_samples: int,
+        entropy_knn: int,
+        input_type: str,
+        run: int = 0,
+        strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(),
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
@@ -317,8 +317,8 @@ def autoencoder_fitting(
     # Generate validation dataset for callback usage
     X_val_dataset = (
         tf.data.Dataset.from_tensor_slices(X_val)
-        .with_options(options)
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+            .with_options(options)
+            .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
     )
 
     # Defines what to log on tensorboard (useful for trying out different models)
@@ -361,7 +361,7 @@ def autoencoder_fitting(
         logparams, metrics = log_hyperparameters(phenotype_prediction, rec)
 
         with tf.summary.create_file_writer(
-            os.path.join(output_path, "hparams", run_ID)
+                os.path.join(output_path, "hparams", run_ID)
         ).as_default():
             hp.hparams_config(
                 hparams=logparams,
@@ -422,28 +422,28 @@ def autoencoder_fitting(
         Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
     if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
+        ys += [y_train[-Xs.shape[0]:, 0]]
+        yvals += [y_val[-Xvals.shape[0]:, 0]]
 
         # Remove the used column (phenotype) from both y arrays
         y_train = y_train[:, 1:]
         y_val = y_val[:, 1:]
 
     if rule_based_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :]]
-        yvals += [y_val[-Xvals.shape[0] :]]
+        ys += [y_train[-Xs.shape[0]:]]
+        yvals += [y_val[-Xvals.shape[0]:]]
 
     # Convert data to tf.data.Dataset objects
     train_dataset = (
         tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .shuffle(buffer_size=X_train.shape[0])
-        .with_options(options)
+            .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+            .shuffle(buffer_size=X_train.shape[0])
+            .with_options(options)
     )
     val_dataset = (
         tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .with_options(options)
+            .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+            .with_options(options)
     )
 
     ae.fit(
@@ -484,23 +484,23 @@ def autoencoder_fitting(
 
 
 def tune_search(
-    data: List[np.array],
-    encoding_size: int,
-    hypertun_trials: int,
-    hpt_type: str,
-    k: int,
-    kl_warmup_epochs: int,
-    loss: str,
-    mmd_warmup_epochs: int,
-    overlap_loss: float,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    rule_based_prediction: float,
-    project_name: str,
-    callbacks: List,
-    n_epochs: int = 30,
-    n_replicas: int = 1,
-    outpath: str = ".",
+        data: List[np.array],
+        encoding_size: int,
+        hypertun_trials: int,
+        hpt_type: str,
+        k: int,
+        kl_warmup_epochs: int,
+        loss: str,
+        mmd_warmup_epochs: int,
+        overlap_loss: float,
+        next_sequence_prediction: float,
+        phenotype_prediction: float,
+        rule_based_prediction: float,
+        project_name: str,
+        callbacks: List,
+        n_epochs: int = 30,
+        n_replicas: int = 1,
+        outpath: str = ".",
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
 
@@ -592,16 +592,16 @@ def tune_search(
         Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
     if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
+        ys += [y_train[-Xs.shape[0]:, 0]]
+        yvals += [y_val[-Xvals.shape[0]:, 0]]
 
         # Remove the used column (phenotype) from both y arrays
         y_train = y_train[:, 1:]
         y_val = y_val[:, 1:]
 
     if rule_based_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :]]
-        yvals += [y_val[-Xvals.shape[0] :]]
+        ys += [y_train[-Xs.shape[0]:]]
+        yvals += [y_val[-Xvals.shape[0]:]]
 
     tuner.search(
         Xs,

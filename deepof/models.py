@@ -17,7 +17,7 @@ from tensorflow.keras.activations import softplus
 from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
-from tensorflow.keras.layers import Dense, Dropout, LSTM
+from tensorflow.keras.layers import Dense, Dropout, GRU
 from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Nadam
@@ -57,17 +57,17 @@ class GMVAE:
         self.batch_size = batch_size
         self.bidirectional_merge = self.hparams["bidirectional_merge"]
         self.CONV_filters = self.hparams["units_conv"]
-        self.DENSE_1 = int(self.hparams["units_lstm"] / 2)
+        self.DENSE_1 = int(self.hparams["units_gru"] / 2)
         self.DENSE_2 = self.hparams["units_dense2"]
         self.DROPOUT_RATE = self.hparams["dropout_rate"]
         self.ENCODING = encoding
-        self.LSTM_units_1 = self.hparams["units_lstm"]
-        self.LSTM_units_2 = int(self.hparams["units_lstm"] / 2)
+        self.GRU_units_1 = self.hparams["units_gru"]
+        self.GRU_units_2 = int(self.hparams["units_gru"] / 2)
         self.clipvalue = self.hparams["clipvalue"]
         self.dense_activation = self.hparams["dense_activation"]
         self.dense_layers_per_branch = self.hparams["dense_layers_per_branch"]
         self.learn_rate = self.hparams["learning_rate"]
-        self.lstm_unroll = True
+        self.gru_unroll = True
         self.compile = compile_model
         self.kl_annealing_mode = kl_annealing_mode
         self.kl_warmup = kl_warmup_epochs
@@ -140,7 +140,7 @@ class GMVAE:
             "learning_rate": 1e-3,
             "units_conv": 64,
             "units_dense2": 32,
-            "units_lstm": 128,
+            "units_gru": 128,
         }
 
         for k, v in params.items():
@@ -155,31 +155,31 @@ class GMVAE:
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
             kernel_size=5,
-            strides=1,
+            strides=2, # Increased strides to yield shorter sequences
             padding="same",
             activation=self.dense_activation,
             kernel_initializer=he_uniform(),
             use_bias=True,
         )
         Model_E1 = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
+            GRU(
+                self.GRU_units_1,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             ),
             merge_mode=self.bidirectional_merge,
         )
         Model_E2 = Bidirectional(
-            LSTM(
-                self.LSTM_units_2,
+            GRU(
+                self.GRU_units_2,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=False,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=0),
                 use_bias=True,
             ),
@@ -231,24 +231,24 @@ class GMVAE:
         )
         Model_D3 = RepeatVector(input_shape[1])
         Model_D4 = Bidirectional(
-            LSTM(
-                self.LSTM_units_2,
+            GRU(
+                self.GRU_units_2,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             ),
             merge_mode=self.bidirectional_merge,
         )
         Model_D5 = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
+            GRU(
+                self.GRU_units_1,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             ),
@@ -272,24 +272,24 @@ class GMVAE:
             use_bias=True,
         )
         Model_P2 = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
+            GRU(
+                self.GRU_units_1,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             ),
             merge_mode=self.bidirectional_merge,
         )
         Model_P3 = Bidirectional(
-            LSTM(
-                self.LSTM_units_1,
+            GRU(
+                self.GRU_units_1,
                 activation="tanh",
                 recurrent_activation="sigmoid",
                 return_sequences=True,
-                unroll=self.lstm_unroll,
+                unroll=self.gru_unroll,
                 # kernel_constraint=UnitNorm(axis=1),
                 use_bias=True,
             ),
@@ -631,8 +631,11 @@ class GMVAE:
 
 
 # TODO:
-#       - Check usefulness of stateful sequential layers! (stateful=True in the LSTMs)
+#       - Check usefulness of stateful sequential layers! (stateful=True in the GRUs)
 #       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
 #       - Explore expanding the event dims of the final reconstruction layer
 #       - Think about gradient penalty to avoid mode collapse (as in WGAN-GP)
 #       - Think about using spectral normalization
+#       - REVISIT DROPOUT - CAN HELP WITH TRAINING STABILIZATION
+#       - Decrease learning rate!
+#       - Implement residual blocks!
