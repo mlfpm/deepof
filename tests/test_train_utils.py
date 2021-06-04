@@ -133,7 +133,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=5, deadline=None)
+@settings(max_examples=15, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
