@@ -133,9 +133,9 @@ class GMVAE:
 
         defaults = {
             "bidirectional_merge": "concat",
-            "clipvalue": 1.0,
+            "clipvalue": 0.75,
             "dense_activation": "relu",
-            "dense_layers_per_branch": 3,
+            "dense_layers_per_branch": 1,
             "dropout_rate": 0.1,
             "learning_rate": 1e-4,
             "units_conv": 64,
