@@ -23,6 +23,7 @@ from typing import Dict, List, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import tensorflow as tf
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
@@ -1326,22 +1327,49 @@ class table_dict(dict):
 
         return X, labels
 
-    def random_projection(
-        self, n_components: int = 2, sample: int = 1000
+    def projection(
+        self, proj, n_components: int = 2, sample: int = 1000, kernel: str = None, perplexity: int = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a random projection
+        """Returns a training set generated from the 2D original data (time x features) and a specified projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
         X, labels = self.prepare_projection(sample=sample)
 
-        rproj = random_projection.GaussianRandomProjection(n_components=n_components)
-        X = rproj.fit_transform(X)
+        if proj == "random":
+            proj = random_projection.GaussianRandomProjection(n_components=n_components)
+        elif proj == "pca":
+            proj = KernelPCA(n_components=n_components, kernel=kernel)
+        elif proj == "tsne":
+            proj = TSNE(n_components=n_components, perplexity=perplexity)
+
+        X = proj.fit_transform(X)
 
         if labels is not None:
             X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
 
-        return X, rproj
+        return X, proj
+
+    # def plot_projection(self, projection, name):
+    #     """Plots a given projection in a 2-dimensional space. If labels are provided,
+    #     these are incorporated into the graph as different colours"""
+    #
+    #     proj_df = pd.DataFrame(projection)
+    #     sns.scatterplot(data=proj_df, x=0, y=1, hue=2)
+    #     plt.xlabel(name + " 1")
+    #     plt.ylabel(name + " 2")
+    #
+    #     plt.legend()
+    #     plt.show()
+
+    def random_projection(
+        self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+        """Returns a training set generated from the 2D original data (time x features) and a random projection
+        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        performance or visualization reasons"""
+
+        return self.projection("random", n_components=n_components, sample=sample, kernel=kernel)
 
     def pca(
         self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
@@ -1350,15 +1378,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X, labels = self.prepare_projection(sample=sample)
-
-        pca = KernelPCA(n_components=n_components, kernel=kernel)
-        X = pca.fit_transform(X)
-
-        if labels is not None:
-            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
-
-        return X, pca
+        return self.projection("pca", n_components=n_components, sample=sample, kernel=kernel)
 
     def tsne(
         self, n_components: int = 2, sample: int = 1000, perplexity: int = 30
@@ -1367,15 +1387,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X, labels = self.prepare_projection(sample=sample)
-
-        tsne = TSNE(n_components=n_components, perplexity=perplexity)
-        X = tsne.fit_transform(X)
-
-        if labels is not None:
-            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
-
-        return X, tsne
+        return self.projection("tsne", n_components=n_components, sample=sample, perplexity=perplexity)
 
 
 def merge_tables(*args):
