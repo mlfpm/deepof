@@ -552,13 +552,17 @@ def tune_search(
         ),
     )
 
+    tuner_objective = (
+        "val_mae" if not next_sequence_prediction else "val_reconstruction_mae"
+    )
+
     hpt_params = {
         "hypermodel": hypermodel,
         "executions_per_trial": n_replicas,
         "logger": TensorBoardLogger(
-            metrics=["val_mae"], logdir=os.path.join(outpath, "logged_hparams")
+            metrics=[tuner_objective], logdir=os.path.join(outpath, "logged_hparams")
         ),
-        "objective": "val_mae",
+        "objective": tuner_objective,
         "project_name": project_name,
         "tune_new_entries": True,
     }

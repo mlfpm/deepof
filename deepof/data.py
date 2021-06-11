@@ -1328,7 +1328,12 @@ class table_dict(dict):
         return X, labels
 
     def projection(
-        self, proj, n_components: int = 2, sample: int = 1000, kernel: str = None, perplexity: int = None,
+        self,
+        proj,
+        n_components: int = 2,
+        sample: int = 1000,
+        kernel: str = None,
+        perplexity: int = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a specified projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
@@ -1369,7 +1374,9 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection("random", n_components=n_components, sample=sample, kernel=kernel)
+        return self.projection(
+            "random", n_components=n_components, sample=sample, kernel=kernel
+        )
 
     def pca(
         self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
@@ -1378,7 +1385,9 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection("pca", n_components=n_components, sample=sample, kernel=kernel)
+        return self.projection(
+            "pca", n_components=n_components, sample=sample, kernel=kernel
+        )
 
     def tsne(
         self, n_components: int = 2, sample: int = 1000, perplexity: int = 30
@@ -1387,7 +1396,9 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection("tsne", n_components=n_components, sample=sample, perplexity=perplexity)
+        return self.projection(
+            "tsne", n_components=n_components, sample=sample, perplexity=perplexity
+        )
 
 
 def merge_tables(*args):
