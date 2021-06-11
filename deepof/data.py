@@ -825,6 +825,7 @@ class coordinates:
         frame_limit: int = np.inf,
         debug: bool = False,
         n_jobs: int = 1,
+        propagate_labels: bool = True,
     ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
@@ -843,6 +844,10 @@ class coordinates:
                 video=[vid for vid in self._videos if key + "DLC" in vid][0],
                 params=params,
             )
+
+        if propagate_labels:
+            for key, tab in tag_dict.items():
+                tab["pheno"] = self._exp_conditions[key]
 
         if video_output:  # pragma: no cover
 
@@ -874,7 +879,11 @@ class coordinates:
             pbar.close()
 
         return table_dict(
-            tag_dict, typ="rule-based", arena=self._arena, arena_dims=self._arena_dims
+            tag_dict,
+            typ="rule-based",
+            arena=self._arena,
+            arena_dims=self._arena_dims,
+            propagate_labels=propagate_labels,
         )
 
     @staticmethod
@@ -1285,22 +1294,42 @@ class table_dict(dict):
 
         return X_train, y_train, np.array(X_test), np.array(y_test)
 
+    def prepare_projection(self, sample: int = 1000) -> np.ndarray:
+        """Returns a numpy ndarray from the preprocessing of the table_dict object,
+        ready for projection into a lower dimensional space"""
+
+        if self._type != "rule-based":
+            X = self.get_training_set()[0]
+
+            # Takes care of propagated labels if present
+            if self._propagate_labels:
+                X = X[:, :-1]
+
+            # noinspection PyUnresolvedReferences
+            X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+            X = IterativeImputer().fit_transform(X)
+
+        else:
+            X = {k: np.mean(v, axis=0) for k, v in self.items()}
+            X = np.concatenate(
+                [np.array(exp)[:, np.newaxis] for exp in X.values()],
+                axis=1,
+            ).T
+
+            # Takes care of propagated labels if present
+            if self._propagate_labels:
+                X = X[:, :-1]
+
+        return X
+
     def random_projection(
-        self, n_components: int = None, sample: int = 1000
+        self, n_components: int = 2, sample: int = 1000
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a random projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.get_training_set()[0]
-
-        # Takes care of propagated labels if present
-        if self._propagate_labels:
-            X = X[:, :-1]
-
-        # noinspection PyUnresolvedReferences
-        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
-        X = IterativeImputer().fit_transform(X)
+        X = self.prepare_projection(sample=sample)
 
         rproj = random_projection.GaussianRandomProjection(n_components=n_components)
         X = rproj.fit_transform(X)
@@ -1308,21 +1337,13 @@ class table_dict(dict):
         return X, rproj
 
     def pca(
-        self, n_components: int = None, sample: int = 1000, kernel: str = "linear"
+        self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.get_training_set()[0]
-        X = IterativeImputer().fit_transform(X)
-
-        # Takes care of propagated labels if present
-        if self._propagate_labels:
-            X = X[:, :-1]
-
-        # noinspection PyUnresolvedReferences
-        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+        X = self.prepare_projection(sample=sample)
 
         pca = KernelPCA(n_components=n_components, kernel=kernel)
         X = pca.fit_transform(X)
@@ -1330,21 +1351,13 @@ class table_dict(dict):
         return X, pca
 
     def tsne(
-        self, n_components: int = None, sample: int = 1000, perplexity: int = 30
+        self, n_components: int = 2, sample: int = 1000, perplexity: int = 30
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.get_training_set()[0]
-        X = IterativeImputer().fit_transform(X)
-
-        # Takes care of propagated labels if present
-        if self._propagate_labels:
-            X = X[:, :-1]
-
-        # noinspection PyUnresolvedReferences
-        X = X[np.random.choice(X.shape[0], sample, replace=False), :]
+        X = self.prepare_projection(sample=sample)
 
         tsne = TSNE(n_components=n_components, perplexity=perplexity)
         X = tsne.fit_transform(X)
