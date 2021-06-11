@@ -825,7 +825,7 @@ class coordinates:
         frame_limit: int = np.inf,
         debug: bool = False,
         n_jobs: int = 1,
-        propagate_labels: bool = True,
+        propagate_labels: bool = False,
     ) -> Table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
@@ -1298,29 +1298,33 @@ class table_dict(dict):
         """Returns a numpy ndarray from the preprocessing of the table_dict object,
         ready for projection into a lower dimensional space"""
 
+        labels = None
+
         if self._type != "rule-based":
             X = self.get_training_set()[0]
 
             # Takes care of propagated labels if present
             if self._propagate_labels:
-                X = X[:, :-1]
+                labels, X = X[:, -1], X[:, :-1]
 
             # noinspection PyUnresolvedReferences
             X = X[np.random.choice(X.shape[0], sample, replace=False), :]
             X = IterativeImputer().fit_transform(X)
 
         else:
+
+            # Takes care of propagated labels if present
+            if self._propagate_labels:
+                labels = {k: v.iloc[0, -1] for k, v in self.items()}
+                labels = np.array([val for val in labels.values()])
+
             X = {k: np.mean(v, axis=0) for k, v in self.items()}
             X = np.concatenate(
                 [np.array(exp)[:, np.newaxis] for exp in X.values()],
                 axis=1,
             ).T
 
-            # Takes care of propagated labels if present
-            if self._propagate_labels:
-                X = X[:, :-1]
-
-        return X
+        return X, labels
 
     def random_projection(
         self, n_components: int = 2, sample: int = 1000
@@ -1329,10 +1333,13 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.prepare_projection(sample=sample)
+        X, labels = self.prepare_projection(sample=sample)
 
         rproj = random_projection.GaussianRandomProjection(n_components=n_components)
         X = rproj.fit_transform(X)
+
+        if labels is not None:
+            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
 
         return X, rproj
 
@@ -1343,10 +1350,13 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.prepare_projection(sample=sample)
+        X, labels = self.prepare_projection(sample=sample)
 
         pca = KernelPCA(n_components=n_components, kernel=kernel)
         X = pca.fit_transform(X)
+
+        if labels is not None:
+            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
 
         return X, pca
 
@@ -1357,10 +1367,13 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X = self.prepare_projection(sample=sample)
+        X, labels = self.prepare_projection(sample=sample)
 
         tsne = TSNE(n_components=n_components, perplexity=perplexity)
         X = tsne.fit_transform(X)
+
+        if labels is not None:
+            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
 
         return X, tsne
 
