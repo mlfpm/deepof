@@ -15,7 +15,7 @@ from typing import Tuple, Union, Any, List
 
 import numpy as np
 import tensorflow as tf
-from kerastuner import BayesianOptimization, Hyperband
+from kerastuner import BayesianOptimization, Hyperband, Objective
 from kerastuner_tensorboard_logger import TensorBoardLogger
 from sklearn.metrics import roc_auc_score
 from tensorboard.plugins.hparams import api as hp
@@ -562,7 +562,7 @@ def tune_search(
         "logger": TensorBoardLogger(
             metrics=[tuner_objective], logdir=os.path.join(outpath, "logged_hparams")
         ),
-        "objective": tuner_objective,
+        "objective": Objective(tuner_objective, direction="min"),
         "project_name": project_name,
         "tune_new_entries": True,
     }
@@ -588,8 +588,8 @@ def tune_search(
 
     print(tuner.search_space_summary())
 
-    Xs, ys = [X_train], [X_train]
-    Xvals, yvals = [X_val], [X_val]
+    Xs, ys = X_train, [X_train]
+    Xvals, yvals = X_val, [X_val]
 
     if next_sequence_prediction > 0.0:
         Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
@@ -607,6 +607,7 @@ def tune_search(
         ys += [y_train[-Xs.shape[0] :]]
         yvals += [y_val[-Xvals.shape[0] :]]
 
+    # Convert data to tf.data.Dataset objects
     tuner.search(
         Xs,
         ys,

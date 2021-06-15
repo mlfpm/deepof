@@ -133,7 +133,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=15, deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
@@ -147,6 +147,7 @@ def test_autoencoder_fitting(
             max_value=1,
         ),
     ),
+    y_train=st.data(),
     batch_size=st.integers(min_value=128, max_value=512),
     encoding_size=st.integers(min_value=1, max_value=16),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
@@ -159,6 +160,7 @@ def test_autoencoder_fitting(
 )
 def test_tune_search(
     X_train,
+    y_train,
     batch_size,
     encoding_size,
     hpt_type,
@@ -173,9 +175,9 @@ def test_tune_search(
         deepof.train_utils.get_callbacks(
             X_train=X_train,
             batch_size=batch_size,
-            phenotype_prediction=phenotype_prediction,
-            next_sequence_prediction=next_sequence_prediction,
-            rule_based_prediction=rule_based_prediction,
+            phenotype_prediction=np.round(phenotype_prediction, 2),
+            next_sequence_prediction=np.round(next_sequence_prediction, 2),
+            rule_based_prediction=np.round(rule_based_prediction, 2),
             loss=loss,
             X_val=X_train,
             input_type=False,
@@ -189,7 +191,13 @@ def test_tune_search(
         )
     )[1:]
 
-    y_train = tf.random.uniform(shape=(X_train.shape[1], 1), maxval=1.0)
+    y_train = y_train.draw(
+        arrays(
+            dtype=np.float32,
+            elements=st.floats(min_value=0.0, max_value=1.0, width=32),
+            shape=(X_train.shape[1], 1),
+        )
+    )
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
@@ -201,9 +209,9 @@ def test_tune_search(
         loss=loss,
         mmd_warmup_epochs=0,
         overlap_loss=overlap_loss,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        rule_based_prediction=rule_based_prediction,
+        next_sequence_prediction=np.round(next_sequence_prediction, 2),
+        phenotype_prediction=np.round(phenotype_prediction, 2),
+        rule_based_prediction=np.round(rule_based_prediction, 2),
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=1,
