@@ -128,7 +128,6 @@ def test_autoencoder_fitting(
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
         rule_based_prediction=rule_based_prediction,
-        entropy_samples=10,
         entropy_knn=5,
     )
 
