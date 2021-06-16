@@ -1291,43 +1291,29 @@ class table_dict(dict):
 
         return X_train, y_train, np.array(X_test), np.array(y_test)
 
-    def prepare_projection(self, sample: int = 1000) -> np.ndarray:
+    def _prepare_projection(self) -> np.ndarray:
         """Returns a numpy ndarray from the preprocessing of the table_dict object,
         ready for projection into a lower dimensional space"""
 
         labels = None
 
-        if self._type != "rule-based":
-            X = self.get_training_set()[0]
+        # Takes care of propagated labels if present
+        if self._propagate_labels:
+            labels = {k: v.iloc[0, -1] for k, v in self.items()}
+            labels = np.array([val for val in labels.values()])
 
-            # Takes care of propagated labels if present
-            if self._propagate_labels:
-                labels, X = X[:, -1], X[:, :-1]
-
-            # noinspection PyUnresolvedReferences
-            X = X[np.random.choice(X.shape[0], sample, replace=False), :]
-            X = IterativeImputer().fit_transform(X)
-
-        else:
-
-            # Takes care of propagated labels if present
-            if self._propagate_labels:
-                labels = {k: v.iloc[0, -1] for k, v in self.items()}
-                labels = np.array([val for val in labels.values()])
-
-            X = {k: np.mean(v, axis=0) for k, v in self.items()}
-            X = np.concatenate(
-                [np.array(exp)[:, np.newaxis] for exp in X.values()],
-                axis=1,
-            ).T
+        X = {k: np.mean(v, axis=0) for k, v in self.items()}
+        X = np.concatenate(
+            [np.array(exp)[:, np.newaxis] for exp in X.values()],
+            axis=1,
+        ).T
 
         return X, labels
 
-    def projection(
+    def _project(
         self,
         proj,
         n_components: int = 2,
-        sample: int = 1000,
         kernel: str = None,
         perplexity: int = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
@@ -1335,7 +1321,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        X, labels = self.prepare_projection(sample=sample)
+        X, labels = self._prepare_projection()
 
         if proj == "random":
             proj = random_projection.GaussianRandomProjection(n_components=n_components)
@@ -1351,27 +1337,15 @@ class table_dict(dict):
 
         return X, proj
 
-    # def plot_projection(self, projection, name):
-    #     """Plots a given projection in a 2-dimensional space. If labels are provided,
-    #     these are incorporated into the graph as different colours"""
-    #
-    #     proj_df = pd.DataFrame(projection)
-    #     sns.scatterplot(data=proj_df, x=0, y=1, hue=2)
-    #     plt.xlabel(name + " 1")
-    #     plt.ylabel(name + " 2")
-    #
-    #     plt.legend()
-    #     plt.show()
-
     def random_projection(
-        self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
+        self, n_components: int = 2, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """Returns a training set generated from the 2D original data (time x features) and a random projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection(
-            "random", n_components=n_components, sample=sample, kernel=kernel
+        return self._project(
+            "random", n_components=n_components, kernel=kernel
         )
 
     def pca(
@@ -1381,8 +1355,8 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection(
-            "pca", n_components=n_components, sample=sample, kernel=kernel
+        return self._project(
+            "pca", n_components=n_components, kernel=kernel
         )
 
     def tsne(
@@ -1392,8 +1366,8 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self.projection(
-            "tsne", n_components=n_components, sample=sample, perplexity=perplexity
+        return self._project(
+            "tsne", n_components=n_components, perplexity=perplexity
         )
 
 
