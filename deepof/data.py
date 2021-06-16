@@ -1333,7 +1333,7 @@ class table_dict(dict):
         X = proj.fit_transform(X)
 
         if labels is not None:
-            X = np.concatenate([X, labels[:, np.newaxis]], axis=1)
+            return X, labels, proj
 
         return X, proj
 
@@ -1344,9 +1344,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self._project(
-            "random", n_components=n_components, kernel=kernel
-        )
+        return self._project("random", n_components=n_components, kernel=kernel)
 
     def pca(
         self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
@@ -1355,9 +1353,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self._project(
-            "pca", n_components=n_components, kernel=kernel
-        )
+        return self._project("pca", n_components=n_components, kernel=kernel)
 
     def tsne(
         self, n_components: int = 2, sample: int = 1000, perplexity: int = 30
@@ -1366,9 +1362,7 @@ class table_dict(dict):
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons"""
 
-        return self._project(
-            "tsne", n_components=n_components, perplexity=perplexity
-        )
+        return self._project("tsne", n_components=n_components, perplexity=perplexity)
 
 
 def merge_tables(*args):

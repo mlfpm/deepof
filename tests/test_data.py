@@ -295,6 +295,12 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     # deepof dimensionality reduction testing
 
-    assert isinstance(table.random_projection(n_components=2, sample=50), tuple)
-    assert isinstance(table.pca(n_components=2, sample=50), tuple)
-    assert isinstance(table.tsne(n_components=2, sample=50), tuple)
+    table = deepof.data.table_dict(
+        dict(table, **{"test1": table["test"]}), typ=table._type
+    )
+
+    print(table)
+
+    assert isinstance(table.random_projection(n_components=2), tuple)
+    assert isinstance(table.pca(n_components=2), tuple)
+    assert isinstance(table.tsne(n_components=2), tuple)
