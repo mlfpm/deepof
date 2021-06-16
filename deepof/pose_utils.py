@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 import regex as re
 import seaborn as sns
-import tensorflow as tf
 from scipy import stats
 
 import deepof.utils
@@ -205,7 +204,7 @@ def sniff_object(
     tol_speed: float,
     nose: str,
     centered_data: bool = False,
-    object: str = "arena",
+    s_object: str = "arena",
     animal_id: str = "",
 ):
     """Returns True if the specified mouse is sniffing an object
@@ -232,7 +231,7 @@ def sniff_object(
     if animal_id != "":
         animal_id += "_"
 
-    if object == "arena":
+    if s_object == "arena":
         if arena_type == "circular":
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
@@ -256,7 +255,7 @@ def sniff_object(
             )
             nosing = nosing_min & (~nosing_max)
 
-    elif object == "partner":
+    elif s_object == "partner":
         raise NotImplementedError
 
     else:
@@ -425,6 +424,7 @@ def following_path(
         < distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Nose"]))]
     )
 
+    # noinspection PyArgumentList
     follow = np.all(
         np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]),
         axis=0,
@@ -778,7 +778,7 @@ def rule_based_tagging(
                 params["climb_tol"],
                 params["huddle_speed"],
                 _id + undercond + "Nose",
-                object="arena",
+                s_object="arena",
                 animal_id=_id,
             )
         )

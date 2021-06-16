@@ -17,13 +17,11 @@ Contains methods for generating training and test sets ready for model training.
 import os
 import warnings
 from collections import defaultdict
-from multiprocessing import cpu_count
 from typing import Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import tensorflow as tf
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
@@ -913,7 +911,6 @@ class coordinates:
         save_weights: bool = True,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
-        entropy_samples: int = 10000,
         entropy_knn: int = 100,
         input_type: str = False,
         run: int = 0,
@@ -979,7 +976,6 @@ class coordinates:
             save_weights=save_weights,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
-            entropy_samples=entropy_samples,
             entropy_knn=entropy_knn,
             input_type=input_type,
             run=run,

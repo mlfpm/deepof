@@ -8,16 +8,13 @@ Functions and general utilities for the deepof tensorflow models. See documentat
 
 """
 
-from itertools import combinations
+from functools import partial
 from typing import Any, Tuple
 
 import matplotlib.pyplot as plt
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-from functools import partial
 from tensorflow.keras import backend as K
-from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.layers import Layer
 
 tfd = tfp.distributions

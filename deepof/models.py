@@ -8,18 +8,16 @@ deep autoencoder models for unsupervised pose detection
 
 """
 
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import softplus
-from tensorflow.keras.constraints import UnitNorm
 from tensorflow.keras.initializers import he_uniform, random_uniform
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, GRU
-from tensorflow.keras.layers import RepeatVector, Reshape, TimeDistributed
-from tensorflow.keras.losses import Huber
+from tensorflow.keras.layers import RepeatVector, Reshape
 from tensorflow.keras.optimizers import Nadam
 
 import deepof.model_utils
@@ -27,6 +25,7 @@ import deepof.model_utils
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
+
 
 # noinspection PyDefaultArgument
 class GMVAE:
@@ -204,8 +203,8 @@ class GMVAE:
             for _ in range(self.dense_layers_per_branch)
         ]
         Model_E4 = []
-        for l in seq_E:
-            Model_E4.append(l)
+        for layer in seq_E:
+            Model_E4.append(layer)
             Model_E4.append(BatchNormalization())
 
         # Decoder layers
@@ -219,8 +218,8 @@ class GMVAE:
             for _ in range(self.dense_layers_per_branch)
         ]
         Model_D1 = []
-        for l in seq_D:
-            Model_D1.append(l)
+        for layer in seq_D:
+            Model_D1.append(layer)
             Model_D1.append(BatchNormalization())
 
         Model_D2 = Dense(
@@ -501,7 +500,7 @@ class GMVAE:
         x_decoded_var = tf.keras.activations.softplus(
             Dense(tfpl.IndependentNormal.params_size(input_shape[2:]) // 2)(generator)
         )
-        x_decoded_var = tf.keras.layers.Lambda(lambda x: 1e-3 + x)(x_decoded_var)
+        x_decoded_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(x_decoded_var)
         x_decoded = tf.keras.layers.concatenate(
             [x_decoded_mean, x_decoded_var], axis=-1
         )
@@ -549,7 +548,7 @@ class GMVAE:
                     predictor
                 )
             )
-            x_predicted_var = tf.keras.layers.Lambda(lambda x: 1e-3 + x)(
+            x_predicted_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(
                 x_predicted_var
             )
             x_decoded = tf.keras.layers.concatenate(

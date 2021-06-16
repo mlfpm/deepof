@@ -8,17 +8,19 @@ Testing module for deepof.train_utils
 
 """
 
-from hypothesis import given, reproduce_failure
+import os
+
+import numpy as np
+import tensorflow as tf
 from hypothesis import HealthCheck
+from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
+
 import deepof.data
 import deepof.model_utils
 import deepof.train_utils
-import numpy as np
-import os
-import tensorflow as tf
 
 
 def test_load_treatments():
@@ -93,7 +95,6 @@ def test_autoencoder_fitting(
     phenotype_prediction,
     rule_based_prediction,
 ):
-
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
 

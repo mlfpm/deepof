@@ -11,6 +11,7 @@ usage: python -m examples.model_training -h
 
 import argparse
 import os
+
 import deepof.data
 import deepof.train_utils
 import deepof.utils
@@ -422,13 +423,12 @@ else:
         loss=loss,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,
-        X_val=(X_val if X_val.shape != (0,) else None),
         input_type=input_type,
         cp=False,
-        entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
+        overlap_loss=overlap_loss,
         run=run,
     )
 

@@ -17,7 +17,6 @@ import numpy as np
 import tensorflow as tf
 from kerastuner import BayesianOptimization, Hyperband, Objective
 from kerastuner_tensorboard_logger import TensorBoardLogger
-from sklearn.metrics import roc_auc_score
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
@@ -75,12 +74,10 @@ def get_callbacks(
     loss: str,
     loss_warmup: int = 0,
     warmup_mode: str = "none",
-    X_val: np.array = None,
     input_type: str = False,
     cp: bool = False,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
-    entropy_samples: int = 15000,
     entropy_knn: int = 100,
     logparam: dict = None,
     outpath: str = ".",
@@ -294,7 +291,6 @@ def autoencoder_fitting(
     save_weights: bool,
     reg_cat_clusters: bool,
     reg_cluster_variance: bool,
-    entropy_samples: int,
     entropy_knn: int,
     input_type: str,
     run: int = 0,
@@ -312,13 +308,6 @@ def autoencoder_fitting(
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = (
         tf.data.experimental.AutoShardPolicy.DATA
-    )
-
-    # Generate validation dataset for callback usage
-    X_val_dataset = (
-        tf.data.Dataset.from_tensor_slices(X_val)
-        .with_options(options)
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
     )
 
     # Defines what to log on tensorboard (useful for trying out different models)
@@ -342,11 +331,9 @@ def autoencoder_fitting(
         overlap_loss=overlap_loss,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
-        X_val=(X_val_dataset if X_val.shape != (0,) else None),
         cp=save_checkpoints,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
-        entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
@@ -613,9 +600,8 @@ def tune_search(
         .batch(batch_size, drop_remainder=True)
         .shuffle(buffer_size=X_train.shape[0])
     )
-    val_dataset = (
-        tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
-        .batch(batch_size, drop_remainder=True)
+    val_dataset = tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals))).batch(
+        batch_size, drop_remainder=True
     )
 
     # Convert data to tf.data.Dataset objects
