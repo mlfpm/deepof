@@ -70,6 +70,19 @@ def plot_heatmap(
     return heatmaps
 
 
+def plot_projection(projection: tuple) -> plt.figure:
+    """Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+    If labels are propagated, it automatically colours all data points with their respective condition.
+
+     Parameters:
+         - projection (tuple): tuple containing the projection and the associated conditions when available
+
+     Returns:
+         - projection_scatter (plt.figure): figure with the specified characteristics"""
+
+    pass
+
+
 def model_comparison_plot(
     bic: list,
     m_bic: list,
