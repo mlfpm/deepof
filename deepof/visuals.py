@@ -58,7 +58,7 @@ def plot_heatmap(
             )
         else:
             sns.kdeplot(
-                data=heatmap.x, data2=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax
+                x=heatmap.x, y=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax
             )
             ax = np.array([ax])
 
