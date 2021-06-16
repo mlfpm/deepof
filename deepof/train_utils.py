@@ -608,11 +608,21 @@ def tune_search(
         yvals += [y_val[-Xvals.shape[0] :]]
 
     # Convert data to tf.data.Dataset objects
+    train_dataset = (
+        tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
+        .batch(batch_size, drop_remainder=True)
+        .shuffle(buffer_size=X_train.shape[0])
+    )
+    val_dataset = (
+        tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals)))
+        .batch(batch_size, drop_remainder=True)
+    )
+
+    # Convert data to tf.data.Dataset objects
     tuner.search(
-        Xs,
-        ys,
+        train_dataset,
         epochs=n_epochs,
-        validation_data=(Xvals, yvals),
+        validation_data=val_dataset,
         verbose=1,
         batch_size=batch_size,
         callbacks=callbacks,

@@ -8,7 +8,7 @@ Testing module for deepof.train_utils
 
 """
 
-from hypothesis import given
+from hypothesis import given, reproduce_failure
 from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
@@ -138,8 +138,8 @@ def test_autoencoder_fitting(
     X_train=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=10, max_value=100),
-            st.integers(min_value=10, max_value=15),
+            st.integers(min_value=128, max_value=512),
+            st.integers(min_value=128, max_value=512),
             st.integers(min_value=2, max_value=10),
         ),
         elements=st.floats(
@@ -148,7 +148,7 @@ def test_autoencoder_fitting(
         ),
     ),
     y_train=st.data(),
-    batch_size=st.integers(min_value=128, max_value=512),
+    batch_size=st.just(128),
     encoding_size=st.integers(min_value=1, max_value=16),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     k=st.integers(min_value=1, max_value=10),
