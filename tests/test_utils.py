@@ -328,7 +328,7 @@ def test_rolling_window(a, window):
     series=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=10, max_value=1000),
+            st.integers(min_value=30, max_value=1000),
         ),
         elements=st.floats(
             min_value=1.0, max_value=1.0, allow_nan=False, allow_infinity=False
@@ -337,12 +337,11 @@ def test_rolling_window(a, window):
 )
 def test_smooth_mult_trajectory(alpha, series):
     alpha1 = alpha.draw(
-        st.floats(min_value=0.1, max_value=1.0, allow_nan=False, allow_infinity=False)
+        st.integers(min_value=3, max_value=6)
     )
     alpha2 = alpha.draw(
-        st.floats(
-            min_value=alpha1, max_value=1.0, allow_nan=False, allow_infinity=False
-        )
+        st.integers(
+            min_value=alpha1, max_value=10)
     )
 
     series *= +np.random.normal(0, 1, len(series))
