@@ -333,9 +333,10 @@ def smooth_mult_trajectory(series: np.array, alpha: int = 9, w_length: int = 11)
 
     Parameters:
         - series (numpy.array): 1D trajectory array with N (instances)
-        - alpha (float): 0 <= alpha <= 1;
-        indicates the inverse weight assigned to previous observations. Higher (alpha~1) indicates less smoothing;
-        lower indicates more (alpha~0)
+        - alpha (int): 0 <= alpha < w_length; indicates the degree of the polynomial to fit using the Savitzky-Golay
+        filter. Higher values produce a better fit, hence less smoothing.
+        - w_length (int): length of the sliding window to which the filter fit. Higher values yield a coarser fit,
+        hence more smoothing.
 
     Returns:
         - smoothed_series (np.array): smoothed version of the input, with equal shape"""
