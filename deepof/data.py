@@ -273,7 +273,7 @@ class project:
                     )
                 )
                 smooth.columns = cols
-                tab_dict[key] = smooth.iloc[1:, :].reset_index(drop=True)
+                tab_dict[key] = smooth.reset_index(drop=True)
 
         for key, tab in tab_dict.items():
             tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]

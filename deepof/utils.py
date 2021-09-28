@@ -345,6 +345,8 @@ def smooth_mult_trajectory(series: np.array, alpha: int = 9, w_length: int = 11)
 
     smoothed_series = savgol_filter(series, polyorder=alpha, window_length=w_length, axis=0)
 
+    assert smoothed_series.shape == series.shape
+
     return smoothed_series
 
 
