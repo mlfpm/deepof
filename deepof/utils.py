@@ -341,7 +341,7 @@ def smooth_mult_trajectory(series: np.array, alpha: int = 9, w_length: int = 11)
     Returns:
         - smoothed_series (np.array): smoothed version of the input, with equal shape"""
 
-    if alpha == None:
+    if alpha is None:
         return series
 
     smoothed_series = savgol_filter(series, polyorder=alpha, window_length=w_length, axis=0)
