@@ -341,7 +341,7 @@ def test_smooth_mult_trajectory(alpha, series):
     )
     alpha2 = alpha.draw(
         st.integers(
-            min_value=alpha1, max_value=10)
+            min_value=alpha1 + 2, max_value=10)
     )
 
     series *= +np.random.normal(0, 1, len(series))
