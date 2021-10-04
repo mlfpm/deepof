@@ -598,8 +598,6 @@ def recognize_arena(
     # Compute the median across frames and return to tuple format for downstream compatibility
     arena = np.median(arena[center_distances < center_quantile], axis=0)
     arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
-    print(arena)
-    print(w, h)
 
     return arena, h, w
 
