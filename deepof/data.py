@@ -63,8 +63,8 @@ class project:
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        arena_dims: tuple = (1,),
-        enable_iterative_imputation: bool = None,
+        arena_dims: tuple = (1,),                   # TODO: Fix scales
+        enable_iterative_imputation: bool = None,   # TODO: Remove method! It's too expensive and yields marginal benefits
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
