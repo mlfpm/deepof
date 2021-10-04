@@ -328,13 +328,16 @@ def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
     return rolled_a
 
 
-def smooth_mult_trajectory(series: np.array, alpha: int = 9, w_length: int = 11) -> np.array:
+def smooth_mult_trajectory(
+    series: np.array, alpha: int = 0, w_length: int = 11
+) -> np.array:
     """Returns a smoothed a trajectory using a Savitzky-Golay 1D filter
 
     Parameters:
         - series (numpy.array): 1D trajectory array with N (instances)
-        - alpha (int): 0 <= alpha < w_length; indicates the degree of the polynomial to fit using the Savitzky-Golay
-        filter. Higher values produce a better fit, hence less smoothing.
+        - alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial
+         and the window length for the Savitzky-Golay filter used for smoothing.
+         Higher values produce a worse fit, hence more smoothing.
         - w_length (int): length of the sliding window to which the filter fit. Higher values yield a coarser fit,
         hence more smoothing.
 
@@ -344,7 +347,9 @@ def smooth_mult_trajectory(series: np.array, alpha: int = 9, w_length: int = 11)
     if alpha is None:
         return series
 
-    smoothed_series = savgol_filter(series, polyorder=alpha, window_length=w_length, axis=0)
+    smoothed_series = savgol_filter(
+        series, polyorder=(w_length - alpha), window_length=w_length, axis=0
+    )
 
     assert smoothed_series.shape == series.shape
 
@@ -506,11 +511,12 @@ def interpolate_outliers(
 
 def recognize_arena(
     videos: list,
+    tables: dict,
     vid_index: int,
     path: str = ".",
-    recoglimit: int = 100,
+    recoglimit: int = 1000,
     arena_type: str = "circular",
-    detection_mode: str = "cnn",
+    detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
     """Returns numpy.array with information about the arena recognised from the first frames
@@ -535,6 +541,15 @@ def recognize_arena(
             - w (int): width of the video in pixels"""
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+
+    # Select relevant table to check animal positions; if animals are close to the arena, do not take those frames
+    # into account
+    centers = tables[list(tables.keys())[vid_index]].iloc[:recoglimit, :]
+    # Select animal centers
+    centers = centers.loc[
+        :, [bpart for bpart in centers.columns if "Center" in bpart[0]]
+    ]
+    centers_shape = centers.shape
 
     # Loop over the first frames in the video to get resolution and center of the arena
     arena, fnum, h, w = None, 0, None, None
@@ -568,16 +583,30 @@ def recognize_arena(
     cap.release()
     cv2.destroyAllWindows()
 
+    # Compute the distance between animal centers and the center of the video, for
+    # the arena to be based on frames which minimize obstruction of its borders
+    center_distances = np.max(
+        np.linalg.norm(
+            centers.to_numpy().reshape(-1, 2) - (w / 2, h / 2), axis=1
+        ).reshape(-1, centers_shape[1] // 2),
+        axis=1,
+    )
+    # Within the frame recognition limit, only the 1% less obstructed will contribute to the arena
+    # fitting
+    center_quantile = np.quantile(center_distances, 0.01)
+
     # Compute the median across frames and return to tuple format for downstream compatibility
-    arena = np.mean(arena, axis=0)
+    arena = np.median(arena[center_distances < center_quantile], axis=0)
     arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
+    print(arena)
+    print(w, h)
 
     return arena, h, w
 
 
 def circular_arena_recognition(
     frame: np.array,
-    detection_mode: str = "cnn",
+    detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> np.array:
     """Returns x,y position of the center, the lengths of the major and minor axes,

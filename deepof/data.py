@@ -70,10 +70,10 @@ class project:
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 5,
-        likelihood_tol: float = 0.25,
+        likelihood_tol: float = 0.5,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
-        smooth_alpha: float = 7,
+        smooth_alpha: float = 0,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
     ):
@@ -123,8 +123,6 @@ class project:
                     if i.startswith("elliptical")
                 ][0]
             )
-
-        self.scales, self.arena_params, self.video_resolution = self.get_arena
 
         # Set the rest of the init parameters
         self.angles = True
@@ -185,8 +183,7 @@ class project:
         enhances performance for big datasets"""
         return self._angles
 
-    @property
-    def get_arena(self) -> np.array:
+    def get_arena(self, tables) -> np.array:
         """Returns the arena as recognised from the videos"""
 
         scales = []
@@ -197,8 +194,9 @@ class project:
 
             for vid_index, _ in enumerate(self.videos):
                 ellipse, h, w = deepof.utils.recognize_arena(
-                    self.videos,
-                    vid_index,
+                    videos=self.videos,
+                    tables=tables,
+                    vid_index=vid_index,
                     path=self.video_path,
                     arena_type=self.arena,
                     detection_mode=self.arena_detection,
@@ -424,6 +422,10 @@ class project:
         tables, quality = self.load_tables(verbose)
         distances = None
         angles = None
+
+        self.scales, self.arena_params, self.video_resolution = self.get_arena(
+            tables=tables
+        )
 
         if self.distances:
             distances = self.get_distances(tables, verbose)
