@@ -66,8 +66,8 @@ class project:
         arena_dims: tuple = (
             1,
         ),  # TODO: Fix scales: make results independent of arena specification!
-        # Make distances relative to arena size (and perhaps animal size?)
-        enable_iterative_imputation: bool = None,  # TODO: Remove method! It's too expensive and yields marginal benefits
+        # TODO: Make distances relative to arena size (and perhaps animal size?)
+        enable_iterative_imputation: bool = None,  # This will impute the position of ocluded body parts, which might not be desirable and it's computationally expensive.
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
