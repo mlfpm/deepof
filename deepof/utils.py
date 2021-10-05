@@ -520,7 +520,7 @@ def recognize_arena(
     vid_index: int,
     path: str = ".",
     tables: dict = None,
-    recoglimit: int = 1000,
+    recoglimit: int = 10000,
     arena_type: str = "circular",
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
@@ -559,7 +559,7 @@ def recognize_arena(
 
         # Select animal centers
         centers = centers.loc[
-            :, [bpart for bpart in centers.columns if "Center" in bpart[0]]
+            :, [bpart for bpart in centers.columns if "Tail" not in bpart[0]]
         ]
         centers_shape = centers.shape
 
@@ -598,7 +598,7 @@ def recognize_arena(
     # Compute the distance between animal centers and the center of the video, for
     # the arena to be based on frames which minimize obstruction of its borders
     if tables is not None:
-        center_distances = np.max(
+        center_distances = np.nanmax(
             np.linalg.norm(
                 centers.to_numpy().reshape(-1, 2) - (w / 2, h / 2), axis=1
             ).reshape(-1, centers_shape[1] // 2),
@@ -610,7 +610,7 @@ def recognize_arena(
         arena = arena[center_distances < center_quantile]
 
     # Compute the median across frames and return to tuple format for downstream compatibility
-    arena = np.median(arena, axis=0)
+    arena = np.nanmedian(arena, axis=0)
     arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
 
     return arena, h, w

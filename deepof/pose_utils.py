@@ -871,7 +871,16 @@ def tag_rulebased_frames(
 
     if debug:
         # Print arena for debugging
-        cv2.ellipse(frame, arena[0], arena[1], arena[2], 0, 360, (0, 255, 0), 3)
+        cv2.ellipse(
+            img=frame,
+            center=arena[0],
+            axes=arena[1],
+            angle=arena[2],
+            startAngle=0,
+            endAngle=360,
+            color=(0, 255, 0),
+            thickness=3,
+        )
         # Print body parts for debuging
         for bpart in coords.columns.levels[0]:
             if not np.isnan(coords[bpart]["x"][fnum]):
