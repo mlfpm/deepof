@@ -15,7 +15,7 @@ import deepof.models
 import deepof.model_utils
 import tensorflow as tf
 
-tf.config.experimental_run_functions_eagerly(True)
+# tf.config.experimental_run_functions_eagerly(True)
 
 
 @settings(deadline=None, max_examples=10)

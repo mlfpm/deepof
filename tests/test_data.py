@@ -38,7 +38,7 @@ def test_project_init(table_type, arena_type):
                 arena_dims=tuple([380]),
                 video_format=".mp4",
                 table_format=table_type,
-            )
+            ).run()
     else:
         prun = deepof.data.project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -52,7 +52,6 @@ def test_project_init(table_type, arena_type):
 
         assert isinstance(prun, deepof.data.project)
         assert isinstance(prun.load_tables(verbose=True), tuple)
-        assert isinstance(prun.get_arena, tuple)
 
 
 def test_project_properties():
@@ -98,6 +97,10 @@ def test_get_distances(nodes, ego):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
+    )
+    tables, _ = prun.load_tables(verbose=True)
+    prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
+        tables=tables
     )
     prun.distances = nodes
     prun.ego = ego

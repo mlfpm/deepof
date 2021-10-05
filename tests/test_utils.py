@@ -346,7 +346,7 @@ def test_smooth_mult_trajectory(alpha, series):
 
     assert autocorr(smoothed1) >= autocorr(series)
     assert autocorr(smoothed2) >= autocorr(series)
-    assert autocorr(smoothed2) <= autocorr(smoothed1)
+    assert autocorr(smoothed2) >= autocorr(smoothed1)
 
 
 @settings(deadline=None)
@@ -419,11 +419,12 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
     arena = deepof.utils.recognize_arena(
-        videos,
-        vid_index,
-        path,
-        recoglimit,
-        "circular",
+        videos=videos,
+        tables=None,
+        vid_index=vid_index,
+        path=path,
+        recoglimit=recoglimit,
+        arena_type="circular",
         detection_mode=detection_type,
         cnn_model=cnn_model,
     )
