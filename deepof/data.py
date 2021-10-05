@@ -63,7 +63,10 @@ class project:
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        arena_dims: tuple = (1,),  # TODO: Fix scales
+        arena_dims: tuple = (
+            1,
+        ),  # TODO: Fix scales: make results independent of arena specification!
+        # Make distances relative to arena size (and perhaps animal size?)
         enable_iterative_imputation: bool = None,  # TODO: Remove method! It's too expensive and yields marginal benefits
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
@@ -312,6 +315,7 @@ class project:
                 print("Interpolating outliers...")
 
             for k, value in tab_dict.items():
+
                 tab_dict[k] = deepof.utils.interpolate_outliers(
                     value,
                     lik_dict[k],

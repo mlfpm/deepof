@@ -379,7 +379,10 @@ def mask_outliers(
     n_std: int,
     mode: str,
 ):
-    """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers
+    """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
+    An outlier can be marked with one of two criteria:
+        1) the likelihood reported by DLC is below likelihood_tolerance
+        2) the deviation from a moving average model is greater than n_std
 
     Parameters:
         - time_series (pd.DataFrame): bivariate time series representing the x, y positions of a single body part
@@ -447,6 +450,7 @@ def full_outlier_mask(
 
     for bpart in body_parts:
         if bpart != exclude:
+
             mask = mask_outliers(
                 experiment[bpart],
                 likelihood[bpart],
@@ -492,6 +496,7 @@ def interpolate_outliers(
     """
 
     interpolated_exp = experiment.copy()
+
     mask = full_outlier_mask(
         experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode
     )
