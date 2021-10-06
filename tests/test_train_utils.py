@@ -107,7 +107,7 @@ def test_autoencoder_fitting(
 
     preprocessed_data = (X_train, y_train, X_train, y_train)
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),

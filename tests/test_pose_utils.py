@@ -105,7 +105,7 @@ def test_climb_wall(center, axes, angle, tol):
     tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
 
     prun = (
-        deepof.data.project(
+        deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([arena[2]]),
@@ -376,7 +376,7 @@ def test_rule_based_tagging(multi_animal, video_output):
         "test_{}_topview".format("multi" if multi_animal else "single"),
     )
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=path,
         arena="circular",
         arena_dims=tuple([380]),
@@ -389,5 +389,5 @@ def test_rule_based_tagging(multi_animal, video_output):
         video_output=video_output, frame_limit=50
     )
 
-    assert isinstance(hardcoded_tags, deepof.data.table_dict)
+    assert isinstance(hardcoded_tags, deepof.data.TableDict)
     assert list(hardcoded_tags.values())[0].shape[1] == (21 if multi_animal else 6)

@@ -22,7 +22,7 @@ import os
 @given(bparts=st.one_of(st.just(["Center"]), st.just(["Center", "Nose"])))
 def test_plot_heatmap(bparts):
     prun = (
-        deepof.data.project(
+        deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([380]),
@@ -47,7 +47,7 @@ def test_plot_heatmap(bparts):
 
 def test_model_comparison_plot():
     prun = (
-        deepof.data.project(
+        deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular",
             arena_dims=tuple([380]),

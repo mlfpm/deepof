@@ -32,7 +32,7 @@ def test_project_init(table_type, arena_type):
 
     if arena_type == "foo":
         with pytest.raises(NotImplementedError):
-            prun = deepof.data.project(
+            prun = deepof.data.Project(
                 path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
                 arena=arena_type,
                 arena_dims=tuple([380]),
@@ -40,7 +40,7 @@ def test_project_init(table_type, arena_type):
                 table_format=table_type,
             ).run()
     else:
-        prun = deepof.data.project(
+        prun = deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena=arena_type,
             arena_dims=tuple([380]),
@@ -50,13 +50,13 @@ def test_project_init(table_type, arena_type):
 
     if table_type != ".foo" and arena_type != "foo":
 
-        assert isinstance(prun, deepof.data.project)
+        assert isinstance(prun, deepof.data.Project)
         assert isinstance(prun.load_tables(verbose=True), tuple)
 
 
 def test_project_properties():
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -91,7 +91,7 @@ def test_get_distances(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -119,7 +119,7 @@ def test_get_angles(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -144,7 +144,7 @@ def test_run(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -156,12 +156,12 @@ def test_run(nodes, ego):
     prun.ego = ego
     prun = prun.run(verbose=True)
 
-    assert isinstance(prun, deepof.data.coordinates)
+    assert isinstance(prun, deepof.data.Coordinates)
 
 
 def test_get_rule_based_annotation():
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -171,7 +171,7 @@ def test_get_rule_based_annotation():
 
     prun = prun.rule_based_annotation()
 
-    assert isinstance(prun, deepof.data.table_dict)
+    assert isinstance(prun, deepof.data.TableDict)
     assert prun._type == "rule-based"
 
 
@@ -187,7 +187,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),
@@ -243,10 +243,10 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     # deepof.coordinates testing
 
-    assert isinstance(coords, deepof.data.table_dict)
-    assert isinstance(speeds, deepof.data.table_dict)
-    assert isinstance(distances, deepof.data.table_dict)
-    assert isinstance(angles, deepof.data.table_dict)
+    assert isinstance(coords, deepof.data.TableDict)
+    assert isinstance(speeds, deepof.data.TableDict)
+    assert isinstance(distances, deepof.data.TableDict)
+    assert isinstance(angles, deepof.data.TableDict)
     assert isinstance(prun.get_videos(), list)
     assert prun.get_exp_conditions is not None
     assert isinstance(prun.get_quality(), defaultdict)
@@ -298,7 +298,7 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
 
     # deepof dimensionality reduction testing
 
-    table = deepof.data.table_dict(
+    table = deepof.data.TableDict(
         dict(table, **{"test1": table["test"]}), typ=table._type
     )
 

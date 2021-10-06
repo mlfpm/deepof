@@ -353,7 +353,7 @@ def test_smooth_mult_trajectory(alpha, series):
 @given(mode=st.one_of(st.just("and"), st.just("or")))
 def test_interpolate_outliers(mode):
 
-    prun = deepof.data.project(
+    prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
         arena_dims=tuple([380]),

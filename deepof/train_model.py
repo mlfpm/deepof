@@ -306,7 +306,7 @@ if rule_based_prediction:
     logparam["rule_based_prediction_weight"] = rule_based_prediction
 
 # noinspection PyTypeChecker
-project_coords = deepof.data.project(
+project_coords = deepof.data.Project(
     animal_ids=tuple([animal_id]),
     arena="circular",
     arena_dims=tuple([arena_dims]),

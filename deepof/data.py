@@ -43,14 +43,14 @@ import deepof.visuals
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-Coordinates = deepof.utils.NewType("Coordinates", deepof.utils.Any)
-Table_dict = deepof.utils.NewType("Table_dict", deepof.utils.Any)
+coordinates = deepof.utils.NewType("coordinates", deepof.utils.Any)
+table_dict = deepof.utils.NewType("table_dict", deepof.utils.Any)
 
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
-class project:
+class Project:
     """
 
     Class for loading and preprocessing DLC data of individual and multiple animals. All main computations are called
@@ -443,7 +443,7 @@ class project:
 
         return angle_dict
 
-    def run(self, verbose: bool = True) -> Coordinates:
+    def run(self, verbose: bool = True) -> coordinates:
         """Generates a dataset using all the options specified during initialization"""
 
         tables, quality = self.load_tables(verbose)
@@ -463,7 +463,7 @@ class project:
         if verbose:
             print("Done!")
 
-        return coordinates(
+        return Coordinates(
             angles=angles,
             animal_ids=self.animal_ids,
             arena=self.arena,
@@ -497,7 +497,7 @@ class project:
         self._angles = value
 
 
-class coordinates:
+class Coordinates:
     """
 
     Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up
@@ -554,7 +554,7 @@ class coordinates:
         align_inplace: bool = False,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
-    ) -> Table_dict:
+    ) -> table_dict:
         """
         Returns a table_dict object with the coordinates of each animal as values.
 
@@ -674,7 +674,7 @@ class coordinates:
                 for ann in annotations:
                     tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
-        return table_dict(
+        return TableDict(
             tabs,
             "coords",
             arena=self._arena,
@@ -690,7 +690,7 @@ class coordinates:
         speed: int = 0,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
-    ) -> Table_dict:
+    ) -> table_dict:
         """
         Returns a table_dict object with the distances between body parts animal as values.
 
@@ -726,7 +726,7 @@ class coordinates:
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
-            return table_dict(
+            return TableDict(
                 tabs,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -743,7 +743,7 @@ class coordinates:
         speed: int = 0,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
-    ) -> Table_dict:
+    ) -> table_dict:
         """
         Returns a table_dict object with the angles between body parts animal as values.
 
@@ -782,7 +782,7 @@ class coordinates:
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
-            return table_dict(
+            return TableDict(
                 tabs,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -827,7 +827,7 @@ class coordinates:
         debug: bool = False,
         n_jobs: int = 1,
         propagate_labels: bool = False,
-    ) -> Table_dict:
+    ) -> table_dict:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
@@ -879,7 +879,7 @@ class coordinates:
                 Parallel()(delayed(output_video)(key) for key in vid_idxs)
             pbar.close()
 
-        return table_dict(
+        return TableDict(
             tag_dict,
             typ="rule-based",
             arena=self._arena,
@@ -988,7 +988,7 @@ class coordinates:
         return trained_models
 
 
-class table_dict(dict):
+class TableDict(dict):
     """
 
     Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
@@ -1017,13 +1017,13 @@ class table_dict(dict):
         self._propagate_annotations = propagate_annotations
         self._scaler = None
 
-    def filter_videos(self, keys: list) -> Table_dict:
+    def filter_videos(self, keys: list) -> table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
         for selecting data coming from videos of a specified condition."""
 
         assert np.all([k in self.keys() for k in keys]), "Invalid keys selected"
 
-        return table_dict(
+        return TableDict(
             {k: value for k, value in self.items() if k in keys}, self._type
         )
 
@@ -1379,7 +1379,7 @@ def merge_tables(*args):
         for key, val in tabdict.items():
             merged_dict[key].append(val)
 
-    merged_tables = table_dict(
+    merged_tables = TableDict(
         {
             key: pd.concat(val, axis=1, ignore_index=True)
             for key, val in merged_dict.items()
