@@ -60,16 +60,13 @@ class Project:
 
     def __init__(
         self,
+        arena_dims: int,
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        arena_dims: tuple = (
-            1,
-        ),  # TODO: Fix scales: make results independent of arena specification!
-        # TODO: Make distances relative to arena size (and perhaps animal size?)
         enable_iterative_imputation: bool = None,  # This will impute the position of ocluded body parts,
         # which might not be desirable and it's computationally expensive. As an alternative, models should
-        # be resistant to NaN values.
+        # be resistant to NaN values (ie with masking). Add this explanation to the documentation.
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
@@ -80,8 +77,7 @@ class Project:
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0,
         table_format: str = "autodetect",
-        time_duration: int = None,  # TODO: If this is not None, add a time-based index to all output DataFrames.
-        # TODO: Remove the downstream option, as it should be controlled only from here.
+        time_duration: int = None,
         video_format: str = ".mp4",
     ):
 
@@ -145,15 +141,13 @@ class Project:
         self.subset_condition = None
         self.time_duration = time_duration
         self.video_format = video_format
-        if enable_iterative_imputation is None:
-            self.enable_iterative_imputation = self.animal_ids == tuple([""])
-        else:
-            self.enable_iterative_imputation = enable_iterative_imputation
+        self.enable_iterative_imputation = enable_iterative_imputation
 
         model_dict = {
             "mouse_topview": deepof.utils.connect_mouse_topview(animal_ids[0])
         }
         self.connectivity = model_dict[model]
+
         self.exclude_bodyparts = exclude_bodyparts
         if self.exclude_bodyparts != tuple([""]):
             for bp in exclude_bodyparts:
@@ -211,9 +205,20 @@ class Project:
                     cnn_model=self.ellipse_detection,
                 )
 
+                # scales contains the coordinates of the center of the arena,
+                # the absolute diameter measured from the video in pixels, and
+                # the provided diameter in mm (1 -default- equals not provided)
                 scales.append(
-                    list(np.array([ellipse[0][0], ellipse[0][1], ellipse[1][1] * 2]))
-                    + list(self.arena_dims)
+                    list(
+                        np.array(
+                            [
+                                ellipse[0][0],
+                                ellipse[0][1],
+                                np.mean([ellipse[1][0], ellipse[1][1]]) * 2,
+                            ]
+                        )
+                    )
+                    + [self.arena_dims]
                 )
                 arena_params.append(ellipse)
                 video_resolution.append((h, w))
@@ -816,7 +821,7 @@ class Coordinates:
     def get_arenas(self):
         """Retrieves all available information associated with the arena"""
 
-        return self._arena, self._arena_dims, self._scales
+        return self._arena, [self._arena_dims], self._scales
 
     # noinspection PyDefaultArgument
     def rule_based_annotation(

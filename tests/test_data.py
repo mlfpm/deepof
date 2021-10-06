@@ -213,7 +213,6 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=polar,
-        length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         align=algn,
         align_inplace=inplace,
         propagate_labels=propagate,
@@ -222,20 +221,17 @@ def test_get_table_dicts(nodes, ego, exclude, sampler):
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
-        length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=speed,
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
     distances = prun.get_distances(
-        length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
-        length=sampler.draw(st.one_of(st.just(False), st.just("00:10:00"))),
         speed=sampler.draw(st.integers(min_value=0, max_value=5)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,

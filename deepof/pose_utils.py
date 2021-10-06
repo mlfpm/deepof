@@ -11,7 +11,7 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 import os
 import warnings
 from itertools import combinations
-from typing import Any, List, NewType
+from typing import List, NewType
 
 import cv2
 import matplotlib.pyplot as plt
@@ -27,7 +27,8 @@ import deepof.utils
 warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 
 # Create custom string type
-Coordinates = NewType("Coordinates", Any)
+coordinates = deepof.utils.NewType("coordinates", deepof.utils.Any)
+table_dict = deepof.utils.NewType("table_dict", deepof.utils.Any)
 
 
 def close_single_contact(
@@ -598,10 +599,10 @@ def frame_corners(w, h, corners: dict = {}):
 
 # noinspection PyDefaultArgument,PyProtectedMember
 def rule_based_tagging(
-    coordinates: Coordinates,
-    coords: Any,
-    dists: Any,
-    speeds: Any,
+    coordinates: coordinates,
+    coords: table_dict,
+    dists: table_dict,
+    speeds: table_dict,
     video: str,
     params: dict = {},
 ) -> pd.DataFrame:
@@ -965,16 +966,6 @@ def tag_rulebased_frames(
             elif tag_dict[_id + undercond + "lookaround"][fnum]:
                 write_on_frame("lookaround", down_pos)
 
-        #     if (
-        #         tag_dict[_id + "_following"][fnum]
-        #         and not tag_dict[_id + "_climbing"][fnum]
-        #     ):
-        #         write_on_frame(
-        #             "*f",
-        #             (int(w * 0.3 / 10), int(h / 10)),
-        #             conditional_col(),
-        #         )
-
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
             colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
@@ -995,7 +986,7 @@ def tag_rulebased_frames(
 
 # noinspection PyProtectedMember,PyDefaultArgument
 def rule_based_video(
-    coordinates: Coordinates,
+    coordinates: coordinates,
     tag_dict: pd.DataFrame,
     vid_index: int,
     frame_limit: int = np.inf,
