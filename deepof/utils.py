@@ -520,7 +520,7 @@ def recognize_arena(
     vid_index: int,
     path: str = ".",
     tables: dict = None,
-    recoglimit: int = 10000,
+    recoglimit: int = 10,
     arena_type: str = "circular",
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,

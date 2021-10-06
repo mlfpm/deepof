@@ -67,7 +67,9 @@ class project:
             1,
         ),  # TODO: Fix scales: make results independent of arena specification!
         # TODO: Make distances relative to arena size (and perhaps animal size?)
-        enable_iterative_imputation: bool = None,  # This will impute the position of ocluded body parts, which might not be desirable and it's computationally expensive.
+        enable_iterative_imputation: bool = None,  # This will impute the position of ocluded body parts,
+        # which might not be desirable and it's computationally expensive. As an alternative, models should
+        # be resistant to NaN values.
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
@@ -78,6 +80,8 @@ class project:
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0,
         table_format: str = "autodetect",
+        time_duration: int = None,  # TODO: If this is not None, add a time-based index to all output DataFrames.
+        # TODO: Remove the downstream option, as it should be controlled only from here.
         video_format: str = ".mp4",
     ):
 
@@ -139,6 +143,7 @@ class project:
         self.likelihood_tolerance = likelihood_tol
         self.smooth_alpha = smooth_alpha
         self.subset_condition = None
+        self.time_duration = time_duration
         self.video_format = video_format
         if enable_iterative_imputation is None:
             self.enable_iterative_imputation = self.animal_ids == tuple([""])
@@ -250,6 +255,16 @@ class project:
                 )
                 for tab in self.tables
             }
+
+        # Pass a time-based index, if specified in init
+        if self.time_duration is not None:
+            for key, tab in tab_dict.items():
+                tab_dict[key].index = pd.timedelta_range(
+                    "00:00:00",
+                    pd.to_timedelta(self.time_duration, unit="sec"),
+                    periods=tab.shape[0] + 1,
+                    closed="left",
+                )
 
         lik_dict = defaultdict()
 
@@ -377,6 +392,10 @@ class project:
                     :, [dist for dist in val.columns if self.ego in dist]
                 ]
 
+        # Restore original index
+        for key in distance_dict.keys():
+            distance_dict[key].index = tab_dict[key].index
+
         return distance_dict
 
     def get_angles(self, tab_dict: dict, verbose: bool = False) -> dict:
@@ -417,6 +436,10 @@ class project:
             dats = pd.concat(dats, axis=1)
 
             angle_dict[key] = dats
+
+        # Restore original index
+        for key in angle_dict.keys():
+            angle_dict[key].index = tab_dict[key].index
 
         return angle_dict
 
@@ -527,7 +550,6 @@ class coordinates:
         center: str = "arena",
         polar: bool = False,
         speed: int = 0,
-        length: str = None,
         align: bool = False,
         align_inplace: bool = False,
         propagate_labels: bool = False,
@@ -543,8 +565,6 @@ class coordinates:
                 - polar (bool): states whether the coordinates should be converted to polar values
                 - speed (int): states the derivative of the positions to report. Speed is returned if 1,
                 acceleration if 2, jerk if 3, etc.
-                - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
-                of the stored dataframes will reflect the actual timing in the video.
                 - align (bool): selects the body part to which later processes will align the frames with
                 (see preprocess in table_dict documentation).
                 - align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to
@@ -620,12 +640,6 @@ class coordinates:
                 vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
                 tabs[key] = vel
 
-        if length:
-            for key, tab in tabs.items():
-                tabs[key].index = pd.timedelta_range(
-                    "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                ).astype("timedelta64[s]")
-
         if align:
             assert (
                 align in list(tabs.values())[0].columns.levels[0]
@@ -674,7 +688,6 @@ class coordinates:
     def get_distances(
         self,
         speed: int = 0,
-        length: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> Table_dict:
@@ -684,8 +697,6 @@ class coordinates:
             Parameters:
                 - speed (int): states the derivative of the positions to report. Speed is returned if 1,
                 acceleration if 2, jerk if 3, etc.
-                - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
-                of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -703,12 +714,6 @@ class coordinates:
                 for key, tab in tabs.items():
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
                     tabs[key] = vel
-
-            if length:
-                for key, tab in tabs.items():
-                    tabs[key].index = pd.timedelta_range(
-                        "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -736,7 +741,6 @@ class coordinates:
         self,
         degrees: bool = False,
         speed: int = 0,
-        length: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> Table_dict:
@@ -747,8 +751,6 @@ class coordinates:
                 - angles (bool): if True, returns the angles in degrees. Radians (default) are returned otherwise.
                 - speed (int): states the derivative of the positions to report. Speed is returned if 1,
                 acceleration if 2, jerk if 3, etc.
-                - length (str): length of the video in a datetime compatible format (hh::mm:ss). If stated, the index
-                of the stored dataframes will reflect the actual timing in the video.
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -768,12 +770,6 @@ class coordinates:
                 for key, tab in tabs.items():
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
                     tabs[key] = vel
-
-            if length:
-                for key, tab in tabs.items():
-                    tabs[key].index = pd.timedelta_range(
-                        "00:00:00", length, periods=tab.shape[0] + 1, closed="left"
-                    ).astype("timedelta64[s]")
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -1395,9 +1391,7 @@ def merge_tables(*args):
 
 
 # TODO:
-#   - Generate ragged training array using a metric (acceleration, maybe?)
-#   - Use something like Dynamic Time Warping to put all instances in the same length
-#   - with the current implementation, preprocess can't fully work on merged table_dict instances.
+#   Explore preprocessing in ragged (masked) tensors using change point detection!
 #   While some operations (mainly alignment) should be carried out before merging, others require
 #   the whole dataset to function properly.
 #   - For now, propagate_annotations is optional and requires the user to actively pass a data frame with traits.
