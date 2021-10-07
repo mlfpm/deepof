@@ -846,15 +846,13 @@ def tag_rulebased_frames(
         """Returns a tag depending on a condition"""
         if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
             return left_flag
-        else:
-            return right_flag
+        return right_flag
 
     def conditional_pos():
         """Returns a position depending on a condition"""
         if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
             return corners["downleft"]
-        else:
-            return corners["downright"]
+        return corners["downright"]
 
     def conditional_col(cond=None):
         """Returns a colour depending on a condition"""
@@ -862,8 +860,7 @@ def tag_rulebased_frames(
             cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
         if cond:
             return 150, 255, 150
-        else:
-            return 150, 150, 255
+        return 150, 150, 255
 
     # Keep track of space usage in the output video
     # The flags are set to False as soon as the lower

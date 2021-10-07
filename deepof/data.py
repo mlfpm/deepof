@@ -158,8 +158,7 @@ class Project:
             return "deepof analysis of {} videos across {} conditions".format(
                 len(self.videos), len(set(self.exp_conditions.values()))
             )
-        else:
-            return "deepof analysis of {} videos".format(len(self.videos))
+        return "deepof analysis of {} videos".format(len(self.videos))
 
     @property
     def subset_condition(self):
@@ -547,8 +546,7 @@ class Coordinates:
             return "Coordinates of {} videos across {} conditions".format(
                 len(self._videos), len(set(self._exp_conditions.values()))
             )
-        else:
-            return "deepof analysis of {} videos".format(len(self._videos))
+        return "deepof analysis of {} videos".format(len(self._videos))
 
     def get_coords(
         self,
@@ -1201,7 +1199,6 @@ class TableDict(dict):
 
         """
 
-        global g
         X_train, y_train, X_test, y_test = self.get_training_set(test_videos)
 
         if scale:
@@ -1276,6 +1273,7 @@ class TableDict(dict):
                 X_test = deepof.utils.align_trajectories(X_test, align)
 
             if conv_filter == "gaussian":
+                # noinspection PyUnboundLocalVariable
                 X_test = X_test * g.reshape([1, window_size, 1])
 
             if shuffle:
