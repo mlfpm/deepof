@@ -77,7 +77,7 @@ class Project:
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 0,
         table_format: str = "autodetect",
-        time_duration: int = None,
+        frame_rate: int = None,
         video_format: str = ".mp4",
     ):
 
@@ -139,7 +139,7 @@ class Project:
         self.likelihood_tolerance = likelihood_tol
         self.smooth_alpha = smooth_alpha
         self.subset_condition = None
-        self.time_duration = time_duration
+        self.frame_rate = frame_rate
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
 
@@ -262,11 +262,11 @@ class Project:
             }
 
         # Pass a time-based index, if specified in init
-        if self.time_duration is not None:
+        if self.frame_rate is not None:
             for key, tab in tab_dict.items():
                 tab_dict[key].index = pd.timedelta_range(
                     "00:00:00",
-                    pd.to_timedelta(self.time_duration, unit="sec"),
+                    pd.to_timedelta((tab.shape[0] // self.frame_rate), unit="sec"),
                     periods=tab.shape[0] + 1,
                     closed="left",
                 )
