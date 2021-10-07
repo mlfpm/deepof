@@ -50,7 +50,7 @@ my_project = deepof.data.Project(path="./my_project",
                                  smooth_alpha=2,        # smoothing coefficient (optional)
                                  frame_rate=25)         # frame rate of the videos in Hz (optional)
 ```
-This command will create a ```deepof.data.project``` object storing all the necessary information to start. The ```smooth_alpha```
+This command will create a ```deepof.data.Project``` object storing all the necessary information to start. The ```smooth_alpha```
 parameter will control how much smoothing will be applied to your trajectories, using an exponentially weighted average.
 Values close to 0 apply a stronger smoothing, and values close to 1 a very light one. In practice, we recommend values
 between 0.95 and 0.99 if your trajectories are not too noisy. There are other things you can do here, but let's stick to
@@ -58,7 +58,7 @@ the basics for now.
   
 One you have this, you can run you project using the ```.run()``` method, which will do quite a lot of computing under
 the hood (load your data, smooth your trajectories, compute distances and angles). The returned object belongs to the 
-```deepof.data.coordinates``` class.
+```deepof.data.Coordinates``` class.
 ```
 my_project = my_project.run(verbose=True)
 ```
@@ -82,13 +82,13 @@ way that will keep the Center-Nose axis fixed. This is useful to constrain the s
 with out unsupervised methods.
 
 As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
-the ```.rule_based_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.coordinates``` 
+the ```.rule_based_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.Coordinates``` 
 class, respectively.
 ```
 rule_based_annot = my_project.rule_based_annotation()
 gmvae_embedding  = my_project.gmvae_embedding()
 ```
-The former returns a ```deepof.data.table_dict``` object, with a pandas.DataFrame per experiment containing a series of 
+The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame per experiment containing a series of 
 annotations. The latter is a bit more complicated: it returns an array containing the encoding of the data per animal, 
 another one with motif membership per time point (probabilities of the animal doing whatever is represented by each of 
 the clusters at any given time), an abstract distribution (a multivariate Gaussian mixture) representing the extracted
