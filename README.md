@@ -44,10 +44,11 @@ be compatible, this is handled by DLC by default.
 The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project:
 ```
 import deepof.data
-my_project = deepof.data.project(path="./my_project",
-                                 arena_type="circular", # type of the filmed arena. So far, only "circular" is valid
-                                 arena_dims=[380],      # diameter of the arena in milimeters
-                                 smooth_alpha=0.99)
+my_project = deepof.data.Project(path="./my_project",
+                                 arena_dims=380,        # diameter of the arena in milimeters
+                                 arena_type="circular", # type of the filmed arena (optional). So far, only "circular" is valid
+                                 smooth_alpha=2,        # smoothing coefficient (optional)
+                                 frame_rate=25)         # frame rate of the videos in Hz (optional)
 ```
 This command will create a ```deepof.data.project``` object storing all the necessary information to start. The ```smooth_alpha```
 parameter will control how much smoothing will be applied to your trajectories, using an exponentially weighted average.
