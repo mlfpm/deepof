@@ -69,6 +69,7 @@ class Project:
         # be resistant to NaN values (ie with masking). Add this explanation to the documentation.
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
+        high_fidelity_arena: bool = False,
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 5,
@@ -133,6 +134,7 @@ class Project:
         self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
+        self.high_fidelity = high_fidelity_arena
         self.interpolate_outliers = interpolate_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
@@ -200,6 +202,7 @@ class Project:
                     vid_index=vid_index,
                     path=self.video_path,
                     arena_type=self.arena,
+                    high_fidelity=self.high_fidelity,
                     detection_mode=self.arena_detection,
                     cnn_model=self.ellipse_detection,
                 )
@@ -659,11 +662,13 @@ class Coordinates:
                 tabs[key] = tab
 
                 if align_inplace and polar is False:
-                    index = tab.columns
+                    columns = tab.columns
+                    index = tab.index
                     tab = pd.DataFrame(
                         deepof.utils.align_trajectories(np.array(tab), mode="all")
                     )
-                    tab.columns = index
+                    tab.columns = columns
+                    tab.index = index
                     tabs[key] = tab
 
         if propagate_labels:
@@ -1394,6 +1399,7 @@ def merge_tables(*args):
 
 
 # TODO:
+#   Add __str__ method for all three major classes!
 #   Explore preprocessing in ragged (masked) tensors using change point detection!
 #   While some operations (mainly alignment) should be carried out before merging, others require
 #   the whole dataset to function properly.

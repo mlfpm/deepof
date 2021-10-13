@@ -520,7 +520,8 @@ def recognize_arena(
     vid_index: int,
     path: str = ".",
     tables: dict = None,
-    recoglimit: int = 10000,
+    recoglimit: int = 1000,
+    high_fidelity: bool = False,
     arena_type: str = "circular",
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
@@ -534,6 +535,8 @@ def recognize_arena(
             - path (str): full path of the directory where the videos are
             - tables (dict): dictionary with DLC time series in DataFrames as values
             - recoglimit (int): number of frames to use for position estimates
+            - high_fidelity (bool): if True, runs arena recognition on the whole video. Slow, but
+            potentially more accurate in some situations.
             - arena_type (string): arena type; must be one of ['circular']
             - detection_mode (str): algorithm to use to detect the arena. "cnn" uses a
             pretrained model based on ResNet50 to predict the ellipse parameters from
@@ -548,6 +551,9 @@ def recognize_arena(
             - w (int): width of the video in pixels"""
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+
+    if high_fidelity:
+        recoglimit = int(1e10) # set recoglimit to a very big value
 
     if tables is not None:
         # Select relevant table to check animal positions; if animals are close to the arena, do not take those frames
@@ -606,11 +612,12 @@ def recognize_arena(
         )
         # Within the frame recognition limit, only the 1% less obstructed will contribute to the arena
         # fitting
-        center_quantile = np.quantile(center_distances, 0.01)
+        center_quantile = np.quantile(center_distances, 0.05)
         arena = arena[center_distances < center_quantile]
+        weights = 1 / center_distances[center_distances < center_quantile]
 
     # Compute the median across frames and return to tuple format for downstream compatibility
-    arena = np.nanmedian(arena, axis=0)
+    arena = np.average(arena[~np.any(np.isnan(arena), axis=1)], axis=0)
     arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
 
     return arena, h, w
