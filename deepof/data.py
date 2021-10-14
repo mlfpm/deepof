@@ -627,9 +627,7 @@ class Coordinates:
                 for aid in self._animal_ids:
 
                     # center on x / rho
-                    value.loc[
-                        :, [i for i in value.columns if i[0].startswith(aid)]
-                    ].loc[:, (slice("coords"), [coord_1])] = (
+                    value.update(
                         value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
                         .loc[:, (slice("coords"), [coord_1])]
                         .subtract(
@@ -639,9 +637,7 @@ class Coordinates:
                     )
 
                     # center on y / phi
-                    value.loc[
-                        :, [i for i in value.columns if i[0].startswith(aid)]
-                    ].loc[:, (slice("coords"), [coord_2])] = (
+                    value.update(
                         value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
                         .loc[:, (slice("coords"), [coord_2])]
                         .subtract(
