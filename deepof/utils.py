@@ -553,7 +553,7 @@ def recognize_arena(
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     if high_fidelity:
-        recoglimit = int(1e10) # set recoglimit to a very big value
+        recoglimit = int(1e10)  # set recoglimit to a very big value
 
     if tables is not None:
         # Select relevant table to check animal positions; if animals are close to the arena, do not take those frames

@@ -146,14 +146,23 @@ class Project:
         self.enable_iterative_imputation = enable_iterative_imputation
 
         model_dict = {
-            "mouse_topview": deepof.utils.connect_mouse_topview(animal_ids[0])
+            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(aid)
+            for aid in self.animal_ids
         }
-        self.connectivity = model_dict[model]
+        self.connectivity = {aid: model_dict[aid + model] for aid in self.animal_ids}
 
+        # Remove specified body parts from the mice graph
         self.exclude_bodyparts = exclude_bodyparts
+        if len(self.animal_ids) > 1 and len(self.exclude_bodyparts) > 1:
+            self.exclude_bodyparts = [
+                aid + "_" + bp for aid in self.animal_ids for bp in exclude_bodyparts
+            ]
+
         if self.exclude_bodyparts != tuple([""]):
-            for bp in exclude_bodyparts:
-                self.connectivity.remove_node(bp)
+            for aid in self.animal_ids:
+                for bp in self.exclude_bodyparts:
+                    if bp.startswith(aid):
+                        self.connectivity[aid].remove_node(bp)
 
     def __str__(self):
         if self.exp_conditions:
@@ -421,7 +430,10 @@ class Project:
         if verbose:
             print("Computing angles...")
 
-        cliques = deepof.utils.nx.enumerate_all_cliques(self.connectivity)
+        # Add all three-element cliques on each mouse
+        cliques = []
+        for i in self.animal_ids:
+            cliques += deepof.utils.nx.enumerate_all_cliques(self.connectivity[i])
         cliques = [i for i in cliques if len(i) == 3]
 
         angle_dict = {}
