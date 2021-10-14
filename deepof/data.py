@@ -597,8 +597,12 @@ class Coordinates:
         """
 
         tabs = deepof.utils.deepcopy(self._tables)
+        coord_1, coord_2 = "x", "y"
+        scales = self._scales
 
         if polar:
+            coord_1, coord_2 = "rho", "phi"
+            scales = deepof.utils.bp2polar(scales).to_numpy()
             for key, tab in tabs.items():
                 tabs[key] = deepof.utils.tab2polar(tab)
 
@@ -607,50 +611,49 @@ class Coordinates:
 
                 for i, (key, value) in enumerate(tabs.items()):
 
-                    try:
-                        value.loc[:, (slice("coords"), ["x"])] = (
-                            value.loc[:, (slice("coords"), ["x"])]
-                            - self._scales[i][0] / 2
-                        )
+                    value.loc[:, (slice("coords"), [coord_1])] = (
+                        value.loc[:, (slice("coords"), [coord_1])] - scales[i][0]
+                    )
 
-                        value.loc[:, (slice("coords"), ["y"])] = (
-                            value.loc[:, (slice("coords"), ["y"])]
-                            - self._scales[i][1] / 2
-                        )
-                    except KeyError:
-                        value.loc[:, (slice("coords"), ["rho"])] = (
-                            value.loc[:, (slice("coords"), ["rho"])]
-                            - self._scales[i][0] / 2
-                        )
-
-                        value.loc[:, (slice("coords"), ["phi"])] = (
-                            value.loc[:, (slice("coords"), ["phi"])]
-                            - self._scales[i][1] / 2
-                        )
+                    value.loc[:, (slice("coords"), [coord_2])] = (
+                        value.loc[:, (slice("coords"), [coord_2])] - scales[i][1]
+                    )
 
         elif isinstance(center, str) and center != "arena":
 
             for i, (key, value) in enumerate(tabs.items()):
 
-                try:
-                    value.loc[:, (slice("coords"), ["x"])] = value.loc[
-                        :, (slice("coords"), ["x"])
-                    ].subtract(value[center]["x"], axis=0)
+                # Center each animal independently
+                for aid in self._animal_ids:
 
-                    value.loc[:, (slice("coords"), ["y"])] = value.loc[
-                        :, (slice("coords"), ["y"])
-                    ].subtract(value[center]["y"], axis=0)
-                except KeyError:
-                    value.loc[:, (slice("coords"), ["rho"])] = value.loc[
-                        :, (slice("coords"), ["rho"])
-                    ].subtract(value[center]["rho"], axis=0)
+                    # center on x / rho
+                    value.loc[
+                        :, [i for i in value.columns if i[0].startswith(aid)]
+                    ].loc[:, (slice("coords"), [coord_1])] = (
+                        value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
+                        .loc[:, (slice("coords"), [coord_1])]
+                        .subtract(
+                            value[aid + ("_" if aid != "" else "") + center][coord_1],
+                            axis=0,
+                        )
+                    )
 
-                    value.loc[:, (slice("coords"), ["phi"])] = value.loc[
-                        :, (slice("coords"), ["phi"])
-                    ].subtract(value[center]["phi"], axis=0)
+                    # center on y / phi
+                    value.loc[
+                        :, [i for i in value.columns if i[0].startswith(aid)]
+                    ].loc[:, (slice("coords"), [coord_2])] = (
+                        value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
+                        .loc[:, (slice("coords"), [coord_2])]
+                        .subtract(
+                            value[aid + ("_" if aid != "" else "") + center][coord_2],
+                            axis=0,
+                        )
+                    )
 
+                # noinspection PyUnboundLocalVariable
                 tabs[key] = value.loc[
-                    :, [tab for tab in value.columns if tab[0] != center]
+                    :,
+                    [tab for tab in value.columns if center not in tab[0]],
                 ]
 
         if speed:

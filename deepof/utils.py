@@ -140,9 +140,9 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
     result = pd.concat(result, axis=1)
     idx = pd.MultiIndex.from_product(
         [list(cartesian_df.columns.levels[0]), ["rho", "phi"]],
-        names=["bodyparts", "coords"],
     )
     result.columns = idx
+    result.index = cartesian_df.index
     return result
 
 
