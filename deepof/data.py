@@ -569,7 +569,7 @@ class Coordinates:
         polar: bool = False,
         speed: int = 0,
         align: bool = False,
-        align_inplace: bool = False,
+        align_inplace: bool = True,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
@@ -658,29 +658,46 @@ class Coordinates:
                 tabs[key] = vel
 
         if align:
-            assert (
-                align in list(tabs.values())[0].columns.levels[0]
+
+            assert np.any(
+                align in bp for bp in list(tabs.values())[0].columns.levels[0]
             ), "align must be set to the name of a bodypart"
 
+            aligned_full = None
             for key, tab in tabs.items():
-                # Bring forward the column to align
-                columns = [i for i in tab.columns if align not in i]
-                columns = [
-                    (align, ("phi" if polar else "x")),
-                    (align, ("rho" if polar else "y")),
-                ] + columns
-                tab = tab[columns]
-                tabs[key] = tab
+                for aid in self._animal_ids:
+                    # Bring forward the column to align
+                    columns = [
+                        i
+                        for i in tab.columns
+                        if align not in i and i[0].startswith(aid)
+                    ]
+                    columns = [
+                        (
+                            aid + ("_" if aid != "" else "") + align,
+                            ("phi" if polar else "x"),
+                        ),
+                        (
+                            aid + ("_" if aid != "" else "") + align,
+                            ("rho" if polar else "y"),
+                        ),
+                    ] + columns
 
-                if align_inplace and polar is False:
-                    columns = tab.columns
-                    index = tab.index
-                    tab = pd.DataFrame(
-                        deepof.utils.align_trajectories(np.array(tab), mode="all")
-                    )
-                    tab.columns = columns
-                    tab.index = index
-                    tabs[key] = tab
+                    aligned_partial = tab[columns]
+                    if align_inplace and polar is False:
+                        columns = aligned_partial.columns
+                        index = aligned_partial.index
+                        aligned_partial = pd.DataFrame(
+                            deepof.utils.align_trajectories(
+                                np.array(aligned_partial), mode="all"
+                            )
+                        )
+                        aligned_partial.columns = columns
+                        aligned_partial.index = index
+
+                    aligned_full = pd.concat([aligned_full, aligned_partial], axis=1)
+
+                tabs[key] = aligned_full
 
         if propagate_labels:
             for key, tab in tabs.items():

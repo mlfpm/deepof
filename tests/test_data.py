@@ -178,20 +178,26 @@ def test_get_rule_based_annotation():
 @settings(max_examples=10, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
+    mode=st.one_of(
+        st.just("single"), st.just("single")
+    ),  # TODO: every setting should be transferrable to the multi-mice setting
     ego=st.integers(min_value=0, max_value=2),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
 )
-def test_get_table_dicts(nodes, ego, exclude, sampler):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
         arena="circular",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
+        animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond"},
