@@ -824,7 +824,7 @@ def supervised_tagging(
             tag_dict[_id + "_following"] = deepof.utils.smooth_boolean_array(
                 following_path(
                     dists,
-                    coords,
+                    raw_coords,
                     follower=_id,
                     followed=[i for i in animal_ids if i != _id][0],
                     frames=params["follow_frames"],
@@ -837,7 +837,7 @@ def supervised_tagging(
             climb_wall(
                 arena_type,
                 arena_params,
-                coords,
+                raw_coords,
                 params["climb_tol"],
                 _id + undercond + "Nose",
             )
@@ -847,7 +847,7 @@ def supervised_tagging(
                 speeds,
                 arena_type,
                 arena_params,
-                coords,
+                raw_coords,
                 params["climb_tol"],
                 params["huddle_speed"],
                 _id + undercond + "Nose",
@@ -891,7 +891,7 @@ def supervised_tagging(
     return tag_df
 
 
-def tag_rulebased_frames(
+def tag_annotated_frames(
     frame,
     font,
     frame_speeds,
@@ -1138,7 +1138,7 @@ def annotate_video(
                 frame_speeds = tag_dict["speed"][fnum]
 
         # Display all annotations in the output video
-        tag_rulebased_frames(
+        tag_annotated_frames(
             frame,
             font,
             frame_speeds,

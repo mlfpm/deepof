@@ -589,7 +589,7 @@ class Coordinates:
                 - align (bool): selects the body part to which later processes will align the frames with
                 (see preprocess in table_dict documentation).
                 - align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to
-                the selected body part with the y axis, for all time points.
+                the selected body part with the y axis, for all time points (default).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -687,7 +687,8 @@ class Coordinates:
                     ] + columns
 
                     aligned_partial = tab[columns]
-                    if align_inplace and polar is False:
+
+                    if align_inplace and not polar:
                         columns = aligned_partial.columns
                         index = aligned_partial.index
                         aligned_partial = pd.DataFrame(
@@ -698,7 +699,7 @@ class Coordinates:
                         aligned_partial.columns = columns
                         aligned_partial.index = index
 
-                    aligned_full = pd.concat([aligned_full, aligned_partial], axis=1)
+                    aligned_full = pd.concat([aligned_full, aligned_partial], join="inner", axis=1)
                     aligned_full = aligned_full.loc[
                         :, ~aligned_full.columns.duplicated()
                     ]
@@ -873,7 +874,7 @@ class Coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
-        raw_coords = self.get_coords(center="arena")
+        raw_coords = self.get_coords(center=None)
         coords = self.get_coords(center="Center", align="Spine_1")
         dists = self.get_distances()
         angs = self.get_angles()
