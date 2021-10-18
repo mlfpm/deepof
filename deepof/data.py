@@ -699,7 +699,9 @@ class Coordinates:
                         aligned_partial.columns = columns
                         aligned_partial.index = index
 
-                    aligned_full = pd.concat([aligned_full, aligned_partial], join="inner", axis=1)
+                    aligned_full = pd.concat(
+                        [aligned_full, aligned_partial], join="inner", axis=1
+                    )
                     aligned_full = aligned_full.loc[
                         :, ~aligned_full.columns.duplicated()
                     ]

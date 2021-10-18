@@ -855,23 +855,19 @@ def supervised_tagging(
                 animal_id=_id,
             )
         )
-        tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
-            huddle(
-                dists,
-                angs,
-                speeds,
-                huddle_estimator,
-                animal_id=_id,
-            )
+        tag_dict[_id + undercond + "huddle"] = huddle(
+            dists,
+            angs,
+            speeds,
+            huddle_estimator,
+            animal_id=_id,
         )
-        tag_dict[_id + undercond + "dig"] = deepof.utils.smooth_boolean_array(
-            dig(
-                coords,
-                dists,
-                speeds,
-                dig_estimator,
-                animal_id=_id,
-            )
+        tag_dict[_id + undercond + "dig"] = dig(
+            coords,
+            dists,
+            speeds,
+            dig_estimator,
+            animal_id=_id,
         )
         tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
             look_around(
@@ -1032,8 +1028,8 @@ def tag_annotated_frames(
                 write_on_frame("sniffing", down_pos)
             elif tag_dict[_id + undercond + "dig"][fnum]:
                 write_on_frame("digging", down_pos)
-            elif tag_dict[_id + undercond + "lookaround"][fnum]:
-                write_on_frame("lookaround", down_pos)
+            # elif tag_dict[_id + undercond + "lookaround"][fnum]:
+            #     write_on_frame("lookaround", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
