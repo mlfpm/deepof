@@ -873,6 +873,7 @@ class Coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
+        raw_coords = self.get_coords(center="arena")
         coords = self.get_coords(center="Center", align="Spine_1")
         dists = self.get_distances()
         angs = self.get_angles()
@@ -882,6 +883,7 @@ class Coordinates:
         for key in tqdm(self._tables.keys()):
             tag_dict[key] = deepof.pose_utils.supervised_tagging(
                 self,
+                raw_coords=raw_coords,
                 coords=coords,
                 dists=dists,
                 angs=angs,

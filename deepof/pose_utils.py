@@ -365,6 +365,9 @@ def dig(
 
     # Remove tail bodyparts
     bps_to_remove = ["Tail_1", "Tail_2", "Tail_tip"]
+    bps_to_remove = [
+        animal_id + ("_" if animal_id != "" else "") + bp for bp in bps_to_remove
+    ]
     pos_dframe.drop(list(product(bps_to_remove, ["x", "y"])), axis=1, inplace=True)
     speed_dframe.drop(bps_to_remove, axis=1, inplace=True)
 
@@ -640,7 +643,8 @@ def frame_corners(w, h, corners: dict = {}):
 
 # noinspection PyDefaultArgument,PyProtectedMember
 def supervised_tagging(
-    coordinates: coordinates,
+    coord_object: coordinates,
+    raw_coords: table_dict,
     coords: table_dict,
     dists: table_dict,
     angs: table_dict,
@@ -653,8 +657,9 @@ def supervised_tagging(
     video displaying the information in real time
 
     Parameters:
-        - coordinates (deepof.data.coordinates): coordinates object containing the project information
-        - coords (deepof.data.table_dict): table_dict with already processed coordinates
+        - coord_object (deepof.data.coordinates): coordinates object containing the project information
+        - raw_coords (deepof.data.table_dict): table_dict with raw coordinates
+        - coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
         - dists (deepof.data.table_dict): table_dict with already processed distances
         - angs (deepof.data.table_dict): table_dict with already processed angles
         - speeds (deepof.data.table_dict): table_dict with already processed speeds
@@ -688,14 +693,14 @@ def supervised_tagging(
         dig_estimator = pickle.load(est)
 
     # Extract useful information from coordinates object
-    tracks = list(coordinates._tables.keys())
-    vid_index = coordinates._videos.index(video)
+    tracks = list(coord_object._tables.keys())
+    vid_index = coord_object._videos.index(video)
 
-    arena_params = coordinates._arena_params[vid_index]
-    arena_type = coordinates._arena
+    arena_params = coord_object._arena_params[vid_index]
+    arena_type = coord_object._arena
 
     params = get_hparameters(params)
-    animal_ids = coordinates._animal_ids
+    animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
@@ -703,12 +708,13 @@ def supervised_tagging(
     except IndexError:
         vid_name = tracks[vid_index]
 
+    raw_coords = raw_coords[vid_name]
     coords = coords[vid_name]
     dists = dists[vid_name]
     angs = angs[vid_name]
     speeds = speeds[vid_name]
-    likelihoods = coordinates.get_quality()[vid_name]
-    arena_abs = coordinates.get_arenas[1][0]
+    likelihoods = coord_object.get_quality()[vid_name]
+    arena_abs = coord_object.get_arenas[1][0]
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -728,7 +734,7 @@ def supervised_tagging(
 
     def onebyone_contact(bparts: List):
         """Returns a smooth boolean array with 1to1 contacts between two mice"""
-        nonlocal coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
 
         try:
             left = animal_ids[0] + bparts[0]
@@ -742,7 +748,7 @@ def supervised_tagging(
 
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
-                coords,
+                raw_coords,
                 (left if not isinstance(left, list) else right),
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
@@ -754,10 +760,10 @@ def supervised_tagging(
     def twobytwo_contact(rev):
         """Returns a smooth boolean array with side by side contacts between two mice"""
 
-        nonlocal coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
-                coords,
+                raw_coords,
                 animal_ids[0] + "_Nose",
                 animal_ids[0] + "_Tail_base",
                 animal_ids[1] + "_Nose",
