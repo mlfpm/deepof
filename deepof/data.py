@@ -495,6 +495,7 @@ class Project:
             scales=self.scales,
             arena_params=self.arena_params,
             tables=tables,
+            trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
         )
@@ -534,6 +535,7 @@ class Coordinates:
         scales: np.array,
         arena_params: List,
         tables: dict,
+        trained_model_path: str,
         videos: List,
         video_resolution: List,
         angles: dict = None,
@@ -551,6 +553,7 @@ class Coordinates:
         self._quality = quality
         self._scales = scales
         self._tables = tables
+        self._trained_model_path = trained_model_path
         self._videos = videos
         self._video_resolution = video_resolution
         self.angles = angles
@@ -696,6 +699,9 @@ class Coordinates:
                         aligned_partial.index = index
 
                     aligned_full = pd.concat([aligned_full, aligned_partial], axis=1)
+                    aligned_full = aligned_full.loc[
+                        :, ~aligned_full.columns.duplicated()
+                    ]
 
                 tabs[key] = aligned_full
 
@@ -855,7 +861,7 @@ class Coordinates:
         return self._arena, [self._arena_dims], self._scales
 
     # noinspection PyDefaultArgument
-    def rule_based_annotation(
+    def supervised_annotation(
         self,
         params: Dict = {},
         video_output: bool = False,
@@ -867,18 +873,21 @@ class Coordinates:
         """Annotates coordinates using a simple rule-based pipeline"""
 
         tag_dict = {}
-        coords = self.get_coords(center=False)
+        coords = self.get_coords(center="Center", align="Spine_1")
         dists = self.get_distances()
+        angs = self.get_angles()
         speeds = self.get_coords(speed=1)
 
         # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
-            tag_dict[key] = deepof.pose_utils.rule_based_tagging(
+            tag_dict[key] = deepof.pose_utils.supervised_tagging(
                 self,
                 coords=coords,
                 dists=dists,
+                angs=angs,
                 speeds=speeds,
                 video=[vid for vid in self._videos if key + "DLC" in vid][0],
+                trained_model_path=self._trained_model_path,
                 params=params,
             )
 
@@ -891,7 +900,7 @@ class Coordinates:
             def output_video(idx):
                 """Outputs a single annotated video. Enclosed in a function to enable parallelization"""
 
-                deepof.pose_utils.rule_based_video(
+                deepof.pose_utils.annotate_video(
                     self,
                     tag_dict=tag_dict[idx],
                     vid_index=list(self._tables.keys()).index(idx),

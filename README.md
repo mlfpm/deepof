@@ -82,10 +82,10 @@ way that will keep the Center-Nose axis fixed. This is useful to constrain the s
 with out unsupervised methods.
 
 As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
-the ```.rule_based_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.Coordinates``` 
+the ```.supervised_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.Coordinates``` 
 class, respectively.
 ```
-rule_based_annot = my_project.rule_based_annotation()
+supervised_annot = my_project.supervised_annotation()
 gmvae_embedding  = my_project.gmvae_embedding()
 ```
 The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame per experiment containing a series of 

@@ -385,7 +385,7 @@ def test_rule_based_tagging(multi_animal, video_output):
         animal_ids=(["B", "W"] if multi_animal else [""]),
     ).run(verbose=True)
 
-    hardcoded_tags = prun.rule_based_annotation(
+    hardcoded_tags = prun.supervised_annotation(
         video_output=video_output, frame_limit=50
     )
 

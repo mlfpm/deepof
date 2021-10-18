@@ -332,7 +332,7 @@ coords = project_coords.get_coords(
     align_inplace=True,
     propagate_labels=(phenotype_prediction > 0),
     propagate_annotations=(
-        False if not rule_based_prediction else project_coords.rule_based_annotation()
+        False if not rule_based_prediction else project_coords.supervised_annotation()
     ),
 )
 distances = project_coords.get_distances()

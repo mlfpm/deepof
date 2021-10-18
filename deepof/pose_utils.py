@@ -10,15 +10,17 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 
 import os
 import warnings
-from itertools import combinations
+from itertools import combinations, product
 from typing import List, NewType
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pickle
 import regex as re
 import seaborn as sns
+import sklearn.pipeline
 from scipy import stats
 
 import deepof.utils
@@ -269,79 +271,118 @@ def sniff_object(
 
 
 def huddle(
-    pos_dframe: pd.DataFrame,
+    dist_dframe: pd.DataFrame,
+    ang_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
-    tol_forward: float,
-    tol_speed: float,
+    huddle_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
 ) -> np.array:
     """Returns true when the mouse is huddling using simple rules.
 
     Parameters:
-        - pos_dframe (pandas.DataFrame): position of body parts over time
+        - dist_dframe (pandas.DataFrame): distance of body parts over time
+        - ang_dframe (pandas.DataFrame): angle of body parts over time
         - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - tol_forward (float): Maximum tolerated distance between ears and
-        forward limbs
-        - tol_rear (float): Maximum tolerated average distance between spine
-        body parts
-        - tol_speed (float): Maximum tolerated speed for the center of the mouse
+        - huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
+        - animal_id (str): id of the animal to tag
 
     Returns:
-        hudd (np.array): True if the animal is huddling, False otherwise
+        y_huddle (np.array): 1 if the animal is huddling, 0 otherwise
     """
 
+    # Select correct animal using animal id
     if animal_id != "":
-        animal_id += "_"
+        speed_dframe = speed_dframe.loc[
+            :, [i for i in speed_dframe.columns.unique() if i.startswith(animal_id)]
+        ]
+        dist_dframe = dist_dframe.loc[
+            :,
+            [
+                i
+                for i in dist_dframe.columns.unique()
+                if i[0].startswith(animal_id) and i[1].startswith(animal_id)
+            ],
+        ]
+        ang_dframe = ang_dframe.loc[
+            :,
+            [
+                i
+                for i in ang_dframe.columns.unique()
+                if i[0].startswith(animal_id)
+                and i[1].startswith(animal_id)
+                and i[2].startswith(animal_id)
+            ],
+        ]
 
-    forward = (
-        np.linalg.norm(
-            pos_dframe[animal_id + "Left_bhip"] - pos_dframe[animal_id + "Left_fhip"],
-            axis=1,
-        )
-        < tol_forward
-    ) | (
-        np.linalg.norm(
-            pos_dframe[animal_id + "Right_bhip"] - pos_dframe[animal_id + "Right_fhip"],
-            axis=1,
-        )
-        < tol_forward
-    )
+    # Concatenate all relevant data frames and predict using the pre-trained estimator
+    X_huddle = pd.concat([dist_dframe, ang_dframe, speed_dframe], axis=1).to_numpy()
+    y_huddle = huddle_estimator.predict(np.nan_to_num(X_huddle, 0))
 
-    speed = speed_dframe[animal_id + "Center"] < tol_speed
-    hudd = forward & speed
-
-    return hudd
+    return y_huddle
 
 
 def dig(
+    pos_dframe: pd.DataFrame,
+    dist_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
-    likelihood_dframe: pd.DataFrame,
-    tol_speed: float,
-    tol_likelihood: float,
+    dig_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
 ):
     """Returns true when the mouse is digging using simple rules.
 
     Parameters:
+        - pos_dframe (pandas.DataFrame): position of body parts over time
+        - dist_dframe (pandas.DataFrame): distance of body parts over time
         - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time,
-        as directly obtained from DeepLabCut
-        - tol_speed (float): Maximum tolerated speed for the center of the mouse
-        - tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal
-        is digging, the nose is momentarily occluded).
+        - dig_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
+        - animal_id (str): id of the animal to tag
 
     Returns:
         dig (np.array): True if the animal is digging, False otherwise
     """
 
+    # Select correct animal using animal id
     if animal_id != "":
-        animal_id += "_"
+        pos_dframe = pos_dframe.loc[
+            :,
+            [
+                i
+                for i in pos_dframe.columns.unique().levels[0]
+                if i.startswith(animal_id)
+            ],
+        ]
+        speed_dframe = speed_dframe.loc[
+            :, [i for i in speed_dframe.columns.unique() if i.startswith(animal_id)]
+        ]
+        dist_dframe = dist_dframe.loc[
+            :,
+            [
+                i
+                for i in dist_dframe.columns.unique()
+                if i[0].startswith(animal_id) and i[1].startswith(animal_id)
+            ],
+        ]
 
-    speed = speed_dframe[animal_id + "Center"] < tol_speed
-    nose_likelihood = likelihood_dframe[animal_id + "Nose"] < tol_likelihood
-    digging = speed & nose_likelihood
+    # Remove tail bodyparts
+    bps_to_remove = ["Tail_1", "Tail_2", "Tail_tip"]
+    pos_dframe.drop(list(product(bps_to_remove, ["x", "y"])), axis=1, inplace=True)
+    speed_dframe.drop(bps_to_remove, axis=1, inplace=True)
 
-    return digging
+    dists_to_drop = []
+    for i in dist_dframe.columns:
+        flag = False
+        for bp in bps_to_remove:
+            if bp in i:
+                flag = True
+        if flag:
+            dists_to_drop.append(i)
+    dist_dframe.drop(dists_to_drop, axis=1, inplace=True)
+
+    # Concatenate all relevant data frames and predict using the pre-trained estimator
+    X_dig = pd.concat([pos_dframe, dist_dframe, speed_dframe], axis=1).to_numpy()
+    y_dig = dig_estimator.predict(np.nan_to_num(X_dig))
+
+    return y_dig
 
 
 def look_around(
@@ -532,7 +573,7 @@ def max_behaviour(
 
     speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
 
-    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype("float")
+    behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype(float)
     win_array = behaviour_dframe.rolling(window_size, center=True).sum()
     if stepped:
         win_array = win_array[::window_size]
@@ -598,12 +639,14 @@ def frame_corners(w, h, corners: dict = {}):
 
 
 # noinspection PyDefaultArgument,PyProtectedMember
-def rule_based_tagging(
+def supervised_tagging(
     coordinates: coordinates,
     coords: table_dict,
     dists: table_dict,
+    angs: table_dict,
     speeds: table_dict,
     video: str,
+    trained_model_path: str = None,
     params: dict = {},
 ) -> pd.DataFrame:
     """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
@@ -613,14 +656,36 @@ def rule_based_tagging(
         - coordinates (deepof.data.coordinates): coordinates object containing the project information
         - coords (deepof.data.table_dict): table_dict with already processed coordinates
         - dists (deepof.data.table_dict): table_dict with already processed distances
+        - angs (deepof.data.table_dict): table_dict with already processed angles
         - speeds (deepof.data.table_dict): table_dict with already processed speeds
         - video (str): string name of the experiment to tag
+        - trained_model_path (str): path indicating where all pretrained models are located
         - params (dict): dictionary to overwrite the default values of the parameters of the functions
         that the rule-based pose estimation utilizes. See documentation for details.
 
     Returns:
         - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
         value is a boolean indicating trait detection at a given time"""
+
+    # Load pre-trained models for ML annotated traits
+    with open(
+        os.path.join(
+            trained_model_path,
+            "deepof_supervised",
+            "deepof_supervised_huddle_estimator.pkl",
+        ),
+        "rb",
+    ) as est:
+        huddle_estimator = pickle.load(est)
+    with open(
+        os.path.join(
+            trained_model_path,
+            "deepof_supervised",
+            "deepof_supervised_dig_estimator.pkl",
+        ),
+        "rb",
+    ) as est:
+        dig_estimator = pickle.load(est)
 
     # Extract useful information from coordinates object
     tracks = list(coordinates._tables.keys())
@@ -640,6 +705,7 @@ def rule_based_tagging(
 
     coords = coords[vid_name]
     dists = dists[vid_name]
+    angs = angs[vid_name]
     speeds = speeds[vid_name]
     likelihoods = coordinates.get_quality()[vid_name]
     arena_abs = coordinates.get_arenas[1][0]
@@ -785,19 +851,19 @@ def rule_based_tagging(
         )
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
-                coords,
+                dists,
+                angs,
                 speeds,
-                params["huddle_forward"],
-                params["huddle_speed"],
+                huddle_estimator,
                 animal_id=_id,
             )
         )
         tag_dict[_id + undercond + "dig"] = deepof.utils.smooth_boolean_array(
             dig(
+                coords,
+                dists,
                 speeds,
-                likelihoods,
-                params["huddle_speed"],
-                params["nose_likelihood"],
+                dig_estimator,
                 animal_id=_id,
             )
         )
@@ -814,7 +880,7 @@ def rule_based_tagging(
         # Preprocessing for weakly supervised autoencoders relies on this
         tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
 
-    tag_df = pd.DataFrame(tag_dict).fillna(0)
+    tag_df = pd.DataFrame(tag_dict).fillna(0).astype(float)
 
     return tag_df
 
@@ -982,7 +1048,7 @@ def tag_rulebased_frames(
 
 
 # noinspection PyProtectedMember,PyDefaultArgument
-def rule_based_video(
+def annotate_video(
     coordinates: coordinates,
     tag_dict: pd.DataFrame,
     vid_index: int,
