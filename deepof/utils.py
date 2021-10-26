@@ -520,7 +520,7 @@ def recognize_arena(
     vid_index: int,
     path: str = ".",
     tables: dict = None,
-    recoglimit: int = 1000,
+    recoglimit: int = 500,
     high_fidelity: bool = False,
     arena_type: str = "circular",
     detection_mode: str = "rule-based",

@@ -1171,4 +1171,5 @@ def annotate_video(
 
 
 # TODO:
-#    - Is border sniffing anything you might consider interesting?
+#    - Scale CD1 features to match those of black6
+#    - Use scaled features (not standard, but scaled using some notion of animal size)
