@@ -9,6 +9,7 @@ Functions and general utilities for rule-based pose estimation. See documentatio
 """
 
 import os
+
 import warnings
 from itertools import combinations, product
 from typing import List, NewType
