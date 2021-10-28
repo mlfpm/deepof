@@ -212,9 +212,11 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=0, max_value=5))
     propagate = sampler.draw(st.booleans())
-    propagate_annots = sampler.draw(
-        st.one_of(st.just(prun.supervised_annotation()), st.just(False))
-    )
+    propagate_annots = False
+    if exclude != tuple([""]):
+        propagate_annots = sampler.draw(
+            st.one_of(st.just(prun.supervised_annotation()), st.just(False))
+        )
 
     coords = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
