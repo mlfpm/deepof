@@ -180,7 +180,7 @@ def test_get_rule_based_annotation():
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(
         st.just("single"), st.just("single")
-    ),  # TODO: every setting should be transferrable to the multi-mice setting
+    ),  # TODO: every setting should be transferable to the multi-mice setting
     ego=st.integers(min_value=0, max_value=2),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
@@ -207,13 +207,12 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     prun.ego = ego
     prun = prun.run(verbose=False)
 
-    algn = sampler.draw(st.one_of(st.just(False), st.just("Nose")))
-    inplace = sampler.draw(st.booleans())
+    algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=0, max_value=5))
     propagate = sampler.draw(st.booleans())
     propagate_annots = False
-    if exclude != tuple([""]):
+    if exclude == tuple([""]) and nodes == "all" and not ego:
         propagate_annots = sampler.draw(
             st.one_of(st.just(prun.supervised_annotation()), st.just(False))
         )
@@ -222,7 +221,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=polar,
         align=algn,
-        align_inplace=inplace,
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )

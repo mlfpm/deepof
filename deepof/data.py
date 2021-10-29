@@ -64,7 +64,7 @@ class Project:
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        enable_iterative_imputation: bool = None,  # This will impute the position of ocluded body parts,
+        enable_iterative_imputation: bool = None,  # This will impute the position of occluded body parts,
         # which might not be desirable and it's computationally expensive. As an alternative, models should
         # be resistant to NaN values (ie with masking). Add this explanation to the documentation.
         exclude_bodyparts: List = tuple([""]),
