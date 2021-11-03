@@ -19,6 +19,7 @@ from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, GRU
 from tensorflow.keras.layers import RepeatVector, Reshape
 from tensorflow.keras.optimizers import Nadam
+from tensorflow_addons.layers import SpectralNormalization
 
 import deepof.model_utils
 
@@ -150,7 +151,7 @@ class GMVAE:
     def get_layers(self, input_shape):
         """Instanciate all layers in the model"""
 
-        # Encoder Layers
+        ##### Encoder Layers
         Model_E0 = tf.keras.layers.Conv1D(
             filters=self.CONV_filters,
             kernel_size=5,
@@ -207,7 +208,7 @@ class GMVAE:
             Model_E4.append(layer)
             Model_E4.append(BatchNormalization())
 
-        # Decoder layers
+        ##### Decoder layers
         seq_D = [
             Dense(
                 self.DENSE_2,
@@ -263,7 +264,7 @@ class GMVAE:
             use_bias=True,
         )
 
-        # Predictor layers
+        ##### Next-sequence predictor layers
         Model_P1 = Dense(
             self.DENSE_1,
             activation=self.dense_activation,
@@ -304,14 +305,14 @@ class GMVAE:
             use_bias=True,
         )
 
-        # Phenotype classification layer
+        ##### Phenotype classification layer
         Model_PC1 = Dense(
             self.number_of_components,
             activation=self.dense_activation,
             kernel_initializer=he_uniform(),
         )
 
-        # Rule based trait classification layer
+        ##### Supervised trait classification layer
         Model_RC1 = Dense(
             self.number_of_components,
             activation=self.dense_activation,
@@ -367,18 +368,17 @@ class GMVAE:
 
         # Define and instantiate encoder
         x = Input(shape=input_shape[1:])
-        encoder = Model_E0(x)
+        encoder = SpectralNormalization(Model_E0(x))
         encoder = BatchNormalization()(encoder)
-        encoder = Model_E1(encoder)
+        encoder = SpectralNormalization(Model_E1(encoder))
         encoder = BatchNormalization()(encoder)
-        encoder = Model_E2(encoder)
+        encoder = SpectralNormalization(Model_E2(encoder))
         encoder = BatchNormalization()(encoder)
-        encoder = Model_E3(encoder)
+        encoder = SpectralNormalization(Model_E3(encoder))
         encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
         encoder = Sequential(Model_E4)(encoder)
 
-        # encoding_shuffle = deepof.model_utils.MCDropout(self.DROPOUT_RATE)(encoder)
         z_cat = Dense(
             self.number_of_components,
             name="cluster_assignment",
@@ -484,15 +484,15 @@ class GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        generator = Sequential(Model_D1)(g)
-        generator = Model_D2(generator)
+        generator = SpectralNormalization(Sequential(Model_D1)(g))
+        generator = SpectralNormalization(Model_D2(generator))
         generator = BatchNormalization()(generator)
-        generator = Model_D3(generator)
-        generator = Model_D4(generator)
+        generator = SpectralNormalization(Model_D3(generator))
+        generator = SpectralNormalization(Model_D4(generator))
         generator = BatchNormalization()(generator)
-        generator = Model_D5(generator)
+        generator = SpectralNormalization(Model_D5(generator))
         generator = BatchNormalization()(generator)
-        generator = Model_D6(generator)
+        generator = SpectralNormalization(Model_D6(generator))
         generator = BatchNormalization()(generator)
         x_decoded_mean = Dense(
             tfpl.IndependentNormal.params_size(input_shape[2:]) // 2
@@ -524,6 +524,7 @@ class GMVAE:
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
 
+        ##### If requested, instantiate next-sequence-prediction model branch
         if self.next_sequence_prediction > 0:
             # Define and instantiate predictor
             predictor = Dense(
@@ -565,6 +566,7 @@ class GMVAE:
             model_metrics["vae_prediction"] = ["mae", "mse"]
             loss_weights.append(self.next_sequence_prediction)
 
+        ##### If requested, instantiate phenotype-prediction model branch
         if self.phenotype_prediction > 0:
             pheno_pred = Model_PC1(z)
             pheno_pred = Dense(tfpl.IndependentBernoulli.params_size(1))(pheno_pred)
@@ -579,6 +581,7 @@ class GMVAE:
             model_metrics["phenotype_prediction"] = ["AUC", "accuracy"]
             loss_weights.append(self.phenotype_prediction)
 
+        #####
         if self.rule_based_prediction > 0:
             rule_pred = Model_RC1(z)
 
