@@ -16,6 +16,7 @@ scipy
 seaborn
 sklearn
 tables
+tensorflow-addons
 tensorflow-probability
 tensorflow
 tqdm

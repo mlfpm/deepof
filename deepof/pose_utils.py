@@ -708,12 +708,12 @@ def supervised_tagging(
     except IndexError:
         vid_name = tracks[vid_index]
 
-    raw_coords = raw_coords[vid_name]
-    coords = coords[vid_name]
-    dists = dists[vid_name]
-    angs = angs[vid_name]
-    speeds = speeds[vid_name]
-    likelihoods = coord_object.get_quality()[vid_name]
+    raw_coords = raw_coords[vid_name].reset_index(drop=True)
+    coords = coords[vid_name].reset_index(drop=True)
+    dists = dists[vid_name].reset_index(drop=True)
+    angs = angs[vid_name].reset_index(drop=True)
+    speeds = speeds[vid_name].reset_index(drop=True)
+    likelihoods = coord_object.get_quality()[vid_name].reset_index(drop=True)
     arena_abs = coord_object.get_arenas[1][0]
 
     # Dictionary with motives per frame

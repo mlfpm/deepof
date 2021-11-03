@@ -76,7 +76,7 @@ class Project:
         likelihood_tol: float = 0.5,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
-        smooth_alpha: float = 0,
+        smooth_alpha: float = 5,
         table_format: str = "autodetect",
         frame_rate: int = None,
         video_format: str = ".mp4",
@@ -301,7 +301,9 @@ class Project:
                 cols = tab.columns
                 smooth = pd.DataFrame(
                     deepof.utils.smooth_mult_trajectory(
-                        np.array(tab), alpha=self.smooth_alpha
+                        np.array(tab),
+                        alpha=self.smooth_alpha,
+                        w_length=15,
                     )
                 )
                 smooth.columns = cols
@@ -884,7 +886,10 @@ class Coordinates:
 
         # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
-            tag_dict[key] = deepof.pose_utils.supervised_tagging(
+            # Remove indices and add at the very end, to avoid conflicts if
+            # frame_rate is specified in project
+            tag_index = raw_coords[key].index
+            supervised_tags = deepof.pose_utils.supervised_tagging(
                 self,
                 raw_coords=raw_coords,
                 coords=coords,
@@ -895,6 +900,8 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 params=params,
             )
+            supervised_tags.index = tag_index
+            tag_dict[key] = supervised_tags
 
         if propagate_labels:
             for key, tab in tag_dict.items():
