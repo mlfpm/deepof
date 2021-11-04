@@ -959,7 +959,7 @@ class Coordinates:
         mmd_annealing_mode: str = "linear",
         mmd_warmup: int = 0,
         montecarlo_kl: int = 10,
-        n_components: int = 25,
+        n_components: int = 10,
         overlap_loss: float = 0,
         output_path: str = ".",
         next_sequence_prediction: float = 0,

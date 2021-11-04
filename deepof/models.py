@@ -10,6 +10,7 @@ deep autoencoder models for unsupervised pose detection
 
 from typing import Dict, Tuple
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
@@ -28,7 +29,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
-# noinspection PyDefaultArgument
+# noinspection PyDefaultArgument,PyCallingNonCallable
 class GMVAE:
     """  Gaussian Mixture Variational Autoencoder for pose motif elucidation.  """
 
@@ -210,11 +211,13 @@ class GMVAE:
 
         ##### Decoder layers
         seq_D = [
-            Dense(
-                self.DENSE_2,
-                activation=self.dense_activation,
-                kernel_initializer=he_uniform(),
-                use_bias=True,
+            SpectralNormalization(
+                Dense(
+                    self.DENSE_2,
+                    activation=self.dense_activation,
+                    kernel_initializer=he_uniform(),
+                    use_bias=True,
+                )
             )
             for _ in range(self.dense_layers_per_branch)
         ]
@@ -368,7 +371,8 @@ class GMVAE:
 
         # Define and instantiate encoder
         x = Input(shape=input_shape[1:])
-        encoder = SpectralNormalization(Model_E0)(x)
+        encoder = tf.keras.layers.Masking(mask_value=0.0)(x)
+        encoder = SpectralNormalization(Model_E0)(encoder)
         encoder = BatchNormalization()(encoder)
         encoder = Model_E1(encoder)
         encoder = BatchNormalization()(encoder)
@@ -484,7 +488,7 @@ class GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        generator = SpectralNormalization(Sequential(Model_D1))(g)
+        generator = Sequential(Model_D1)(g)
         generator = SpectralNormalization(Model_D2)(generator)
         generator = BatchNormalization()(generator)
         generator = Model_D3(generator)
@@ -501,25 +505,31 @@ class GMVAE:
             Dense(tfpl.IndependentNormal.params_size(input_shape[2:]) // 2)(generator)
         )
         x_decoded_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(x_decoded_var)
-        x_decoded = tf.keras.layers.concatenate(
-            [x_decoded_mean, x_decoded_var], axis=-1
-        )
-        x_decoded_mean = tfpl.IndependentNormal(
-            event_shape=input_shape[2:],
-            convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+        x_decoded = tfpl.DistributionLambda(
+            make_distribution_fn=lambda decoded: tfd.Masked(
+                tfd.Independent(
+                    tfd.Normal(
+                        loc=decoded[0],
+                        scale=decoded[1],
+                    ),
+                    reinterpreted_batch_ndims=1,
+                ),
+                validity_mask=tf.reduce_all(decoded[2] == 0.0, axis=2),
+            ),
+            convert_to_tensor_fn="mean",
             name="vae_reconstruction",
-        )(x_decoded)
+        )([x_decoded_mean, x_decoded_var, x])
 
         # define individual branches as models
         encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
-        generator = Model(g, x_decoded_mean, name="vae_reconstruction")
+        generator = Model([g, x], x_decoded, name="vae_reconstruction")
 
         def log_loss(x_true, p_x_q_given_z):
             """Computes the negative log likelihood of the data given
             the output distribution"""
             return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
 
-        model_outs = [generator(encoder.outputs)]
+        model_outs = [generator([encoder.outputs, encoder.inputs])]
         model_losses = [log_loss]
         model_metrics = {"vae_reconstruction": ["mae", "mse"]}
         loss_weights = [1.0]
@@ -552,16 +562,22 @@ class GMVAE:
             x_predicted_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(
                 x_predicted_var
             )
-            x_decoded = tf.keras.layers.concatenate(
-                [x_predicted_mean, x_predicted_var], axis=-1
-            )
-            x_predicted_mean = tfpl.IndependentNormal(
-                event_shape=input_shape[2:],
-                convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+            x_predicted = tfpl.DistributionLambda(
+                make_distribution_fn=lambda predicted: tfd.Masked(
+                    tfd.Independent(
+                        tfd.Normal(
+                            loc=predicted[0],
+                            scale=predicted[1],
+                        ),
+                        reinterpreted_batch_ndims=1,
+                    ),
+                    validity_mask=tf.reduce_all(predicted[2] == 0.0, axis=2),
+                ),
+                convert_to_tensor_fn="mean",
                 name="vae_prediction",
-            )(x_decoded)
+            )([x_predicted_mean, x_predicted_var, x])
 
-            model_outs.append(x_predicted_mean)
+            model_outs.append(x_predicted)
             model_losses.append(log_loss)
             model_metrics["vae_prediction"] = ["mae", "mse"]
             loss_weights.append(self.next_sequence_prediction)
@@ -581,7 +597,7 @@ class GMVAE:
             model_metrics["phenotype_prediction"] = ["AUC", "accuracy"]
             loss_weights.append(self.phenotype_prediction)
 
-        #####
+        ##### If requested, instantiate supervised-annotation-prediction model branch
         if self.rule_based_prediction > 0:
             rule_pred = Model_RC1(z)
 

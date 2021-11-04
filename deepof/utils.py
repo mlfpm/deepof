@@ -329,7 +329,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list):
         np.pad(
             i,
             ((0, 0), (0, np.max(rpt_lengths) - i.shape[1]), (0, 0)),
-            constant_values=np.nan,
+            constant_values=0.0,
         )
         for i in split_a
     ]
