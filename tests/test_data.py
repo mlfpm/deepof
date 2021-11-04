@@ -178,9 +178,7 @@ def test_get_rule_based_annotation():
 @settings(max_examples=10, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
-    mode=st.one_of(
-        st.just("single"), st.just("single")
-    ),  # TODO: every setting should be transferable to the multi-mice setting
+    mode=st.one_of(st.just("single"), st.just("multi")),
     ego=st.integers(min_value=0, max_value=2),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),

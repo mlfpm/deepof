@@ -1473,8 +1473,3 @@ def merge_tables(*args):
 
 # TODO:
 #   Add __str__ method for all three major classes!
-#   Explore preprocessing in ragged (masked) tensors using change point detection!
-#   While some operations (mainly alignment) should be carried out before merging, others require
-#   the whole dataset to function properly.
-#   - For now, propagate_annotations is optional and requires the user to actively pass a data frame with traits.
-#   - If this gives good results, we'll make it default or give a boolean option that requires less effort
