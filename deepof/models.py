@@ -368,13 +368,13 @@ class GMVAE:
 
         # Define and instantiate encoder
         x = Input(shape=input_shape[1:])
-        encoder = SpectralNormalization(Model_E0(x))
+        encoder = SpectralNormalization(Model_E0)(x)
         encoder = BatchNormalization()(encoder)
-        encoder = SpectralNormalization(Model_E1(encoder))
+        encoder = SpectralNormalization(Model_E1)(encoder)
         encoder = BatchNormalization()(encoder)
-        encoder = SpectralNormalization(Model_E2(encoder))
+        encoder = SpectralNormalization(Model_E2)(encoder)
         encoder = BatchNormalization()(encoder)
-        encoder = SpectralNormalization(Model_E3(encoder))
+        encoder = SpectralNormalization(Model_E3)(encoder)
         encoder = BatchNormalization()(encoder)
         encoder = Dropout(self.DROPOUT_RATE)(encoder)
         encoder = Sequential(Model_E4)(encoder)
@@ -484,15 +484,15 @@ class GMVAE:
 
         # Define and instantiate generator
         g = Input(shape=self.ENCODING)
-        generator = SpectralNormalization(Sequential(Model_D1)(g))
-        generator = SpectralNormalization(Model_D2(generator))
+        generator = SpectralNormalization(Sequential(Model_D1))(g)
+        generator = SpectralNormalization(Model_D2)(generator)
         generator = BatchNormalization()(generator)
-        generator = SpectralNormalization(Model_D3(generator))
-        generator = SpectralNormalization(Model_D4(generator))
+        generator = SpectralNormalization(Model_D3)(generator)
+        generator = SpectralNormalization(Model_D4)(generator)
         generator = BatchNormalization()(generator)
-        generator = SpectralNormalization(Model_D5(generator))
+        generator = SpectralNormalization(Model_D5)(generator)
         generator = BatchNormalization()(generator)
-        generator = SpectralNormalization(Model_D6(generator))
+        generator = SpectralNormalization(Model_D6)(generator)
         generator = BatchNormalization()(generator)
         x_decoded_mean = Dense(
             tfpl.IndependentNormal.params_size(input_shape[2:]) // 2
@@ -632,14 +632,3 @@ class GMVAE:
     @prior.setter
     def prior(self, value):
         self._prior = value
-
-
-# TODO:
-#       - Check usefulness of stateful sequential layers! (stateful=True in the GRUs)
-#       - Investigate full covariance matrix approximation for the latent space! (details on tfp course) :)
-#       - Explore expanding the event dims of the final reconstruction layer
-#       - Think about gradient penalty to avoid mode collapse (as in WGAN-GP)
-#       - Think about using spectral normalization
-#       - REVISIT DROPOUT - CAN HELP WITH TRAINING STABILIZATION
-#       - Decrease learning rate!
-#       - Implement residual blocks!
