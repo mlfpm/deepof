@@ -20,6 +20,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import regex as re
+import ruptures as rpt
 import tensorflow as tf
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
@@ -310,22 +311,68 @@ def smooth_boolean_array(a: np.array) -> np.array:
     return a == 1
 
 
-def rolling_window(a: np.array, window_size: int, window_step: int) -> np.array:
+def split_with_breakpoints(a: np.ndarray, breakpoints: list):
+    """
+
+    Args:
+        a (np.ndarray): N (instances) * m (features) shape
+        breakpoints (list): list of breakpoints obtained with ruptures
+
+    Returns:
+        split_a (np.ndarray): N (instances) * l (maximum break length) * m (features) shape
+    """
+    rpt_lengths = np.array(breakpoints)[1:] - np.array(breakpoints)[:-1]
+
+    # Reshape experiment data according to extracted ruptures
+    split_a = np.split(np.expand_dims(a, axis=0), breakpoints, axis=1)
+    split_a = [
+        np.pad(
+            i,
+            ((0, 0), (0, np.max(rpt_lengths) - i.shape[1]), (0, 0)),
+            constant_values=np.nan,
+        )
+        for i in split_a
+    ]
+    split_a = np.concatenate(split_a, axis=0)
+
+    return split_a
+
+
+def rolling_window(
+    a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False
+) -> np.array:
     """Returns a 3D numpy.array with a sliding-window extra dimension
 
     Parameters:
         - a (2D np.array): N (instances) * m (features) shape
+        - window_size (int): size of the window to apply
+        - window_step (int): step of the window to apply
+        - automatic_changepoints (str): changepoint detection algorithm to apply.
+        If False, applies a fixed sliding window.
 
     Returns:
         - rolled_a (3D np.array):
         N (sliding window instances) * l (sliding window size) * m (features)"""
 
-    shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
-    strides = (a.strides[0],) + a.strides
-    rolled_a = np.lib.stride_tricks.as_strided(
-        a, shape=shape, strides=strides, writeable=True
-    )[::window_step]
-    return rolled_a
+    brakepoints = None
+    if automatic_changepoints:
+        # Define change point detection model using ruptures
+        rpt_model = rpt.BottomUp(
+            model=automatic_changepoints, min_size=window_size, jump=window_step
+        ).fit(a)
+
+        # Extract change points from current experiment
+        breakpoints = rpt_model.predict(pen=1.0)
+        rolled_a = split_with_breakpoints(a, breakpoints)
+
+    else:
+        shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
+        strides = (a.strides[0],) + a.strides
+        rolled_a = np.lib.stride_tricks.as_strided(
+            a, shape=shape, strides=strides, writeable=True
+        )[::window_step]
+
+    return rolled_a, brakepoints
 
 
 def smooth_mult_trajectory(

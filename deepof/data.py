@@ -1206,7 +1206,8 @@ class TableDict(dict):
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
-        window_size: int = 1,
+        automatic_changepoints="l2",
+        window_size: int = 15,
         window_step: int = 1,
         scale: str = "standard",
         test_videos: int = 0,
@@ -1223,9 +1224,15 @@ class TableDict(dict):
         and test sets ready for model training.
 
             Parameters:
-                - window_size (int): Size of the sliding window to pass through the data to generate training instances
-                - window_step (int): Step to take when sliding the window. If 1, a true sliding window is used;
-                if equal to window_size, the data is split into non-overlapping chunks.
+                - automatic_changepoints (str): specifies the changepoint detection algorithm to use to ruprure the
+                data across time. Can be set to "l1", "l2" (default) or "rbf". If False, fixed-length ruptures are
+                appled.
+                - window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
+                 specifies the size of the sliding window to pass through the data to generate training instances.
+                - window_step (int): Specifies the minimum jump for the rupture algorithms.
+                If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window.
+                In this case, a value of 1 indicates a true sliding window, and a value equal to to window_size
+                splits the data into non-overlapping chunks.
                 - scale (str): Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
                 - test_videos (int): Number of videos to use when generating the test set.
                 If 0, no test set is generated (not recommended).
@@ -1284,15 +1291,22 @@ class TableDict(dict):
                     X_test.reshape(-1, X_test.shape[-1])
                 ).reshape(X_test.shape)
 
-            if verbose:
-                print("Done!")
+        if verbose:
+            print("Breaking time series...")
 
         if align == "all":
             X_train = deepof.utils.align_trajectories(X_train, align)
 
-        X_train = deepof.utils.rolling_window(X_train, window_size, window_step)
+        X_train, train_breaks = deepof.utils.rolling_window(
+            X_train, window_size, window_step, automatic_changepoints
+        )
         if self._propagate_labels or self._propagate_annotations:
-            y_train = deepof.utils.rolling_window(y_train, window_size, window_step)
+            if train_breaks is None:
+                y_train, _ = deepof.utils.rolling_window(
+                    y_train, window_size, window_step, automatic_changepoints=False
+                )
+            else:
+                y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
             y_train = y_train.mean(axis=1)
 
         if align == "center":
@@ -1317,11 +1331,18 @@ class TableDict(dict):
             if align == "all":
                 X_test = deepof.utils.align_trajectories(X_test, align)
 
-            X_test = deepof.utils.rolling_window(X_test, window_size, window_step)
+            X_test, test_breaks = deepof.utils.rolling_window(
+                X_test, window_size, window_step, automatic_changepoints
+            )
 
             if self._propagate_labels or self._propagate_annotations:
-                y_test = deepof.utils.rolling_window(y_test, window_size, window_step)
-                y_test = y_test.mean(axis=1)
+                if test_breaks is None:
+                    y_test, _ = deepof.utils.rolling_window(
+                        y_test, window_size, window_step, automatic_changepoints=False
+                    )
+                else:
+                    y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
+                    y_test = y_test.mean(axis=1)
 
             if align == "center":
                 X_test = deepof.utils.align_trajectories(X_test, align)
@@ -1347,6 +1368,9 @@ class TableDict(dict):
 
             if self._propagate_labels:
                 y_train = y_train[shuffle_train]
+
+        if verbose:
+            print("Done!")
 
         return X_train, y_train, np.array(X_test), np.array(y_test)
 
