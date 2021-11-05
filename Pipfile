@@ -18,16 +18,17 @@ seaborn = "*"
 sklearn = "*"
 tables = "*"
 tensorflow-probability = "*"
-tensorflow = "*"
+tensorflow-addons = "*"
+tensorflow = "==2.6.0"
 tqdm = "*"
 umap-learn = "*"
+pipfile = "*"
 
 [dev-packages]
 coverage = "*"
 dash = "*"
 hypothesis = "*"
 keras-tuner = "*"
-kerastuner-tensorboard-logger = "*"
 pytest = "*"
 
 [requires]
