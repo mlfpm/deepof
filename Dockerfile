@@ -1,4 +1,4 @@
-FROM continuumio/anaconda3:2021.05-amazonlinux
+FROM continuumio/anaconda3:latest
 COPY Pipfile .
 COPY Pipfile.lock .
 RUN apt-get --allow-releaseinfo-change update \
@@ -6,6 +6,5 @@ RUN apt-get --allow-releaseinfo-change update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir pipenv
-RUN pipenv install --python=3.8 --dev --ignore-pipfile
-RUN conda install -c conda-forge tensorflow
+RUN pipenv install --python=3.8.12 --dev --system --ignore-pipfile
 CMD [ "/bin/bash" ]
