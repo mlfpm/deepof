@@ -16,7 +16,6 @@ from typing import Tuple, Union, Any, List
 import numpy as np
 import tensorflow as tf
 from kerastuner import BayesianOptimization, Hyperband, Objective
-from kerastuner_tensorboard_logger import TensorBoardLogger
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
@@ -546,9 +545,6 @@ def tune_search(
     hpt_params = {
         "hypermodel": hypermodel,
         "executions_per_trial": n_replicas,
-        "logger": TensorBoardLogger(
-            metrics=[tuner_objective], logdir=os.path.join(outpath, "logged_hparams")
-        ),
         "objective": Objective(tuner_objective, direction="min"),
         "project_name": project_name,
         "tune_new_entries": True,
