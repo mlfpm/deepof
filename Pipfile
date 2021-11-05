@@ -23,6 +23,8 @@ tensorflow = "==2.6.0"
 tqdm = "*"
 umap-learn = "*"
 pipfile = "*"
+keras = "==2.6.*"
+ruptures = "*"
 
 [dev-packages]
 coverage = "*"
