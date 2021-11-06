@@ -59,7 +59,7 @@ def test_compute_shannon_entropy(tensor):
 def test_k_nearest_neighbors(tensor, k):
 
     deepof_knn = deepof.model_utils.get_k_nearest_neighbors(tensor, k, 0)
-    sklearn_knn = NearestNeighbors(k).fit(tensor)
+    sklearn_knn = NearestNeighbors(n_neighbors=k).fit(tensor)
     sklearn_knn = sklearn_knn.kneighbors(tensor[0].reshape(1, -1))[1].flatten()
     assert np.allclose(deepof_knn.numpy(), sorted(sklearn_knn))
 

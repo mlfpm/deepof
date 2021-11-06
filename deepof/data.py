@@ -64,9 +64,7 @@ class Project:
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        enable_iterative_imputation: bool = None,  # This will impute the position of occluded body parts,
-        # which might not be desirable and it's computationally expensive. As an alternative, models should
-        # be resistant to NaN values (ie with masking). Add this explanation to the documentation.
+        enable_iterative_imputation: bool = None,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         high_fidelity_arena: bool = False,
@@ -153,7 +151,7 @@ class Project:
 
         # Remove specified body parts from the mice graph
         self.exclude_bodyparts = exclude_bodyparts
-        if len(self.animal_ids) > 1 and len(self.exclude_bodyparts) > 1:
+        if len(self.animal_ids) > 1 and self.exclude_bodyparts != tuple([""]):
             self.exclude_bodyparts = [
                 aid + "_" + bp for aid in self.animal_ids for bp in exclude_bodyparts
             ]
@@ -1120,13 +1118,23 @@ class TableDict(dict):
     def get_training_set(
         self,
         test_videos: int = 0,
+        selected_id: str = None,
         encode_labels: bool = True,
     ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
+        # Select tables from self.values and filter selected animals
+        if selected_id is not None:
+            raw_data = [
+                v.loc[:, [bp for bp in v.columns if bp[0].startswith(selected_id)]]
+                for v in self.values()
+            ]
+        else:
+            raw_data = self.values()
+
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced
-        raw_data = np.array([np.array(v) for v in self.values()], dtype=object)
+        raw_data = np.array([np.array(v) for v in raw_data], dtype=object)
         if self._propagate_labels:
             concat_raw = np.concatenate(raw_data, axis=0)
             test_index = np.array([], dtype=int)
@@ -1217,6 +1225,7 @@ class TableDict(dict):
         shift: float = 0.0,
         shuffle: bool = False,
         align: str = False,
+        selected_id: str = None,
     ) -> np.ndarray:
         """
 
@@ -1247,6 +1256,8 @@ class TableDict(dict):
                 when calling get_coords) axis with the y-axis of the cartesian plane. If 'center', rotates all instances
                 using the angle of the central frame of the sliding window. This way rotations of the animal are caught
                 as well. It doesn't do anything if False.
+                - selected_id (str): In case of multiple animals, this parameter can be used to select only one of them
+                for further processing. If None (default) all animals are used.
 
             Returns:
                 - X_train (np.ndarray): 3d dataset with shape (instances, sliding_window_size, features)
@@ -1260,7 +1271,9 @@ class TableDict(dict):
 
         """
 
-        X_train, y_train, X_test, y_test = self.get_training_set(test_videos)
+        X_train, y_train, X_test, y_test = self.get_training_set(
+            test_videos, selected_id
+        )
 
         if scale:
             if verbose:
@@ -1312,7 +1325,7 @@ class TableDict(dict):
         if align == "center":
             X_train = deepof.utils.align_trajectories(X_train, align)
 
-        if conv_filter == "gaussian":
+        if conv_filter == "gaussian" and not automatic_changepoints:
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
             r = [i - shift for i in r]
             g = np.array(
@@ -1347,7 +1360,7 @@ class TableDict(dict):
             if align == "center":
                 X_test = deepof.utils.align_trajectories(X_test, align)
 
-            if conv_filter == "gaussian":
+            if conv_filter == "gaussian" and not automatic_changepoints:
                 # noinspection PyUnboundLocalVariable
                 X_test = X_test * g.reshape([1, window_size, 1])
 

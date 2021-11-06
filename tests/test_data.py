@@ -180,7 +180,7 @@ def test_get_rule_based_annotation():
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi")),
     ego=st.integers(min_value=0, max_value=2),
-    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
+    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_1"])),
     sampler=st.data(),
 )
 def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
@@ -201,13 +201,15 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         exp_conditions={"test": "test_cond"},
     )
 
-    prun.distances = nodes
-    prun.ego = ego
+    if mode == "single":
+        prun.distances = nodes
+        prun.ego = ego
+
     prun = prun.run(verbose=False)
 
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = st.one_of(st.just(True), st.just(False))
-    speed = sampler.draw(st.integers(min_value=0, max_value=5))
+    speed = sampler.draw(st.integers(min_value=1, max_value=3))
     propagate = sampler.draw(st.booleans())
     propagate_annots = False
     if exclude == tuple([""]) and nodes == "all" and not ego:
@@ -225,18 +227,18 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     speeds = prun.get_coords(
         center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
-        speed=speed,
+        speed=(speed if not ego and nodes == "all" else 0),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
     distances = prun.get_distances(
-        speed=sampler.draw(st.integers(min_value=0, max_value=5)),
+        speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
-        speed=sampler.draw(st.integers(min_value=0, max_value=5)),
+        speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
@@ -281,6 +283,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     else:
         align = False
 
+    selected_id = None
+    if mode == "multi" and nodes == "all" and not ego:
+        selected_id = sampler.draw(st.one_of(st.just(None), st.just("B")))
+
     prep = table.preprocess(
         window_size=11,
         window_step=1,
@@ -292,6 +298,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
         shuffle=sampler.draw(st.booleans()),
         align=align,
+        selected_id=selected_id,
     )
 
     assert isinstance(prep[0], np.ndarray)

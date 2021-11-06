@@ -309,17 +309,28 @@ def test_smooth_boolean_array(a):
         ),
     ),
     window=st.data(),
+    automatic_changepoints=st.one_of(
+        st.just(False),
+        st.just("l1"),
+        st.just("l2"),
+    ),
 )
-def test_rolling_window(a, window):
+def test_rolling_window(a, window, automatic_changepoints):
     window_step = window.draw(st.integers(min_value=1, max_value=10))
     window_size = window.draw(
         st.integers(min_value=1, max_value=10).map(lambda x: x * window_step)
     )
 
-    rolled_shape = deepof.utils.rolling_window(a, window_size, window_step).shape
+    rolled_a, breakpoints = deepof.utils.rolling_window(
+        a, window_size, window_step, automatic_changepoints
+    )
 
-    assert len(rolled_shape) == len(a.shape) + 1
-    assert rolled_shape[1] == window_size
+    if not automatic_changepoints:
+        assert len(rolled_a.shape) == len(a.shape) + 1
+        assert rolled_a.shape[1] == window_size
+
+    else:
+        assert rolled_a.shape[0] == len(breakpoints)
 
 
 @settings(deadline=None)
@@ -328,7 +339,7 @@ def test_rolling_window(a, window):
     series=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=30, max_value=1000),
+            st.integers(min_value=300, max_value=1000),
         ),
         elements=st.floats(
             min_value=1.0, max_value=1.0, allow_nan=False, allow_infinity=False
