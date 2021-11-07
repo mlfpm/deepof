@@ -326,7 +326,7 @@ if rule_based_prediction:
 project_coords = deepof.data.Project(
     animal_ids=tuple([animal_id]),
     arena="circular",
-    arena_dims=tuple([arena_dims]),
+    arena_dims=arena_dims,
     enable_iterative_imputation=True,
     exclude_bodyparts=exclude_bodyparts,
     exp_conditions=treatment_dict,

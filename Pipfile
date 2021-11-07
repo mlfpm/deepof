@@ -26,6 +26,7 @@ pipfile = "*"
 keras = "==2.6.*"
 ruptures = "*"
 openpyxl = "*"
+snakemake = "*"
 
 [dev-packages]
 coverage = "*"
