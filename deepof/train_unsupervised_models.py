@@ -386,8 +386,6 @@ print("Preprocessing data...")
 X_train, y_train, X_val, y_val = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
 
-print(X_train.shape)
-
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
 if any([phenotype_prediction, rule_based_prediction]):

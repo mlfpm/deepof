@@ -1382,10 +1382,29 @@ class TableDict(dict):
             if self._propagate_labels:
                 y_train = y_train[shuffle_train]
 
+        X_test, y_test = np.array(X_test), np.array(y_test)
+
+        # If automatic changepoints are anabled, train and test can have different seq lengths.
+        # To remove that issue, pad the shortest set to match the longest one.
+        if automatic_changepoints and X_train.shape[1] != X_test.shape[1]:
+            max_seqlength = np.maximum(X_train.shape[1], X_test.shape[1])
+            if X_train.shape[1] < max_seqlength:
+                X_train = np.pad(
+                    X_train,
+                    ((0, 0), (0, max_seqlength - X_train.shape[1]), (0, 0)),
+                    constant_values=0.0,
+                )
+            else:
+                X_test = np.pad(
+                    X_test,
+                    ((0, 0), (0, max_seqlength - X_test.shape[1]), (0, 0)),
+                    constant_values=0.0,
+                )
+
         if verbose:
             print("Done!")
 
-        return X_train, y_train, np.array(X_test), np.array(y_test)
+        return X_train, y_train, X_test, y_test
 
     def _prepare_projection(self) -> np.ndarray:
         """Returns a numpy ndarray from the preprocessing of the table_dict object,
