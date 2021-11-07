@@ -324,7 +324,7 @@ if rule_based_prediction:
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
-    animal_ids=tuple([animal_id]),
+    animal_ids=animal_id.split(","),
     arena="circular",
     arena_dims=arena_dims,
     enable_iterative_imputation=True,

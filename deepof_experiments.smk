@@ -154,6 +154,8 @@ rule train_models:
         "pipenv run python -m deepof.train_unsupervised_models "
         "--train-path {input.data_path} "
         "--val-num 15 "
+        "--animal-id B,W "
+        "--animal-to-preprocess B "
         "--components {wildcards.k} "
         "--input-type {wildcards.input_type} "
         "--next-sequence-prediction {wildcards.nspredweight} "
