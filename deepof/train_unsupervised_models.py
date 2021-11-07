@@ -114,7 +114,7 @@ parser.add_argument(
     "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle."
     "Defaults to coords.",
     type=str,
-    default="dists",
+    default="coords",
 )
 parser.add_argument(
     "--kl-annealing-mode",
@@ -324,7 +324,7 @@ if rule_based_prediction:
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
-    animal_ids=animal_id.split(","),
+    animal_ids=["B", "W"],
     arena="circular",
     arena_dims=arena_dims,
     enable_iterative_imputation=True,
@@ -367,7 +367,7 @@ def batch_preprocess(tab_dict):
         window_size=window_size,
         window_step=window_step,
         automatic_changepoints=automatic_changepoints,
-        selected_id=animal_to_preprocess,
+        selected_id="B",
         scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
@@ -389,6 +389,8 @@ input_dict_train = {
 print("Preprocessing data...")
 X_train, y_train, X_val, y_val = batch_preprocess(input_dict_train[input_type])
 # Get training and validation sets
+
+print(X_train.shape)
 
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
@@ -425,7 +427,6 @@ if not tune:
         save_weights=True,
         reg_cat_clusters=("categorical" in latent_reg),
         reg_cluster_variance=("variance" in latent_reg),
-        entropy_samples=entropy_samples,
         entropy_knn=entropy_knn,
         input_type=input_type,
         run=run,
