@@ -324,7 +324,7 @@ if rule_based_prediction:
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
-    animal_ids=["B", "W"],
+    animal_ids=animal_id.split(","),
     arena="circular",
     arena_dims=arena_dims,
     enable_iterative_imputation=True,
@@ -336,16 +336,12 @@ project_coords = deepof.data.Project(
     video_format=".mp4",
 )
 
-if animal_id:
-    project_coords.subset_condition = animal_id
-
 project_coords = project_coords.run(verbose=True)
-undercond = "" if animal_id == "" else "_"
 
 # Coordinates for training data
 coords = project_coords.get_coords(
-    center=animal_id + undercond + "Center",
-    align=animal_id + undercond + "Spine_1",
+    center="Center",
+    align="Spine_1",
     align_inplace=True,
     propagate_labels=(phenotype_prediction > 0),
     propagate_annotations=(
@@ -367,7 +363,7 @@ def batch_preprocess(tab_dict):
         window_size=window_size,
         window_step=window_step,
         automatic_changepoints=automatic_changepoints,
-        selected_id="B",
+        selected_id=animal_to_preprocess,
         scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
