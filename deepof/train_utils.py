@@ -15,7 +15,7 @@ from typing import Tuple, Union, Any, List
 
 import numpy as np
 import tensorflow as tf
-from kerastuner import BayesianOptimization, Hyperband, Objective
+from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
