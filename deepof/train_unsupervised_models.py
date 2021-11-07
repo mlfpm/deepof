@@ -225,7 +225,7 @@ parser.add_argument(
     help="Sets the exponential smoothing factor to apply to the input data. "
     "Float between 0 and 1 (lower is more smooting)",
     type=float,
-    default=0.99,
+    default=4,
 )
 parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
 parser.add_argument(
