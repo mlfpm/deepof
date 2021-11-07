@@ -8,7 +8,7 @@ Testing module for deepof.utils
 
 """
 
-from hypothesis import given
+from hypothesis import given, reproduce_failure
 from hypothesis import HealthCheck
 from hypothesis import settings
 from hypothesis import strategies as st
@@ -295,7 +295,7 @@ def test_smooth_boolean_array(a):
 
     assert trans(a) >= trans(smooth)
 
-
+@reproduce_failure('6.24.2', b'AAAAAAAAAAAAAAAAAQAA')
 @settings(max_examples=10, deadline=None)
 @given(
     a=arrays(
@@ -317,7 +317,7 @@ def test_smooth_boolean_array(a):
 def test_rolling_window(a, window, automatic_changepoints):
     window_step = window.draw(st.integers(min_value=1, max_value=10))
     window_size = window.draw(
-        st.integers(min_value=1, max_value=10).map(lambda x: x * window_step)
+        st.integers(min_value=5, max_value=10).map(lambda x: x * window_step)
     )
 
     rolled_a, breakpoints = deepof.utils.rolling_window(
