@@ -13,14 +13,14 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 import os
 
-outpath = "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/20210325_Data_for_deepof_SI/JB08_files_SI"
+outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 warmup_epochs = [15]
 warmup_mode = ["sigmoid"]
-automatic_changepoints = ["l2"] # [None, "l1", "l2", "rbf"]
-animal_to_preprocess = ["B"] # [None, "B", "W"]
+automatic_changepoints = ["l2"]  # [None, "l1", "l2", "rbf"]
+animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
-overlap_loss = [0.] # [0.1, 0.2, 0.5, 0.75, 1.]
+overlap_loss = [0.0]  # [0.1, 0.2, 0.5, 0.75, 1.]
 encodings = [4]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["variance"]  # ["none", "categorical", "variance", "categorical+variance"]
@@ -30,7 +30,7 @@ phenotype_pred_weights = [0.0]
 rule_based_pred_weights = [0.0]
 window_lengths = [15]  # range(11,56,11)
 input_types = ["coords"]
-run = [1] # list(range(1, 11))
+run = [1]  # list(range(1, 11))
 
 
 rule deepof_experiments:
@@ -100,7 +100,7 @@ rule elliptical_arena_detector:
 
 rule coarse_hyperparameter_tuning:
     input:
-        data_path="/u/lucasmir/Projects/DLC/DLC_models/deepof_single_topview/",
+        data_path="/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/20210325_Data_for_deepof_SI/JB08_files_SI",
     output:
         trained_models=os.path.join(
             outpath,
@@ -130,7 +130,7 @@ rule coarse_hyperparameter_tuning:
 rule train_models:
     input:
         data_path=ancient(
-            "/u/lucasmir/Projects/DLC/DLC_models/deepof_single_topview/"
+            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/20210325_Data_for_deepof_SI/JB08_files_SI"
         ),
     output:
         trained_models=outpath + "train_models/trained_weights/"
@@ -141,7 +141,7 @@ rule train_models:
         "PPred={phenpredweight}_"
         "RBPred={rulesweight}_"
         "loss={loss}_"
-        "overlap_loss={overlap_loss}_"                           
+        "overlap_loss={overlap_loss}_"
         "loss_warmup={warmup}_"
         "warmup_mode={warmup_mode}_"
         "encoding={encs}_"
