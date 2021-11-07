@@ -109,7 +109,7 @@ rule coarse_hyperparameter_tuning:
     shell:
         "pipenv run python -m deepof.train_unsupervised_models "
         "--train-path {input.data_path} "
-        "--val-num 25 "
+        "--val-num 10 "
         "--components {wildcards.k} "
         "--input-type coords "
         "--next-sequence-prediction {wildcards.nspredweight} "

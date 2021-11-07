@@ -295,7 +295,7 @@ def test_smooth_boolean_array(a):
 
     assert trans(a) >= trans(smooth)
 
-@reproduce_failure('6.24.2', b'AAAAAAAAAAAAAAAAAQAA')
+
 @settings(max_examples=10, deadline=None)
 @given(
     a=arrays(
