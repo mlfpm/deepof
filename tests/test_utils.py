@@ -296,7 +296,7 @@ def test_smooth_boolean_array(a):
     assert trans(a) >= trans(smooth)
 
 
-@settings(deadline=None)
+@settings(max_examples=10, deadline=None)
 @given(
     a=arrays(
         dtype=float,
@@ -311,7 +311,6 @@ def test_smooth_boolean_array(a):
     window=st.data(),
     automatic_changepoints=st.one_of(
         st.just(False),
-        st.just("l1"),
         st.just("l2"),
     ),
 )

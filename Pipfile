@@ -25,6 +25,7 @@ umap-learn = "*"
 pipfile = "*"
 keras = "==2.6.*"
 ruptures = "*"
+openpyxl = "*"
 
 [dev-packages]
 coverage = "*"

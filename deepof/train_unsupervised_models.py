@@ -28,11 +28,26 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
+    "--animal-to-preprocess",
+    "-idprep",
+    help="Id of the animal to preprocess if multiple animals are being tracked. None by default",
+    type=str,
+    default=None,
+)
+parser.add_argument(
     "--arena-dims",
     "-adim",
     help="diameter in mm of the utilised arena. Used for scaling purposes",
     type=int,
     default=380,
+)
+parser.add_argument(
+    "--automatic-changepoints",
+    "-ruptures",
+    help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
+    "Must be one of 'l2', 'l1', 'rbf' or False (a sliding window is used instead).",
+    type=str,
+    default="l2",
 )
 parser.add_argument(
     "--batch-size",
@@ -245,7 +260,9 @@ parser.add_argument(
 args = parser.parse_args()
 
 animal_id = args.animal_id
+animal_to_preprocess = args.animal_to_preprocess
 arena_dims = args.arena_dims
+automatic_changepoints = args.automatic_changepoints
 batch_size = args.batch_size
 hypertun_trials = args.hpt_trials
 encoding_size = args.encoding_size
@@ -349,6 +366,8 @@ def batch_preprocess(tab_dict):
     return tab_dict.preprocess(
         window_size=window_size,
         window_step=window_step,
+        automatic_changepoints=automatic_changepoints,
+        selected_id=animal_to_preprocess,
         scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
