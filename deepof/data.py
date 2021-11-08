@@ -28,6 +28,7 @@ from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -573,6 +574,7 @@ class Coordinates:
         speed: int = 0,
         align: bool = False,
         align_inplace: bool = True,
+        selected_id: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
@@ -590,6 +592,8 @@ class Coordinates:
                 (see preprocess in table_dict documentation).
                 - align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to
                 the selected body part with the y axis, for all time points (default).
+                - selected_id (str): select a single animal on multi animal settings. Defaults to None
+                (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -602,6 +606,13 @@ class Coordinates:
         tabs = deepof.utils.deepcopy(self._tables)
         coord_1, coord_2 = "x", "y"
         scales = self._scales
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            for key, val in tabs.items():
+                tabs[key] = val.loc[
+                    :, [bp for bp in val.columns if bp[0].startswith(selected_id)]
+                ]
 
         if polar:
             coord_1, coord_2 = "rho", "phi"
@@ -627,7 +638,11 @@ class Coordinates:
             for i, (key, value) in enumerate(tabs.items()):
 
                 # Center each animal independently
-                for aid in self._animal_ids:
+                animal_ids = self._animal_ids
+                if selected_id is not None:
+                    animal_ids = [selected_id]
+
+                for aid in animal_ids:
 
                     # center on x / rho
                     value.update(
@@ -668,7 +683,7 @@ class Coordinates:
 
             aligned_full = None
             for key, tab in tabs.items():
-                for aid in self._animal_ids:
+                for aid in animal_ids:
                     # Bring forward the column to align
                     columns = [
                         i
@@ -1386,7 +1401,11 @@ class TableDict(dict):
 
         # If automatic changepoints are anabled, train and test can have different seq lengths.
         # To remove that issue, pad the shortest set to match the longest one.
-        if automatic_changepoints and X_train.shape[1] != X_test.shape[1]:
+        if (
+            test_videos
+            and automatic_changepoints
+            and X_train.shape[1] != X_test.shape[1]
+        ):
             max_seqlength = np.maximum(X_train.shape[1], X_test.shape[1])
             if X_train.shape[1] < max_seqlength:
                 X_train = np.pad(
@@ -1480,7 +1499,7 @@ class TableDict(dict):
         return self._project("tsne", n_components=n_components, perplexity=perplexity)
 
 
-def merge_tables(*args):
+def merge_tables(*args, ignore_index=False):
     """
 
     Takes a number of table_dict objects and merges them
@@ -1494,7 +1513,7 @@ def merge_tables(*args):
 
     merged_tables = TableDict(
         {
-            key: pd.concat(val, axis=1, ignore_index=True)
+            key: pd.concat(val, axis=1, ignore_index=ignore_index)
             for key, val in merged_dict.items()
         },
         typ="merged",

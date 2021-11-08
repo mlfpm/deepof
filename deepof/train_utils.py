@@ -27,7 +27,7 @@ tf.autograph.set_verbosity(0)
 
 
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
-    """ Custom early stopping callback. Prevents the model from stopping before warmup is over """
+    """Custom early stopping callback. Prevents the model from stopping before warmup is over"""
 
     def __init__(self, start_epoch, *args, **kwargs):
         super(CustomStopper, self).__init__(*args, **kwargs)

@@ -804,7 +804,7 @@ def rolling_speed(
 
     speeds.columns = body_parts
 
-    return speeds
+    return speeds.fillna(0.0)
 
 
 # MACHINE LEARNING FUNCTIONS #

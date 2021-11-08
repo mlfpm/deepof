@@ -111,7 +111,8 @@ parser.add_argument(
     "--input-type",
     "-d",
     help="Select an input type for the autoencoder hypermodels. "
-    "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle."
+    "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. "
+    "To any of these, '+speed' can be added at the end, which includes overall speed of each bodypart. "
     "Defaults to coords.",
     type=str,
     default="coords",
@@ -296,7 +297,7 @@ run = args.run
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
 
-assert input_type in [
+assert input_type.replace("+speed", "") in [
     "coords",
     "dists",
     "angles",
@@ -348,6 +349,7 @@ coords = project_coords.get_coords(
         False if not rule_based_prediction else project_coords.supervised_annotation()
     ),
 )
+speeds = project_coords.get_coords(speed=1)
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
 coords_distances = deepof.data.merge_tables(coords, distances)
@@ -382,8 +384,12 @@ input_dict_train = {
     "coords+dist+angle": coords_dist_angles,
 }
 
+to_preprocess = input_dict_train[input_type.replace("+speed", "")]
+if "speed" in input_type:
+    to_preprocess = deepof.data.merge_tables(to_preprocess, speeds)
+
 print("Preprocessing data...")
-X_train, y_train, X_val, y_val = batch_preprocess(input_dict_train[input_type])
+X_train, y_train, X_val, y_val = batch_preprocess(to_preprocess)
 # Get training and validation sets
 
 print("Training set shape:", X_train.shape)

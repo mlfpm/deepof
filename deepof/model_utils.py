@@ -190,7 +190,7 @@ class one_cycle_scheduler(tf.keras.callbacks.Callback):
 
     # noinspection PyMethodOverriding,PyTypeChecker
     def on_batch_begin(self, batch: int, logs):
-        """ Defines computations to perform for each batch """
+        """Defines computations to perform for each batch"""
 
         self.history.setdefault("lr", []).append(K.get_value(self.model.optimizer.lr))
 

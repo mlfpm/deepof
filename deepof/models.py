@@ -31,7 +31,7 @@ tfpl = tfp.layers
 
 # noinspection PyDefaultArgument,PyCallingNonCallable
 class GMVAE:
-    """  Gaussian Mixture Variational Autoencoder for pose motif elucidation.  """
+    """Gaussian Mixture Variational Autoencoder for pose motif elucidation."""
 
     def __init__(
         self,
