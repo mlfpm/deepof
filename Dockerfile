@@ -1,4 +1,5 @@
 FROM continuumio/anaconda3:2021.05
+WORKDIR /
 COPY Pipfile .
 COPY Pipfile.lock .
 RUN apt-get --allow-releaseinfo-change update \
