@@ -279,7 +279,7 @@ class Project:
                     pd.to_timedelta((tab.shape[0] // self.frame_rate), unit="sec"),
                     periods=tab.shape[0] + 1,
                     closed="left",
-                )
+                ).map(lambda t: str(t)[7:])
 
         lik_dict = defaultdict()
 
@@ -297,16 +297,20 @@ class Project:
                 print("Smoothing trajectories...")
 
             for key, tab in tab_dict.items():
-                cols = tab.columns
+                cur_idx = tab.index
+                cur_cols = tab.columns
                 smooth = pd.DataFrame(
                     deepof.utils.smooth_mult_trajectory(
                         np.array(tab),
                         alpha=self.smooth_alpha,
                         w_length=15,
                     )
-                )
-                smooth.columns = cols
-                tab_dict[key] = smooth.reset_index(drop=True)
+                ).reset_index(drop=True)
+                smooth.columns = cur_cols
+                smooth.index = cur_idx
+                tab_dict[key] = smooth
+
+        # Remove scorer header
 
         for key, tab in tab_dict.items():
             tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]
@@ -467,6 +471,11 @@ class Project:
         """Generates a dataset using all the options specified during initialization"""
 
         tables, quality = self.load_tables(verbose)
+        if self.exp_conditions is not None:
+            assert (
+                tables.keys() == self.exp_conditions.keys()
+            ), "experimental IDs in exp_conditions do not match"
+
         distances = None
         angles = None
 
@@ -677,12 +686,15 @@ class Coordinates:
 
         if align:
 
-            assert np.any(
+            assert any(
+                center in bp for bp in list(tabs.values())[0].columns.levels[0]
+            ), "for align to run, center must be set to the name of a bodypart"
+            assert any(
                 align in bp for bp in list(tabs.values())[0].columns.levels[0]
             ), "align must be set to the name of a bodypart"
 
-            aligned_full = None
             for key, tab in tabs.items():
+                # noinspection PyUnboundLocalVariable
                 for aid in animal_ids:
                     # Bring forward the column to align
                     columns = [
@@ -701,27 +713,20 @@ class Coordinates:
                         ),
                     ] + columns
 
-                    aligned_partial = tab[columns]
+                    aligned_coordinates = tab[columns]
 
                     if align_inplace and not polar:
-                        columns = aligned_partial.columns
-                        index = aligned_partial.index
-                        aligned_partial = pd.DataFrame(
+                        columns = aligned_coordinates.columns
+                        index = aligned_coordinates.index
+                        aligned_coordinates = pd.DataFrame(
                             deepof.utils.align_trajectories(
-                                np.array(aligned_partial), mode="all"
+                                np.array(aligned_coordinates), mode="all"
                             )
                         )
-                        aligned_partial.columns = columns
-                        aligned_partial.index = index
+                        aligned_coordinates.columns = columns
+                        aligned_coordinates.index = index
 
-                    aligned_full = pd.concat(
-                        [aligned_full, aligned_partial], join="inner", axis=1
-                    )
-                    aligned_full = aligned_full.loc[
-                        :, ~aligned_full.columns.duplicated()
-                    ]
-
-                tabs[key] = aligned_full
+                tabs[key] = aligned_coordinates
 
         if propagate_labels:
             for key, tab in tabs.items():
@@ -974,7 +979,7 @@ class Coordinates:
         montecarlo_kl: int = 10,
         n_components: int = 10,
         overlap_loss: float = 0,
-        output_path: str = ".",
+        output_path: str = "unsupervised_trained_models",
         next_sequence_prediction: float = 0,
         phenotype_prediction: float = 0,
         rule_based_prediction: float = 0,
@@ -1506,14 +1511,14 @@ def merge_tables(*args, ignore_index=False):
     Returns a table_dict object of type 'merged'
 
     """
-    merged_dict = {key: [] for key in args[0].keys()}
+    merged_dict = defaultdict(list)
     for tabdict in args:
         for key, val in tabdict.items():
             merged_dict[key].append(val)
 
     merged_tables = TableDict(
         {
-            key: pd.concat(val, axis=1, ignore_index=ignore_index)
+            key: pd.concat(val, axis=1, ignore_index=ignore_index, join="inner")
             for key, val in merged_dict.items()
         },
         typ="merged",

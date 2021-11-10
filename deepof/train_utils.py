@@ -300,6 +300,10 @@ def autoencoder_fitting(
     # Load data
     X_train, y_train, X_val, y_val = preprocessed_object
 
+    # Make sure that batch_size is not larger than training set
+    if batch_size > preprocessed_object[0].shape[0]:
+        batch_size = preprocessed_object[0].shape[0]
+
     # To avoid stability issues
     tf.keras.backend.clear_session()
 
@@ -309,7 +313,7 @@ def autoencoder_fitting(
         tf.data.experimental.AutoShardPolicy.DATA
     )
 
-    # Defines what to log on tensorboard (useful for trying out different models)
+    # Defines what to log on tensorboard (useful for keeping track of different models)
     logparam = {
         "encoding": encoding_size,
         "k": n_components,
