@@ -154,11 +154,8 @@ def test_climb_wall(center, axes, angle, tol):
             elements=st.floats(min_value=-20, max_value=20),
         ),
     ),
-    tol_forward=st.floats(min_value=0.01, max_value=4.98),
-    tol_speed=st.floats(min_value=0.01, max_value=4.98),
-    animal_id=st.text(min_size=0, max_size=15, alphabet=string.ascii_lowercase),
 )
-def test_single_animal_traits(pos_dframe, tol_forward, tol_speed, animal_id):
+def test_single_animal_traits(pos_dframe):
 
     _id = animal_id
     if animal_id != "":
@@ -181,17 +178,13 @@ def test_single_animal_traits(pos_dframe, tol_forward, tol_speed, animal_id):
     pos_dframe.columns = idx
     hudd = deepof.pose_utils.huddle(
         pos_dframe,
-        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
-        tol_forward,
-        tol_speed,
-        animal_id,
+        speed_dframe,
+        huddle_estimator="../deepof/trained_models/deepof_supervised/deepof_supervised_huddle_estimator.pkl",
     )
     digging = deepof.pose_utils.dig(
-        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
-        pos_dframe.xs("X", level="coords", axis=1, drop_level=True),
-        tol_speed,
-        0.85,
-        animal_id,
+        pos_dframe,
+        speed_dframe,
+        dig_estimator="../deepof/trained_models/deepof_supervised/deepof_supervised_dig_estimator.pkl",
     )
 
     assert hudd.dtype == bool
