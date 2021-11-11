@@ -271,81 +271,47 @@ def sniff_object(
 
 
 def huddle(
-    dist_dframe: pd.DataFrame,
-    ang_dframe: pd.DataFrame,
+    pos_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
     huddle_estimator: sklearn.pipeline.Pipeline,
-    animal_id: str = "",
 ) -> np.array:
     """Returns true when the mouse is huddling using simple rules.
 
     Parameters:
-        - dist_dframe (pandas.DataFrame): distance of body parts over time
-        - ang_dframe (pandas.DataFrame): angle of body parts over time
+        - pos_dframe (pandas.DataFrame): position of body parts over time
         - speed_dframe (pandas.DataFrame): speed of body parts over time
         - huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
-        - animal_id (str): id of the animal to tag
 
     Returns:
         y_huddle (np.array): 1 if the animal is huddling, 0 otherwise
     """
 
-    # Select correct animal using animal id
-    if animal_id != "":
-        pass
-
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    X_huddle = pd.concat([dist_dframe, ang_dframe, speed_dframe], axis=1).to_numpy()
-    y_huddle = huddle_estimator.predict(np.nan_to_num(X_huddle, 0))
+    X_huddle = pd.concat([pos_dframe, speed_dframe], axis=1).to_numpy()
+    y_huddle = huddle_estimator.predict(X_huddle)
 
     return y_huddle
 
 
 def dig(
     pos_dframe: pd.DataFrame,
-    dist_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
     dig_estimator: sklearn.pipeline.Pipeline,
-    animal_id: str = "",
 ):
     """Returns true when the mouse is digging using simple rules.
 
     Parameters:
         - pos_dframe (pandas.DataFrame): position of body parts over time
-        - dist_dframe (pandas.DataFrame): distance of body parts over time
         - speed_dframe (pandas.DataFrame): speed of body parts over time
         - dig_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
-        - animal_id (str): id of the animal to tag
 
     Returns:
         dig (np.array): True if the animal is digging, False otherwise
     """
 
-    # Select correct animal using animal id
-    if animal_id != "":
-        pass
-
-    # Remove tail bodyparts
-    bps_to_remove = ["Tail_1", "Tail_2", "Tail_tip"]
-    bps_to_remove = [
-        animal_id + ("_" if animal_id != "" else "") + bp for bp in bps_to_remove
-    ]
-    pos_dframe.drop(list(product(bps_to_remove, ["x", "y"])), axis=1, inplace=True)
-    speed_dframe.drop(bps_to_remove, axis=1, inplace=True)
-
-    dists_to_drop = []
-    for i in dist_dframe.columns:
-        flag = False
-        for bp in bps_to_remove:
-            if bp in i:
-                flag = True
-        if flag:
-            dists_to_drop.append(i)
-    dist_dframe.drop(dists_to_drop, axis=1, inplace=True)
-
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    X_dig = pd.concat([pos_dframe, dist_dframe, speed_dframe], axis=1).to_numpy()
-    y_dig = dig_estimator.predict(np.nan_to_num(X_dig))
+    X_dig = pd.concat([pos_dframe, speed_dframe], axis=1).to_numpy()
+    y_dig = dig_estimator.predict(X_dig)
 
     return y_dig
 
@@ -673,7 +639,7 @@ def supervised_tagging(
     raw_coords = raw_coords[vid_name].reset_index(drop=True)
     coords = coords[vid_name].reset_index(drop=True)
     dists = dists[vid_name].reset_index(drop=True)
-    angs = angs[vid_name].reset_index(drop=True)
+    # angs = angs[vid_name].reset_index(drop=True)
     speeds = speeds[vid_name].reset_index(drop=True)
     likelihoods = coord_object.get_quality()[vid_name].reset_index(drop=True)
     arena_abs = coord_object.get_arenas[1][0]
@@ -818,18 +784,42 @@ def supervised_tagging(
             )
         )
         tag_dict[_id + undercond + "huddle"] = huddle(
-            dists,
-            angs,
-            speeds,
+            coords.loc[  # Filter coordinates to keep only the current animal
+                :,
+                [
+                    col
+                    for col in coords.columns
+                    if col in deepof.utils.filter_columns(coords.columns, _id)
+                ],
+            ],
+            speeds.loc[  # Filter speeds to keep only the current animal
+                :,
+                [
+                    col
+                    for col in speeds.columns
+                    if col in deepof.utils.filter_columns(speeds.columns, _id)
+                ],
+            ],
             huddle_estimator,
-            animal_id=_id,
         )
         tag_dict[_id + undercond + "dig"] = dig(
-            coords,
-            dists,
-            speeds,
+            coords.loc[  # Filter coordinates to keep only the current animal
+                :,
+                [
+                    col
+                    for col in coords.columns
+                    if col in deepof.utils.filter_columns(coords.columns, _id)
+                ],
+            ],
+            speeds.loc[  # Filter speeds to keep only the current animal
+                :,
+                [
+                    col
+                    for col in speeds.columns
+                    if col in deepof.utils.filter_columns(speeds.columns, _id)
+                ],
+            ],
             dig_estimator,
-            animal_id=_id,
         )
         tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
             look_around(

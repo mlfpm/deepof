@@ -162,9 +162,10 @@ def test_run(nodes, ego):
 def test_get_rule_based_annotation():
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         arena="circular",
-        arena_dims=tuple([380]),
+        arena_dims=380,
+        animal_ids=["B", "W"],
         video_format=".mp4",
         table_format=".h5",
     ).run()

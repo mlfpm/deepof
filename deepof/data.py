@@ -66,7 +66,7 @@ class Project:
         animal_ids: List = tuple([""]),
         arena: str = "circular",
         arena_detection: str = "rule-based",
-        enable_iterative_imputation: bool = None,
+        enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         high_fidelity_arena: bool = False,
@@ -702,7 +702,7 @@ class Coordinates:
                     columns = [
                         i
                         for i in tab.columns
-                        if align not in i and i[0].startswith(aid)
+                        if not i[0].endswith(align) and i[0].startswith(aid)
                     ]
                     columns = [
                         (
