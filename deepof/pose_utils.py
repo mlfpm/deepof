@@ -292,27 +292,7 @@ def huddle(
 
     # Select correct animal using animal id
     if animal_id != "":
-        speed_dframe = speed_dframe.loc[
-            :, [i for i in speed_dframe.columns.unique() if i.startswith(animal_id)]
-        ]
-        dist_dframe = dist_dframe.loc[
-            :,
-            [
-                i
-                for i in dist_dframe.columns.unique()
-                if i[0].startswith(animal_id) and i[1].startswith(animal_id)
-            ],
-        ]
-        ang_dframe = ang_dframe.loc[
-            :,
-            [
-                i
-                for i in ang_dframe.columns.unique()
-                if i[0].startswith(animal_id)
-                and i[1].startswith(animal_id)
-                and i[2].startswith(animal_id)
-            ],
-        ]
+        pass
 
     # Concatenate all relevant data frames and predict using the pre-trained estimator
     X_huddle = pd.concat([dist_dframe, ang_dframe, speed_dframe], axis=1).to_numpy()
@@ -343,25 +323,7 @@ def dig(
 
     # Select correct animal using animal id
     if animal_id != "":
-        pos_dframe = pos_dframe.loc[
-            :,
-            [
-                i
-                for i in pos_dframe.columns.unique().levels[0]
-                if i.startswith(animal_id)
-            ],
-        ]
-        speed_dframe = speed_dframe.loc[
-            :, [i for i in speed_dframe.columns.unique() if i.startswith(animal_id)]
-        ]
-        dist_dframe = dist_dframe.loc[
-            :,
-            [
-                i
-                for i in dist_dframe.columns.unique()
-                if i[0].startswith(animal_id) and i[1].startswith(animal_id)
-            ],
-        ]
+        pass
 
     # Remove tail bodyparts
     bps_to_remove = ["Tail_1", "Tail_2", "Tail_tip"]

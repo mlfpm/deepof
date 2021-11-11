@@ -60,9 +60,10 @@ def plot_heatmap(
             sns.kdeplot(x=heatmap.x, y=heatmap.y, cmap=None, shade=True, alpha=1, ax=ax)
             ax = np.array([ax])
 
-    [x.set_xlim(xlim) for x in ax]
-    [x.set_ylim(ylim) for x in ax]
-    [x.set_title(bp) for x, bp in zip(ax, bodyparts)]
+    for x, bp in zip(ax, bodyparts):
+        x.set_xlim(xlim)
+        x.set_ylim(ylim)
+        x.set_title(bp)
 
     if save:  # pragma: no cover
         plt.savefig(save)
@@ -80,7 +81,8 @@ def plot_projection(projection: tuple) -> plt.figure:
      Returns:
          - projection_scatter (plt.figure): figure with the specified characteristics"""
 
-    pass
+    # TODO: to be implemented
+    return None
 
 
 def model_comparison_plot(

@@ -44,8 +44,9 @@ import deepof.visuals
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-coordinates = deepof.utils.NewType("coordinates", deepof.utils.Any)
-table_dict = deepof.utils.NewType("table_dict", deepof.utils.Any)
+project = deepof.utils.NewType("deepof_project", deepof.utils.Any)
+coordinates = deepof.utils.NewType("deepof_coordinates", deepof.utils.Any)
+table_dict = deepof.utils.NewType("deepof_table_dict", deepof.utils.Any)
 
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
@@ -367,9 +368,7 @@ class Project:
                 print("Iterative imputation of ocluded bodyparts...")
 
             for k, value in tab_dict.items():
-                imputed = IterativeImputer(
-                    max_iter=5, skip_complete=True
-                ).fit_transform(value)
+                imputed = IterativeImputer(skip_complete=True).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
                 )
@@ -616,13 +615,6 @@ class Coordinates:
         coord_1, coord_2 = "x", "y"
         scales = self._scales
 
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            for key, val in tabs.items():
-                tabs[key] = val.loc[
-                    :, [bp for bp in val.columns if bp[0].startswith(selected_id)]
-                ]
-
         if polar:
             coord_1, coord_2 = "rho", "phi"
             scales = deepof.utils.bp2polar(scales).to_numpy()
@@ -684,6 +676,13 @@ class Coordinates:
                 vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
                 tabs[key] = vel
 
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            for key, val in tabs.items():
+                tabs[key] = val.loc[
+                    :, deepof.utils.filter_columns(val.columns, selected_id)
+                ]
+
         if align:
 
             assert any(
@@ -695,6 +694,9 @@ class Coordinates:
 
             for key, tab in tabs.items():
                 # noinspection PyUnboundLocalVariable
+                all_index = tab.index
+                all_columns = []
+                aligned_coordinates = None
                 for aid in animal_ids:
                     # Bring forward the column to align
                     columns = [
@@ -713,19 +715,22 @@ class Coordinates:
                         ),
                     ] + columns
 
-                    aligned_coordinates = tab[columns]
+                    partial_aligned = tab[columns]
+                    all_columns += columns
 
                     if align_inplace and not polar:
-                        columns = aligned_coordinates.columns
-                        index = aligned_coordinates.index
-                        aligned_coordinates = pd.DataFrame(
+
+                        partial_aligned = pd.DataFrame(
                             deepof.utils.align_trajectories(
-                                np.array(aligned_coordinates), mode="all"
+                                np.array(partial_aligned), mode="all"
                             )
                         )
-                        aligned_coordinates.columns = columns
-                        aligned_coordinates.index = index
+                        aligned_coordinates = pd.concat(
+                            [aligned_coordinates, partial_aligned], axis=1
+                        )
 
+                aligned_coordinates.index = all_index
+                aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
                 tabs[key] = aligned_coordinates
 
         if propagate_labels:
@@ -753,6 +758,7 @@ class Coordinates:
     def get_distances(
         self,
         speed: int = 0,
+        selected_id: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
@@ -762,6 +768,8 @@ class Coordinates:
             Parameters:
                 - speed (int): states the derivative of the positions to report. Speed is returned if 1,
                 acceleration if 2, jerk if 3, etc.
+                - selected_id (str): select a single animal on multi animal settings. Defaults to None
+                (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -779,6 +787,13 @@ class Coordinates:
                 for key, tab in tabs.items():
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
                     tabs[key] = vel
+
+            if selected_id is not None:
+                for key, val in tabs.items():
+                    tabs[key] = val.loc[
+                        :,
+                        deepof.utils.filter_columns(val.columns, selected_id),
+                    ]
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -806,6 +821,7 @@ class Coordinates:
         self,
         degrees: bool = False,
         speed: int = 0,
+        selected_id: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
@@ -813,9 +829,11 @@ class Coordinates:
         Returns a table_dict object with the angles between body parts animal as values.
 
             Parameters:
-                - angles (bool): if True, returns the angles in degrees. Radians (default) are returned otherwise.
+                - degrees (bool): if True, returns the angles in degrees. Radians (default) are returned otherwise.
                 - speed (int): states the derivative of the positions to report. Speed is returned if 1,
                 acceleration if 2, jerk if 3, etc.
+                - selected_id (str): select a single animal on multi animal settings. Defaults to None
+                (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
                 - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
@@ -835,6 +853,13 @@ class Coordinates:
                 for key, tab in tabs.items():
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
                     tabs[key] = vel
+
+            if selected_id is not None:
+                for key, val in tabs.items():
+                    tabs[key] = val.loc[
+                        :,
+                        deepof.utils.filter_columns(val.columns, selected_id),
+                    ]
 
             if propagate_labels:
                 for key, tab in tabs.items():
@@ -1135,6 +1160,122 @@ class TableDict(dict):
 
             return heatmaps
 
+    def _prepare_projection(self) -> np.ndarray:
+        """Returns a numpy ndarray from the preprocessing of the table_dict object,
+        ready for projection into a lower dimensional space"""
+
+        labels = None
+
+        # Takes care of propagated labels if present
+        if self._propagate_labels:
+            labels = {k: v.iloc[0, -1] for k, v in self.items()}
+            labels = np.array([val for val in labels.values()])
+
+        X = {k: np.mean(v, axis=0) for k, v in self.items()}
+        X = np.concatenate(
+            [np.array(exp)[:, np.newaxis] for exp in X.values()],
+            axis=1,
+        ).T
+
+        return X, labels
+
+    def _project(
+        self,
+        proj,
+        n_components: int = 2,
+        kernel: str = None,
+        perplexity: int = None,
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+        """Returns a training set generated from the 2D original data (time x features) and a specified projection
+        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        performance or visualization reasons"""
+
+        X, labels = self._prepare_projection()
+
+        if proj == "random":
+            proj = random_projection.GaussianRandomProjection(n_components=n_components)
+        elif proj == "pca":
+            proj = KernelPCA(n_components=n_components, kernel=kernel)
+        elif proj == "tsne":
+            proj = TSNE(n_components=n_components, perplexity=perplexity)
+
+        X = proj.fit_transform(X)
+
+        if labels is not None:
+            return X, labels, proj
+
+        return X, proj
+
+    def random_projection(
+        self, n_components: int = 2, kernel: str = "linear"
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+        """Returns a training set generated from the 2D original data (time x features) and a random projection
+        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        performance or visualization reasons"""
+
+        return self._project("random", n_components=n_components, kernel=kernel)
+
+    def pca(
+        self, n_components: int = 2, kernel: str = "linear"
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+        """Returns a training set generated from the 2D original data (time x features) and a PCA projection
+        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        performance or visualization reasons"""
+
+        return self._project("pca", n_components=n_components, kernel=kernel)
+
+    def tsne(
+        self, n_components: int = 2, perplexity: int = 30
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+        """Returns a training set generated from the 2D original data (time x features) and a PCA projection
+        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        performance or visualization reasons"""
+
+        return self._project("tsne", n_components=n_components, perplexity=perplexity)
+
+    def filter_id(self, selected_id: str = None) -> table_dict:
+        """
+        Filters a TableDict object to keep only those columns related to the selected id
+
+        Parameters:
+            - selected_id (str): select a single animal on multi animal settings. Defaults to None
+            (all animals are processed).
+
+        """
+
+        tabs = self.copy()
+        for key, val in tabs.items():
+            columns_to_keep = deepof.utils.filter_columns(val.columns, selected_id)
+            tabs[key] = val.loc[
+                :,
+                [bpa for bpa in val.columns if bpa in columns_to_keep],
+            ]
+
+        return tabs
+
+    def merge(self, *args, ignore_index=False):
+        """
+
+        Takes a number of table_dict objects and merges them
+        Returns a table_dict object of type 'merged'
+
+        """
+        args = [self.copy()] + list(args)
+        merged_dict = defaultdict(list)
+        for tabdict in args:
+            for key, val in tabdict.items():
+                merged_dict[key].append(val)
+
+        merged_tables = TableDict(
+            {
+                key: pd.concat(val, axis=1, ignore_index=ignore_index, join="inner")
+                for key, val in merged_dict.items()
+            },
+            typ="merged",
+        )
+
+        return merged_tables
+
     def get_training_set(
         self,
         test_videos: int = 0,
@@ -1146,7 +1287,7 @@ class TableDict(dict):
         # Select tables from self.values and filter selected animals
         if selected_id is not None:
             raw_data = [
-                v.loc[:, [bp for bp in v.columns if bp[0].startswith(selected_id)]]
+                v.loc[:, deepof.utils.filter_columns(v.columns, selected_id)]
                 for v in self.values()
             ]
         else:
@@ -1244,7 +1385,6 @@ class TableDict(dict):
         sigma: float = 1.0,
         shift: float = 0.0,
         shuffle: bool = False,
-        align: str = False,
         selected_id: str = None,
     ) -> np.ndarray:
         """
@@ -1272,10 +1412,6 @@ class TableDict(dict):
                 - shift (float): usable only if conv_filter is 'gaussian'. Shift from mean zero of the kernel to use.
                 - shuffle (bool): Shuffles the data instances if True. In most use cases, it should be True for training
                 and False for prediction.
-                - align (bool): If "all", rotates all data instances to align the center -> align (selected before
-                when calling get_coords) axis with the y-axis of the cartesian plane. If 'center', rotates all instances
-                using the angle of the central frame of the sliding window. This way rotations of the animal are caught
-                as well. It doesn't do anything if False.
                 - selected_id (str): In case of multiple animals, this parameter can be used to select only one of them
                 for further processing. If None (default) all animals are used.
 
@@ -1327,9 +1463,6 @@ class TableDict(dict):
         if verbose:
             print("Breaking time series...")
 
-        if align == "all":
-            X_train = deepof.utils.align_trajectories(X_train, align)
-
         X_train, train_breaks = deepof.utils.rolling_window(
             X_train, window_size, window_step, automatic_changepoints
         )
@@ -1341,9 +1474,6 @@ class TableDict(dict):
             else:
                 y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
             y_train = y_train.mean(axis=1)
-
-        if align == "center":
-            X_train = deepof.utils.align_trajectories(X_train, align)
 
         if conv_filter == "gaussian" and not automatic_changepoints:
             r = range(-int(window_size / 2), int(window_size / 2) + 1)
@@ -1361,9 +1491,6 @@ class TableDict(dict):
 
         if test_videos:
 
-            if align == "all":
-                X_test = deepof.utils.align_trajectories(X_test, align)
-
             X_test, test_breaks = deepof.utils.rolling_window(
                 X_test, window_size, window_step, automatic_changepoints
             )
@@ -1376,9 +1503,6 @@ class TableDict(dict):
                 else:
                     y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
                     y_test = y_test.mean(axis=1)
-
-            if align == "center":
-                X_test = deepof.utils.align_trajectories(X_test, align)
 
             if conv_filter == "gaussian" and not automatic_changepoints:
                 # noinspection PyUnboundLocalVariable
@@ -1429,102 +1553,6 @@ class TableDict(dict):
             print("Done!")
 
         return X_train, y_train, X_test, y_test
-
-    def _prepare_projection(self) -> np.ndarray:
-        """Returns a numpy ndarray from the preprocessing of the table_dict object,
-        ready for projection into a lower dimensional space"""
-
-        labels = None
-
-        # Takes care of propagated labels if present
-        if self._propagate_labels:
-            labels = {k: v.iloc[0, -1] for k, v in self.items()}
-            labels = np.array([val for val in labels.values()])
-
-        X = {k: np.mean(v, axis=0) for k, v in self.items()}
-        X = np.concatenate(
-            [np.array(exp)[:, np.newaxis] for exp in X.values()],
-            axis=1,
-        ).T
-
-        return X, labels
-
-    def _project(
-        self,
-        proj,
-        n_components: int = 2,
-        kernel: str = None,
-        perplexity: int = None,
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a specified projection
-        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons"""
-
-        X, labels = self._prepare_projection()
-
-        if proj == "random":
-            proj = random_projection.GaussianRandomProjection(n_components=n_components)
-        elif proj == "pca":
-            proj = KernelPCA(n_components=n_components, kernel=kernel)
-        elif proj == "tsne":
-            proj = TSNE(n_components=n_components, perplexity=perplexity)
-
-        X = proj.fit_transform(X)
-
-        if labels is not None:
-            return X, labels, proj
-
-        return X, proj
-
-    def random_projection(
-        self, n_components: int = 2, kernel: str = "linear"
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a random projection
-        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons"""
-
-        return self._project("random", n_components=n_components, kernel=kernel)
-
-    def pca(
-        self, n_components: int = 2, sample: int = 1000, kernel: str = "linear"
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a PCA projection
-        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons"""
-
-        return self._project("pca", n_components=n_components, kernel=kernel)
-
-    def tsne(
-        self, n_components: int = 2, sample: int = 1000, perplexity: int = 30
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a PCA projection
-        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons"""
-
-        return self._project("tsne", n_components=n_components, perplexity=perplexity)
-
-
-def merge_tables(*args, ignore_index=False):
-    """
-
-    Takes a number of table_dict objects and merges them
-    Returns a table_dict object of type 'merged'
-
-    """
-    merged_dict = defaultdict(list)
-    for tabdict in args:
-        for key, val in tabdict.items():
-            merged_dict[key].append(val)
-
-    merged_tables = TableDict(
-        {
-            key: pd.concat(val, axis=1, ignore_index=ignore_index, join="inner")
-            for key, val in merged_dict.items()
-        },
-        typ="merged",
-    )
-
-    return merged_tables
 
 
 # TODO:

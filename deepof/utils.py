@@ -89,8 +89,7 @@ def str2bool(v: str) -> bool:
         return True
     elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
-    else:  # pragma: no cover
-        raise argparse.ArgumentTypeError("Boolean compatible value expected.")
+    raise argparse.ArgumentTypeError("Boolean compatible value expected.")
 
 
 def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
@@ -561,6 +560,35 @@ def interpolate_outliers(
     return interpolated_exp
 
 
+def filter_columns(columns: list, selected_id: str) -> list:
+    """
+    Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id
+
+    Parameters:
+        - columns: list of columns to filter
+
+    """
+
+    columns_to_keep = []
+    for column in columns:
+        # Speed transformed columns
+        if type(column) == str and column.startswith(selected_id):
+            columns_to_keep.append(column)
+        # Raw coordinate columns
+        if column[0].startswith(selected_id) and column[1] in [
+            "x",
+            "y",
+            "rho",
+            "phi",
+        ]:
+            columns_to_keep.append(column)
+        # Raw distance and angle columns
+        elif len(column) in [2, 3] and all([i.startswith(selected_id) for i in column]):
+            columns_to_keep.append(column)
+
+    return columns_to_keep
+
+
 # noinspection PyUnboundLocalVariable
 def recognize_arena(
     videos: list,
@@ -952,6 +980,4 @@ def cluster_transition_matrix(
 
 # TODO:
 #    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)
-#    - Add digging to rule_based_tagging
-#    - Add center to rule_based_tagging
-#    - Check for features requested by Joeri
+#    - Add center / time in zone to rule_based_tagging
