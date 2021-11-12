@@ -150,7 +150,7 @@ def test_autoencoder_fitting(
     batch_size=st.just(128),
     encoding_size=st.one_of(st.just(4), st.just(8)),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    k=st.just(min_value=5, max_value=10),
+    k=st.one_of(st.just(5), st.just(10)),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     overlap_loss=st.one_of(st.just(0.0), st.just(1.0)),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),

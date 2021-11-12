@@ -353,15 +353,16 @@ def rolling_window(
         - rolled_a (3D np.array):
         N (sliding window instances) * l (sliding window size) * m (features)"""
 
-    brakepoints = None
+    breakpoints = None
     if automatic_changepoints:
         # Define change point detection model using ruptures
-        rpt_model = rpt.BottomUp(
+        rpt_model = rpt.Binseg(
             model=automatic_changepoints, min_size=window_size, jump=window_step
         ).fit(a)
 
         # Extract change points from current experiment
         breakpoints = rpt_model.predict(pen=1.0)
+
         rolled_a = split_with_breakpoints(a, breakpoints)
 
     else:
@@ -371,7 +372,7 @@ def rolling_window(
             a, shape=shape, strides=strides, writeable=True
         )[::window_step]
 
-    return rolled_a, brakepoints
+    return rolled_a, breakpoints
 
 
 def smooth_mult_trajectory(

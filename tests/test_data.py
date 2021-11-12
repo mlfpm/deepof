@@ -281,7 +281,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         window_step=1,
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1)),
-        verbose=True,
+        verbose=2,
         conv_filter=sampler.draw(st.one_of(st.just(None), st.just("gaussian"))),
         sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
         shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),

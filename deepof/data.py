@@ -1380,7 +1380,7 @@ class TableDict(dict):
         window_step: int = 1,
         scale: str = "standard",
         test_videos: int = 0,
-        verbose: bool = False,
+        verbose: int = 0,
         conv_filter: bool = None,
         sigma: float = 1.0,
         shift: float = 0.0,
@@ -1405,7 +1405,7 @@ class TableDict(dict):
                 - scale (str): Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
                 - test_videos (int): Number of videos to use when generating the test set.
                 If 0, no test set is generated (not recommended).
-                - verbose (bool): prints job information if True
+                - verbose (int): prints job information if True. Increasing values give more information
                 - conv_filter (bool): must be one of None, 'gaussian'. If not None, convolves each instance
                 with the specified kernel.
                 - sigma (float): usable only if conv_filter is 'gaussian'. Standard deviation of the kernel to use.
@@ -1466,6 +1466,18 @@ class TableDict(dict):
         X_train, train_breaks = deepof.utils.rolling_window(
             X_train, window_size, window_step, automatic_changepoints
         )
+
+        # Print rupture information to screen
+        if verbose > 1 and automatic_changepoints:
+            rpt_lengths = np.array(train_breaks)[1:] - np.array(train_breaks)[:-1]
+            print(
+                "average rupture length: {}, standard deviation: {}".format(
+                    rpt_lengths.mean(), rpt_lengths.std()
+                )
+            )
+            print("minimum rupture length: {}".format(rpt_lengths.min()))
+            print("maximum rupture length: {}".format(rpt_lengths.max()))
+
         if self._propagate_labels or self._propagate_annotations:
             if train_breaks is None:
                 y_train, _ = deepof.utils.rolling_window(
