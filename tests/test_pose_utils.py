@@ -312,7 +312,9 @@ def test_rule_based_tagging(multi_animal, video_output):
     ).run(verbose=True)
 
     hardcoded_tags = prun.supervised_annotation(
-        video_output=video_output, frame_limit=50
+        video_output=video_output,
+        frame_limit=50,
+        debug=True,
     )
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)

@@ -91,8 +91,8 @@ def test_get_callbacks(
 def test_autoencoder_fitting(
     loss,
     next_sequence_prediction,
-    phenotype_prediction,
     rule_based_prediction,
+    phenotype_prediction,
 ):
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
@@ -118,7 +118,7 @@ def test_autoencoder_fitting(
         preprocessed_data,
         batch_size=10,
         encoding_size=2,
-        epochs=1,
+        epochs=2,
         kl_warmup=1,
         log_history=True,
         log_hparams=True,
@@ -132,7 +132,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=5, deadline=None)
+@settings(max_examples=15, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
@@ -148,14 +148,14 @@ def test_autoencoder_fitting(
     ),
     y_train=st.data(),
     batch_size=st.just(128),
-    encoding_size=st.integers(min_value=1, max_value=16),
+    encoding_size=st.one_of(st.just(4), st.just(8)),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    k=st.integers(min_value=1, max_value=10),
+    k=st.just(min_value=5, max_value=10),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    overlap_loss=st.floats(min_value=0.0, max_value=1.0),
-    next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
-    phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
-    rule_based_prediction=st.floats(min_value=0.0, max_value=1.0),
+    overlap_loss=st.one_of(st.just(0.0), st.just(1.0)),
+    next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    rule_based_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_tune_search(
     X_train,
@@ -211,5 +211,5 @@ def test_tune_search(
         rule_based_prediction=np.round(rule_based_prediction, 2),
         project_name="test_run",
         callbacks=callbacks,
-        n_epochs=1,
+        n_epochs=2,
     )

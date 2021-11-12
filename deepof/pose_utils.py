@@ -258,11 +258,8 @@ def sniff_object(
             )
             nosing = nosing_min & (~nosing_max)
 
-    elif s_object == "partner":
-        raise NotImplementedError
-
     else:
-        raise ValueError("object should be one of [arena, partner]")
+        raise NotImplementedError
 
     speed = speed_dframe[animal_id + "Center"] < tol_speed
     sniffing = nosing & speed

@@ -18,13 +18,14 @@ import tensorflow as tf
 # tf.config.experimental_run_functions_eagerly(True)
 
 
-@settings(deadline=None, max_examples=10)
+@settings(deadline=None, max_examples=25)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    kl_warmup_epochs=st.integers(min_value=0, max_value=5),
-    mmd_warmup_epochs=st.integers(min_value=0, max_value=5),
-    montecarlo_kl=st.integers(min_value=1, max_value=10),
-    number_of_components=st.integers(min_value=1, max_value=5),
+    kl_warmup_epochs=st.integers(min_value=0, max_value=1),
+    mmd_warmup_epochs=st.integers(min_value=0, max_value=1),
+    montecarlo_kl=st.integers(min_value=1, max_value=2),
+    number_of_components=st.integers(min_value=1, max_value=2),
+    annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")),
 )
 def test_GMVAE_build(
     loss,
@@ -32,6 +33,7 @@ def test_GMVAE_build(
     mmd_warmup_epochs,
     montecarlo_kl,
     number_of_components,
+    annealing_mode,
 ):
     deepof.models.GMVAE(
         loss=loss,
@@ -43,6 +45,8 @@ def test_GMVAE_build(
         phenotype_prediction=True,
         rule_based_prediction=True,
         overlap_loss=True,
+        kl_annealing_mode=annealing_mode,
+        mmd_annealing_mode=annealing_mode,
     ).build(
         input_shape=(
             100,
