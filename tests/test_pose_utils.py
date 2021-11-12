@@ -7,6 +7,7 @@
 Testing module for deepof.pose_utils
 
 """
+import pickle
 
 from hypothesis import given
 from hypothesis import HealthCheck
@@ -132,66 +133,50 @@ def test_climb_wall(center, axes, angle, tol):
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    pos_dframe=data_frames(
-        index=range_indexes(min_size=5),
-        columns=columns(
-            [
-                "X0",
-                "y0",
-                "X1",
-                "y1",
-                "X2",
-                "y2",
-                "X3",
-                "y3",
-                "X4",
-                "y4",
-                "X5",
-                "y5",
-            ],
-            dtype=float,
-            elements=st.floats(min_value=-20, max_value=20),
-        ),
-    ),
-)
-def test_single_animal_traits(pos_dframe):
+@given(animal_id=st.one_of(st.just("B"), st.just("W")))
+def test_single_animal_traits(animal_id):
 
-    _id = animal_id
-    if animal_id != "":
-        _id += "_"
+    prun = deepof.data.Project(
+        path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        arena="circular",
+        animal_ids=["B", "W"],
+        arena_dims=380,
+        video_format=".mp4",
+        table_format=".h5",
+    ).run(verbose=True)
 
-    idx = pd.MultiIndex.from_product(
-        [
-            [
-                _id + "Nose",
-                _id + "Left_bhip",
-                _id + "Right_bhip",
-                _id + "Left_fhip",
-                _id + "Right_fhip",
-                _id + "Center",
-            ],
-            ["X", "y"],
-        ],
-        names=["bodyparts", "coords"],
-    )
-    pos_dframe.columns = idx
-    hudd = deepof.pose_utils.huddle(
+    pos_dframe = prun.get_coords(
+        center="Center", align="Spine_1", selected_id=animal_id
+    )["test"]
+    speed_dframe = prun.get_coords(speed=1, selected_id=animal_id)["test"]
+
+    with open(
+        "./deepof/trained_models/deepof_supervised/deepof_supervised_huddle_estimator.pkl",
+        "rb",
+    ) as handle:
+        huddle_clf = pickle.load(handle)
+    with open(
+        "./deepof/trained_models/deepof_supervised/deepof_supervised_dig_estimator.pkl",
+        "rb",
+    ) as handle:
+        dig_clf = pickle.load(handle)
+
+    huddling = deepof.pose_utils.huddle(
         pos_dframe,
         speed_dframe,
-        huddle_estimator="../deepof/trained_models/deepof_supervised/deepof_supervised_huddle_estimator.pkl",
+        huddle_estimator=huddle_clf,
     )
     digging = deepof.pose_utils.dig(
         pos_dframe,
         speed_dframe,
-        dig_estimator="../deepof/trained_models/deepof_supervised/deepof_supervised_dig_estimator.pkl",
+        dig_estimator=dig_clf,
     )
 
-    assert hudd.dtype == bool
-    assert digging.dtype == bool
-    assert np.array(hudd).shape[0] == pos_dframe.shape[0]
+    assert huddling.dtype == int
+    assert digging.dtype == int
+    assert np.array(huddling).shape[0] == pos_dframe.shape[0]
     assert np.array(digging).shape[0] == pos_dframe.shape[0]
-    assert np.sum(np.array(hudd)) <= pos_dframe.shape[0]
+    assert np.sum(np.array(huddling)) <= pos_dframe.shape[0]
     assert np.sum(np.array(digging)) <= pos_dframe.shape[0]
 
 
@@ -247,58 +232,6 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     assert len(follow) == distance_dframe.shape[0]
     assert np.sum(follow) <= position_dframe.shape[0]
     assert np.sum(follow) <= distance_dframe.shape[0]
-
-
-@settings(
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-@given(sampler=st.data())
-def test_single_behaviour_analysis(sampler):
-    behaviours = sampler.draw(
-        st.lists(min_size=2, elements=st.text(min_size=5), unique=True)
-    )
-    treatments = sampler.draw(
-        st.lists(min_size=2, max_size=4, elements=st.text(min_size=5), unique=True)
-    )
-
-    behavioural_dict = sampler.draw(
-        st.dictionaries(
-            min_size=2,
-            keys=st.text(min_size=5),
-            values=data_frames(
-                index=range_indexes(min_size=50, max_size=50),
-                columns=columns(behaviours, dtype=bool),
-            ),
-        )
-    )
-
-    ind_dict = {vid: np.random.choice(treatments) for vid in behavioural_dict.keys()}
-    treatment_dict = {treat: [] for treat in set(ind_dict.values())}
-    for vid, treat in ind_dict.items():
-        treatment_dict[treat].append(vid)
-
-    ylim = sampler.draw(st.floats(min_value=0, max_value=10))
-    stat_tests = sampler.draw(st.booleans())
-
-    plot = sampler.draw(st.integers(min_value=0, max_value=200))
-
-    out = deepof.pose_utils.single_behaviour_analysis(
-        behaviours[0],
-        treatment_dict,
-        behavioural_dict,
-        plot=plot,
-        stat_tests=stat_tests,
-        save=None,
-        ylim=ylim,
-    )
-
-    assert len(out) == 1 if (stat_tests == 0 and plot == 0) else len(out) >= 2
-    assert isinstance(out[0], dict)
-    if plot:
-        assert np.any(np.array([isinstance(i, matplotlib.figure.Figure) for i in out]))
-    if stat_tests:
-        assert isinstance(out[0], dict)
 
 
 @settings(

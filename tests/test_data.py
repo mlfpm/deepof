@@ -208,6 +208,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     prun = prun.run(verbose=False)
 
+    center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = st.one_of(st.just(True), st.just(False))
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
@@ -219,9 +220,9 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         )
 
     coords = prun.get_coords(
-        center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
+        center=center,
         polar=polar,
-        align=algn,
+        align=(algn if center == "Center" and not polar else False),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
     )
@@ -261,7 +262,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         st.one_of(
             st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
         ),
-        st.just(deepof.data.merge_tables(coords, speeds, distances, angles)),
+        st.just(coords.merge(speeds, distances, angles)),
     )
 
     assert table.filter_videos(["test"]) == table
@@ -270,19 +271,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     )
     assert len(tset) == 4
     assert isinstance(tset[0], np.ndarray)
-
-    if table._type == "coords" and algn == "Nose" and polar is False and speed == 0:
-
-        assert isinstance(
-            table.plot_heatmaps(bodyparts=["Spine_1"]), matplotlib.figure.Figure
-        )
-
-        align = sampler.draw(
-            st.one_of(st.just(False), st.just("all"), st.just("center"))
-        )
-
-    else:
-        align = False
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -298,7 +286,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
         shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
         shuffle=sampler.draw(st.booleans()),
-        align=align,
         selected_id=selected_id,
     )
 
@@ -309,8 +296,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     table = deepof.data.TableDict(
         dict(table, **{"test1": table["test"]}), typ=table._type
     )
-
-    print(table)
 
     assert isinstance(table.random_projection(n_components=2), tuple)
     assert isinstance(table.pca(n_components=2), tuple)
