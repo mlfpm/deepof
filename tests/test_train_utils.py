@@ -185,7 +185,7 @@ def test_tune_search(
         arrays(
             dtype=np.float32,
             elements=st.floats(min_value=0.0, max_value=1.0, width=32),
-            shape=(X_train.shape[1], 1),
+            shape=(100, 1),
         )
     )
 
@@ -199,10 +199,10 @@ def test_tune_search(
         loss=loss,
         mmd_warmup_epochs=0,
         overlap_loss=overlap_loss,
-        next_sequence_prediction=np.round(next_sequence_prediction, 2),
-        phenotype_prediction=np.round(phenotype_prediction, 2),
-        rule_based_prediction=np.round(supervised_prediction, 2),
+        next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        rule_based_prediction=supervised_prediction,
         project_name="test_run",
         callbacks=callbacks,
-        n_epochs=2,
+        n_epochs=1,
     )
