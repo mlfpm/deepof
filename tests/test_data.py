@@ -176,7 +176,7 @@ def test_get_rule_based_annotation():
     assert prun._type == "rule-based"
 
 
-@settings(max_examples=10, deadline=None)
+@settings(max_examples=25, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi")),
@@ -227,7 +227,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         propagate_annotations=propagate_annots,
     )
     speeds = prun.get_coords(
-        center=sampler.draw(st.one_of(st.just("arena"), st.just("Center"))),
         polar=sampler.draw(st.booleans()),
         speed=(speed if not ego and nodes == "all" else 0),
         propagate_labels=propagate,

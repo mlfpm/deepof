@@ -136,11 +136,7 @@ def test_autoencoder_fitting(
 @given(
     X_train=arrays(
         dtype=float,
-        shape=st.tuples(
-            st.integers(min_value=128, max_value=512),
-            st.integers(min_value=128, max_value=512),
-            st.integers(min_value=2, max_value=10),
-        ),
+        shape=(100, 8, 6),
         elements=st.floats(
             min_value=0.0,
             max_value=1,
