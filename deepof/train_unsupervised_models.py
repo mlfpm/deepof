@@ -439,7 +439,7 @@ else:
         batch_size=batch_size,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
-        rule_based_prediction=rule_base_prediction,
+        supervised_prediction=rule_base_prediction,
         loss=loss,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,

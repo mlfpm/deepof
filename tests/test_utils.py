@@ -302,8 +302,12 @@ def test_smooth_boolean_array(a):
         dtype=float,
         shape=(100, 5),
         elements=st.floats(
-            min_value=1, max_value=10, allow_nan=False, allow_infinity=False,
-        ), unique=True,
+            min_value=1,
+            max_value=10,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        unique=True,
     ),
     window=st.data(),
     automatic_changepoints=st.one_of(

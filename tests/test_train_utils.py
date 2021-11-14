@@ -63,7 +63,7 @@ def test_get_callbacks(
         batch_size=batch_size,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
-        rule_based_prediction=rule_based_prediction,
+        supervised_prediction=rule_based_prediction,
         overlap_loss=overlap_loss,
         loss=loss,
         input_type=False,
@@ -81,9 +81,9 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=15, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=12, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
-    loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
+    loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     rule_based_prediction=st.one_of(st.just(0.0), st.just(1.0)),
@@ -110,7 +110,7 @@ def test_autoencoder_fitting(
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
     ).run()
 
@@ -132,7 +132,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=15, deadline=None)
+@settings(max_examples=12, deadline=None)
 @given(
     X_train=arrays(
         dtype=float,
@@ -143,36 +143,33 @@ def test_autoencoder_fitting(
         ),
     ),
     y_train=st.data(),
-    batch_size=st.just(128),
-    encoding_size=st.one_of(st.just(4), st.just(8)),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    k=st.one_of(st.just(5), st.just(10)),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    overlap_loss=st.one_of(st.just(0.0), st.just(1.0)),
-    next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
-    phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
-    rule_based_prediction=st.one_of(st.just(0.0), st.just(1.0)),
+    overlap_loss=st.one_of(st.just(1.0)),
+    predictor_branch=st.one_of(
+        st.just("next_seq"), st.just("pheno"), st.just("supervised")
+    ),
 )
 def test_tune_search(
     X_train,
     y_train,
-    batch_size,
-    encoding_size,
     hpt_type,
-    k,
     loss,
-    next_sequence_prediction,
-    phenotype_prediction,
-    rule_based_prediction,
     overlap_loss,
+    predictor_branch,
 ):
+
+    next_sequence_prediction = 1.0 if predictor_branch == "next_seq" else 0.0
+    phenotype_prediction = 1.0 if predictor_branch == "pheno" else 0.0
+    supervised_prediction = 1.0 if predictor_branch == "supervised" else 0.0
+
     callbacks = list(
         deepof.train_utils.get_callbacks(
             X_train=X_train,
-            batch_size=batch_size,
+            batch_size=25,
             phenotype_prediction=np.round(phenotype_prediction, 2),
             next_sequence_prediction=np.round(next_sequence_prediction, 2),
-            rule_based_prediction=np.round(rule_based_prediction, 2),
+            supervised_prediction=np.round(supervised_prediction, 2),
             loss=loss,
             input_type=False,
             cp=False,
@@ -180,7 +177,7 @@ def test_tune_search(
             reg_cluster_variance=True,
             overlap_loss=overlap_loss,
             entropy_knn=5,
-            logparam={"encoding": 2, "k": 15},
+            logparam={"encoding": 2, "k": 5},
         )
     )[1:]
 
@@ -194,17 +191,17 @@ def test_tune_search(
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
-        encoding_size=encoding_size,
+        encoding_size=2,
         hpt_type=hpt_type,
         hypertun_trials=1,
-        k=k,
+        k=5,
         kl_warmup_epochs=0,
         loss=loss,
         mmd_warmup_epochs=0,
         overlap_loss=overlap_loss,
         next_sequence_prediction=np.round(next_sequence_prediction, 2),
         phenotype_prediction=np.round(phenotype_prediction, 2),
-        rule_based_prediction=np.round(rule_based_prediction, 2),
+        rule_based_prediction=np.round(supervised_prediction, 2),
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=2,
