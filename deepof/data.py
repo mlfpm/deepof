@@ -1429,7 +1429,9 @@ class TableDict(dict):
 
         X_train, y_train, X_test, y_test = self.get_training_set(
             test_videos, selected_id
-        )
+        ) # TODO: Scale and rupture PER VIDEO individually
+          # TODO: The current implementation may lead to inconsistent normalization
+          # TODO: and ruptures.
 
         if scale:
             if verbose:

@@ -27,6 +27,7 @@ keras = "==2.6.*"
 ruptures = "*"
 openpyxl = "*"
 snakemake = "*"
+scikit-learn-extra = "*"
 
 [dev-packages]
 coverage = "*"

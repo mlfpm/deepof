@@ -296,17 +296,14 @@ def test_smooth_boolean_array(a):
     assert trans(a) >= trans(smooth)
 
 
-@settings(max_examples=10, deadline=None)
+@settings(deadline=None)
 @given(
     a=arrays(
         dtype=float,
-        shape=st.tuples(
-            st.integers(min_value=1000, max_value=10000),
-            st.integers(min_value=1, max_value=10).map(lambda x: 2 * x),
-        ),
+        shape=(100, 5),
         elements=st.floats(
-            min_value=1, max_value=10, allow_nan=False, allow_infinity=False
-        ),
+            min_value=1, max_value=10, allow_nan=False, allow_infinity=False,
+        ), unique=True,
     ),
     window=st.data(),
     automatic_changepoints=st.one_of(
@@ -315,10 +312,8 @@ def test_smooth_boolean_array(a):
     ),
 )
 def test_rolling_window(a, window, automatic_changepoints):
-    window_step = window.draw(st.integers(min_value=1, max_value=10))
-    window_size = window.draw(
-        st.integers(min_value=5, max_value=10).map(lambda x: x * window_step)
-    )
+    window_step = window.draw(st.integers(min_value=1, max_value=5))
+    window_size = 5 * window_step
 
     rolled_a, breakpoints = deepof.utils.rolling_window(
         a, window_size, window_step, automatic_changepoints
@@ -329,7 +324,7 @@ def test_rolling_window(a, window, automatic_changepoints):
         assert rolled_a.shape[1] == window_size
 
     else:
-        assert rolled_a.shape[0] == len(breakpoints)
+        assert rolled_a.shape[0] == len(breakpoints) + 1
 
 
 @settings(deadline=None)

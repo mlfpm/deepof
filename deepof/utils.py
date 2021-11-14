@@ -25,6 +25,7 @@ import tensorflow as tf
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
 from sklearn import mixture
+from sklearn.feature_selection import VarianceThreshold
 from tqdm import tqdm
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -356,9 +357,10 @@ def rolling_window(
     breakpoints = None
     if automatic_changepoints:
         # Define change point detection model using ruptures
-        rpt_model = rpt.Binseg(
+        # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
+        rpt_model = rpt.BottomUp(
             model=automatic_changepoints, min_size=window_size, jump=window_step
-        ).fit(a)
+        ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
         # Extract change points from current experiment
         breakpoints = rpt_model.predict(pen=1.0)
