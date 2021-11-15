@@ -33,8 +33,8 @@ class GMVAE(HyperModel):
         overlap_loss: float = False,
         next_sequence_prediction: float = 0.0,
         phenotype_prediction: float = 0.0,
-        rule_based_prediction: float = 0.0,
-        rule_based_features: int = 6,
+        supervised_prediction: float = 0.0,
+        supervised_features: int = 6,
         prior: str = "standard_normal",
     ):
         super().__init__()
@@ -48,8 +48,8 @@ class GMVAE(HyperModel):
         self.overlap_loss = overlap_loss
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
-        self.rule_based_prediction = rule_based_prediction
-        self.rule_based_features = rule_based_features
+        self.supervised_prediction = supervised_prediction
+        self.supervised_features = supervised_features
         self.prior = prior
 
         assert (
@@ -121,8 +121,8 @@ class GMVAE(HyperModel):
             overlap_loss=self.overlap_loss,
             next_sequence_prediction=self.next_sequence_prediction,
             phenotype_prediction=self.phenotype_prediction,
-            supervised_prediction=self.rule_based_prediction,
-            supervised_features=self.rule_based_features,
+            supervised_prediction=self.supervised_prediction,
+            supervised_features=self.supervised_features,
         ).build(self.input_shape)[-3]
 
         return gmvaep

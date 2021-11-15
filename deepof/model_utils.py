@@ -434,7 +434,6 @@ class ClusterOverlap(Layer):
         config.update({"k": self.k})
         config.update({"loss_weight": self.loss_weight})
         config.update({"min_confidence": self.min_confidence})
-        config.update({"samples": self.samples})
         return config
 
     def call(self, inputs, **kwargs):
@@ -489,7 +488,9 @@ class ClusterOverlap(Layer):
         )
 
         self.add_metric(
-            neighbourhood_entropy, aggregation="mean", name="neighbourhood_entropy"
+            neighbourhood_entropy,
+            aggregation="mean",
+            name="average_neighbourhood_entropy",
         )
 
         if self.loss_weight:

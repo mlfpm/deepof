@@ -159,7 +159,7 @@ def test_run(nodes, ego):
     assert isinstance(prun, deepof.data.Coordinates)
 
 
-def test_get_rule_based_annotation():
+def test_get_supervised_annotation():
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
@@ -173,7 +173,7 @@ def test_get_rule_based_annotation():
     prun = prun.supervised_annotation()
 
     assert isinstance(prun, deepof.data.TableDict)
-    assert prun._type == "rule-based"
+    assert prun._type == "supervised"
 
 
 @settings(max_examples=25, deadline=None)

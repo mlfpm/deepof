@@ -603,7 +603,7 @@ class Coordinates:
                 - selected_id (str): select a single animal on multi animal settings. Defaults to None
                 (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                - propagate_annotations (Dict): if a dictionary is provided, supervised annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
                 on already known traits.
 
@@ -771,7 +771,7 @@ class Coordinates:
                 - selected_id (str): select a single animal on multi animal settings. Defaults to None
                 (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                - propagate_annotations (Dict): if a dictionary is provided, supervised annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
                 on already known traits.
 
@@ -835,7 +835,7 @@ class Coordinates:
                 - selected_id (str): select a single animal on multi animal settings. Defaults to None
                 (all animals are processed).
                 - propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-                - propagate_annotations (Dict): if a dictionary is provided, rule based annotations
+                - propagate_annotations (Dict): if a dictionary is provided, supervised annotations
                 are propagated through the training dataset. This can be used for regularising the latent space based
                 on already known traits.
 
@@ -918,7 +918,7 @@ class Coordinates:
         n_jobs: int = 1,
         propagate_labels: bool = False,
     ) -> table_dict:
-        """Annotates coordinates using a simple rule-based pipeline"""
+        """Annotates coordinates with behavioral traits using a supervised pipeline"""
 
         tag_dict = {}
         raw_coords = self.get_coords(center=None)
@@ -981,7 +981,7 @@ class Coordinates:
 
         return TableDict(
             tag_dict,
-            typ="rule-based",
+            typ="supervised",
             arena=self._arena,
             arena_dims=self._arena_dims,
             propagate_labels=propagate_labels,
@@ -1007,7 +1007,7 @@ class Coordinates:
         output_path: str = "unsupervised_trained_models",
         next_sequence_prediction: float = 0,
         phenotype_prediction: float = 0,
-        rule_based_prediction: float = 0,
+        supervised_prediction: float = 0,
         pretrained: str = False,
         save_checkpoints: bool = False,
         save_weights: bool = True,
@@ -1072,7 +1072,7 @@ class Coordinates:
             output_path=output_path,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
-            rule_based_prediction=rule_based_prediction,
+            supervised_prediction=supervised_prediction,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
             save_weights=save_weights,
@@ -1421,9 +1421,9 @@ class TableDict(dict):
                 - X_test (np.ndarray): 3d dataset with shape (instances, sliding_window_size, features)
                 generated from all test videos (if test_videos > 0)
                 - y_train (np.ndarray): 2d dataset with a shape dependent in the type of labels the model uses
-                (phenotypes, rule-based tags).
+                (phenotypes, supervised tags).
                 - y_test (np.ndarray): 2d dataset with a shape dependent in the type of labels the model uses
-                (phenotypes, rule-based tags).
+                (phenotypes, supervised tags).
 
         """
 

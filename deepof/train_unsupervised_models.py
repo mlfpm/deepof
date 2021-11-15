@@ -213,9 +213,9 @@ parser.add_argument(
     type=float,
 )
 parser.add_argument(
-    "--rule-based-prediction",
+    "--supervised-prediction",
     "-rbpred",
-    help="Activates the rule-based trait prediction branch of the variational Seq 2 Seq model "
+    help="Activates the supervised trait prediction branch of the variational Seq 2 Seq model "
     "with the specified weight Defaults to 0.0 (inactive)",
     default=0.0,
     type=float,
@@ -285,7 +285,7 @@ output_path = os.path.join(args.output_path)
 overlap_loss = float(args.overlap_loss)
 next_sequence_prediction = float(args.next_sequence_prediction)
 phenotype_prediction = float(args.phenotype_prediction)
-rule_based_prediction = float(args.rule_based_prediction)
+supervised_prediction = float(args.supervised_prediction)
 smooth_alpha = args.smooth_alpha
 train_path = os.path.abspath(args.train_path)
 tune = args.hyperparameter_tuning
@@ -320,8 +320,8 @@ if next_sequence_prediction:
     logparam["next_sequence_prediction_weight"] = next_sequence_prediction
 if phenotype_prediction:
     logparam["phenotype_prediction_weight"] = phenotype_prediction
-if rule_based_prediction:
-    logparam["rule_based_prediction_weight"] = rule_based_prediction
+if supervised_prediction:
+    logparam["supervised_prediction_weight"] = supervised_prediction
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
@@ -346,7 +346,7 @@ coords = project_coords.get_coords(
     align_inplace=True,
     propagate_labels=(phenotype_prediction > 0),
     propagate_annotations=(
-        False if not rule_based_prediction else project_coords.supervised_annotation()
+        False if not supervised_prediction else project_coords.supervised_annotation()
     ),
 )
 speeds = project_coords.get_coords(speed=1)
@@ -394,7 +394,7 @@ X_train, y_train, X_val, y_val = batch_preprocess(to_preprocess)
 
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
-if any([phenotype_prediction, rule_based_prediction]):
+if any([phenotype_prediction, supervised_prediction]):
     print("Training set label shape:", y_train.shape)
     print("Validation set label shape:", y_val.shape)
 
@@ -422,7 +422,7 @@ if not tune:
         overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
-        rule_based_prediction=rule_based_prediction,
+        supervised_prediction=supervised_prediction,
         save_checkpoints=False,
         save_weights=True,
         reg_cat_clusters=("categorical" in latent_reg),
@@ -439,7 +439,7 @@ else:
         batch_size=batch_size,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
-        supervised_prediction=rule_base_prediction,
+        supervised_prediction=supervised_prediction,
         loss=loss,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,
@@ -464,7 +464,7 @@ else:
         overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
-        rule_based_prediction=rule_base_prediction,
+        supervised_prediction=supervised_prediction,
         project_name="{}-based_GMVAE_{}".format(input_type, tune.capitalize()),
         callbacks=[
             tensorboard_callback,

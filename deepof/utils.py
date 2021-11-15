@@ -983,4 +983,4 @@ def cluster_transition_matrix(
 
 # TODO:
 #    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)
-#    - Add center / time in zone to rule_based_tagging
+#    - Add center / time in zone to supervised_tagging

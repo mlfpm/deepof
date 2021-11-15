@@ -4,7 +4,7 @@
 
 """
 
-Functions and general utilities for rule-based pose estimation. See documentation for details
+Functions and general utilities for supervised pose estimation. See documentation for details
 
 """
 
@@ -272,7 +272,7 @@ def huddle(
     speed_dframe: pd.DataFrame,
     huddle_estimator: sklearn.pipeline.Pipeline,
 ) -> np.array:
-    """Returns true when the mouse is huddling using simple rules.
+    """Returns true when the mouse is huddling a pretrained model.
 
     Parameters:
         - pos_dframe (pandas.DataFrame): position of body parts over time
@@ -295,7 +295,7 @@ def dig(
     speed_dframe: pd.DataFrame,
     dig_estimator: sklearn.pipeline.Pipeline,
 ):
-    """Returns true when the mouse is digging using simple rules.
+    """Returns true when the mouse is digging using a pretrained model.
 
     Parameters:
         - pos_dframe (pandas.DataFrame): position of body parts over time
@@ -320,7 +320,7 @@ def look_around(
     tol_likelihood: float,
     animal_id: str = "",
 ):
-    """Returns true when the mouse is digging using simple rules.
+    """Returns true when the mouse is looking around using simple rules.
 
     Parameters:
         - speed_dframe (pandas.DataFrame): speed of body parts over time
@@ -770,7 +770,7 @@ def tag_annotated_frames(
     debug,
     coords,
 ):
-    """Helper function for rule_based_video. Annotates a given frame with on-screen information
+    """Helper function for annotate_video. Annotates a given frame with on-screen information
     about the recognised patterns"""
 
     arena, w, h = arena
@@ -927,7 +927,7 @@ def annotate_video(
     debug: bool = False,
     params: dict = {},
 ) -> True:
-    """Renders a version of the input video with all rule-based taggings in place.
+    """Renders a version of the input video with all supervised taggings in place.
 
     Parameters:
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
@@ -936,7 +936,7 @@ def annotate_video(
         - vid_index: for internal usage only; index of the video to tag in coordinates._videos
         - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
         - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
-        that the rule-based pose estimation utilizes. Values can be:
+        that the supervised pose estimation utilizes. Values can be:
             - speed_pause (int): size of the rolling window to use when computing speeds
             - close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait
             - side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait

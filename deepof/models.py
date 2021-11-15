@@ -478,7 +478,8 @@ class GMVAE:
         # Dummy layer with no parameters, to retrieve the previous tensor
         z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
 
-        if self.number_of_components > 1 and self.overlap_loss:
+        # Tracks clustering metrics and adds a KNN regularizer if self.overlap_loss != 0
+        if self.number_of_components > 1:
             z = deepof.model_utils.ClusterOverlap(
                 batch_size=self.batch_size,
                 encoding_dim=self.ENCODING,
@@ -599,18 +600,18 @@ class GMVAE:
 
         ##### If requested, instantiate supervised-annotation-prediction model branch
         if self.supervised_prediction > 0:
-            rule_pred = Model_RC1(z)
+            supervised_trait_pred = Model_RC1(z)
 
-            rule_pred = Dense(
+            supervised_trait_pred = Dense(
                 tfpl.IndependentBernoulli.params_size(self.supervised_features)
-            )(rule_pred)
-            rule_pred = tfpl.IndependentBernoulli(
+            )(supervised_trait_pred)
+            supervised_trait_pred = tfpl.IndependentBernoulli(
                 event_shape=self.supervised_features,
                 convert_to_tensor_fn=tfp.distributions.Distribution.mean,
                 name="supervised_prediction",
-            )(rule_pred)
+            )(supervised_trait_pred)
 
-            model_outs.append(rule_pred)
+            model_outs.append(supervised_trait_pred)
             model_losses.append(log_loss)
             model_metrics["supervised_prediction"] = [
                 "mae",

@@ -205,7 +205,7 @@ def tensorboard_metric_logging(
     y_val: np.ndarray,
     next_sequence_prediction: float,
     phenotype_prediction: float,
-    rule_based_prediction: float,
+    supervised_prediction: float,
     rec: str,
 ):
     """Autoencoder metric logging in tensorboard"""
@@ -253,7 +253,7 @@ def tensorboard_metric_logging(
             tf.summary.scalar("phenotype_prediction_accuracy", pheno_acc, step=1)
             tf.summary.scalar("phenotype_prediction_auc", pheno_auc, step=1)
 
-        if rule_based_prediction:
+        if supervised_prediction:
             idx = next(idx_generator)
             rules_mae = tf.reduce_mean(
                 tf.keras.metrics.mean_absolute_error(y_val[idx], outputs[idx])
@@ -284,7 +284,7 @@ def autoencoder_fitting(
     overlap_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
-    rule_based_prediction: float,
+    supervised_prediction: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
@@ -328,7 +328,7 @@ def autoencoder_fitting(
         batch_size=batch_size,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
-        supervised_prediction=rule_based_prediction,
+        supervised_prediction=supervised_prediction,
         loss=loss,
         loss_warmup=kl_warmup,
         overlap_loss=overlap_loss,
@@ -358,13 +358,13 @@ def autoencoder_fitting(
                 metrics=metrics,
             )
 
-    # Gets the number of rule-based features
+    # Gets the number of supervised features
     try:
-        rule_based_features = (
+        supervised_features = (
             y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
         )
     except IndexError:
-        rule_based_features = 0
+        supervised_features = 0
 
     # Build model
     with strategy.scope():
@@ -383,8 +383,8 @@ def autoencoder_fitting(
             overlap_loss=overlap_loss,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
-            supervised_prediction=rule_based_prediction,
-            supervised_features=rule_based_features,
+            supervised_prediction=supervised_prediction,
+            supervised_features=supervised_features,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
         ).build(X_train.shape)
@@ -419,7 +419,7 @@ def autoencoder_fitting(
         y_train = y_train[:, 1:]
         y_val = y_val[:, 1:]
 
-    if rule_based_prediction > 0.0:
+    if supervised_prediction > 0.0:
         ys += [y_train[-Xs.shape[0] :]]
         yvals += [y_val[-Xvals.shape[0] :]]
 
@@ -466,7 +466,7 @@ def autoencoder_fitting(
             y_val=yvals,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
-            rule_based_prediction=rule_based_prediction,
+            supervised_prediction=supervised_prediction,
             rec=rec,
         )
 
@@ -485,7 +485,7 @@ def tune_search(
     overlap_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
-    rule_based_prediction: float,
+    supervised_prediction: float,
     project_name: str,
     callbacks: List,
     n_epochs: int = 30,
@@ -536,14 +536,14 @@ def tune_search(
         overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
-        rule_based_prediction=rule_based_prediction,
-        rule_based_features=(
+        supervised_prediction=supervised_prediction,
+        supervised_features=(
             y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
         ),
     )
 
     tuner_objective = (
-        "val_mae" if not next_sequence_prediction else "val_reconstruction_mae"
+        "val_mae" if not next_sequence_prediction else "val_vae_reconstruction_mae"
     )
 
     hpt_params = {
@@ -590,7 +590,7 @@ def tune_search(
         y_train = y_train[:, 1:]
         y_val = y_val[:, 1:]
 
-    if rule_based_prediction > 0.0:
+    if supervised_prediction > 0.0:
         ys += [y_train[-Xs.shape[0] :]]
         yvals += [y_val[-Xvals.shape[0] :]]
 
