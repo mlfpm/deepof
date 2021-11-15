@@ -32,6 +32,7 @@ def test_GMVAE_hypermodel_build(
 ):
     deepof.hypermodels.GMVAE(
         encoding=encoding_size,
+        batch_size=64,
         input_shape=(
             100,
             15,

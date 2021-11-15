@@ -29,6 +29,7 @@ snakemake = "*"
 tensorflow-addons = "==0.14.0"
 pytest-xdist = "*"
 typeguard = "*"
+pytest-cov = "*"
 
 [dev-packages]
 coverage = "*"
