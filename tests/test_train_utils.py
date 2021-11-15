@@ -81,7 +81,7 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
@@ -132,24 +132,26 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(
+    max_examples=4,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    derandomize=True,
+    stateful_step_count=1,
+)
 @given(
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    predictor_branch=st.one_of(
-        st.just("next_seq"), st.just("pheno"), st.just("supervised")
-    ),
 )
 def test_tune_search(
     hpt_type,
     loss,
-    predictor_branch,
 ):
 
     overlap_loss = 0.1
-    next_sequence_prediction = 1.0 if predictor_branch == "next_seq" else 0.0
-    phenotype_prediction = 1.0 if predictor_branch == "pheno" else 0.0
-    supervised_prediction = 1.0 if predictor_branch == "supervised" else 0.0
+    next_sequence_prediction = 0.1
+    phenotype_prediction = 0.1
+    supervised_prediction = 0.1
 
     X_train = np.ones([100, 5, 6]).astype(float)
     y_train = np.ones([100, 1]).astype(float)
