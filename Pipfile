@@ -34,9 +34,9 @@ pytest-cov = "*"
 [dev-packages]
 coverage = "*"
 dash = "*"
-hypothesis = "*"
 keras-tuner = "*"
 pytest = "*"
+hypothesis = "*"
 
 [requires]
 python_version = "3.8"
