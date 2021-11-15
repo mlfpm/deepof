@@ -1090,10 +1090,11 @@ class TableDict(dict):
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
         for selecting data coming from videos of a specified condition."""
 
-        assert np.all([k in self.keys() for k in keys]), "Invalid keys selected"
+        table = deepof.utils.deepcopy(self)
+        assert np.all([k in table.keys() for k in keys]), "Invalid keys selected"
 
         return TableDict(
-            {k: value for k, value in self.items() if k in keys}, self._type
+            {k: value for k, value in table.items() if k in keys}, self._type
         )
 
     # noinspection PyTypeChecker
@@ -1269,6 +1270,7 @@ class TableDict(dict):
             concat_raw = np.concatenate(raw_data, axis=0)
             test_index = np.array([], dtype=int)
             for label in set(list(concat_raw[:, -1])):
+                print(raw_data)
                 label_index = np.random.choice(
                     [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
                     test_videos,

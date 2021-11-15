@@ -195,7 +195,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
         exclude_bodyparts=exclude,
-        exp_conditions={"test": "test_cond"},
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
     )
 
     if mode == "single":
@@ -259,10 +259,8 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         st.just(coords.merge(speeds, distances, angles)),
     )
 
-    assert table.filter_videos(["test"]) == table
-    tset = table.get_training_set(
-        test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1))
-    )
+    assert len(list(table.filter_videos(["test"]).keys())) == 1
+    tset = table.get_training_set(test_videos=1)
     assert len(tset) == 4
     assert isinstance(tset[0], np.ndarray)
 
@@ -277,7 +275,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
             False if not propagate and not propagate_annots else "l2"
         ),
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
-        test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1)),
+        test_videos=1,
         verbose=2,
         conv_filter=sampler.draw(st.one_of(st.just(None), st.just("gaussian"))),
         sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
