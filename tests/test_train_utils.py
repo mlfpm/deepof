@@ -95,14 +95,11 @@ def test_autoencoder_fitting(
     phenotype_prediction,
 ):
 
-    np.random.seed(42)
-    X_train = np.random.uniform(-1, 1, [20, 5, 6])
-    y_train = np.round(np.random.uniform(0, 1, [20, 1]))
+    X_train = np.ones([20, 5, 6]).astype(float)
+    y_train = np.ones([20, 1]).astype(float)
 
     if supervised_prediction:
-        y_train = np.concatenate(
-            [y_train, np.round(np.random.uniform(0, 1, [20, 6]), 1)], axis=1
-        )
+        y_train = np.concatenate([y_train, np.ones([20, 6]).astype(float)], axis=1)
 
     if next_sequence_prediction:
         y_train = y_train[1:]
@@ -154,9 +151,8 @@ def test_tune_search(
     phenotype_prediction = 1.0 if predictor_branch == "pheno" else 0.0
     supervised_prediction = 1.0 if predictor_branch == "supervised" else 0.0
 
-    np.random.seed(42)
-    X_train = np.random.uniform(-1, 1, [100, 5, 6])
-    y_train = np.round(np.random.uniform(0, 1, [100, 1]))
+    X_train = np.ones([100, 5, 6]).astype(float)
+    y_train = np.ones([100, 1]).astype(float)
 
     callbacks = list(
         deepof.train_utils.get_callbacks(
