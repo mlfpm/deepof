@@ -49,8 +49,8 @@ class GMVAE:
         overlap_loss: float = 0.0,
         next_sequence_prediction: float = 0.0,
         phenotype_prediction: float = 0.0,
-        rule_based_prediction: float = 0.0,
-        rule_based_features: int = 6,
+        supervised_prediction: float = 0.0,
+        supervised_features: int = 6,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
     ):
@@ -81,8 +81,8 @@ class GMVAE:
         self.overlap_loss = overlap_loss
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
-        self.rule_based_prediction = rule_based_prediction
-        self.rule_based_features = rule_based_features
+        self.supervised_prediction = supervised_prediction
+        self.supervised_features = supervised_features
         self.prior = "standard_normal"
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
@@ -598,25 +598,25 @@ class GMVAE:
             loss_weights.append(self.phenotype_prediction)
 
         ##### If requested, instantiate supervised-annotation-prediction model branch
-        if self.rule_based_prediction > 0:
+        if self.supervised_prediction > 0:
             rule_pred = Model_RC1(z)
 
             rule_pred = Dense(
-                tfpl.IndependentBernoulli.params_size(self.rule_based_features)
+                tfpl.IndependentBernoulli.params_size(self.supervised_features)
             )(rule_pred)
             rule_pred = tfpl.IndependentBernoulli(
-                event_shape=self.rule_based_features,
+                event_shape=self.supervised_features,
                 convert_to_tensor_fn=tfp.distributions.Distribution.mean,
-                name="rule_based_prediction",
+                name="supervised_prediction",
             )(rule_pred)
 
             model_outs.append(rule_pred)
             model_losses.append(log_loss)
-            model_metrics["rule_based_prediction"] = [
+            model_metrics["supervised_prediction"] = [
                 "mae",
                 "mse",
             ]
-            loss_weights.append(self.rule_based_prediction)
+            loss_weights.append(self.supervised_prediction)
 
         # define grouper and end-to-end autoencoder model
         grouper = Model(encoder.inputs, z_cat, name="Deep_Gaussian_Mixture_clustering")

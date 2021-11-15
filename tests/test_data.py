@@ -176,7 +176,7 @@ def test_get_rule_based_annotation():
     assert prun._type == "rule-based"
 
 
-@settings(max_examples=16, deadline=None)
+@settings(max_examples=25, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi")),
@@ -278,6 +278,9 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     prep = table.preprocess(
         window_size=11,
         window_step=1,
+        automatic_changepoints=(
+            False if not propagate and not propagate_annots else "l2"
+        ),
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=sampler.draw(st.integers(min_value=0, max_value=len(table) - 1)),
         verbose=2,

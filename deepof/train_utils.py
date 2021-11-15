@@ -383,8 +383,8 @@ def autoencoder_fitting(
             overlap_loss=overlap_loss,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
-            rule_based_prediction=rule_based_prediction,
-            rule_based_features=rule_based_features,
+            supervised_prediction=rule_based_prediction,
+            supervised_features=rule_based_features,
             reg_cat_clusters=reg_cat_clusters,
             reg_cluster_variance=reg_cluster_variance,
         ).build(X_train.shape)

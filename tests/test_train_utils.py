@@ -145,7 +145,7 @@ def test_autoencoder_fitting(
     y_train=st.data(),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
-    overlap_loss=st.one_of(st.just(1.0)),
+    overlap_loss=st.one_of(st.just(0.1)),
     predictor_branch=st.one_of(
         st.just("next_seq"), st.just("pheno"), st.just("supervised")
     ),
@@ -167,9 +167,9 @@ def test_tune_search(
         deepof.train_utils.get_callbacks(
             X_train=X_train,
             batch_size=25,
-            phenotype_prediction=np.round(phenotype_prediction, 2),
-            next_sequence_prediction=np.round(next_sequence_prediction, 2),
-            supervised_prediction=np.round(supervised_prediction, 2),
+            phenotype_prediction=phenotype_prediction,
+            next_sequence_prediction=next_sequence_prediction,
+            supervised_prediction=supervised_prediction,
             loss=loss,
             input_type=False,
             cp=False,
@@ -185,7 +185,7 @@ def test_tune_search(
         arrays(
             dtype=np.float32,
             elements=st.floats(min_value=0.0, max_value=1.0, width=32),
-            shape=(100, 1),
+            shape=(100, (1 if not supervised_prediction else 6)),
         )
     )
 
