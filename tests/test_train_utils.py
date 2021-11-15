@@ -81,7 +81,7 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
@@ -132,7 +132,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=12, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
