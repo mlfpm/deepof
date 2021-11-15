@@ -81,7 +81,7 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=1, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
@@ -133,7 +133,7 @@ def test_autoencoder_fitting(
     )
 
 
-@settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=12, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
@@ -147,7 +147,7 @@ def test_tune_search(
     predictor_branch,
 ):
 
-    overlap_loss = 0
+    overlap_loss = 0.1
     next_sequence_prediction = 1.0 if predictor_branch == "next_seq" else 0.0
     phenotype_prediction = 1.0 if predictor_branch == "pheno" else 0.0
     supervised_prediction = 1.0 if predictor_branch == "supervised" else 0.0
@@ -175,6 +175,7 @@ def test_tune_search(
 
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
+        batch_size=25,
         encoding_size=2,
         hpt_type=hpt_type,
         hypertun_trials=1,

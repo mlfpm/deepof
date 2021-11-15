@@ -488,6 +488,7 @@ def tune_search(
     supervised_prediction: float,
     project_name: str,
     callbacks: List,
+    batch_size: int = 64,
     n_epochs: int = 30,
     n_replicas: int = 1,
     outpath: str = ".",
@@ -525,9 +526,9 @@ def tune_search(
         "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
 
-    batch_size = 64
     hypermodel = deepof.hypermodels.GMVAE(
         input_shape=X_train.shape,
+        batch_size=batch_size,
         encoding=encoding_size,
         kl_warmup_epochs=kl_warmup_epochs,
         loss=loss,

@@ -25,6 +25,7 @@ class GMVAE(HyperModel):
         self,
         input_shape: tuple,
         encoding: int,
+        batch_size: int,
         kl_warmup_epochs: int = 0,
         learn_rate: float = 1e-3,
         loss: str = "ELBO+MMD",
@@ -39,6 +40,7 @@ class GMVAE(HyperModel):
     ):
         super().__init__()
         self.input_shape = input_shape
+        self.batch_size = batch_size
         self.encoding = encoding
         self.kl_warmup_epochs = kl_warmup_epochs
         self.learn_rate = learn_rate
@@ -114,6 +116,7 @@ class GMVAE(HyperModel):
                 "units_lstm": lstm_units_1,
             },
             encoding=self.encoding,
+            batch_size=self.batch_size,
             kl_warmup_epochs=self.kl_warmup_epochs,
             loss=self.loss,
             mmd_warmup_epochs=self.mmd_warmup_epochs,

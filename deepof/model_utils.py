@@ -436,7 +436,7 @@ class ClusterOverlap(Layer):
         config.update({"min_confidence": self.min_confidence})
         return config
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, training=False, **kwargs):
         """Updates Layer's call method"""
 
         encodings, categorical = inputs[0], inputs[1]
@@ -476,22 +476,23 @@ class ClusterOverlap(Layer):
             tf.dtypes.float32,
         )
 
-        self.add_metric(
-            number_of_clusters,
-            name="number_of_populated_clusters",
-        )
+        if training:
+            self.add_metric(
+                number_of_clusters,
+                name="number_of_populated_clusters",
+            )
 
-        self.add_metric(
-            max_groups,
-            aggregation="mean",
-            name="average_confidence_in_selected_cluster",
-        )
+            self.add_metric(
+                max_groups,
+                aggregation="mean",
+                name="average_confidence_in_selected_cluster",
+            )
 
-        self.add_metric(
-            neighbourhood_entropy,
-            aggregation="mean",
-            name="average_neighbourhood_entropy",
-        )
+            self.add_metric(
+                neighbourhood_entropy,
+                aggregation="mean",
+                name="average_neighbourhood_entropy",
+            )
 
         if self.loss_weight:
             # minimize local entropy
