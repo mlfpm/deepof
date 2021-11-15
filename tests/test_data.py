@@ -227,7 +227,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         propagate_annotations=propagate_annots,
     )
     speeds = prun.get_coords(
-        polar=polar,
         speed=(speed if not ego and nodes == "all" else 0),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
