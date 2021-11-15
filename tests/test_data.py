@@ -64,10 +64,6 @@ def test_project_properties():
         table_format=".h5",
     )
 
-    assert prun.subset_condition is None
-    prun.subset_condition = "testing"
-    assert prun.subset_condition == "testing"
-
     assert prun.distances == "all"
     prun.distances = "testing"
     assert prun.distances == "testing"
@@ -176,7 +172,7 @@ def test_get_supervised_annotation():
     assert prun._type == "supervised"
 
 
-@settings(max_examples=25, deadline=None)
+@settings(max_examples=25, deadline=None, derandomize=True)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi")),
