@@ -491,7 +491,7 @@ def tune_search(
     batch_size: int = 64,
     n_epochs: int = 30,
     n_replicas: int = 1,
-    outpath: str = ".",
+    outpath: str = "unsupervised_tuner_search",
 ) -> Union[bool, Tuple[Any, Any]]:
     """Define the search space using keras-tuner and bayesian optimization
 

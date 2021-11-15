@@ -94,6 +94,8 @@ def test_autoencoder_fitting(
     supervised_prediction,
     phenotype_prediction,
 ):
+
+    np.random.seed(42)
     X_train = np.random.uniform(-1, 1, [20, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [20, 1]))
 
@@ -152,6 +154,7 @@ def test_tune_search(
     phenotype_prediction = 1.0 if predictor_branch == "pheno" else 0.0
     supervised_prediction = 1.0 if predictor_branch == "supervised" else 0.0
 
+    np.random.seed(42)
     X_train = np.random.uniform(-1, 1, [100, 5, 6])
     y_train = np.round(np.random.uniform(0, 1, [100, 1]))
 
@@ -169,6 +172,7 @@ def test_tune_search(
             reg_cluster_variance=True,
             overlap_loss=overlap_loss,
             entropy_knn=5,
+            outpath="unsupervised_tuner_search",
             logparam={"encoding": 2, "k": 5},
         )
     )[1:]
