@@ -140,7 +140,6 @@ class Project:
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
         self.smooth_alpha = smooth_alpha
-        self.subset_condition = None
         self.frame_rate = frame_rate
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
@@ -170,12 +169,6 @@ class Project:
                 len(self.videos), len(set(self.exp_conditions.values()))
             )
         return "deepof analysis of {} videos".format(len(self.videos))
-
-    @property
-    def subset_condition(self):
-        """Sets a subset condition for the videos to load. If set,
-        only the videos with the included pattern will be loaded"""
-        return self._subset_condition
 
     @property
     def distances(self):
@@ -315,26 +308,6 @@ class Project:
 
         for key, tab in tab_dict.items():
             tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]
-
-        if self.subset_condition:
-            for key, value in tab_dict.items():
-                lablist = [
-                    b
-                    for b in value.columns.levels[0]
-                    if not b.startswith(self.subset_condition)
-                ]
-
-                tabcols = value.drop(
-                    lablist, axis=1, level=0
-                ).T.index.remove_unused_levels()
-
-                tab = value.loc[
-                    :, [i for i in value.columns.levels[0] if i not in lablist]
-                ]
-
-                tab.columns = tabcols
-
-                tab_dict[key] = tab
 
         if self.exclude_bodyparts != tuple([""]):
 
@@ -508,10 +481,6 @@ class Project:
             videos=self.videos,
             video_resolution=self.video_resolution,
         )
-
-    @subset_condition.setter
-    def subset_condition(self, value):
-        self._subset_condition = value
 
     @distances.setter
     def distances(self, value):
