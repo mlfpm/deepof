@@ -37,6 +37,7 @@ dash = "*"
 keras-tuner = "*"
 pytest = "*"
 hypothesis = "*"
+sphinx = "*"
 
 [requires]
 python_version = "3.8"
