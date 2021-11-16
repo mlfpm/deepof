@@ -1270,7 +1270,6 @@ class TableDict(dict):
             concat_raw = np.concatenate(raw_data, axis=0)
             test_index = np.array([], dtype=int)
             for label in set(list(concat_raw[:, -1])):
-                print(raw_data)
                 label_index = np.random.choice(
                     [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
                     test_videos,

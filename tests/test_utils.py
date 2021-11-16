@@ -368,7 +368,7 @@ def test_interpolate_outliers(mode):
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
-        exp_conditions={"test": "test_cond"},
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
     ).run()
     coords = prun.get_coords()
     lkhood = prun.get_quality()

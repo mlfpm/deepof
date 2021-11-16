@@ -260,9 +260,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     )
 
     assert len(list(table.filter_videos(["test"]).keys())) == 1
-    tset = table.get_training_set(test_videos=1)
-    assert len(tset) == 4
-    assert isinstance(tset[0], np.ndarray)
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -287,10 +284,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     assert isinstance(prep[0], np.ndarray)
 
     # deepof dimensionality reduction testing
-
-    table = deepof.data.TableDict(
-        dict(table, **{"test1": table["test"]}), typ=table._type
-    )
 
     assert isinstance(table.random_projection(n_components=2), tuple)
     assert isinstance(table.pca(n_components=2), tuple)
