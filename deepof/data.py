@@ -13,7 +13,7 @@ computations for getting the data into the desired shape
 Contains methods for generating training and test sets ready for model training.
 
 """
-
+import copy
 import os
 import warnings
 from collections import defaultdict
@@ -28,7 +28,6 @@ from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer
-from sklearn.feature_selection import VarianceThreshold
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -666,6 +665,7 @@ class Coordinates:
                 all_index = tab.index
                 all_columns = []
                 aligned_coordinates = None
+                # noinspection PyUnboundLocalVariable
                 for aid in animal_ids:
                     # Bring forward the column to align
                     columns = [
@@ -1084,7 +1084,6 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
-        self._scaler = None
 
     def filter_videos(self, keys: list) -> table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
@@ -1397,40 +1396,40 @@ class TableDict(dict):
 
         """
 
-        X_train, y_train, X_test, y_test = self.get_training_set(
-            test_videos, selected_id
-        )  # TODO: Scale and rupture PER VIDEO individually
-        # TODO: The current implementation may lead to inconsistent normalization
-        # TODO: and ruptures.
+        # Create a temporary copy of the current TableDict object,
+        # to avoid modifying it in place
+        table_temp = copy.deepcopy(self)
 
         if scale:
             if verbose:
                 print("Scaling data...")
 
-            if scale == "standard":
-                self._scaler = StandardScaler()
+            # Scale each experiment independently
+            for key, tab in table_temp.items():
+                if scale == "standard":
+                    current_scaler = StandardScaler()
+                elif scale == "minmax":
+                    current_scaler = MinMaxScaler()
+                else:
+                    raise ValueError(
+                        "Invalid scaler. Select one of standard, minmax or None"
+                    )  # pragma: no cover
 
-            elif scale == "minmax":
-                self._scaler = MinMaxScaler()
-            else:
-                raise ValueError(
-                    "Invalid scaler. Select one of standard, minmax or None"
-                )  # pragma: no cover
+                exp_flat = tab.to_numpy().reshape(-1, tab.shape[-1])
+                exp_flat = current_scaler.fit_transform(exp_flat)
 
-            X_train_flat = X_train.reshape(-1, X_train.shape[-1])
+                if scale == "standard":
+                    assert np.all(np.nan_to_num(np.mean(exp_flat), nan=0) < 0.01)
+                    assert np.all(np.nan_to_num(np.std(exp_flat), nan=1) > 0.99)
 
-            self._scaler.fit(X_train_flat)
+                table_temp[key] = pd.DataFrame(
+                    exp_flat.reshape(tab.shape), columns=tab.columns, index=tab.index
+                )
 
-            X_train = self._scaler.transform(X_train_flat).reshape(X_train.shape)
-
-            if scale == "standard":
-                assert np.all(np.nan_to_num(np.mean(X_train), nan=0) < 0.1)
-                assert np.all(np.nan_to_num(np.std(X_train), nan=1) > 0.9)
-
-            if test_videos:
-                X_test = self._scaler.transform(
-                    X_test.reshape(-1, X_test.shape[-1])
-                ).reshape(X_test.shape)
+        # Split videos and generate training and test sets
+        X_train, y_train, X_test, y_test = self.get_training_set(
+            test_videos, selected_id
+        )  # TODO: rupture PER VIDEO individually
 
         if verbose:
             print("Breaking time series...")
