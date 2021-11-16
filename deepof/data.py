@@ -1250,7 +1250,7 @@ class TableDict(dict):
         current_table_dict: table_dict,
         test_videos: int = 0,
         selected_id: str = None,
-    ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Generates training and test sets as numpy.array objects for model training"""
 
         # Select tables from self.values and filter selected animals
@@ -1264,10 +1264,10 @@ class TableDict(dict):
 
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced
+        test_index = np.array([], dtype=int)
         raw_data = np.array([np.array(v) for v in raw_data], dtype=object)
         if self._propagate_labels:
             concat_raw = np.concatenate(raw_data, axis=0)
-            test_index = np.array([], dtype=int)
             for label in set(list(concat_raw[:, -1])):
                 label_index = np.random.choice(
                     [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
@@ -1286,6 +1286,7 @@ class TableDict(dict):
                 X_test = np.concatenate(raw_data[test_index])
                 X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
             except ValueError:
+                test_index = np.array([], dtype=int)
                 X_train = np.concatenate(list(raw_data))
                 warnings.warn(
                     "Could not find more than one sample for at least one condition. "
@@ -1341,6 +1342,7 @@ class TableDict(dict):
             y_train.astype(float),
             X_test.astype(float),
             y_test.astype(float),
+            test_index,
         )
 
     # noinspection PyTypeChecker,PyGlobalUndefined
@@ -1448,16 +1450,38 @@ class TableDict(dict):
                 )
 
         # Split videos and generate training and test sets
-        X_train, y_train, X_test, y_test = self.get_training_set(
+        X_train, y_train, X_test, y_test, test_index = self.get_training_set(
             table_temp, test_videos, selected_id
-        )  # TODO: rupture PER VIDEO individually
+        )
 
         if verbose:
             print("Breaking time series...")
 
+        # Generate a base ruptured training set and a set of breaks
+        X_train_ruptured, train_breaks = None, None
+        cumulative_shape = 0
+        # Iterate over all experiments and populate them
+        for i, tab in enumerate(table_temp.values()):
+            if i not in test_index:
+                current_size = tab.shape[0]
+                current_train, current_breaks = deepof.utils.rolling_window(
+                    X_train[cumulative_shape : cumulative_shape + current_size],
+                    window_size,
+                    window_step,
+                    automatic_changepoints,
+                )
+                cumulative_shape += current_size
+
+                try:
+                    X_train_ruptured = np.concatenate([X_train_ruptured, current_train])
+                    train_breaks = np.concatenate([train_breaks, current_breaks])
+                except ValueError:
+                    X_train_ruptured = current_train
+                    train_breaks = current_breaks
+
         X_train, train_breaks = deepof.utils.rolling_window(
             X_train, window_size, window_step, automatic_changepoints
-        )
+        )  # TODO: rupture PER VIDEO individually using test indices
 
         # Print rupture information to screen
         if verbose > 1 and automatic_changepoints:
