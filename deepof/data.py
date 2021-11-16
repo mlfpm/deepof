@@ -702,16 +702,16 @@ class Coordinates:
                 aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
                 tabs[key] = aligned_coordinates
 
-        if propagate_labels:
-            for key, tab in tabs.items():
-                tab.loc[:, "pheno"] = self._exp_conditions[key]
-
         if propagate_annotations:
             annotations = list(propagate_annotations.values())[0].columns
 
             for key, tab in tabs.items():
                 for ann in annotations:
                     tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+        if propagate_labels:
+            for key, tab in tabs.items():
+                tab.loc[:, "pheno"] = self._exp_conditions[key]
 
         return TableDict(
             tabs,
@@ -1247,9 +1247,9 @@ class TableDict(dict):
 
     def get_training_set(
         self,
+        current_table_dict: table_dict,
         test_videos: int = 0,
         selected_id: str = None,
-        encode_labels: bool = True,
     ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
         """Generates training and test sets as numpy.array objects for model training"""
 
@@ -1257,10 +1257,10 @@ class TableDict(dict):
         if selected_id is not None:
             raw_data = [
                 v.loc[:, deepof.utils.filter_columns(v.columns, selected_id)]
-                for v in self.values()
+                for v in current_table_dict.values()
             ]
         else:
-            raw_data = self.values()
+            raw_data = current_table_dict.values()
 
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced
@@ -1282,16 +1282,26 @@ class TableDict(dict):
 
         y_train, X_test, y_test = np.array([]), np.array([]), np.array([])
         if test_videos > 0:
-            X_test = np.concatenate(raw_data[test_index])
-            X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
+            try:
+                X_test = np.concatenate(raw_data[test_index])
+                X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
+            except ValueError:
+                X_train = np.concatenate(list(raw_data))
+                warnings.warn(
+                    "Could not find more than one sample for at least one condition. "
+                    "Partition between training and test set was not possible."
+                )
 
         else:
             X_train = np.concatenate(list(raw_data))
 
         if self._propagate_labels:
+            le = LabelEncoder()
             X_train, y_train = X_train[:, :-1], X_train[:, -1][:, np.newaxis]
+            y_train[:, 0] = le.fit_transform(y_train[:, 0])
             try:
                 X_test, y_test = X_test[:, :-1], X_test[:, -1][:, np.newaxis]
+                y_test[:, 0] = le.transform(y_test[:, 0])
             except IndexError:
                 pass
 
@@ -1300,7 +1310,7 @@ class TableDict(dict):
 
             try:
                 X_train, y_train = X_train[:, :-n_annot], np.concatenate(
-                    [y_train, X_train[:, -n_annot:]]
+                    [y_train, X_train[:, -n_annot:]], axis=1
                 )
             except ValueError:
                 X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
@@ -1323,14 +1333,6 @@ class TableDict(dict):
                     y_test[:, -1] > deepof.pose_utils.get_hparameters()["huddle_speed"]
                 )
 
-            except IndexError:
-                pass
-
-        if self._propagate_labels and encode_labels:
-            le = LabelEncoder()
-            y_train[:, 0] = le.fit_transform(y_train[:, 0])
-            try:
-                y_test[:, 0] = le.transform(y_test[:, 0])
             except IndexError:
                 pass
 
@@ -1415,20 +1417,39 @@ class TableDict(dict):
                         "Invalid scaler. Select one of standard, minmax or None"
                     )  # pragma: no cover
 
-                exp_flat = tab.to_numpy().reshape(-1, tab.shape[-1])
+                exp_temp = tab.to_numpy()
+                if self._propagate_labels:
+                    exp_temp = exp_temp[:, :-1]
+
+                if self._propagate_annotations:
+                    exp_temp = exp_temp[
+                        :, : -list(self._propagate_annotations.values())[0].shape[1]
+                    ]
+
+                exp_flat = exp_temp.reshape(-1, exp_temp.shape[-1])
                 exp_flat = current_scaler.fit_transform(exp_flat)
 
                 if scale == "standard":
                     assert np.all(np.nan_to_num(np.mean(exp_flat), nan=0) < 0.01)
                     assert np.all(np.nan_to_num(np.std(exp_flat), nan=1) > 0.99)
 
+                current_tab = np.concatenate(
+                    [
+                        exp_flat.reshape(exp_temp.shape),
+                        tab.copy().to_numpy()[:, exp_temp.shape[1] :],
+                    ],
+                    axis=1,
+                )
+
                 table_temp[key] = pd.DataFrame(
-                    exp_flat.reshape(tab.shape), columns=tab.columns, index=tab.index
+                    current_tab,
+                    columns=tab.columns,
+                    index=tab.index,
                 )
 
         # Split videos and generate training and test sets
         X_train, y_train, X_test, y_test = self.get_training_set(
-            test_videos, selected_id
+            table_temp, test_videos, selected_id
         )  # TODO: rupture PER VIDEO individually
 
         if verbose:
