@@ -29,9 +29,9 @@ from sklearn.feature_selection import VarianceThreshold
 from tqdm import tqdm
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-
-
-Coordinates = NewType("Coordinates", Any)
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 # CONNECTIVITY FOR DLC MODELS
@@ -311,7 +311,7 @@ def smooth_boolean_array(a: np.array) -> np.array:
     return a == 1
 
 
-def split_with_breakpoints(a: np.ndarray, breakpoints: list):
+def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
     """
 
     Args:
@@ -324,7 +324,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list):
     rpt_lengths = np.array(breakpoints)[1:] - np.array(breakpoints)[:-1]
 
     # Reshape experiment data according to extracted ruptures
-    split_a = np.split(np.expand_dims(a, axis=0), breakpoints, axis=1)
+    split_a = np.split(np.expand_dims(a, axis=0), breakpoints[:-1], axis=1)
     split_a = [
         np.pad(
             i,
@@ -340,7 +340,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list):
 
 def rolling_window(
     a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False
-) -> np.array:
+) -> np.ndarray:
     """Returns a 3D numpy.array with a sliding-window extra dimension
 
     Parameters:
@@ -377,9 +377,90 @@ def rolling_window(
     return rolled_a, breakpoints
 
 
+def rupture_per_experiment(
+    table_dict: table_dict,
+    to_rupture: np.ndarray,
+    rupture_indices: list,
+    automatic_changepoints: str,
+    window_size: int,
+    window_step: int,
+) -> np.ndarray:
+    """
+    Apply the rupture method independently to each experiment, and concatenate into a single dataset
+    at the end. Returns a dataset and the rupture indices, adapted to be used in a concatenated version
+    of the labels
+
+    Parameters:
+        - table_dict (deepof.data.table_dict): table_dict with all experiments.
+        - to_rupture (np.ndarray): array with dataset to rupture.
+        - rupture_indices (list): indices of tables to rupture. Useful to select training and test sets.
+        - automatic_changepoints (str): rupture method to apply.
+        If false, a sliding window of window_length * window_size is obtained.
+        If one of "l1", "l2" or "rbf", different automatic change point detection algorithms are applied
+        on each independent experiment.
+        - window_size (int): if automatic_changepoints is False, specifies the length of the sliding window.
+        If not, it determines the minimum size of the obtained time series breaks.
+        - window_step (int): if automatic_changepoints is False, specifies the stride of the sliding window.
+        If not, it determines the minimum step size of the obtained time series breaks.
+    """
+
+    # Generate a base ruptured training set and a set of breaks
+    ruptured_dataset, break_indices = None, None
+    cumulative_shape = 0
+    # Iterate over all experiments and populate them
+    for i, tab in enumerate(table_dict.values()):
+        if i in rupture_indices:
+            current_size = tab.shape[0]
+            current_train, current_breaks = rolling_window(
+                to_rupture[cumulative_shape : cumulative_shape + current_size],
+                window_size,
+                window_step,
+                automatic_changepoints,
+            )
+            # Add shape of the current tab as the last breakpoint,
+            # to avoid skipping breakpoints between experiments
+            if current_breaks is not None:
+                current_breaks = np.array(current_breaks) + cumulative_shape
+                cumulative_shape += current_size
+
+            try:
+                # To concatenate the current ruptures with the ones obtained
+                # until now, pad the smallest to the length of the largest
+                # alongside axis 1 (temporal dimension) with zeros.
+                if ruptured_dataset.shape[1] > current_train.shape[1]:
+                    current_train = np.pad(
+                        current_train,
+                        (
+                            (0, 0),
+                            (0, ruptured_dataset.shape[1] - current_train.shape[1]),
+                            (0, 0),
+                        ),
+                    )
+                elif ruptured_dataset.shape[1] < current_train.shape[1]:
+                    ruptured_dataset = np.pad(
+                        ruptured_dataset,
+                        (
+                            (0, 0),
+                            (0, current_train.shape[1] - ruptured_dataset.shape[1]),
+                            (0, 0),
+                        ),
+                    )
+
+                # Once that's taken care of, concatenate ruptures alongside axis 0
+                ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
+                if current_breaks is not None:
+                    break_indices = np.concatenate([break_indices, current_breaks])
+            except (ValueError, AttributeError):
+                ruptured_dataset = current_train
+                if current_breaks is not None:
+                    break_indices = current_breaks
+
+    return ruptured_dataset, break_indices
+
+
 def smooth_mult_trajectory(
     series: np.array, alpha: int = 0, w_length: int = 11
-) -> np.array:
+) -> np.ndarray:
     """Returns a smoothed a trajectory using a Savitzky-Golay 1D filter
 
     Parameters:
@@ -982,5 +1063,4 @@ def cluster_transition_matrix(
 
 
 # TODO:
-#    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)
 #    - Add center / time in zone to supervised_tagging

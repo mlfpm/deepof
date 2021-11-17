@@ -9,28 +9,22 @@ Functions and general utilities for supervised pose estimation. See documentatio
 """
 
 import os
+import pickle
 import warnings
-from itertools import combinations, product
-from typing import List, NewType
+from typing import Any, List, NewType
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pickle
 import regex as re
-import seaborn as sns
 import sklearn.pipeline
-from scipy import stats
 
 import deepof.utils
 
-# Ignore warning with no downstream effect
-warnings.filterwarnings("ignore", message="All-NaN slice encountered")
-
-# Create custom string type
-coordinates = deepof.utils.NewType("coordinates", deepof.utils.Any)
-table_dict = deepof.utils.NewType("table_dict", deepof.utils.Any)
+# DEFINE CUSTOM ANNOTATED TYPES #
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 def close_single_contact(
@@ -1038,6 +1032,10 @@ def annotate_video(
 
     return True
 
+
+if __name__ == "__main__":
+    # Ignore warnings with no downstream effect
+    warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 
 # TODO:
 #    - Scale CD1 features to match those of black6

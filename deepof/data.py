@@ -13,11 +13,12 @@ computations for getting the data into the desired shape
 Contains methods for generating training and test sets ready for model training.
 
 """
-
+import copy
 import os
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Tuple, Union
+from typing import Dict
+from typing import Tuple, Any, List, NewType
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,7 +29,6 @@ from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer
-from sklearn.feature_selection import VarianceThreshold
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -40,13 +40,10 @@ import deepof.train_utils
 import deepof.utils
 import deepof.visuals
 
-# Remove excessive logging from tensorflow
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 # DEFINE CUSTOM ANNOTATED TYPES #
-project = deepof.utils.NewType("deepof_project", deepof.utils.Any)
-coordinates = deepof.utils.NewType("deepof_coordinates", deepof.utils.Any)
-table_dict = deepof.utils.NewType("deepof_table_dict", deepof.utils.Any)
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
@@ -666,6 +663,7 @@ class Coordinates:
                 all_index = tab.index
                 all_columns = []
                 aligned_coordinates = None
+                # noinspection PyUnboundLocalVariable
                 for aid in animal_ids:
                     # Bring forward the column to align
                     columns = [
@@ -702,16 +700,16 @@ class Coordinates:
                 aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
                 tabs[key] = aligned_coordinates
 
-        if propagate_labels:
-            for key, tab in tabs.items():
-                tab.loc[:, "pheno"] = self._exp_conditions[key]
-
         if propagate_annotations:
             annotations = list(propagate_annotations.values())[0].columns
 
             for key, tab in tabs.items():
                 for ann in annotations:
                     tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+        if propagate_labels:
+            for key, tab in tabs.items():
+                tab.loc[:, "pheno"] = self._exp_conditions[key]
 
         return TableDict(
             tabs,
@@ -1084,7 +1082,6 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
-        self._scaler = None
 
     def filter_videos(self, keys: list) -> table_dict:
         """Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
@@ -1248,27 +1245,27 @@ class TableDict(dict):
 
     def get_training_set(
         self,
+        current_table_dict: table_dict,
         test_videos: int = 0,
         selected_id: str = None,
-        encode_labels: bool = True,
-    ) -> Tuple[np.ndarray, list, Union[np.ndarray, list], list]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Generates training and test sets as numpy.array objects for model training"""
 
         # Select tables from self.values and filter selected animals
         if selected_id is not None:
             raw_data = [
                 v.loc[:, deepof.utils.filter_columns(v.columns, selected_id)]
-                for v in self.values()
+                for v in current_table_dict.values()
             ]
         else:
-            raw_data = self.values()
+            raw_data = current_table_dict.values()
 
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced
+        test_index = np.array([], dtype=int)
         raw_data = np.array([np.array(v) for v in raw_data], dtype=object)
         if self._propagate_labels:
             concat_raw = np.concatenate(raw_data, axis=0)
-            test_index = np.array([], dtype=int)
             for label in set(list(concat_raw[:, -1])):
                 label_index = np.random.choice(
                     [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
@@ -1283,16 +1280,27 @@ class TableDict(dict):
 
         y_train, X_test, y_test = np.array([]), np.array([]), np.array([])
         if test_videos > 0:
-            X_test = np.concatenate(raw_data[test_index])
-            X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
+            try:
+                X_test = np.concatenate(raw_data[test_index])
+                X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
+            except ValueError:
+                test_index = np.array([], dtype=int)
+                X_train = np.concatenate(list(raw_data))
+                warnings.warn(
+                    "Could not find more than one sample for at least one condition. "
+                    "Partition between training and test set was not possible."
+                )
 
         else:
             X_train = np.concatenate(list(raw_data))
 
         if self._propagate_labels:
+            le = LabelEncoder()
             X_train, y_train = X_train[:, :-1], X_train[:, -1][:, np.newaxis]
+            y_train[:, 0] = le.fit_transform(y_train[:, 0])
             try:
                 X_test, y_test = X_test[:, :-1], X_test[:, -1][:, np.newaxis]
+                y_test[:, 0] = le.transform(y_test[:, 0])
             except IndexError:
                 pass
 
@@ -1301,7 +1309,7 @@ class TableDict(dict):
 
             try:
                 X_train, y_train = X_train[:, :-n_annot], np.concatenate(
-                    [y_train, X_train[:, -n_annot:]]
+                    [y_train, X_train[:, -n_annot:]], axis=1
                 )
             except ValueError:
                 X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
@@ -1327,19 +1335,12 @@ class TableDict(dict):
             except IndexError:
                 pass
 
-        if self._propagate_labels and encode_labels:
-            le = LabelEncoder()
-            y_train[:, 0] = le.fit_transform(y_train[:, 0])
-            try:
-                y_test[:, 0] = le.transform(y_test[:, 0])
-            except IndexError:
-                pass
-
         return (
             X_train.astype(float),
             y_train.astype(float),
             X_test.astype(float),
             y_test.astype(float),
+            test_index,
         )
 
     # noinspection PyTypeChecker,PyGlobalUndefined
@@ -1397,46 +1398,71 @@ class TableDict(dict):
 
         """
 
-        X_train, y_train, X_test, y_test = self.get_training_set(
-            test_videos, selected_id
-        )  # TODO: Scale and rupture PER VIDEO individually
-        # TODO: The current implementation may lead to inconsistent normalization
-        # TODO: and ruptures.
+        # Create a temporary copy of the current TableDict object,
+        # to avoid modifying it in place
+        table_temp = copy.deepcopy(self)
 
         if scale:
             if verbose:
                 print("Scaling data...")
 
-            if scale == "standard":
-                self._scaler = StandardScaler()
+            # Scale each experiment independently
+            for key, tab in table_temp.items():
+                if scale == "standard":
+                    current_scaler = StandardScaler()
+                elif scale == "minmax":
+                    current_scaler = MinMaxScaler()
+                else:
+                    raise ValueError(
+                        "Invalid scaler. Select one of standard, minmax or None"
+                    )  # pragma: no cover
 
-            elif scale == "minmax":
-                self._scaler = MinMaxScaler()
-            else:
-                raise ValueError(
-                    "Invalid scaler. Select one of standard, minmax or None"
-                )  # pragma: no cover
+                exp_temp = tab.to_numpy()
+                if self._propagate_labels:
+                    exp_temp = exp_temp[:, :-1]
 
-            X_train_flat = X_train.reshape(-1, X_train.shape[-1])
+                if self._propagate_annotations:
+                    exp_temp = exp_temp[
+                        :, : -list(self._propagate_annotations.values())[0].shape[1]
+                    ]
 
-            self._scaler.fit(X_train_flat)
+                exp_flat = exp_temp.reshape(-1, exp_temp.shape[-1])
+                exp_flat = current_scaler.fit_transform(exp_flat)
 
-            X_train = self._scaler.transform(X_train_flat).reshape(X_train.shape)
+                if scale == "standard":
+                    assert np.all(np.nan_to_num(np.mean(exp_flat), nan=0) < 0.01)
+                    assert np.all(np.nan_to_num(np.std(exp_flat), nan=1) > 0.99)
 
-            if scale == "standard":
-                assert np.all(np.nan_to_num(np.mean(X_train), nan=0) < 0.1)
-                assert np.all(np.nan_to_num(np.std(X_train), nan=1) > 0.9)
+                current_tab = np.concatenate(
+                    [
+                        exp_flat.reshape(exp_temp.shape),
+                        tab.copy().to_numpy()[:, exp_temp.shape[1] :],
+                    ],
+                    axis=1,
+                )
 
-            if test_videos:
-                X_test = self._scaler.transform(
-                    X_test.reshape(-1, X_test.shape[-1])
-                ).reshape(X_test.shape)
+                table_temp[key] = pd.DataFrame(
+                    current_tab,
+                    columns=tab.columns,
+                    index=tab.index,
+                )
+
+        # Split videos and generate training and test sets
+        X_train, y_train, X_test, y_test, test_index = self.get_training_set(
+            table_temp, test_videos, selected_id
+        )
 
         if verbose:
             print("Breaking time series...")
 
-        X_train, train_breaks = deepof.utils.rolling_window(
-            X_train, window_size, window_step, automatic_changepoints
+        # Apply rupture method to each train experiment independently
+        X_train, train_breaks = deepof.utils.rupture_per_experiment(
+            table_dict=table_temp,
+            to_rupture=X_train,
+            rupture_indices=[i for i in range(len(table_temp)) if i not in test_index],
+            automatic_changepoints=automatic_changepoints,
+            window_size=window_size,
+            window_step=window_step,
         )
 
         # Print rupture information to screen
@@ -1452,8 +1478,15 @@ class TableDict(dict):
 
         if self._propagate_labels or self._propagate_annotations:
             if train_breaks is None:
-                y_train, _ = deepof.utils.rolling_window(
-                    y_train, window_size, window_step, automatic_changepoints=False
+                y_train, _ = deepof.utils.rupture_per_experiment(
+                    table_dict=table_temp,
+                    to_rupture=y_train,
+                    rupture_indices=[
+                        i for i in range(len(table_temp)) if i not in test_index
+                    ],
+                    automatic_changepoints=False,
+                    window_size=window_size,
+                    window_step=window_step,
                 )
             else:
                 y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
@@ -1473,16 +1506,29 @@ class TableDict(dict):
             g /= np.max(g)
             X_train = X_train * g.reshape([1, window_size, 1])
 
-        if test_videos:
+        if test_videos and len(test_index) > 0:
 
-            X_test, test_breaks = deepof.utils.rolling_window(
-                X_test, window_size, window_step, automatic_changepoints
+            # Apply rupture method to each test experiment independently
+            X_test, test_breaks = deepof.utils.rupture_per_experiment(
+                table_dict=table_temp,
+                to_rupture=X_test,
+                rupture_indices=test_index,
+                automatic_changepoints=automatic_changepoints,
+                window_size=window_size,
+                window_step=window_step,
             )
 
             if self._propagate_labels or self._propagate_annotations:
                 if test_breaks is None:
-                    y_test, _ = deepof.utils.rolling_window(
-                        y_test, window_size, window_step, automatic_changepoints=False
+                    y_test, _ = deepof.utils.rupture_per_experiment(
+                        table_dict=table_temp,
+                        to_rupture=y_test,
+                        rupture_indices=[
+                            i for i in range(len(table_temp)) if i not in test_index
+                        ],
+                        automatic_changepoints=False,
+                        window_size=window_size,
+                        window_step=window_step,
                     )
                 else:
                     y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
@@ -1517,6 +1563,7 @@ class TableDict(dict):
         if (
             test_videos
             and automatic_changepoints
+            and len(X_test.shape) > 0
             and X_train.shape[1] != X_test.shape[1]
         ):
             max_seqlength = np.maximum(X_train.shape[1], X_test.shape[1])
@@ -1536,8 +1583,23 @@ class TableDict(dict):
         if verbose:
             print("Done!")
 
+        if y_train.shape != (0,):
+            assert (
+                X_train.shape[0] == y_train.shape[0]
+            ), "training set ({}) and labels ({}) do not have the same shape".format(
+                X_train.shape[0], y_train.shape[0]
+            )
+        if y_test.shape != (0,):
+            assert (
+                X_test.shape[0] == y_test.shape[0]
+            ), "training set and labels do not have the same shape"
+
         return X_train, y_train, X_test, y_test
 
+
+if __name__ == "__main__":
+    # Remove excessive logging from tensorflow
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # TODO:
 #   Add __str__ method for all three major classes!
