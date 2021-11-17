@@ -1457,31 +1457,15 @@ class TableDict(dict):
         if verbose:
             print("Breaking time series...")
 
-        # Generate a base ruptured training set and a set of breaks
-        X_train_ruptured, train_breaks = None, None
-        cumulative_shape = 0
-        # Iterate over all experiments and populate them
-        for i, tab in enumerate(table_temp.values()):
-            if i not in test_index:
-                current_size = tab.shape[0]
-                current_train, current_breaks = deepof.utils.rolling_window(
-                    X_train[cumulative_shape : cumulative_shape + current_size],
-                    window_size,
-                    window_step,
-                    automatic_changepoints,
-                )
-                cumulative_shape += current_size
-
-                try:
-                    X_train_ruptured = np.concatenate([X_train_ruptured, current_train])
-                    train_breaks = np.concatenate([train_breaks, current_breaks])
-                except ValueError:
-                    X_train_ruptured = current_train
-                    train_breaks = current_breaks
-
-        X_train, train_breaks = deepof.utils.rolling_window(
-            X_train, window_size, window_step, automatic_changepoints
-        )  # TODO: rupture PER VIDEO individually using test indices
+        # Apply rupture method to each train experiment independently
+        X_train, train_breaks = deepof.utils.rupture_per_experiment(
+            table_dict=table_temp,
+            to_rupture=X_train,
+            rupture_indices=[i for i in range(len(table_temp)) if i not in test_index],
+            automatic_changepoints=automatic_changepoints,
+            window_size=window_size,
+            window_step=window_step,
+        )
 
         # Print rupture information to screen
         if verbose > 1 and automatic_changepoints:
@@ -1496,8 +1480,15 @@ class TableDict(dict):
 
         if self._propagate_labels or self._propagate_annotations:
             if train_breaks is None:
-                y_train, _ = deepof.utils.rolling_window(
-                    y_train, window_size, window_step, automatic_changepoints=False
+                y_train, _ = deepof.utils.rupture_per_experiment(
+                    table_dict=table_temp,
+                    to_rupture=y_train,
+                    rupture_indices=[
+                        i for i in range(len(table_temp)) if i not in test_index
+                    ],
+                    automatic_changepoints=False,
+                    window_size=window_size,
+                    window_step=window_step,
                 )
             else:
                 y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
@@ -1517,16 +1508,29 @@ class TableDict(dict):
             g /= np.max(g)
             X_train = X_train * g.reshape([1, window_size, 1])
 
-        if test_videos:
+        if test_videos and len(test_index) > 0:
 
-            X_test, test_breaks = deepof.utils.rolling_window(
-                X_test, window_size, window_step, automatic_changepoints
+            # Apply rupture method to each test experiment independently
+            X_test, test_breaks = deepof.utils.rupture_per_experiment(
+                table_dict=table_temp,
+                to_rupture=X_test,
+                rupture_indices=test_index,
+                automatic_changepoints=automatic_changepoints,
+                window_size=window_size,
+                window_step=window_step,
             )
 
             if self._propagate_labels or self._propagate_annotations:
                 if test_breaks is None:
-                    y_test, _ = deepof.utils.rolling_window(
-                        y_test, window_size, window_step, automatic_changepoints=False
+                    y_test, _ = deepof.utils.rupture_per_experiment(
+                        table_dict=table_temp,
+                        to_rupture=y_test,
+                        rupture_indices=[
+                            i for i in range(len(table_temp)) if i not in test_index
+                        ],
+                        automatic_changepoints=False,
+                        window_size=window_size,
+                        window_step=window_step,
                     )
                 else:
                     y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
@@ -1561,6 +1565,7 @@ class TableDict(dict):
         if (
             test_videos
             and automatic_changepoints
+            and len(X_test.shape) > 0
             and X_train.shape[1] != X_test.shape[1]
         ):
             max_seqlength = np.maximum(X_train.shape[1], X_test.shape[1])
@@ -1579,6 +1584,17 @@ class TableDict(dict):
 
         if verbose:
             print("Done!")
+
+        if y_train.shape != (0,):
+            assert (
+                X_train.shape[0] == y_train.shape[0]
+            ), "training set ({}) and labels ({}) do not have the same shape".format(
+                X_train.shape[0], y_train.shape[0]
+            )
+        if y_test.shape != (0,):
+            assert (
+                X_test.shape[0] == y_test.shape[0]
+            ), "training set and labels do not have the same shape"
 
         return X_train, y_train, X_test, y_test
 
