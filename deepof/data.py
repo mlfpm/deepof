@@ -160,8 +160,7 @@ class Project:
                     if bp.startswith(aid):
                         self.connectivity[aid].remove_node(bp)
 
-    # pragma: no cover
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         if self.exp_conditions:
             return "deepof analysis of {} videos across {} condition{}".format(
                 len(self.videos),
@@ -170,8 +169,7 @@ class Project:
             )
         return "deepof analysis of {} videos".format(len(self.videos))
 
-    # pragma: no cover
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         if self.exp_conditions:
             return "deepof analysis of {} videos across {} condition{}".format(
                 len(self.videos),
@@ -547,8 +545,7 @@ class Coordinates:
         self.angles = angles
         self.distances = distances
 
-    # pragma: no cover
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         if self._exp_conditions:
             return "deepof coordinates of {} videos across {} condition{}".format(
                 len(self._videos),
@@ -557,8 +554,7 @@ class Coordinates:
             )
         return "deepof analysis of {} videos".format(len(self._videos))
 
-    # pragma: no cover
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         if self._exp_conditions:
             return "deepof coordinates of {} videos across {} condition{}".format(
                 len(self._videos),
