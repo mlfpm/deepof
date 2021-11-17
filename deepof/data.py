@@ -17,7 +17,8 @@ import copy
 import os
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Tuple, Union
+from typing import Dict
+from typing import Tuple, Any, List, NewType
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,7 +28,6 @@ from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
-from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -39,13 +39,10 @@ import deepof.train_utils
 import deepof.utils
 import deepof.visuals
 
-# Remove excessive logging from tensorflow
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 # DEFINE CUSTOM ANNOTATED TYPES #
-project = deepof.utils.NewType("deepof_project", deepof.utils.Any)
-coordinates = deepof.utils.NewType("deepof_coordinates", deepof.utils.Any)
-table_dict = deepof.utils.NewType("deepof_table_dict", deepof.utils.Any)
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
@@ -1593,11 +1590,15 @@ class TableDict(dict):
             )
         if y_test.shape != (0,):
             assert (
-                X_test.shape[0] == y_test.shape[0]
+                    X_test.shape[0] == y_test.shape[0]
             ), "training set and labels do not have the same shape"
 
         return X_train, y_train, X_test, y_test
 
+
+if __name__ == "__main__":
+    # Remove excessive logging from tensorflow
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # TODO:
 #   Add __str__ method for all three major classes!

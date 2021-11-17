@@ -29,8 +29,7 @@ from sklearn.feature_selection import VarianceThreshold
 from tqdm import tqdm
 
 # DEFINE CUSTOM ANNOTATED TYPES #
-import deepof.data
-
+project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
@@ -412,8 +411,8 @@ def rupture_per_experiment(
     for i, tab in enumerate(table_dict.values()):
         if i in rupture_indices:
             current_size = tab.shape[0]
-            current_train, current_breaks = deepof.utils.rolling_window(
-                to_rupture[cumulative_shape : cumulative_shape + current_size],
+            current_train, current_breaks = rolling_window(
+                to_rupture[cumulative_shape: cumulative_shape + current_size],
                 window_size,
                 window_step,
                 automatic_changepoints,
@@ -1064,5 +1063,4 @@ def cluster_transition_matrix(
 
 
 # TODO:
-#    - Add sequence plot to single_behaviour_analysis (show how the condition varies across a specified time window)
 #    - Add center / time in zone to supervised_tagging
