@@ -6,10 +6,10 @@
 
 Data structures for preprocessing and wrangling of DLC output data.
 
-- project: initial structure for specifying the characteristics of the project.
-- coordinates: result of running the project. In charge of calling all relevant
+- Project: initial structure for specifying the characteristics of the project.
+- Coordinates: result of running the project. In charge of calling all relevant
 computations for getting the data into the desired shape
-- table_dict: python dict subclass for storing experimental instances as pandas.DataFrames.
+- TableDict: python dict subclass for storing experimental instances as pandas.DataFrames.
 Contains methods for generating training and test sets ready for model training.
 
 """
@@ -1626,3 +1626,6 @@ class TableDict(dict):
 if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+
+# TODO: Complete docstrings of all three classes!
