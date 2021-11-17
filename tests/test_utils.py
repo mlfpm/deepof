@@ -328,7 +328,7 @@ def test_rolling_window(a, window, automatic_changepoints):
         assert rolled_a.shape[1] == window_size
 
     else:
-        assert rolled_a.shape[0] == len(breakpoints) + 1
+        assert rolled_a.shape[0] == len(breakpoints)
 
 
 @settings(deadline=None)
