@@ -28,12 +28,12 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def close_single_contact(
-        pos_dframe: pd.DataFrame,
-        left: str,
-        right: str,
-        tol: float,
-        arena_abs: int,
-        arena_rel: int,
+    pos_dframe: pd.DataFrame,
+    left: str,
+    right: str,
+    tol: float,
+    arena_abs: int,
+    arena_rel: int,
 ) -> np.array:
     """Returns a boolean array that's True if the specified body parts are closer than tol.
 

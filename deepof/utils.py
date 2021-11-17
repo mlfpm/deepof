@@ -412,7 +412,7 @@ def rupture_per_experiment(
         if i in rupture_indices:
             current_size = tab.shape[0]
             current_train, current_breaks = rolling_window(
-                to_rupture[cumulative_shape: cumulative_shape + current_size],
+                to_rupture[cumulative_shape : cumulative_shape + current_size],
                 window_size,
                 window_step,
                 automatic_changepoints,

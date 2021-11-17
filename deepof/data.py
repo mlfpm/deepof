@@ -28,6 +28,7 @@ from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
+from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -1590,7 +1591,7 @@ class TableDict(dict):
             )
         if y_test.shape != (0,):
             assert (
-                    X_test.shape[0] == y_test.shape[0]
+                X_test.shape[0] == y_test.shape[0]
             ), "training set and labels do not have the same shape"
 
         return X_train, y_train, X_test, y_test
