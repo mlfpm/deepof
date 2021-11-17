@@ -160,10 +160,23 @@ class Project:
                     if bp.startswith(aid):
                         self.connectivity[aid].remove_node(bp)
 
+    # pragma: no cover
     def __str__(self):
         if self.exp_conditions:
-            return "deepof analysis of {} videos across {} conditions".format(
-                len(self.videos), len(set(self.exp_conditions.values()))
+            return "deepof analysis of {} videos across {} condition{}".format(
+                len(self.videos),
+                len(set(self.exp_conditions.values())),
+                ("s" if len(set(self.exp_conditions.values())) > 1 else ""),
+            )
+        return "deepof analysis of {} videos".format(len(self.videos))
+
+    # pragma: no cover
+    def __repr__(self):
+        if self.exp_conditions:
+            return "deepof analysis of {} videos across {} condition{}".format(
+                len(self.videos),
+                len(set(self.exp_conditions.values())),
+                ("s" if len(set(self.exp_conditions.values())) > 1 else ""),
             )
         return "deepof analysis of {} videos".format(len(self.videos))
 
@@ -534,10 +547,23 @@ class Coordinates:
         self.angles = angles
         self.distances = distances
 
+    # pragma: no cover
     def __str__(self):
         if self._exp_conditions:
-            return "Coordinates of {} videos across {} conditions".format(
-                len(self._videos), len(set(self._exp_conditions.values()))
+            return "deepof coordinates of {} videos across {} condition{}".format(
+                len(self._videos),
+                len(set(self._exp_conditions.values())),
+                ("s" if len(set(self._exp_conditions.values())) > 1 else ""),
+            )
+        return "deepof analysis of {} videos".format(len(self._videos))
+
+    # pragma: no cover
+    def __repr__(self):
+        if self._exp_conditions:
+            return "deepof coordinates of {} videos across {} condition{}".format(
+                len(self._videos),
+                len(set(self._exp_conditions.values())),
+                ("s" if len(set(self._exp_conditions.values())) > 1 else ""),
             )
         return "deepof analysis of {} videos".format(len(self._videos))
 
@@ -1600,6 +1626,3 @@ class TableDict(dict):
 if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-# TODO:
-#   Add __str__ method for all three major classes!
