@@ -515,7 +515,9 @@ class GMVAE:
                     ),
                     reinterpreted_batch_ndims=1,
                 ),
-                validity_mask=tf.reduce_all(decoded[2] == 0.0, axis=2),
+                validity_mask=tf.math.logical_not(
+                    tf.reduce_all(decoded[2] == 0.0, axis=2)
+                ),
             ),
             convert_to_tensor_fn="mean",
             name="vae_reconstruction",
@@ -572,7 +574,9 @@ class GMVAE:
                         ),
                         reinterpreted_batch_ndims=1,
                     ),
-                    validity_mask=tf.reduce_all(predicted[2] == 0.0, axis=2),
+                    validity_mask=tf.math.logical_not(
+                        tf.reduce_all(predicted[2] == 0.0, axis=2)
+                    ),
                 ),
                 convert_to_tensor_fn="mean",
                 name="vae_prediction",

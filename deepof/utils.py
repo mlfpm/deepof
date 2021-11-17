@@ -423,7 +423,7 @@ def rupture_per_experiment(
                 current_breaks = np.array(current_breaks) + cumulative_shape
                 cumulative_shape += current_size
 
-            try:
+            try:  # pragma: no cover
                 # To concatenate the current ruptures with the ones obtained
                 # until now, pad the smallest to the length of the largest
                 # alongside axis 1 (temporal dimension) with zeros.
