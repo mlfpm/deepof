@@ -1629,3 +1629,7 @@ if __name__ == "__main__":
 
 
 # TODO: Complete docstrings of all three classes!
+# TODO: Fix issues and add supervised parameters
+# TODO: Label more data for model training
+# TODO: Finish visualization pipeline (Projections and time-wise analyses)
+# TODO: Add options to compare cohorts in the unsupervised pipeline (cluster population - cluster dinamycs)
