@@ -20,16 +20,16 @@ warmup_mode = ["sigmoid"]
 automatic_changepoints = ["l2"]  # [None, "l1", "l2", "rbf"]
 animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
-overlap_loss = [0.0]  # [0.1, 0.2, 0.5, 0.75, 1.]
-encodings = [4]  # [2, 4, 6, 8, 10, 12, 14, 16]
+overlap_loss = [0.0, 0.1]  # [0.1, 0.2, 0.5, 0.75, 1.]
+encodings = [4, 6, 8]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
-latent_reg = ["variance"]  # ["none", "categorical", "variance", "categorical+variance"]
+latent_reg = ["none", "variance", "categorical+variance"]  # ["none", "categorical", "variance", "categorical+variance"]
 entropy_knn = [10]
-next_sequence_pred_weights = [0.0]
+next_sequence_pred_weights = [0.1]
 phenotype_pred_weights = [0.0]
-rule_based_pred_weights = [0.0]
+supervised_pred_weights = [0.0]
 window_lengths = [15]  # range(11,56,11)
-input_types = ["coords"]
+input_types = ["coords", "coords+speed"]
 run = [1]  # list(range(1, 11))
 
 
@@ -57,7 +57,7 @@ rule deepof_experiments:
             "window_size={window_size}_"
             "NSPred={nspredweight}_"
             "PPred={phenpredweight}_"
-            "RBPred={rulesweight}_"
+            "SupPred={supervisedweight}_"
             "loss={loss}_"
             "overlap_loss={overlap_loss}_"
             "loss_warmup={warmup}_"
@@ -80,7 +80,7 @@ rule deepof_experiments:
             entknn=entropy_knn,
             nspredweight=next_sequence_pred_weights,
             phenpredweight=phenotype_pred_weights,
-            rulesweight=rule_based_pred_weights,
+            supervisedweight=supervised_pred_weights,
             run=run,
         ),
 
@@ -114,7 +114,7 @@ rule coarse_hyperparameter_tuning:
         "--input-type coords "
         "--next-sequence-prediction {wildcards.nspredweight} "
         "--phenotype-prediction {wildcards.phenpredweight} "
-        "--rule-based-prediction {wildcards.rulesweight} "
+        "--supervised-prediction {wildcards.supervisedweight} "
         "--loss {wildcards.loss} "
         "--kl-warmup 30 "
         "--mmd-warmup 30 "
@@ -139,7 +139,7 @@ rule train_models:
         "window_size={window_size}_"
         "NSPred={nspredweight}_"
         "PPred={phenpredweight}_"
-        "RBPred={rulesweight}_"
+        "SupPred={supervisedweight}_"
         "loss={loss}_"
         "overlap_loss={overlap_loss}_"
         "loss_warmup={warmup}_"
@@ -160,7 +160,7 @@ rule train_models:
         "--input-type {wildcards.input_type} "
         "--next-sequence-prediction {wildcards.nspredweight} "
         "--phenotype-prediction {wildcards.phenpredweight} "
-        "--rule-based-prediction {wildcards.rulesweight} "
+        "--superviseded-prediction {wildcards.supervisedweight} "
         "--latent-reg {wildcards.latreg} "
         "--loss {wildcards.loss} "
         "--overlap-loss {wildcards.overlap_loss} "
