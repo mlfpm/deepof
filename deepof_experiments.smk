@@ -164,7 +164,7 @@ rule train_models:
         "--input-type {wildcards.input_type} "
         "--next-sequence-prediction {wildcards.nspredweight} "
         "--phenotype-prediction {wildcards.phenpredweight} "
-        "--superviseded-prediction {wildcards.supervisedweight} "
+        "--supervised-prediction {wildcards.supervisedweight} "
         "--latent-reg {wildcards.latreg} "
         "--loss {wildcards.loss} "
         "--overlap-loss {wildcards.overlap_loss} "
