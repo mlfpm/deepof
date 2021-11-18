@@ -23,7 +23,11 @@ losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 overlap_loss = [0.0, 0.1]  # [0.1, 0.2, 0.5, 0.75, 1.]
 encodings = [4, 6, 8]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
-latent_reg = ["none", "variance", "categorical+variance"]  # ["none", "categorical", "variance", "categorical+variance"]
+latent_reg = [
+    "none",
+    "variance",
+    "categorical+variance",
+]  # ["none", "categorical", "variance", "categorical+variance"]
 entropy_knn = [10]
 next_sequence_pred_weights = [0.1]
 phenotype_pred_weights = [0.0]
