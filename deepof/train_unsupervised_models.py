@@ -352,10 +352,10 @@ coords = project_coords.get_coords(
 speeds = project_coords.get_coords(speed=1)
 distances = project_coords.get_distances()
 angles = project_coords.get_angles()
-coords_distances = deepof.data.merge_tables(coords, distances)
-coords_angles = deepof.data.merge_tables(coords, angles)
-dists_angles = deepof.data.merge_tables(distances, angles)
-coords_dist_angles = deepof.data.merge_tables(coords, distances, angles)
+coords_distances = coords.merge(distances)
+coords_angles = coords.merge(angles)
+dists_angles = distances.merge(angles)
+coords_dist_angles = coords.merge(distances, angles)
 
 
 def batch_preprocess(tab_dict):
@@ -386,7 +386,7 @@ input_dict_train = {
 
 to_preprocess = input_dict_train[input_type.replace("+speed", "")]
 if "speed" in input_type:
-    to_preprocess = deepof.data.merge_tables(to_preprocess, speeds)
+    to_preprocess = to_preprocess.merge(speeds)
 
 print("Preprocessing data...")
 X_train, y_train, X_val, y_val = batch_preprocess(to_preprocess)
