@@ -502,3 +502,13 @@ class ClusterOverlap(Layer):
                 # self.add_loss(-self.loss_weight * tf.reduce_mean(number_of_clusters))
 
         return encodings
+
+
+@tf.keras.utils.register_keras_serializable(package="Custom", name="var_distance")
+def mean_variance_regularizer(tensor, reg_weight=0.1):
+    """
+    Regularizer that penalizes the difference in variance between the modes of the latent Gaussian Mixture
+    """
+    tensor_mean = tf.reduce_mean(tensor, axis=1)
+    dist_to_mean = tf.math.reduce_euclidean_norm(tf.transpose(tensor) - tensor_mean)
+    return reg_weight * dist_to_mean

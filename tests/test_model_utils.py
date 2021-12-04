@@ -289,3 +289,37 @@ def test_find_learning_rate():
     test_model.build(X.shape)
 
     deepof.model_utils.find_learning_rate(test_model, X, y)
+
+
+def test_mean_variance_regularizer():
+    X = np.random.uniform(0, 10, [75, 5])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(
+        tf.keras.layers.Dense(
+            1, activity_regularizer=deepof.model_utils.mean_variance_regularizer
+        )
+    )
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
+    )
+    test_model.build(X.shape)
+
+    assert deepof.model_utils.mean_variance_regularizer(X) > 0.0
+    assert np.allclose(
+        deepof.model_utils.mean_variance_regularizer(np.zeros([75, 5])), 0.0
+    )
+    assert np.allclose(
+        deepof.model_utils.mean_variance_regularizer(
+            np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5).T
+        ),
+        0.0,
+    )
+    assert (
+        deepof.model_utils.mean_variance_regularizer(
+            np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5)
+        )
+        > 0.0
+    )
