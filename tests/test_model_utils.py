@@ -297,7 +297,7 @@ def test_mean_variance_regularizer():
     test_model = tf.keras.Sequential()
     test_model.add(
         tf.keras.layers.Dense(
-            1, activity_regularizer=deepof.model_utils.mean_variance_regularizer
+            1, activity_regularizer=deepof.model_utils.MeanVarianceRegularizer(0.1)
         )
     )
 
@@ -307,18 +307,18 @@ def test_mean_variance_regularizer():
     )
     test_model.build(X.shape)
 
-    assert deepof.model_utils.mean_variance_regularizer(X) > 0.0
+    assert deepof.model_utils.MeanVarianceRegularizer(0.1)(X) > 0.0
     assert np.allclose(
-        deepof.model_utils.mean_variance_regularizer(np.zeros([75, 5])), 0.0
+        deepof.model_utils.MeanVarianceRegularizer(0.1)(np.zeros([75, 5])), 0.0
     )
     assert np.allclose(
-        deepof.model_utils.mean_variance_regularizer(
+        deepof.model_utils.MeanVarianceRegularizer(0.1)(
             np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5).T
         ),
         0.0,
     )
     assert (
-        deepof.model_utils.mean_variance_regularizer(
+        deepof.model_utils.MeanVarianceRegularizer(0.1)(
             np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5)
         )
         > 0.0

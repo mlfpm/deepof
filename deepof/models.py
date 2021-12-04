@@ -412,9 +412,10 @@ class GMVAE:
             // 2,
             name="cluster_variances",
             activation=None,
-            activity_regularizer=(
+            kernel_regularizer=(
                 tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
             ),
+            activity_regularizer=deepof.model_utils.MeanVarianceRegularizer(0.05),
             kernel_initializer=random_uniform(),
         )(encoder)
 
