@@ -321,14 +321,16 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
     Returns:
         split_a (np.ndarray): N (instances) * l (maximum break length) * m (features) shape
     """
-    rpt_lengths = np.array(breakpoints)[1:] - np.array(breakpoints)[:-1]
+    rpt_lengths = list(np.array(breakpoints)[1:] - np.array(breakpoints)[:-1])
+    max_rpt_length = np.max([breakpoints[0], np.max(rpt_lengths)])
 
     # Reshape experiment data according to extracted ruptures
     split_a = np.split(np.expand_dims(a, axis=0), breakpoints[:-1], axis=1)
+
     split_a = [
         np.pad(
             i,
-            ((0, 0), (0, np.max(rpt_lengths) - i.shape[1]), (0, 0)),
+            ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)),
             constant_values=0.0,
         )
         for i in split_a
@@ -364,7 +366,7 @@ def rolling_window(
         ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
         # Extract change points from current experiment
-        breakpoints = rpt_model.predict(pen=3.0)
+        breakpoints = rpt_model.predict(pen=4.0)
         rolled_a = split_with_breakpoints(a, breakpoints)
 
     else:
@@ -427,7 +429,7 @@ def rupture_per_experiment(
                 # To concatenate the current ruptures with the ones obtained
                 # until now, pad the smallest to the length of the largest
                 # alongside axis 1 (temporal dimension) with zeros.
-                if ruptured_dataset.shape[1] > current_train.shape[1]:
+                if ruptured_dataset.shape[1] >= current_train.shape[1]:
                     current_train = np.pad(
                         current_train,
                         (

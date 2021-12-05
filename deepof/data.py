@@ -1550,7 +1550,7 @@ class TableDict(dict):
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
-        automatic_changepoints="l2",
+        automatic_changepoints="rbf",
         window_size: int = 15,
         window_step: int = 1,
         scale: str = "standard",
@@ -1566,9 +1566,9 @@ class TableDict(dict):
         Main method for preprocessing the loaded dataset. Capable of returning training
         and test sets ready for model training.
 
-        :param automatic_changepoints: specifies the changepoint detection algorithm to use to ruprure the
-        data across time. Can be set to "l1", "l2" (default) or "rbf". If False, fixed-length ruptures are
-        appled.
+        :param automatic_changepoints: specifies the changepoint detection kernel to use to rupture the
+        data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are
+        appiled.
         :type automatic_changepoints: str or bool
         :param window_size: Minimum size of the applied ruptures. If automatic_changepoints is False,
          specifies the size of the sliding window to pass through the data to generate training instances.
@@ -1681,7 +1681,7 @@ class TableDict(dict):
 
         # Print rupture information to screen
         if verbose > 1 and automatic_changepoints:
-            rpt_lengths = np.array(train_breaks)[1:] - np.array(train_breaks)[:-1]
+            rpt_lengths = np.all(X_train != 0, axis=2).sum(axis=1)
             print(
                 "average rupture length: {}, standard deviation: {}".format(
                     rpt_lengths.mean(), rpt_lengths.std()
