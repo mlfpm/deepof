@@ -355,16 +355,16 @@ def rolling_window(
         N (sliding window instances) * l (sliding window size) * m (features)"""
 
     breakpoints = None
+
     if automatic_changepoints:
         # Define change point detection model using ruptures
         # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
-        rpt_model = rpt.BottomUp(
-            model=automatic_changepoints, min_size=window_size, jump=window_step
+        rpt_model = rpt.KernelCPD(
+            kernel=automatic_changepoints, min_size=window_size, jump=window_step
         ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
         # Extract change points from current experiment
-        breakpoints = rpt_model.predict(pen=1.0)
-
+        breakpoints = rpt_model.predict(pen=3.0)
         rolled_a = split_with_breakpoints(a, breakpoints)
 
     else:

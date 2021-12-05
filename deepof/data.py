@@ -66,9 +66,9 @@ class Project:
         exp_conditions: dict = None,
         high_fidelity_arena: bool = False,
         interpolate_outliers: bool = True,
-        interpolation_limit: int = 5,
+        interpolation_limit: int = 2,
         interpolation_std: int = 5,
-        likelihood_tol: float = 0.5,
+        likelihood_tol: float = 0.85,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 5,
@@ -397,7 +397,7 @@ class Project:
                 print("Iterative imputation of ocluded bodyparts...")
 
             for k, value in tab_dict.items():
-                imputed = IterativeImputer(skip_complete=True).fit_transform(value)
+                imputed = IterativeImputer(skip_complete=True, max_iter=1000).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
                 )
@@ -1814,8 +1814,8 @@ if __name__ == "__main__":
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
-# TODO: Complete docstrings of all three classes!
-# TODO: Fix issues and add supervised parameters
+# TODO: Add an option to
+# TODO: Fix issues and add supervised parameters (time in zone, etc).
 # TODO: Label more data for model training
 # TODO: Finish visualization pipeline (Projections and time-wise analyses)
 # TODO: Add options to compare cohorts in the unsupervised pipeline (cluster population - cluster dinamycs)
