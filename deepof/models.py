@@ -77,7 +77,7 @@ class GMVAE:
         self.mmd_annealing_mode = mmd_annealing_mode
         self.mmd_warmup = mmd_warmup_epochs
         self.number_of_components = number_of_components
-        self.optimizer = Nadam(lr=self.learn_rate, clipvalue=self.clipvalue)
+        self.optimizer = Nadam(learning_rate=self.learn_rate, clipvalue=self.clipvalue)
         self.overlap_loss = overlap_loss
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction

@@ -52,9 +52,9 @@ parser.add_argument(
 parser.add_argument(
     "--batch-size",
     "-bs",
-    help="set training batch size. Defaults to 512",
+    help="set training batch size. Defaults to 256",
     type=int,
-    default=512,
+    default=256,
 )
 parser.add_argument(
     "--components",
