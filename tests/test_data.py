@@ -269,7 +269,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         window_size=11,
         window_step=1,
         automatic_changepoints=(
-            False if not propagate and not propagate_annots else "l2"
+            False if not propagate and not propagate_annots else "linear"
         ),
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=1,
