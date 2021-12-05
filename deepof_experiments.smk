@@ -17,24 +17,20 @@ outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 warmup_epochs = [15]
 warmup_mode = ["sigmoid"]
-automatic_changepoints = ["l2"]  # [None, "l1", "l2", "rbf"]
-animal_to_preprocess = ["B"]  # [None, "B", "W"]
+automatic_changepoints = ["rbf"]  # [None, "rbf", "linear"]
+animal_to_preprocess = [None]  # [None, "B", "W"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 overlap_loss = [0.0, 0.1]  # [0.1, 0.2, 0.5, 0.75, 1.]
-encodings = [4, 6, 8]  # [2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = [15]  # [1, 5, 10, 15, 20, 25]
-latent_reg = [
-    "none",
-    "variance",
-    "categorical+variance",
-]  # ["none", "categorical", "variance", "categorical+variance"]
+encodings = [4]  # [2, 4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = list(range(5, 21))  # [1, 5, 10, 15, 20, 25]
+latent_reg = ["categorical+variance"]
 entropy_knn = [10]
-next_sequence_pred_weights = [0.1]
+next_sequence_pred_weights = [0.0]
 phenotype_pred_weights = [0.0]
 supervised_pred_weights = [0.0]
-window_lengths = [15]  # range(11,56,11)
-input_types = ["coords", "coords+speed"]
-run = [1]  # list(range(1, 11))
+window_lengths = [5]
+input_types = ["coords"]
+run = list(range(1, 4))
 
 
 rule deepof_experiments:
@@ -134,7 +130,7 @@ rule coarse_hyperparameter_tuning:
 rule train_models:
     input:
         data_path=ancient(
-            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/20210325_Data_for_deepof_SI/JB08_files_SI"
+            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/CSDS_SI_single_tag/"
         ),
     output:
         trained_models=outpath + "train_models/trained_weights/"
@@ -157,9 +153,10 @@ rule train_models:
     shell:
         "pipenv run python -m deepof.train_unsupervised_models "
         "--train-path {input.data_path} "
-        "--val-num 15 "
-        "--animal-id B,W "
-        "--animal-to-preprocess B "
+        "--val-num 5 "
+        # "--animal-id B,W "
+        # "--animal-to-preprocess B "
+        "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
         "--components {wildcards.k} "
         "--input-type {wildcards.input_type} "
         "--next-sequence-prediction {wildcards.nspredweight} "
@@ -177,6 +174,6 @@ rule train_models:
         "--entropy-knn {wildcards.entknn} "
         "--batch-size 256 "
         "--window-size {wildcards.window_size} "
-        "--window-step 11 "
+        "--window-step 1 "
         "--run {wildcards.run} "
         "--output-path {outpath}train_models"
