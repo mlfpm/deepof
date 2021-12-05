@@ -45,9 +45,9 @@ parser.add_argument(
     "--automatic-changepoints",
     "-ruptures",
     help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
-    "Must be one of 'l2', 'l1', 'rbf' or False (a sliding window is used instead).",
+    "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
     type=str,
-    default="l2",
+    default="rbf",
 )
 parser.add_argument(
     "--batch-size",
@@ -241,14 +241,14 @@ parser.add_argument(
     "-ws",
     help="Sets the sliding window size to be used when building both training and validation sets. Defaults to 15",
     type=int,
-    default=15,
+    default=5,
 )
 parser.add_argument(
     "--window-step",
     "-wt",
     help="Sets the sliding window step to be used when building both training and validation sets. Defaults to 5",
     type=int,
-    default=5,
+    default=1,
 )
 parser.add_argument(
     "--run",
