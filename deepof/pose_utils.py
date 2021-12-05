@@ -694,44 +694,44 @@ def supervised_tagging(
                 animal_id=_id,
             )
         )
-        # tag_dict[_id + undercond + "huddle"] = huddle(
-        #     coords.loc[  # Filter coordinates to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in coords.columns
-        #             if col in deepof.utils.filter_columns(coords.columns, _id)
-        #         ],
-        #     ],
-        #     speeds.loc[  # Filter speeds to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in speeds.columns
-        #             if col in deepof.utils.filter_columns(speeds.columns, _id)
-        #         ],
-        #     ],
-        #     huddle_estimator,
-        # )
-        # tag_dict[_id + undercond + "dig"] = dig(
-        #     coords.loc[  # Filter coordinates to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in coords.columns
-        #             if col in deepof.utils.filter_columns(coords.columns, _id)
-        #         ],
-        #     ],
-        #     speeds.loc[  # Filter speeds to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in speeds.columns
-        #             if col in deepof.utils.filter_columns(speeds.columns, _id)
-        #         ],
-        #     ],
-        #     dig_estimator,
-        # )
+        tag_dict[_id + undercond + "huddle"] = huddle(
+            coords.loc[  # Filter coordinates to keep only the current animal
+                :,
+                [
+                    col
+                    for col in coords.columns
+                    if col in deepof.utils.filter_columns(coords.columns, _id)
+                ],
+            ],
+            speeds.loc[  # Filter speeds to keep only the current animal
+                :,
+                [
+                    col
+                    for col in speeds.columns
+                    if col in deepof.utils.filter_columns(speeds.columns, _id)
+                ],
+            ],
+            huddle_estimator,
+        )
+        tag_dict[_id + undercond + "dig"] = dig(
+            coords.loc[  # Filter coordinates to keep only the current animal
+                :,
+                [
+                    col
+                    for col in coords.columns
+                    if col in deepof.utils.filter_columns(coords.columns, _id)
+                ],
+            ],
+            speeds.loc[  # Filter speeds to keep only the current animal
+                :,
+                [
+                    col
+                    for col in speeds.columns
+                    if col in deepof.utils.filter_columns(speeds.columns, _id)
+                ],
+            ],
+            dig_estimator,
+        )
         tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
             look_around(
                 speeds,
@@ -885,12 +885,12 @@ def tag_annotated_frames(
 
             if tag_dict[_id + undercond + "climbing"][fnum]:
                 write_on_frame("climbing", down_pos)
-            # elif tag_dict[_id + undercond + "huddle"][fnum]:
-            #    write_on_frame("huddling", down_pos)
+            elif tag_dict[_id + undercond + "huddle"][fnum]:
+                write_on_frame("huddling", down_pos)
             elif tag_dict[_id + undercond + "sniffing"][fnum]:
                 write_on_frame("sniffing", down_pos)
-            # elif tag_dict[_id + undercond + "dig"][fnum]:
-            #    write_on_frame("digging", down_pos)
+            elif tag_dict[_id + undercond + "dig"][fnum]:
+                write_on_frame("digging", down_pos)
             # elif tag_dict[_id + undercond + "lookaround"][fnum]:
             #     write_on_frame("lookaround", down_pos)
 

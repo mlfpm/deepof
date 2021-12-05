@@ -397,7 +397,9 @@ class Project:
                 print("Iterative imputation of ocluded bodyparts...")
 
             for k, value in tab_dict.items():
-                imputed = IterativeImputer(skip_complete=True, max_iter=1000).fit_transform(value)
+                imputed = IterativeImputer(
+                    skip_complete=True, max_iter=1000
+                ).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
                 )
