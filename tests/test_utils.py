@@ -312,7 +312,7 @@ def test_smooth_boolean_array(a):
     window=st.data(),
     automatic_changepoints=st.one_of(
         st.just(False),
-        st.just("l2"),
+        st.just("linear"),
     ),
 )
 def test_rolling_window(a, window, automatic_changepoints):
