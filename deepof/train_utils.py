@@ -370,7 +370,7 @@ def autoencoder_fitting(
     with strategy.scope():
         (encoder, generator, grouper, ae, prior, posterior,) = deepof.models.GMVAE(
             architecture_hparams=({} if hparams is None else hparams),
-            batch_size=batch_size * strategy.num_replicas_in_sync,
+            batch_size=batch_size,
             compile_model=True,
             encoding=encoding_size,
             kl_annealing_mode=kl_annealing_mode,
