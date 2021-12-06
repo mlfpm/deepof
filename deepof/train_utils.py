@@ -293,9 +293,16 @@ def autoencoder_fitting(
     entropy_knn: int,
     input_type: str,
     run: int = 0,
-    strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(),
+    strategy: tf.distribute.Strategy = "one_device",
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
+
+    # Check if a GPU is available and if not, fall back to CPU
+    if strategy == "one_device":
+        if len(tf.config.list_physical_devices('GPU')) > 0:
+            strategy = tf.distribute.OneDeviceStrategy("gpu")
+        else:
+            strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     # Load data
     X_train, y_train, X_val, y_val = preprocessed_object

@@ -1108,7 +1108,7 @@ class Coordinates:
         entropy_knn: int = 100,
         input_type: str = False,
         run: int = 0,
-        strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(),
+        strategy: tf.distribute.Strategy = "one_device",
     ) -> Tuple:
         """
         Annotates coordinates using an unsupervised autoencoder.
