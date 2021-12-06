@@ -293,7 +293,7 @@ def autoencoder_fitting(
     entropy_knn: int,
     input_type: str,
     run: int = 0,
-    strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(),
+    strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(),
 ):
     """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
 
