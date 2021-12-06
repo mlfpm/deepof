@@ -299,7 +299,7 @@ def autoencoder_fitting(
 
     # Check if a GPU is available and if not, fall back to CPU
     if strategy == "one_device":
-        if len(tf.config.list_physical_devices('GPU')) > 0:
+        if len(tf.config.list_physical_devices("GPU")) > 0:
             strategy = tf.distribute.OneDeviceStrategy("gpu")
         else:
             strategy = tf.distribute.OneDeviceStrategy("cpu")
