@@ -33,6 +33,8 @@ mkl = "*"
 scipy = "*"
 jupyter = "*"
 sphinx = "*"
+statannotations = "*"
+statsmodels = "*"
 
 [dev-packages]
 coverage = "*"

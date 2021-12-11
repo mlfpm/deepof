@@ -488,7 +488,7 @@ def smooth_mult_trajectory(
     return smoothed_series
 
 
-def moving_average(time_series: pd.Series, N: int = 5):
+def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
     """Fast implementation of a moving average function
 
     Parameters:
@@ -498,7 +498,7 @@ def moving_average(time_series: pd.Series, N: int = 5):
     Returns:
         -  moving_avg (pd.Series): univariate moving average over time_series"""
 
-    moving_avg = np.convolve(time_series, np.ones(N) / N, mode="same")
+    moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
 
     return moving_avg
 
@@ -510,7 +510,7 @@ def mask_outliers(
     lag: int,
     n_std: int,
     mode: str,
-):
+) -> pd.DataFrame:
     """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
     An outlier can be marked with one of two criteria:
         1) the likelihood reported by DLC is below likelihood_tolerance
@@ -534,8 +534,12 @@ def mask_outliers(
     residuals_x = time_series["x"] - moving_avg_x
     residuals_y = time_series["y"] - moving_avg_y
 
-    outlier_mask_x = np.abs(residuals_x) > n_std * np.std(residuals_x)
-    outlier_mask_y = np.abs(residuals_y) > n_std * np.std(residuals_y)
+    outlier_mask_x = np.abs(residuals_x) > np.mean(
+        residuals_x[lag:-lag]
+    ) + n_std * np.std(residuals_x[lag:-lag])
+    outlier_mask_y = np.abs(residuals_y) > np.mean(
+        residuals_y[lag:-lag]
+    ) + n_std * np.std(residuals_y[lag:-lag])
     outlier_mask_l = likelihood < likelihood_tolerance
     mask = None
 
@@ -555,7 +559,7 @@ def full_outlier_mask(
     lag: int,
     n_std: int,
     mode: str,
-):
+) -> pd.DataFrame:
     """Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
     replaced by a boolean mask, where True indicates an outlier
 
@@ -608,7 +612,7 @@ def interpolate_outliers(
     n_std: int = 3,
     mode: str = "or",
     limit: int = 10,
-):
+) -> pd.DataFrame:
     """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
@@ -637,7 +641,6 @@ def interpolate_outliers(
     interpolated_exp.interpolate(
         method="linear", limit=limit, limit_direction="both", inplace=True
     )
-
     # Add original frames to what happens before lag
     interpolated_exp = pd.concat(
         [experiment.iloc[:lag, :], interpolated_exp.iloc[lag:, :]]
