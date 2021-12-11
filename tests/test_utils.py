@@ -365,7 +365,7 @@ def test_interpolate_outliers(mode):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -374,24 +374,14 @@ def test_interpolate_outliers(mode):
     lkhood = prun.get_quality()
     coords_name = list(coords.keys())[0]
 
-    interp = deepof.utils.interpolate_outliers(
-        coords[coords_name],
-        lkhood[coords_name],
-        0.999,
-        exclude="Center",
-        mode=mode,
-        limit=15,
-        n_std=0,
-    )
-
     assert (
         deepof.utils.full_outlier_mask(
-            interp,
+            coords[coords_name],
             lkhood[coords_name],
             likelihood_tolerance=0.9,
             exclude="Center",
             lag=5,
-            n_std=2,
+            n_std=3,
             mode=mode,
         )
         .sum()
@@ -402,7 +392,7 @@ def test_interpolate_outliers(mode):
             likelihood_tolerance=0.9,
             exclude="Center",
             lag=5,
-            n_std=2,
+            n_std=1,
             mode=mode,
         )
         .sum()
