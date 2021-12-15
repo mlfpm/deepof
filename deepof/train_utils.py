@@ -98,13 +98,12 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
         "deepof_GMVAE",
         ("_input_type={}".format(input_type) if input_type else "coords"),
-        ("_window_size={}".format(X_train.shape[1])),
         ("_NSPred={}".format(next_sequence_prediction)),
         ("_PPred={}".format(phenotype_prediction)),
-        ("_RBPred={}".format(supervised_prediction)),
+        ("_SupPred={}".format(supervised_prediction)),
         ("_loss={}".format(loss)),
         ("_overlap_loss={}".format(overlap_loss)),
         ("_loss_warmup={}".format(loss_warmup)),

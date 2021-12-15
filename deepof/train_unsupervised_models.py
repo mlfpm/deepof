@@ -441,6 +441,7 @@ else:
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
         loss=loss,
+        window_size=window_size,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,

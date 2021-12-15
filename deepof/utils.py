@@ -9,6 +9,7 @@ Functions and general utilities for the deepof package. See documentation for de
 """
 
 import argparse
+import gc
 import multiprocessing
 import os
 from copy import deepcopy

@@ -398,7 +398,10 @@ class Project:
 
             for k, value in tab_dict.items():
                 imputed = IterativeImputer(
-                    skip_complete=True, max_iter=1000
+                    skip_complete=True,
+                    max_iter=10,
+                    n_nearest_features=value.shape[1] // len(self.animal_ids) - 1,
+                    tol=1e-1,
                 ).fit_transform(value)
                 tab_dict[k] = pd.DataFrame(
                     imputed, index=value.index, columns=value.columns
@@ -1417,7 +1420,7 @@ class TableDict(dict):
                 [bpa for bpa in val.columns if bpa in columns_to_keep],
             ]
 
-        return tabs
+        return TableDict(tabs, typ=self._type)
 
     def merge(self, *args, ignore_index=False):
         """
