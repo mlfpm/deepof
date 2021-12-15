@@ -107,7 +107,7 @@ rule coarse_hyperparameter_tuning:
             "coarse_hyperparameter_tuning/trained_weights/GMVAE_loss={loss}_k={k}_encoding={enc}_final_weights.h5",
         ),
     shell:
-        "pipenv run python -m deepof.train_unsupervised_models "
+        "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
         "--val-num 10 "
         "--components {wildcards.k} "
@@ -150,7 +150,7 @@ rule train_models:
         "run={run}_"
         "final_weights.h5",
     shell:
-        "pipenv run python -m deepof.train_unsupervised_models "
+        "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
         "--val-num 5 "
         "--animal-id B,W "

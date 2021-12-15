@@ -432,6 +432,53 @@ if not tune:
         run=run,
     )
 
+    deep_encodings_per_video = {}
+    deep_assignments_per_video = {}
+    deep_breaks_per_video = {}
+
+    for key in tqdm(csds_aligned_coords.keys()):
+
+        # Get preprocessed data for current video
+        curr_prep = csds_aligned_coords.filter_videos([key]).preprocess(
+            window_size=window_size,
+            window_step=window_step,
+            automatic_changepoints=automatic_changepoints,
+            selected_id=animal_to_preprocess,
+            scale="standard",
+            conv_filter=gaussian_filter,
+            sigma=1,
+            test_videos=0,
+            shuffle=False,
+        )[0]
+
+        # Get breakpoints per video
+        deep_breaks_per_video[key] = np.all(curr_prep != 0, axis=2).sum(axis=1)
+
+        # Unpack trained models
+        curr_deep_encoder, _, curr_deep_grouper, curr_ae, _, _ = trained_models
+
+        # Embed current video in the autoencoder and add to the dictionary
+        deep_encodings_per_video[key] = curr_deep_encoder.predict(curr_prep)
+
+        # Obtain groupings for current video and add to the dictionary
+        deep_assignments_per_video[key] = curr_deep_grouper.predict(curr_prep)
+
+    with open(
+        "csds_unsupervised_encodings_k={}_overlap_loss={}_run={}.pkl".format(
+            k, overlap_loss, run
+        ),
+        "wb",
+    ) as x:
+        pickle.dump(
+            [
+                deep_encodings_per_video,
+                deep_assignments_per_video,
+                deep_breaks_per_video,
+            ],
+            x,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
     run_ID, tensorboard_callback, entropy, onecycle = deepof.train_utils.get_callbacks(
