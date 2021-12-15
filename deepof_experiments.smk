@@ -127,7 +127,7 @@ rule coarse_hyperparameter_tuning:
 rule train_models:
     input:
         data_path=ancient(
-            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/CSDS_SI_single_tag/"
+            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/Data_for_deepof_SI/JB08_files_SI"
         ),
     output:
         trained_models=outpath + "train_models/trained_weights/"
