@@ -432,6 +432,7 @@ if not tune:
         run=run,
     )
 
+    # Save data encoded with the current trained model
     deep_encodings_per_video = {}
     deep_assignments_per_video = {}
     deep_breaks_per_video = {}
