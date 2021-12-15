@@ -97,7 +97,7 @@ rule elliptical_arena_detector:
 
 rule coarse_hyperparameter_tuning:
     input:
-        data_path="/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/20210325_Data_for_deepof_SI/JB08_files_SI",
+        data_path="/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/Data_for_deepof_SI/JB08_files_SI",
     output:
         trained_models=os.path.join(
             outpath,
