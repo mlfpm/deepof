@@ -28,7 +28,6 @@ entropy_knn = [10]
 next_sequence_pred_weights = [0.0]
 phenotype_pred_weights = [0.0]
 supervised_pred_weights = [0.0]
-window_lengths = [5]
 input_types = ["coords"]
 run = list(range(1, 4))
 
@@ -54,7 +53,6 @@ rule deepof_experiments:
             outpath + "train_models/trained_weights/"
             "deepof_"
             "GMVAE_input_type={input_type}_"
-            "window_size={window_size}_"
             "NSPred={nspredweight}_"
             "PPred={phenpredweight}_"
             "SupPred={supervisedweight}_"
@@ -69,7 +67,6 @@ rule deepof_experiments:
             "run={run}_"
             "final_weights.h5",
             input_type=input_types,
-            window_size=window_lengths,
             loss=losses,
             overlap_loss=overlap_loss,
             warmup=warmup_epochs,
@@ -172,7 +169,7 @@ rule train_models:
         "--encoding-size {wildcards.encs} "
         "--entropy-knn {wildcards.entknn} "
         "--batch-size 256 "
-        "--window-size {wildcards.window_size} "
+        "--window-size 5 "
         "--window-step 1 "
         "--run {wildcards.run} "
         "--output-path {outpath}train_models"
