@@ -15,6 +15,7 @@ import os
 import deepof.data
 import deepof.train_utils
 import deepof.utils
+import numpy as np
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -456,7 +457,7 @@ if not tune:
         deep_breaks_per_video[key] = np.all(curr_prep != 0, axis=2).sum(axis=1)
 
         # Unpack trained models
-        curr_deep_encoder, _, curr_deep_grouper, curr_ae, _, _ = trained_models
+        curr_deep_encoder, _, curr_deep_grouper, curr_ae = trained_models
 
         # Embed current video in the autoencoder and add to the dictionary
         deep_encodings_per_video[key] = curr_deep_encoder.predict(curr_prep)
