@@ -437,10 +437,10 @@ if not tune:
     deep_assignments_per_video = {}
     deep_breaks_per_video = {}
 
-    for key in tqdm(csds_aligned_coords.keys()):
+    for key in to_preprocess.keys():
 
         # Get preprocessed data for current video
-        curr_prep = csds_aligned_coords.filter_videos([key]).preprocess(
+        curr_prep = to_preprocess.filter_videos([key]).preprocess(
             window_size=window_size,
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,

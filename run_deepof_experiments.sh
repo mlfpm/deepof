@@ -4,6 +4,7 @@ mkdir snakemake_logs
 
 module load cuda/11.2
 module load tensorflow/gpu-cuda-11.2/2.6.0
+module load cudnn
 module load tensorflow-probability/0.14.1
 
 snakemake --snakefile deepof_experiments.smk --forceall --dag | dot -Tpdf > deepof_experiments_DAG.pdf
