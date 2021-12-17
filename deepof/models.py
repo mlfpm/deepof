@@ -38,7 +38,7 @@ class GMVAE:
         architecture_hparams: dict = {},
         batch_size: int = 256,
         compile_model: bool = True,
-        encoding: int = 6,
+        encoding: int = 4,
         kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 20,
         loss: str = "ELBO",

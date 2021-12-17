@@ -461,9 +461,9 @@ if not tune:
 
         # Load weights into a newly created model, buit with the current input shape
         curr_deep_encoder, _, curr_deep_grouper, curr_ae, _, _ = deepof.models.GMVAE(
-            encoding_size=encoding_size,
-            n_components=k,
-            next_sequence_predictio=next_sequence_prediction,
+            encoding=encoding_size,
+            number_of_components=k,
+            next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
             supervised_prediction=supervised_prediction,
         ).build(curr_prep.shape)
