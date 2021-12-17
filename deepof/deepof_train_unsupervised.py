@@ -456,8 +456,18 @@ if not tune:
         # Get breakpoints per video
         deep_breaks_per_video[key] = np.all(curr_prep != 0, axis=2).sum(axis=1)
 
-        # Unpack trained models
-        curr_deep_encoder, _, curr_deep_grouper, curr_ae = trained_models
+        # Get current model weights
+        curr_weights = trained_models[3].get_weights()
+
+        # Load weights into a newly created model, buit with the current input shape
+        curr_deep_encoder, _, curr_deep_grouper, curr_ae, _, _ = deepof.models.GMVAE(
+            encoding_size=encoding_size,
+            n_components=k,
+            next_sequence_predictio=next_sequence_prediction,
+            phenotype_prediction=phenotype_prediction,
+            supervised_prediction=supervised_prediction,
+        ).build(curr_prep.shape)
+        curr_ae.set_weights(curr_weights)
 
         # Embed current video in the autoencoder and add to the dictionary
         deep_encodings_per_video[key] = curr_deep_encoder.predict(curr_prep)
