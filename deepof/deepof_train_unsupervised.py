@@ -16,6 +16,7 @@ import deepof.data
 import deepof.train_utils
 import deepof.utils
 import numpy as np
+import pickle
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
