@@ -168,7 +168,7 @@ rule train_models:
         "--montecarlo-kl 10 "
         "--encoding-size {wildcards.encs} "
         "--entropy-knn {wildcards.entknn} "
-        "--batch-size 256 "
+        "--batch-size 64 "
         "--window-size 5 "
         "--window-step 1 "
         "--run {wildcards.run} "
