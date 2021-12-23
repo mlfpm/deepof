@@ -477,8 +477,8 @@ if not tune:
         deep_assignments_per_video[key] = curr_deep_grouper.predict(curr_prep)
 
     with open(
-        "csds_unsupervised_encodings_k={}_overlap_loss={}_run={}.pkl".format(
-            k, overlap_loss, run
+        "csds_unsupervised_encodings_k={}latreg={}_overlap_loss={}_run={}.pkl".format(
+            k, latent_reg, overlap_loss, run
         ),
         "wb",
     ) as x:
