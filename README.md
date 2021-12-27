@@ -31,10 +31,9 @@ To start, create a folder for your project
  tables you got from DeepLabCut, either in .h5 or .csv format. If you don't want to use DLC yourself, don't worry:
  a compatible pre-trained model for mice will be released soon!
 ```
-my_project  -- Videos -> all tagged videos
-            |
-            |
-            -- Tables -> all tracking tables (.h5 or .csv)
+   my_project
+   ├── Videos -> all tagged videos
+   ├── Tables -> all tracking tables (.h5 or .csv)
 ```
 IMPORTANT: You should make sure that the tables and videos correspond to the same experiments. While the names should 
 be compatible, this is handled by DLC by default.
@@ -82,11 +81,11 @@ way that will keep the Center-Nose axis fixed. This is useful to constrain the s
 with out unsupervised methods.
 
 As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
-the ```.supervised_annotation()``` method, and the ```.gmvae_embedding()``` methods of the ```deepof.data.Coordinates``` 
+the ```.supervised_annotation()``` method, and the ```.deep_unsupervised_embedding()``` methods of the ```deepof.data.Coordinates``` 
 class, respectively.
 ```
 supervised_annot = my_project.supervised_annotation()
-gmvae_embedding  = my_project.gmvae_embedding()
+gmvae_embedding  = my_project.deep_unsupervised_embedding()
 ```
 The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame per experiment containing a series of 
 annotations. The latter is a bit more complicated: it returns an array containing the encoding of the data per animal, 

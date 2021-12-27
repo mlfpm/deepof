@@ -1,68 +1,32 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" />
-  
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
-  <title>Welcome to deepof’s documentation! &mdash; deepof 0.1.5 documentation</title>
-  
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-
-  
-  
-
-  
-  
-
-  
-
-  
+  <title>Welcome to DeepOF! &mdash; deepof 0.1.5 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-    
-      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
+    <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" /> 
 </head>
 
-<body class="wy-body-for-nav">
-
-   
+<body class="wy-body-for-nav"> 
   <div class="wy-grid-for-nav">
-    
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-          
-
-          
             <a href="#" class="icon icon-home"> deepof
-          
-
-          
           </a>
-
-          
-            
-            
-          
-
-          
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
@@ -70,145 +34,179 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-
-          
-        </div>
-
-        
-        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          
-            
-            
-              
-            
-            
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">Welcome to deepof’s documentation!</a></li>
-<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+<li><a class="reference internal" href="#">Welcome to DeepOF!</a></li>
+<li><a class="reference internal" href="#getting-started">Getting started</a><ul>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#formatting-your-data">Formatting your data</a></li>
+<li><a class="reference internal" href="#basic-usage">Basic usage</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#full-api">Full API</a></li>
+<li><a class="reference internal" href="#advanced-tutorials">Advanced tutorials</a></li>
 </ul>
 </div>
-            
-          
         </div>
-        
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" aria-label="top navigation">
-        
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="#">deepof</a>
-        
       </nav>
 
-
       <div class="wy-nav-content">
-        
         <div class="rst-content">
-        
-          
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<div role="navigation" aria-label="breadcrumbs navigation">
-
+          <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-    
       <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-        
-      <li>Welcome to deepof’s documentation!</li>
-    
-    
+      <li>Welcome to DeepOF!</li>
       <li class="wy-breadcrumbs-aside">
-        
-          
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
-          
-        
       </li>
-    
   </ul>
-
-  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
-            
-  <div class="section" id="welcome-to-deepof-s-documentation">
-<h1>Welcome to deepof’s documentation!<a class="headerlink" href="#welcome-to-deepof-s-documentation" title="Permalink to this headline">¶</a></h1>
+             
+  <p><a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines"><img alt="Pipeline" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg" /></a> <a class="reference external" href="https://coverage.readthedocs.io/en/coverage-5.3/"><img alt="Coverage" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg" /></a> <a class="reference external" href="https://www.codefactor.io/repository/github/lucasmiranda42/deepof"><img alt="CodeFactor" src="https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="Version" src="https://img.shields.io/badge/release-v0.1.4-informational" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="MLFPM" src="https://img.shields.io/badge/funding-MLFPM-informational" /></a> <a class="reference external" href="https://github.com/psf/black"><img alt="Black" src="https://img.shields.io/badge/code%20style-black-black" /></a></p>
+<section id="welcome-to-deepof">
+<h1>Welcome to DeepOF!<a class="headerlink" href="#welcome-to-deepof" title="Permalink to this headline"></a></h1>
+<p>A suite for postprocessing time-series extracted from videos of freely moving rodents using <a class="reference external" href="http://www.mousemotorlab.org/deeplabcut">DeepLabCut</a></p>
 <div class="toctree-wrapper compound">
 </div>
+<a class="reference internal image-reference" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png"><img alt="DeepOF logo" class="align-center" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png" style="width: 400px;" /></a>
+</section>
+<section id="getting-started">
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Permalink to this headline"></a></h1>
+<p>You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing,
+basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
+unsupervised way! Both of these can be used within the package, for example, to automatically
+compare user-defined experimental groups.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
+<p>The easiest way to install DeepOF is to use <a class="reference external" href="https://pypi.org/project/deepof/">pip</a>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install deepof
+</pre></div>
 </div>
-<div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<p>Alternatively, you can download our pre-built Docker image, which contains all compatible dependencies:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker pull lucasmir/deepof:latest
+</pre></div>
+</div>
+</section>
+<section id="formatting-your-data">
+<h2>Formatting your data<a class="headerlink" href="#formatting-your-data" title="Permalink to this headline"></a></h2>
+</section>
+<section id="basic-usage">
+<h2>Basic usage<a class="headerlink" href="#basic-usage" title="Permalink to this headline"></a></h2>
+<p>To start, create a folder for your project with at least two subdirectories inside, called ‘Videos’ and ‘Tables’. The former should contain the videos you’re
+working with (either you original data or the labeled ones obtained from DLC); the latter should have all the tracking
+tables you got from DeepLabCut, either in .h5 or .csv format. If you don’t want to use DLC yourself, don’t worry:
+a compatible pre-trained model for mice will be released soon!</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>my_project
+├── Videos -&gt; all tagged videos
+├── Tables -&gt; all tracking tables <span class="o">(</span>.h5 or .csv<span class="o">)</span>
+</pre></div>
+</div>
+<p>IMPORTANT: You should make sure that the tables and videos correspond to the same experiments. While the names should
+be compatible, this is handled by DLC by default.</p>
+<p>The main module with which you’ll interact is called <code class="docutils literal notranslate"><span class="pre">`deepof.data`</span></code>. Let’s import it and create a project:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.data</span>
+<span class="n">my_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;./my_project&quot;</span><span class="p">,</span>
+                                 <span class="n">arena_dims</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>        <span class="c1"># diameter of the arena in milimeters</span>
+                                 <span class="n">arena_type</span><span class="o">=</span><span class="s2">&quot;circular&quot;</span><span class="p">,</span> <span class="c1"># type of the filmed arena (optional). So far, only &quot;circular&quot; is valid</span>
+                                 <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>        <span class="c1"># smoothing coefficient (optional)</span>
+                                 <span class="n">frame_rate</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>         <span class="c1"># frame rate of the videos in Hz (optional)</span>
+</pre></div>
+</div>
+<p>This command will create a <code class="docutils literal notranslate"><span class="pre">`deepof.data.Project`</span></code> object storing all the necessary information to start. The <code class="docutils literal notranslate"><span class="pre">`smooth_alpha`</span></code>
+parameter will control how much smoothing will be applied to your trajectories, using an exponentially weighted average.
+Values close to 0 apply a stronger smoothing, and values close to 1 a very light one. In practice, we recommend values
+between 0.95 and 0.99 if your trajectories are not too noisy. There are other things you can do here, but let’s stick to
+the basics for now.</p>
+<p>One you have this, you can run you project using the <code class="docutils literal notranslate"><span class="pre">`.run()`</span></code> method, which will do quite a lot of computing under
+the hood (load your data, smooth your trajectories, compute distances and angles). The returned object belongs to the
+<code class="docutils literal notranslate"><span class="pre">`deepof.data.Coordinates`</span></code> class.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Once you have this, you can do several things! But let’s first explore how the results of those computations I mentioned
+are stored. To extract trajectories, distances and/or angles, you can respectively type:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project_coords</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">polar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Nose&quot;</span><span class="p">,</span> <span class="n">align_inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">my_project_dists</span>  <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_distances</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">my_project_angles</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_angles</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here, the data are stored as <code class="docutils literal notranslate"><span class="pre">`deepof.data.table_dict`</span></code> instances. These are very similar to python dictionaries
+with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convenience. Peeping
+into the parameters you see in the code block above, <code class="docutils literal notranslate"><span class="pre">`center`</span></code> centers your data (it can be either a boolean or
+one of the body parts in your model! in which case the coordinate origin will be fixed to the position of that point);
+<code class="docutils literal notranslate"><span class="pre">`polar`</span></code> makes the <code class="docutils literal notranslate"><span class="pre">`.get_coords()`</span></code> method return polar instead of Cartesian coordinates, and <code class="docutils literal notranslate"><span class="pre">`speed`</span></code>
+indicates the derivation level to apply (0 is position-based, 1 speed, 2 acceleration, 3 jerk, etc). Regarding
+<code class="docutils literal notranslate"><span class="pre">`align`</span></code> and <code class="docutils literal notranslate"><span class="pre">`align-inplace`</span></code>, they take care of aligning the animal position to the y Cartesian axis: if we
+center the data to “Center” and set <code class="docutils literal notranslate"><span class="pre">`align=&quot;Nose&quot;,</span> <span class="pre">align_inplace=True`</span></code>, all frames in the video will be aligned in a
+way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movements that one can extract
+with out unsupervised methods.</p>
+<p>As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
+the <code class="docutils literal notranslate"><span class="pre">`.supervised_annotation()`</span></code> method, and the <code class="docutils literal notranslate"><span class="pre">`.deep_unsupervised_embedding()`</span></code> methods of the <code class="docutils literal notranslate"><span class="pre">`deepof.data.Coordinates`</span></code>
+class, respectively.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annot</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
+<span class="n">gmvae_embedding</span>  <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">deep_unsupervised_embedding</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The former returns a <code class="docutils literal notranslate"><span class="pre">`deepof.data.TableDict`</span></code> object, with a pandas.DataFrame per experiment containing a series of
+annotations. The latter is a bit more complicated: it returns an array containing the encoding of the data per animal,
+another one with motif membership per time point (probabilities of the animal doing whatever is represented by each of
+the clusters at any given time), an abstract distribution (a multivariate Gaussian mixture) representing the extracted
+components, and a decoder you can use to generate samples from each of the extracted components (yeah,
+you get a generative model for free).</p>
+<p>That’s it for this (very basic) introduction. Check out the tutorials below for more advanced examples!</p>
+</section>
+</section>
+<section id="full-api">
+<h1>Full API<a class="headerlink" href="#full-api" title="Permalink to this headline"></a></h1>
 <ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+<li><p><span class="xref std std-ref">Advanced usage (full API documentation)</span></p></li>
 </ul>
-</div>
+</section>
+<section id="advanced-tutorials">
+<h1>Advanced tutorials<a class="headerlink" href="#advanced-tutorials" title="Permalink to this headline"></a></h1>
+<ul class="simple">
+<li><p><span class="xref std std-ref">DeepOF supervised pipeline: detecting pre-defined behaviors</span></p></li>
+<li><p><span class="xref std std-ref">DeepOF unsupervised pipeline: exploring the behavioral space</span></p></li>
+<li><p><span class="xref std std-ref">Case study: Characterizing CSDS</span></p></li>
+</ul>
+</section>
 
 
            </div>
-           
           </div>
           <footer>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>
-        &#169; Copyright 2021, Lucas Miranda.
-
-    </p>
+    <p>&#169; Copyright 2021, Lucas Miranda.</p>
   </div>
-    
-    
-    
-    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
 
 </footer>
         </div>
       </div>
-
     </section>
-
   </div>
-  
-
-  <script type="text/javascript">
+  <script>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script>
-
-  
-  
-    
-   
+  </script> 
 
 </body>
 </html>

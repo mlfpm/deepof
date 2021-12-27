@@ -47,6 +47,7 @@ hypothesis = "*"
 sphinx = "*"
 pipenv = "*"
 install = "*"
+sphinx-rtd-theme = "*"
 
 [requires]
 python_version = "3.8"
