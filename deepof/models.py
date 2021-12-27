@@ -108,11 +108,13 @@ class GMVAE:
                     probs=tf.ones(self.number_of_components) / self.number_of_components
                 ),
                 components_distribution=tfd.MultivariateNormalDiag(
-                    loc=tf.keras.initializers.orthogonal(gain=1.)(
-                            [self.number_of_components, self.ENCODING],
-                        ),
-                    scale_diag=tfb.Softplus()(tf.ones([self.number_of_components, self.ENCODING])
-                        / self.number_of_components),
+                    loc=tf.keras.initializers.orthogonal(gain=1.0)(
+                        [self.number_of_components, self.ENCODING],
+                    ),
+                    scale_diag=tfb.Softplus()(
+                        tf.ones([self.number_of_components, self.ENCODING])
+                        / self.number_of_components
+                    ),
                 ),
             )
 
@@ -425,7 +427,8 @@ class GMVAE:
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.ENCODING, k],
-                            scale=1e-3 + softplus(gauss[1][..., self.ENCODING :, k]),
+                            scale=1e-3
+                            + softplus(tf.math.exp(gauss[1][..., self.ENCODING :, k])),
                         ),
                         reinterpreted_batch_ndims=1,
                     )

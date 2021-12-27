@@ -9,7 +9,7 @@ keras hypermodels for hyperparameter tuning of deep autoencoders
 """
 
 import tensorflow_probability as tfp
-from kerastuner import HyperModel
+from keras_tuner import HyperModel
 
 import deepof.model_utils
 import deepof.models

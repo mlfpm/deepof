@@ -25,7 +25,7 @@ from tensorflow.python.framework.ops import EagerTensor
 # For coverage.py to work with @tf.function decorated functions and methods,
 # graph execution is disabled when running this script with pytest
 
-tf.config.experimental_run_functions_eagerly(True)
+tf.config.run_functions_eagerly(True)
 tfpl = tfp.layers
 tfd = tfp.distributions
 

@@ -12,11 +12,11 @@ tuning models are building properly in all possible configurations
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-from kerastuner import HyperParameters
+from keras_tuner import HyperParameters
 import deepof.hypermodels
 import tensorflow as tf
 
-tf.config.experimental_run_functions_eagerly(True)
+tf.config.run_functions_eagerly(True)
 
 
 @settings(deadline=None, max_examples=10)
