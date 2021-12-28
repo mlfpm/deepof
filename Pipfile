@@ -48,6 +48,7 @@ sphinx = "*"
 pipenv = "*"
 install = "*"
 sphinx-rtd-theme = "*"
+sphinxcontrib-napoleon = "*"
 
 [requires]
 python_version = "3.8"

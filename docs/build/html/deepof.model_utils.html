@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>deepof.model_utils module &mdash; deepof 0.1.5 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> deepof
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">deepof.model_utils module</a></li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">deepof</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>deepof.model_utils module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/deepof.model_utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-deepof.model_utils">
+<span id="deepof-model-utils-module"></span><h1>deepof.model_utils module<a class="headerlink" href="#module-deepof.model_utils" title="Permalink to this headline"></a></h1>
+<p>Functions and general utilities for the deepof tensorflow models. See documentation for details</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.compute_shannon_entropy">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_shannon_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_shannon_entropy" title="Permalink to this definition"></a></dt>
+<dd><p>Computes Shannon entropy for a given tensor</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.get_k_nearest_neighbors">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_k_nearest_neighbors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_k_nearest_neighbors" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.get_neighbourhood_entropy">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_neighbourhood_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clusters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_neighbourhood_entropy" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">exponential_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.callbacks.Callback</span></code></p>
+<p>Simple class that allows to grow learning rate exponentially during training</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.on_batch_end">
+<span class="sig-name descname"><span class="pre">on_batch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.on_batch_end" title="Permalink to this definition"></a></dt>
+<dd><p>This callback acts after processing each batch</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.find_learning_rate">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">find_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.find_learning_rate" title="Permalink to this definition"></a></dt>
+<dd><p>Trains the provided model for an epoch with an exponentially increasing learning rate</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.plot_lr_vs_loss">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">plot_lr_vs_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">losses</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.plot_lr_vs_loss" title="Permalink to this definition"></a></dt>
+<dd><p>Plots learing rate versus the loss function of the model</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.compute_kernel">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_kernel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></span><a class="headerlink" href="#deepof.model_utils.compute_kernel" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the MMD between the two specified vectors using a gaussian kernel.</p>
+<blockquote>
+<div><dl>
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>x (tf.Tensor): left tensor</p></li>
+<li><p>y (tf.Tensor): right tensor</p></li>
+</ul>
+</dd>
+<dt>Returns</dt><dd><ul class="simple">
+<li><p>kernel (tf.Tensor): returns the result of applying the kernel, for</p></li>
+</ul>
+<p>each training instance</p>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.compute_mmd">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_mmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></span><a class="headerlink" href="#deepof.model_utils.compute_mmd" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the MMD between the two specified vectors using a gaussian kernel.</p>
+<blockquote>
+<div><dl>
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>tensors (tuple): tuple containing two tf.Tensor objects</p></li>
+</ul>
+</dd>
+<dt>Returns</dt><dd><ul class="simple">
+<li><p>mmd (tf.Tensor): returns the maximum mean discrepancy for each</p></li>
+</ul>
+<p>training instance</p>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">one_cycle_scheduler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.callbacks.Callback</span></code></p>
+<p>One cycle learning rate scheduler.
+Based on <a class="reference external" href="https://arxiv.org/pdf/1506.01186.pdf">https://arxiv.org/pdf/1506.01186.pdf</a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_batch_begin">
+<span class="sig-name descname"><span class="pre">on_batch_begin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_batch_begin" title="Permalink to this definition"></a></dt>
+<dd><p>Defines computations to perform for each batch</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_epoch_end">
+<span class="sig-name descname"><span class="pre">on_epoch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_epoch_end" title="Permalink to this definition"></a></dt>
+<dd><p>Logs the learning rate to tensorboard</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.MCDropout">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MCDropout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MCDropout" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.layers.core.Dropout</span></code></p>
+<p>Equivalent to tf.keras.layers.Dropout, but with training mode enabled at prediction time.
+Useful for Montecarlo predictions</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MCDropout.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MCDropout.call" title="Permalink to this definition"></a></dt>
+<dd><p>Overrides the call method of the subclassed function</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">DenseTranspose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.engine.base_layer.Layer</span></code></p>
+<p>Mirrors a tf.keras.layers.Dense instance with transposed weights.
+Useful for decoder layers in autoencoders, to force structure and
+decrease the effective number of parameters to train</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose.get_config">
+<span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose.get_config" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Constraint metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_input_shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose.build" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Layer’s build method</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose.call" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Layer’s call method</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.DenseTranspose.compute_output_shape">
+<span class="sig-name descname"><span class="pre">compute_output_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.DenseTranspose.compute_output_shape" title="Permalink to this definition"></a></dt>
+<dd><p>Outputs the transposed shape</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.KLDivergenceLayer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">KLDivergenceLayer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.KLDivergenceLayer" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tensorflow_probability.python.layers.distribution_layer.KLDivergenceAddLoss</span></code></p>
+<p>Identity transform layer that adds KL Divergence
+to the final model loss.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.KLDivergenceLayer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warm_up_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annealing_mode</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.KLDivergenceLayer.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initialize the <cite>KLDivergenceAddLoss</cite> (placeholder) layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>distribution_b</strong> – distribution instance corresponding to <cite>b</cite> as in
+<cite>KL[a, b]</cite>. The previous layer’s output is presumed to be a
+<cite>Distribution</cite> instance and is <cite>a</cite>).</p></li>
+<li><p><strong>use_exact_kl</strong> – Python <cite>bool</cite> indicating if KL divergence should be
+calculated exactly via <cite>tfp.distributions.kl_divergence</cite> or via Monte
+Carlo approximation.
+Default value: <cite>False</cite>.</p></li>
+<li><p><strong>test_points_reduce_axis</strong> – <cite>int</cite> vector or scalar representing dimensions
+over which to <cite>reduce_mean</cite> while calculating the Monte Carlo
+approximation of the KL divergence.  As is with all <cite>tf.reduce_*</cite> ops,
+<cite>None</cite> means reduce over all dimensions; <cite>()</cite> means reduce over none of
+them.
+Default value: <cite>()</cite> (i.e., no reduction).</p></li>
+<li><p><strong>test_points_fn</strong> – Python <cite>callable</cite> taking a <cite>Distribution</cite> instance and
+returning a <cite>Tensor</cite> used for random test points to approximate the KL
+divergence.
+Default value: <cite>tf.convert_to_tensor</cite>.</p></li>
+<li><p><strong>weight</strong> – Multiplier applied to the calculated KL divergence for each Keras
+batch member.
+Default value: <cite>None</cite> (i.e., do not weight each batch member).</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments passed to <cite>tf.keras.Layer</cite>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.KLDivergenceLayer.get_config">
+<span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.KLDivergenceLayer.get_config" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Constraint metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.KLDivergenceLayer.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distribution_a</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.KLDivergenceLayer.call" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Layer’s call method</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MMDiscrepancyLayer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.engine.base_layer.Layer</span></code></p>
+<p>Identity transform layer that adds MM Discrepancy
+to the final model loss.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warm_up_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annealing_mode</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer.get_config">
+<span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer.get_config" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Constraint metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer.call" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Layer’s call method</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">ClusterOverlap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterOverlap" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.engine.base_layer.Layer</span></code></p>
+<p>Identity layer that measures the overlap between the components of the latent Gaussian Mixture
+using the the entropy of the nearest neighbourhood. If self.loss_weight &gt; 0, it adds a regularization
+penalty to the loss function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterOverlap.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap.get_config">
+<span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterOverlap.get_config" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Constraint metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterOverlap.call" title="Permalink to this definition"></a></dt>
+<dd><p>Updates Layer’s call method</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MeanVarianceRegularizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.regularizers.Regularizer</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer.__init__" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer.get_config">
+<span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer.get_config" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the config of the regularizer.</p>
+<p>An regularizer config is a Python dictionary (serializable)
+containing all configuration parameters of the regularizer.
+The same regularizer can be reinstantiated later
+(without any saved state) from this configuration.</p>
+<p>This method is optional if you are just training and executing models,
+exporting to and from SavedModels, or using weight checkpoints.</p>
+<p>This method is required for Keras <cite>model_to_estimator</cite>, saving and
+loading models to HDF5 formats, Keras model cloning, some visualization
+utilities, and exporting models to and from JSON.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Python dictionary.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Lucas Miranda.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

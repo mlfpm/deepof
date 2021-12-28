@@ -51,8 +51,10 @@ table_dict = NewType("deepof_table_dict", Any)
 
 class Project:
     """
-    Class for loading and preprocessing DLC data of individual and multiple animals. All main computations are called
-    here.
+
+    Class for loading and preprocessing DLC data of individual and multiple animals. All main computations are
+    handled from here.
+
     """
 
     def __init__(
@@ -77,44 +79,31 @@ class Project:
         video_format: str = ".mp4",
     ):
         """
-        :param arena_dims: diameter of the arena in mm (so far, only round arenas are supported).
-        :type arena_dims: int
-        :param animal_ids: list of animal ids.
-        :type animal_ids: list
-        :param arena: type of arena (so far, only round arenas are supported).
-        :type arena: str
-        :param arena_detection: arena detection method (must be either 'rule-based' (default) or 'cnn').
-        :type arena_detection: str
-        :param enable_iterative_imputatuion: whether to use iterative imputer for missing values (recommended for the
-        unsupervised pipeline, although slow).
-        :type enable_iterative_imputation: bool
-        :param exclude_bodyparts: List of body parts to leave out of preprocessing.
-        :type exclude_bodyparts: list
-        :param exp_conditions: dictionary with experiment IDs as keys and experimental conditions as values.
-        :type exp_conditions: dict
-        :param high_fidelity_arena: whether to use high-fidelity arena detection (recommended for the supervised pipeline
-        if video lighting is uneven throughout the dataset).
-        :type high_fidelity_arena: bool
-        :param interpolate_outliers: whether to interpolate missing values (default).
-        :type interpolate_outliers: bool
-        :param interpolation_limit: maximum number of consecutive missing values to interpolate.
-        :type interpolation_limit: int
-        :param interpolation_std: standard deviation of the gaussian kernel used for interpolation.
-        :type interpolation_std: float
-        :param likelihood_tol: tolerance for likelihood computation.
-        :type likelihood_tol: float
-        :param model: model employed to tag the mice with DLC (used for skeleton tracking and angle computation).
-        :type model: str
-        :param path: path to the DLC output data.
-        :type path: str
-        :param smooth_alpha: smoothing intensity. The higher the value, the more smoothing.
-        :type smooth_alpha: float
-        :param table_format: format of the input tables (default is 'autodetect').
-        :type table_format: str
-        :param frame_rate: frame rate of the DLC output data.
-        :type frame_rate: int
-        :param video_format: video format of the DLC output data.
-        :type video_format: str
+
+        Initializes a Project object.
+
+        Args:
+            arena_dims (int): diameter of the arena in mm (so far, only round arenas are supported).
+            animal_ids (list): list of animal ids.
+            arena (str): arena type. So far, only 'circular' is supported.
+            arena_detection (str): method for detecting the arena (must be either 'rule-based' (default) or 'cnn').
+            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended,
+            but slow.
+            exclude_bodyparts (list): list of bodyparts to exclude from analysis.
+            exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+            high_fidelity_arena (bool): whether to use high-fidelity arena detection. Recommended if light conditions
+            are uneven across videos.
+            interpolate_outliers (bool): whether to interpolate missing data.
+            interpolation_limit (int): maximum number of missing frames to interpolate.
+            interpolation_std (int): maximum number of standard deviations to interpolate.
+            likelihood_tol (float): likelihood threshold for outlier detection.
+            model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
+            path (str): path to the folder containing the DLC output data.
+            smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
+            table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
+            frame_rate (int): frame rate of the videos. If not specified, it will be inferred from the video files.
+            video_format (str): video format. Defaults to '.mp4'.
+
         """
 
         # Set working paths
@@ -288,7 +277,16 @@ class Project:
 
     def load_tables(self, verbose: bool = False) -> deepof.utils.Tuple:
         """
-        Loads videos and tables into dictionaries
+
+        Loads videos and tables into dictionaries.
+
+        Args:
+            verbose (bool): If True, prints the progress of data loading.
+
+        Returns:
+            Tuple: A tuple containing the following a dictionary with all loaded tables per experiment,
+            and another dictionary with DLC data quality.
+
         """
 
         if self.table_format not in [".h5", ".csv"]:
@@ -361,7 +359,6 @@ class Project:
                 tab_dict[key] = smooth
 
         # Remove scorer header
-
         for key, tab in tab_dict.items():
             tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]
 
@@ -411,10 +408,18 @@ class Project:
 
     def get_distances(self, tab_dict: dict, verbose: bool = False) -> dict:
         """
-        Computes the distances between all selected body parts over time.
-        If ego is provided, it only returns distances to a specified bodypart
-        """
 
+        Computes the distances between all selected body parts over time. If ego is provided, it only returns
+        distances to a specified bodypart.
+
+        Args:
+            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+            verbose (bool): If True, prints progress. Defaults to False.
+
+        Returns:
+            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+
+        """
         if verbose:
             print("Computing distances...")
 
@@ -456,7 +461,16 @@ class Project:
 
     def get_angles(self, tab_dict: dict, verbose: bool = False) -> dict:
         """
+
         Computes all the angles between adjacent bodypart trios per video and per frame in the data.
+
+        Args:
+            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+            verbose (bool): If True, prints progress. Defaults to False.
+
+        Returns:
+            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+
         """
 
         if verbose:
@@ -496,7 +510,15 @@ class Project:
 
     def run(self, verbose: bool = True) -> coordinates:
         """
-        Generates a dataset using all the options specified during initialization
+
+        Generates a deepof.Coordinates dataset using all the options specified during initialization.
+
+        Args:
+            verbose (bool): If True, prints progress. Defaults to True.
+
+        Returns:
+            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
+
         """
 
         tables, quality = self.load_tables(verbose)
@@ -555,7 +577,7 @@ class Project:
 class Coordinates:
     """
     Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up
-    the generated tables. For internal usage only.
+    the generated tables.
     """
 
     def __init__(
@@ -577,36 +599,29 @@ class Coordinates:
         exp_conditions: dict = None,
     ):
         """
-        :param arena: type of arena (so far, only round arenas are supported).
-        :type arena: str
-        :param arena_detection: arena detection method (must be either 'rule-based' (default) or 'cnn').
-        :type arena_detection: str
-        :param arena_dims: diameter of the arena in mm (so far, only round arenas are supported).
-        :type arena_dims: np.array
-        :param path: path to the DLC output data.
-        :type path: str
-        :param quality: dictionary containing the likelihood of the DLC annotated data.
-        :type quality: dict
-        :param scales: matrix with arena dimensions for each experiment.
-        :type scales: np.ndarray
-        :param arena_params: list of arena parameters for each experiment.
-        :type arena_params: List
-        :param tables: dictionary containing preprocessed DLC output data.
-        :type tables: dict
-        :param trained_model_path: path to the supervised pretrained models.
-        :type trained_model_path: str
-        :param videos: list of video paths for each experiment.
-        :type videos: List
-        :param video_resolution: list of video resolutions for each experiment.
-        :type video_resolution: List
-        :param angles: dictionary containing the angles between animal body parts for each experiment.
-        :type angles: dict
-        :param animal_ids: list of animal IDs.
-        :type animal_ids: List
-        :param distances: dictionary containing the distances between animal body parts for each experiment.
-        :type distances: dict
-        :param exp_conditions: dictionary with experiment IDs as keys and experimental conditions as values.
-        :type exp_conditions: dict
+
+        Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up
+        the generated tables.
+
+        Args:
+            arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
+            arena_detection (str): Type of arena detection used for the experiment. See deepof.data.Project for more
+            information.
+            arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
+            path (str): Path to the folder containing the results of the experiment.
+            quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
+            scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
+            arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
+            tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
+            trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
+            videos (List): List containing the videos used for the experiment. See deepof.data.Project for more information.
+            video_resolution (List): List containing the automatically detected resolution of the videos used for the experiment.
+            angles (dict): Dictionary containing the angles of the experiment. See deepof.data.Project for more information.
+            animal_ids (List): List containing the animal IDs of the experiment. See deepof.data.Project for more information.
+            distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
+            exp_conditions (dict): Dictionary containing the experimental conditions of the experiment.
+            See deepof.data.Project for more information.
+
         """
 
         self._animal_ids = animal_ids
@@ -655,30 +670,27 @@ class Coordinates:
         propagate_annotations: Dict = False,
     ) -> table_dict:
         """
+
         Returns a table_dict object with the coordinates of each animal as values.
 
-        :param center: name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
-        :type center: str
-        :param polar: states whether the coordinates should be converted to polar values
-        :type polar: bool
-        :param speed: states the derivative of the positions to report. Speed is returned if 1, acceleration if 2,
-        jerk if 3, etc.
-        :type speed: int
-        :param align: selects the body part to which later processes will align the frames with
-        (see preprocess in table_dict documentation).
-        :type align: str
-        :param align_inplace: Only valid if align is set. Aligns the vector that goes from the origin to the
-        selected body part with the y axis, for all time points (default).
-        :type align_inplace: bool
-        :param selected_id: select a single animal on multi animal settings. Defaults to None
-        (all animals are processed).
-        :type selected_id: str
-        :param propagate_labels: If True, adds an extra feature for each video containing its phenotypic label
-        :type propagate_labels: bool
-        :param propagate_annotations: if a dictionary is provided, supervised annotations are propagated through
-        the training dataset. This can be used for regularising the latent space based on already known traits.
-        :type propagate_annotations: dict
+        Args:
+            center (str): Name of the body part to which the positions will be centered. If false,
+            the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            polar (bool) States whether the coordinates should be converted to polar values.
+            speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2,
+            jerk if 3, etc.
+            align (str): Selects the body part to which later processes will align the frames with
+            (see preprocess in table_dict documentation).
+            align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the
+            selected body part with the y axis, for all time points (default).
+            selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
+            propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through
+            the training dataset. This can be used for regularising the latent space based on already known traits.
+
+        Returns:
+            table_dict: A table_dict object containing the coordinates of each animal as values.
+
         """
 
         tabs = deepof.utils.deepcopy(self._tables)
@@ -834,19 +846,18 @@ class Coordinates:
         propagate_annotations: Dict = False,
     ) -> table_dict:
         """
+
         Returns a table_dict object with the distances between body parts animal as values.
 
-        :param speed: states the derivative of the positions to report. Speed is returned if 1,
-        acceleration if 2, jerk if 3, etc.
-        :type speed: int
-        :param selected_id: select a single animal on multi animal settings. Defaults to None (all animals are
-        processed).
-        :type selected_id: str
-        :param propagate_labels: If True, adds an extra feature for each video containing its phenotypic label.
-        :type propagate_labels: bool
-        :param propagate_annotations: if a dictionary is provided, supervised annotations are propagated through
-        the training dataset. This can be used for regularising the latent space based on already known traits.
-        :type propagate_annotations: Dict
+        Args:
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
+            propagate_annotations (Dict): A dictionary of annotations to propagate.
+
+        Returns:
+            table_dict: A table_dict object with the distances between body parts animal as values.
+
         """
 
         tabs = deepof.utils.deepcopy(self.distances)
@@ -896,21 +907,19 @@ class Coordinates:
         propagate_annotations: Dict = False,
     ) -> table_dict:
         """
+
         Returns a table_dict object with the angles between body parts animal as values.
 
-        :param degrees: if True, returns the angles in degrees. Radians (default) are returned otherwise.
-        :type degrees: bool
-        :param speed: states the derivative of the positions to report. Speed is returned if 1, acceleration if 2,
-        jerk if 3, etc.
-        :type speed: int
-        :param selected_id: select a single animal on multi animal settings. Defaults to None (all animals are
-        processed).
-        :type selected_id: str
-        :param propagate_labels: If True, adds an extra feature for each video containing its phenotypic label
-        :type propagate_labels: bool
-        :param propagate_annotations: if a dictionary is provided, supervised annotations are propagated through
-        the training dataset. This can be used for regularising the latent space based on already known traits.
-        :type propagate_annotations: Dict
+        Args:
+            degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
+            propagate_annotations (Dict): A dictionary of annotations to propagate.
+
+        Returns:
+            table_dict: A table_dict object with the angles between body parts animal as values.
+
         """
 
         tabs = deepof.utils.deepcopy(self.angles)
@@ -997,20 +1006,23 @@ class Coordinates:
         propagate_labels: bool = False,
     ) -> table_dict:
         """
-        Annotates coordinates with behavioral traits using a supervised pipeline
 
-        :param params: dictionary with the parameters for the supervised pipeline.
-        :type params: Dict
-        :param video_output: if True, creates a video with the imprinted annotations.
-        :type video_output: bool
-        :param frame_limit: limits the number of frames to be included in the output video.
-        :type frame_limit: int
-        :param debug: if True, includes debugging information in the output video.
-        :type debug: bool
-        :param n_jobs: number of parallel jobs to be used.
-        :type n_jobs: int
-        :param propagate_labels: if True, adds an extra feature for each video containing its phenotypic label
-        :type propagate_labels: bool
+        Annotates coordinates with behavioral traits using a supervised pipeline.
+
+        Args:
+            params (Dict): A dictionary with the parameters to use for the pipeline. If unsure, leave empty.
+            video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to
+            "all", it will output all videos. False by default.
+            frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per
+            video to output.
+            debug (bool): Only applies if video_output is not False. If True, all videos will include debug information,
+            such as the detected arena and the preprocessed tracking tags.
+            n_jobs (int): Number of jobs to use for parallel processing.
+            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
+
+        Returns:
+            table_dict: A table_dict object with all supervised annotations per experiment as values.
+
         """
 
         tag_dict = {}
@@ -1085,6 +1097,7 @@ class Coordinates:
     @staticmethod
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        embedding_model: str = "GMVAE",
         batch_size: int = 256,
         encoding_size: int = 4,
         epochs: int = 50,
@@ -1114,65 +1127,58 @@ class Coordinates:
         strategy: tf.distribute.Strategy = "one_device",
     ) -> Tuple:
         """
-        Annotates coordinates using an unsupervised autoencoder.
-        Full implementation in deepof.train_utils.deep_unsupervised_embedding
 
-        :preprocessed_object: tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
-        :type preprocessed_object: tuple
-        :param encoding_size: number of dimensions in the latent space of the autoencoder.
-        :type encoding_size: int
-        :param epochs: epochs during which to train the models
-        :type epochs: int
-        :param batch_size: batch size for training
-        :type batch_size: int
-        :param save_checkpoints: if True, training checkpoints are saved to disk. Useful for debugging,
-        but can make training significantly slower
-        :type save_checkpoints: bool
-        :param hparams: dictionary to change architecture hyperparameters of the autoencoders
-        (see documentation for details).
-        :type hparams: dict
-        :param kl_warmup: number of epochs over which to increase KL weight linearly (default is number of epochs // 4)
-        :type kl_warmup: int
-        :param loss: Loss function to use. Currently, 'ELBO', 'MMD' and 'ELBO+MMD' are supported.
-        :type loss: str
-        :param mmd_warmup: number of epochs over which to increase MMD weight linearly
-        (default is number of epochs // 4).
-        :type mmd_warmup: int
-        :param montecarlo_kl: Number of Montecarlo samples used to estimate the KL between latent space and prior.
-        :type montecarlo_kl: int
-        :param n_components: Number of components of the Gaussian Mixture in the latent space.
-        :type n_components: int.
-        :param overlap_loss: Weight of a loss term penalizing overlar between clusters.
-        :type overlap_loss: float
-        :param output_path: path to save the trained models.
-        :type output_path: str
-        :param next_sequence_prediction: Weight of a loss term for the prediction of the next sequence.
-        :type next_sequence_prediction: float
-        :param phenotype_prediction: Weight of a loss term for the prediction of the phenotype.
-        :type phenotype_prediction: float
-        :param supervised_prediction: Weight of a loss term for the prediction of the labels in the supervised pipeline.
-        :type supervised_prediction: float
-        :param pretrained: if False, the autoencoder is trained from scratch, otherwise it is loaded from a pretrained
-        model.
-        :type pretrained: bool
-        :param save_weights: if True, the weights of the autoencoder are saved to disk.
-        :type save_weights: bool
-        :param reg_cat_clusters: if True, the categorical distribution controlling cluster assignment is regularized.
-        :type reg_cat_clusters: bool
-        :param reg_cluster_variance: if True, the variance of the clusters is regularized.
-        :type reg_cluster_variance: bool
-        :param entropy_knn: number of nearest neighbors used to estimate the entropy of the latent space.
-        :type entropy_knn: int
-        :param input_type: type of input to the autoencoder.
-        :type input_type: str
-        :param run: number of the run.
-        :type run: int
-        :param strategy: strategy to use for training.
-        :type strategy: tf.distribute.Strategy
+        Annotates coordinates using a deep unsupervised autoencoder.
+
+        Args:
+            preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
+            embedding_model (str): Model to use for unsupervised embedding. Must be one of "VQVAE" and "GMVAE".
+            batch_size (int): Batch size for training.
+            encoding_size (int): Dimention size of the latent space.
+            epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
+            will stop training when validation loss stops decreasing.
+            hparams (dict): Hyperparameters for the model. See deepof.models for more details.
+            kl_annealing_mode (str): Mode for annealing the KL divergence. Must be one of "linear" and "sigmoid".
+            kl_warmup (int): Number of epochs to warm up the KL divergence.
+            log_history (bool): Whether to log the history of the model to TensorBoard.
+            log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
+            loss (str): Loss function to use. Must be one of "VQ", "ELBO", "MMD", and "ELBO+MMD".
+            mmd_annealing_mode (str): Mode for annealing the MMD loss. Must be one of "linear" and "sigmoid".
+            mmd_warmup (int): Number of epochs to warm up the MMD loss.
+            montecarlo_kl (int): Number of Monte Carlo samples to take for the Monte-Carlo KL divergence.
+            n_components (int): Number of latent clusters for the embedding model to use.
+            overlap_loss (float): Weight of the overlap loss, which adds a regularization term to GMVAE models which
+            penalizes the overlap between the clusters.
+            output_path (str): Path to save the trained model and all log files.
+            next_sequence_prediction (float): Weight of the next sequence prediction loss, used as a regularizer.
+            phenotype_prediction (float): Weight of the phenotype prediction loss, used to guide training towards using
+            traits that are differentially expressed across phenotypes.
+            supervised_prediction (float): Weight of the supervised prediction loss, used to guide training towards
+            clusters that correlate with the supervised annotations.
+            pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
+            must be the path to a saved model.
+            save_checkpoints (bool): Whether to save checkpoints of the model during training. Defaults to False.
+            save_weights (bool): Whether to save the weights of the model during training. Defaults to True.
+            reg_cat_clusters (bool): Whether to regularize the latent space of GMVAE models based on the number of
+            categories in the categorical features.
+            reg_cluster_variance (bool): Whether to penalize the latent space of GMVAE models based on variance
+            differences across clusters.
+            entropy_knn (int): Number of nearest neighbors to use for the entropy computation in overlap_loss.
+            input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict
+            for more details.
+            run (int): Run number for the model. Used to save the model and log files. Optional.
+            strategy (tf.distribute.Strategy): Distributed strategy for TensorFloe to use. Must be one of "one_device",
+            or "mirrored_strategy" (capable of handling more than one GPU, ideal for big experiments). If unsure, leave
+            as "one_device".
+
+        Returns:
+            Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
+
         """
 
         trained_models = deepof.train_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
+            embedding_model=embedding_model,
             batch_size=batch_size,
             encoding_size=encoding_size,
             epochs=epochs,
@@ -1224,23 +1230,24 @@ class TableDict(dict):
         propagate_annotations: Dict = False,
     ):
         """
-        :param tabs: dictionary of pandas.DataFrames with individual experiments as keys.
-        :type tabs: dict
-        :param typ: type of the dataset.
-        :type typ: str
-        :param arena: type of arena (so far, only round arenas are supported).
-        :type arena: str
-        :param arena_dims: diameter of the arena in mm (so far, only round arenas are supported).
-        :type arena_dims: np.array
-        :param center: type of center (so far, only round arenas are supported).
-        :type center: str
-        :param polar: if True, polar coordinates are used.
-        :type polar: bool
-        :param propagate_labels: if True, the labels of the individual experiments are propagated to the dataset.
-        :type propagate_labels: bool
-        :param propagate_annotations: if True, the supervised annotations of the individual experiments are propagated
-        to the dataset.
+
+        Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
+        Includes methods for generating training and testing datasets for the autoencoders.
+
+        Args:
+            tabs (Dict): Dictionary of pandas.DataFrames with individual experiments as keys.
+            typ (str): Type of the dataset. Examples are "coords", "dists", and "angles". For logging purposes only.
+            arena (str): Type of the arena. Currently, only "circular" is supported. Handled internally.
+            arena_dims (np.array): Dimensions of the arena in mm.
+            center (str): Type of the center. Handled internally.
+            polar (bool): Whether the dataset is in polar coordinates. Handled internally.
+            propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the
+            transformed dataset.
+            propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations
+            of the individual experiments are propagated to the dataset.
+
         """
+
         super().__init__(tabs)
         self._type = typ
         self._center = center
@@ -1252,8 +1259,16 @@ class TableDict(dict):
 
     def filter_videos(self, keys: list) -> table_dict:
         """
+
         Returns a subset of the original table_dict object, containing only the specified keys. Useful, for example,
         for selecting data coming from videos of a specified condition.
+
+        Args:
+            keys (list): List of keys to keep.
+
+        Returns:
+            TableDict: Subset of the original table_dict object, containing only the specified keys.
+
         """
 
         table = deepof.utils.deepcopy(self)
@@ -1274,20 +1289,20 @@ class TableDict(dict):
         dpi: int = 100,
     ) -> plt.figure:
         """
-        Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i)
 
-        :param bodyparts: list of body parts to plot
-        :type bodyparts: list
-        :param xlim: x-axis limits
-        :type xlim: float
-        :param ylim: y-axis limits
-        :type ylim: float
-        :param save: if True, the figure is saved
-        :type save: bool
-        :param i: index of the animal to plot
-        :type i: int
-        :param dpi: resolution of the figure
-        :type dpi: int
+        Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
+
+        Args:
+            bodyparts (list): list of body parts to plot.
+            xlim (float): x-axis limits.
+            ylim (float): y-axis limits.
+            save (str):  if provided, the figure is saved to the specified path.
+            i (int): index of the animal to plot.
+            dpi (int): resolution of the figure.
+
+        Returns:
+            plt.figure: Figure object containing the heatmaps.
+
         """
 
         if self._type != "coords" or self._polar:
@@ -1332,84 +1347,122 @@ class TableDict(dict):
 
         return X, labels
 
-    def _project(
+    def _projection(
         self,
-        proj,
+        projection_type: str,
         n_components: int = 2,
         kernel: str = None,
         perplexity: int = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """
+
         Returns a training set generated from the 2D original data (time x features) and a specified projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons
+        performance or visualization reasons. For internal usage only.
 
-        :param proj: projection to be used
-        :type proj: str
-        :param n_components: number of components to project to
-        :type n_components: int
-        :param kernel: kernel to be used for the t-SNE and algorithms
-        :type kernel: str
-        :param perplexity: perplexity parameter for the t-SNE
-        :type perplexity: int
+        Args:
+            projection_type (str): Projection to be used.
+            n_components: Number of components to project to.
+            kernel: Kernel to be used for the random and PCA algorithms.
+            perplexity: Perplexity parameter for the t-SNE algorithm.
+
+        Returns:
+            tuple: Tuple containing projected data and projection type.
+
         """
 
         X, labels = self._prepare_projection()
 
-        if proj == "random":
-            proj = random_projection.GaussianRandomProjection(n_components=n_components)
-        elif proj == "pca":
-            proj = KernelPCA(n_components=n_components, kernel=kernel)
-        elif proj == "tsne":
-            proj = TSNE(n_components=n_components, perplexity=perplexity)
+        if projection_type == "random":
+            projection_type = random_projection.GaussianRandomProjection(
+                n_components=n_components
+            )
+        elif projection_type == "pca":
+            projection_type = KernelPCA(n_components=n_components, kernel=kernel)
+        elif projection_type == "tsne":
+            projection_type = TSNE(n_components=n_components, perplexity=perplexity)
 
-        X = proj.fit_transform(X)
+        X = projection_type.fit_transform(X)
 
         if labels is not None:
-            return X, labels, proj
+            return X, labels, projection_type
 
-        return X, proj
+        return X, projection_type
 
     def random_projection(
         self, n_components: int = 2, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """
+
         Returns a training set generated from the 2D original data (time x features) and a random projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons
+        performance or visualization reasons.
+
+        Args:
+            n_components (int): Number of components to project to. Default is 2.
+            kernel (str): Kernel to be used for projections. Defaults to linear.
+
+        Returns:
+            tuple: Tuple containing projected data and projection type.
+
         """
 
-        return self._project("random", n_components=n_components, kernel=kernel)
+        return self._projection("random", n_components=n_components, kernel=kernel)
 
     def pca(
         self, n_components: int = 2, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """
+
         Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons
+        performance or visualization reasons.
+
+        Args:
+            n_components (int): Number of components to project to. Default is 2.
+            kernel (str): Kernel to be used for projections. Defaults to linear.
+
+        Returns:
+            tuple: Tuple containing projected data and projection type.
+
         """
 
-        return self._project("pca", n_components=n_components, kernel=kernel)
+        return self._projection("pca", n_components=n_components, kernel=kernel)
 
     def tsne(
         self, n_components: int = 2, perplexity: int = 30
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """
+
         Returns a training set generated from the 2D original data (time x features) and a PCA projection
         to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
-        performance or visualization reasons
+        performance or visualization reasons.
+
+        Args:
+            n_components (int): Number of components to project to. Default is 2.
+            perplexity (int): Perplexity parameter for the t-SNE algorithm. Default is 30.
+
+        Returns:
+            tuple: Tuple containing projected data and projection type.
+
         """
 
-        return self._project("tsne", n_components=n_components, perplexity=perplexity)
+        return self._projection(
+            "tsne", n_components=n_components, perplexity=perplexity
+        )
 
     def filter_id(self, selected_id: str = None) -> table_dict:
         """
-        Filters a TableDict object to keep only those columns related to the selected id
 
-        :param selected_id: select a single animal on multi animal settings. Defaults to None
-        (all animals are processed).
-        :type selected_id: str
+        Filters a TableDict object to keep only those columns related to the selected id.
+
+        Args:
+            selected_id (str): select a single animal on multi animal settings. Defaults to None
+            (all animals are processed).
+
+        Returns:
+            table_dict: Filtered TableDict object, keeping only the selected animal.
+
         """
 
         tabs = self.copy()
@@ -1424,13 +1477,18 @@ class TableDict(dict):
 
     def merge(self, *args, ignore_index=False):
         """
-        Takes a number of table_dict objects and merges them
-        Returns a table_dict object of type 'merged'
 
-        :param args: table_dict objects to be merged
-        :type args: table_dict
-        :param ignore_index: ignore index when merging
-        :type ignore_index: bool
+        Takes a number of table_dict objects and merges them to the current one.
+        Returns a table_dict object of type 'merged'.
+
+        Args:
+            *args (table_dict): table_dict objects to be merged.
+            ignore_index (bool): ignore index when merging. Defaults to False.
+
+
+        Returns:
+            table_dict: Merged table_dict object.
+
         """
         args = [self.copy()] + list(args)
         merged_dict = defaultdict(list)
@@ -1455,7 +1513,19 @@ class TableDict(dict):
         selected_id: str = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Generates training and test sets as numpy.array objects for model training
+
+        Generates training and test sets as numpy.array objects for model training. Intended for internal usage only.
+
+
+        Args:
+            current_table_dict (table_dict): table_dict object containing the data to be used for training.
+            test_videos (int): Number of videos to be used for testing. Defaults to 0.
+            selected_id (str): select a single animal on multi animal settings. Defaults to None
+            (all animals are processed).
+
+        Returns:
+            tuple: Tuple containing training data, training labels (if any), test data, and test labels (if any).
+
         """
 
         # Select tables from self.values and filter selected animals
@@ -1566,53 +1636,41 @@ class TableDict(dict):
         selected_id: str = None,
     ) -> np.ndarray:
         """
-        Main method for preprocessing the loaded dataset. Capable of returning training
-        and test sets ready for model training.
 
-        :param automatic_changepoints: specifies the changepoint detection kernel to use to rupture the
-        data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are
-        appiled.
-        :type automatic_changepoints: str or bool
-        :param window_size: Minimum size of the applied ruptures. If automatic_changepoints is False,
-         specifies the size of the sliding window to pass through the data to generate training instances.
-        :type window_size: int
-        :param window_step: Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
-        specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
-        a true sliding window, and a value equal to to window_size splits the data into non-overlapping chunks.
-        :type window_step: int
-        :param scale: Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
-        :type scale: str
-        :param test_videos: Number of videos to use when generating the test set.
-        If 0, no test set is generated.
-        :type test_videos: int
-        :param verbose: prints job information if True. Increasing values give more information
-        :type verbose: int
-        :param conv_filter: must be one of None, 'gaussian'. If not None, convolves each instance
-        with the specified kernel.
-        :type conv_filter: str
-        :param sigma: usable only if conv_filter is 'gaussian'. Standard deviation of the kernel to use.
-        :type sigma: float
-        :param shift: usable only if conv_filter is 'gaussian'. Shift from mean zero of the kernel to use.
-        :type shift: float
-        :param shuffle: Shuffles the data instances if True. In most use cases, it should be True for training
-        and False for prediction.
-        :type shuffle: bool
-        :param selected_id: In case of multiple animals, this parameter can be used to select only one of them
-        for further processing. If None (default) all animals are used.
-        :type selected_id: str
+        Main method for preprocessing the loaded dataset before feeding to unsupervised embedding models.
+        Capable of returning training and test sets ready for model training.
 
-        :return X_train: 3D dataset with shape (instances, sliding_window_size, features)
-        generated from all training videos.
-        :rtype X_train: np.ndarray
-        :return y_train: 2D dataset with a shape dependent in the type of labels the model uses
-        (phenotypes, supervised tags).
-        :rtype y_train: np.ndarray
-        :return X_test: 3D dataset with shape (instances, sliding_window_size, features)
-        generated from all test videos (if test_videos > 0).
-        :rtype X_test: np.ndarray
-        :return y_test: 2d dataset with a shape dependent in the type of labels the model uses
-        (phenotypes, supervised tags).
-        :rtype y_test: np.ndarray
+        Args:
+            automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the
+            data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are
+            appiled.
+            window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
+            specifies the size of the sliding window to pass through the data to generate training instances.
+            window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
+            specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
+            a true sliding window, and a value equal to to window_size splits the data into non-overlapping chunks.
+            scale (str): Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
+            test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
+            verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
+            conv_filter (bool): Whether to apply a convolutional filter to the data.
+            sigma (float): Sigma parameter for the Gaussian kernel used in the convolutional filter.
+            shift (float): Shift parameter for the Gaussian kernel used in the convolutional filter.
+            shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
+            selected_id (str): In case of multiple animals, this parameter can be used to select only one of them
+            for further processing. If None (default) all animals are used.
+
+        Returns:
+            X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
+            generated from all training videos.
+            y_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels)
+            generated from all training videos. Note that no labels are use by default in the fully
+            unsupervised pipeline (in which case this is an empty array).
+            X_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
+            generated from all test videos (0 by default).
+            y_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels)
+            generated from all test videos. Note that no labels are use by default in the fully
+            unsupervised pipeline (in which case this is an empty array).
+
         """
 
         # Create a temporary copy of the current TableDict object,

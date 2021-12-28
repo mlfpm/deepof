@@ -266,6 +266,7 @@ def tensorboard_metric_logging(
 
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    embedding_model: str,  # TODO: add option to use VQ-VAE instead
     batch_size: int,
     encoding_size: int,
     epochs: int,

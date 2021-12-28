@@ -39,15 +39,18 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def connect_mouse_topview(animal_id=None) -> nx.Graph:
-    """Creates a nx.Graph object with the connectivity of the bodyparts in the
-    DLC topview model for a single mouse. Used later for angle computing, among others
+    """
 
-        Parameters:
-            - animal_id (str): if more than one animal is tagged,
-            specify the animal identyfier as a string
+    Creates a nx.Graph object with the connectivity of the bodyparts in the
+    DLC topview model for a single mouse. Used later for angle computing, among others.
 
-        Returns:
-            - connectivity (nx.Graph)"""
+    Args:
+        animal_id (str): if more than one animal is tagged, specify the animal identyfier as a string.
+
+    Returns:
+        connectivity (nx.Graph)
+
+    """
 
     connectivity = {
         "Nose": ["Left_ear", "Right_ear", "Spine_1"],
@@ -76,13 +79,16 @@ def connect_mouse_topview(animal_id=None) -> nx.Graph:
 
 
 def str2bool(v: str) -> bool:
-    """Returns the passed string as a boolean
+    """
 
-    Parameters:
-        v (str): string to transform to boolean value
+    Returns the passed string as a boolean.
+
+    Args:
+        v (str): String to transform to boolean value.
 
     Returns:
-        boolean value. If conversion is not possible, it raises an error
+        bool. If conversion is not possible, it raises an error
+
     """
 
     if isinstance(v, bool):
@@ -95,14 +101,18 @@ def str2bool(v: str) -> bool:
 
 
 def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
-    """Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
+    """
 
-    Parameters:
-        - dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihhod
-        - threshold (float): minimum acceptable confidence
+    Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
+
+    Args:
+        dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihood.
+        threshold (float): Minimum acceptable confidence.
 
     Returns:
-        - filt_mask (np.array): mask on the rows of dframe"""
+        filt_mask (np.array): mask on the rows of dframe
+
+    """
 
     Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
     Likes = np.nan_to_num(Likes, nan=1.0)
@@ -112,13 +122,17 @@ def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
 
 
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
-    """Returns the DataFrame in polar coordinates.
+    """
 
-    Parameters:
-        - tab (pandas.DataFrame):Table with cartesian coordinates
+    Returns the DataFrame in polar coordinates.
+
+    Args:
+        tab (pandas.DataFrame): Table with cartesian coordinates.
 
     Returns:
-        - polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+        polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
+
+    """
 
     tab_ = np.array(tab)
     complex_ = tab_[:, 0] + 1j * tab_[:, 1]
@@ -128,13 +142,17 @@ def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
 
 
 def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
-    """Returns a pandas.DataFrame in which all the coordinates are polar.
+    """
 
-    Parameters:
-        - cartesian_df (pandas.DataFrame):DataFrame containing tables with cartesian coordinates
+    Returns a pandas.DataFrame in which all the coordinates are polar.
+
+    Args:
+        cartesian_df (pandas.DataFrame): DataFrame containing tables with cartesian coordinates.
 
     Returns:
-        - result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates"""
+        result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
+
+    """
 
     result = []
     for df in list(cartesian_df.columns.levels[0]):
@@ -151,17 +169,20 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
 def compute_dist(
     pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
-    """Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
+    """
 
-    Parameters:
-        - pair_array (numpy.array): np.array of shape N * 4 containing X,y positions
-        over time for a given pair of body parts
-        - arena_abs (int): diameter of the real arena in cm
-        - arena_rel (int): diameter of the captured arena in pixels
+    Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
+
+    Args:
+        pair_array (numpy.array): np.array of shape N * 4 containing X, y positions.
+        over time for a given pair of body parts.
+        arena_abs (int): Diameter of the real arena in cm.
+        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
-        - result (pd.DataFrame): pandas.DataFrame with the
-        absolute distances between a pair of body parts"""
+        result (pd.DataFrame): pandas.DataFrame with the absolute distances between a pair of body parts.
+
+    """
 
     lim = 2 if pair_array.shape[1] == 4 else 1
     a, b = pair_array[:, :lim], pair_array[:, lim:]
@@ -174,17 +195,20 @@ def compute_dist(
 def bpart_distance(
     dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
-    """Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
+    """
 
-    Parameters:
-        - dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
-    over time for a given set of bp body parts
-        - arena_abs (int): diameter of the real arena in cm
-        - arena_rel (int): diameter of the captured arena in pixels
+    Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
+
+    Args:
+        dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
+        over time for a given set of bp body parts.
+        arena_abs (int): Diameter of the real arena in cm.
+        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
-        - result (pd.DataFrame): pandas.DataFrame with the
-        absolute distances between all pairs of body parts"""
+        result (pd.DataFrame): pandas.DataFrame with the absolute distances between all pairs of body parts.
+
+    """
 
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
@@ -197,15 +221,19 @@ def bpart_distance(
 
 
 def angle(a: np.array, b: np.array, c: np.array) -> np.array:
-    """Returns a numpy.array with the angles between the provided instances.
+    """
 
-    Parameters:
-        - a (2D np.array): positions over time for a bodypart
-        - b (2D np.array): positions over time for a bodypart
-        - c (2D np.array): positions over time for a bodypart
+    Returns a numpy.array with the angles between the provided instances.
+
+    Args:
+        a (np.array): 2D positions over time for a body part.
+        b (np.array): 2D positions over time for a body part.
+        c (np.array): 2D positions over time for a body part.
 
     Returns:
-        - ang (1D np.array): angles between the three-point-instances"""
+        ang (np.array): 1D angles between the three-point-instances.
+
+    """
 
     ba = a - b
     bc = c - b
@@ -219,13 +247,17 @@ def angle(a: np.array, b: np.array, c: np.array) -> np.array:
 
 
 def angle_trio(bpart_array: np.array) -> np.array:
-    """Returns a numpy.array with all three possible angles between the provided instances.
+    """
 
-    Parameters:
-        - bpart_array (2D numpy.array): positions over time for a bodypart
+    Returns a numpy.array with all three possible angles between the provided instances.
+
+    Args:
+        bpart_array (numpy.array): 2D positions over time for a bodypart.
 
     Returns:
-        - ang_trio (2D numpy.array): all-three angles between the three-point-instances"""
+        ang_trio (numpy.array): 2D all-three angles between the three-point-instances.
+
+    """
 
     a, b, c = bpart_array
     ang_trio = np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c)])
@@ -236,15 +268,19 @@ def angle_trio(bpart_array: np.array) -> np.array:
 def rotate(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:
-    """Returns a numpy.array with the initial values rotated by angles radians
+    """
 
-    Parameters:
-        - p (2D numpy.array): array containing positions of bodyparts over time
-        - angles (2D numpy.array): set of angles (in radians) to rotate p with
-        - origin (2D numpy.array): rotation axis (zero vector by default)
+    Returns a 2D numpy.ndarray with the initial values rotated by angles radians.
+
+    Args:
+        p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
+        angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
+        origin (numpy.ndarray): Rotation axis (zero vector by default).
 
     Returns:
-        - rotated (2D numpy.array): rotated positions over time"""
+        - rotated (numpy.ndarray): rotated positions over time
+
+    """
 
     R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
 
@@ -257,17 +293,21 @@ def rotate(
 
 
 def align_trajectories(data: np.array, mode: str = "all") -> np.array:
-    """Returns a numpy.array with the positions rotated in a way that the center (0 vector)
+    """
+
+    Returns a numpy.array with the positions rotated in a way that the center (0 vector)
     and the body part in the first column of data are aligned with the y axis.
 
-    Parameters:
-        - data (3D numpy.array): array containing positions of body parts over time, where
+    Args:
+        data (numpy.ndarray): 3D array containing positions of body parts over time, where
         shape is N (sliding window instances) * m (sliding window size) * l (features)
-        - mode (string): specifies if *all* instances of each sliding window get
+        mode (string): Specifies if *all* instances of each sliding window get
         aligned, or only the *center*
 
     Returns:
-        - aligned_trajs (2D np.array): aligned positions over time"""
+        aligned_trajs (np.ndarray): 2D aligned positions over time.
+
+    """
 
     angles = np.zeros(data.shape[0])
     data = deepcopy(data)
@@ -298,13 +338,17 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 
 
 def smooth_boolean_array(a: np.array) -> np.array:
-    """Returns a boolean array in which isolated appearances of a feature are smoothened
+    """
 
-    Parameters:
-        - a (1D numpy.array): boolean instances
+    Returns a boolean array in which isolated appearances of a feature are smoothed.
+
+    Args:
+        a (numpy.ndarray): Boolean instances.
 
     Returns:
-        - a (1D numpy.array): smoothened boolean instances"""
+        a (numpy.ndarray): Smoothened boolean instances.
+
+    """
 
     for i in range(1, len(a) - 1):
         if a[i - 1] == a[i + 1]:
@@ -315,12 +359,15 @@ def smooth_boolean_array(a: np.array) -> np.array:
 def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
     """
 
+    Split a numpy.ndarray at the given breakpoints.
+
     Args:
         a (np.ndarray): N (instances) * m (features) shape
         breakpoints (list): list of breakpoints obtained with ruptures
 
     Returns:
         split_a (np.ndarray): N (instances) * l (maximum break length) * m (features) shape
+
     """
     rpt_lengths = list(np.array(breakpoints)[1:] - np.array(breakpoints)[:-1])
     max_rpt_length = np.max([breakpoints[0], np.max(rpt_lengths)])
@@ -344,18 +391,21 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 def rolling_window(
     a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False
 ) -> np.ndarray:
-    """Returns a 3D numpy.array with a sliding-window extra dimension
+    """
 
-    Parameters:
-        - a (2D np.array): N (instances) * m (features) shape
-        - window_size (int): size of the window to apply
-        - window_step (int): step of the window to apply
-        - automatic_changepoints (str): changepoint detection algorithm to apply.
+    Returns a 3D numpy.array with a sliding-window extra dimension.
+
+    Args:
+        a (np.ndarray): N (instances) * m (features) shape
+        window_size (int): Size of the window to apply
+        window_step (int): Step of the window to apply
+        automatic_changepoints (str): Changepoint detection algorithm to apply.
         If False, applies a fixed sliding window.
 
     Returns:
-        - rolled_a (3D np.array):
-        N (sliding window instances) * l (sliding window size) * m (features)"""
+        rolled_a (np.ndarray): N (sliding window instances) * l (sliding window size) * m (features)
+
+    """
 
     breakpoints = None
 
@@ -375,7 +425,7 @@ def rolling_window(
         strides = (a.strides[0],) + a.strides
         rolled_a = np.lib.stride_tricks.as_strided(
             a, shape=shape, strides=strides, writeable=True
-        )[::window_step]
+        )[:window_step]
 
     return rolled_a, breakpoints
 
@@ -389,22 +439,28 @@ def rupture_per_experiment(
     window_step: int,
 ) -> np.ndarray:
     """
+
     Apply the rupture method independently to each experiment, and concatenate into a single dataset
     at the end. Returns a dataset and the rupture indices, adapted to be used in a concatenated version
-    of the labels
+    of the labels.
 
-    Parameters:
-        - table_dict (deepof.data.table_dict): table_dict with all experiments.
-        - to_rupture (np.ndarray): array with dataset to rupture.
-        - rupture_indices (list): indices of tables to rupture. Useful to select training and test sets.
-        - automatic_changepoints (str): rupture method to apply.
+    Args:
+        table_dict (deepof.data.table_dict): table_dict with all experiments.
+        to_rupture (np.ndarray): Array with dataset to rupture.
+        rupture_indices (list): Indices of tables to rupture. Useful to select training and test sets.
+        automatic_changepoints (str): Rupture method to apply.
         If false, a sliding window of window_length * window_size is obtained.
         If one of "l1", "l2" or "rbf", different automatic change point detection algorithms are applied
         on each independent experiment.
-        - window_size (int): if automatic_changepoints is False, specifies the length of the sliding window.
+        window_size (int): If automatic_changepoints is False, specifies the length of the sliding window.
         If not, it determines the minimum size of the obtained time series breaks.
-        - window_step (int): if automatic_changepoints is False, specifies the stride of the sliding window.
+        window_step (int): If automatic_changepoints is False, specifies the stride of the sliding window.
         If not, it determines the minimum step size of the obtained time series breaks.
+
+    Returns:
+        ruptured_dataset (np.ndarray): Dataset with all ruptures concatenated across the first axis.
+        rupture_indices (list): Indices of ruptures.
+
     """
 
     # Generate a base ruptured training set and a set of breaks
@@ -464,18 +520,21 @@ def rupture_per_experiment(
 def smooth_mult_trajectory(
     series: np.array, alpha: int = 0, w_length: int = 11
 ) -> np.ndarray:
-    """Returns a smoothed a trajectory using a Savitzky-Golay 1D filter
+    """
 
-    Parameters:
-        - series (numpy.array): 1D trajectory array with N (instances)
-        - alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial
-         and the window length for the Savitzky-Golay filter used for smoothing.
-         Higher values produce a worse fit, hence more smoothing.
-        - w_length (int): length of the sliding window to which the filter fit. Higher values yield a coarser fit,
+    Returns a smoothed a trajectory using a Savitzky-Golay 1D filter.
+
+    Args:
+        series (numpy.ndarray): 1D trajectory array with N (instances)
+        alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial and the window
+        length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse fit, hence more smoothing.
+        w_length (int): Length of the sliding window to which the filter fit. Higher values yield a coarser fit,
         hence more smoothing.
 
     Returns:
-        - smoothed_series (np.array): smoothed version of the input, with equal shape"""
+        smoothed_series (np.ndarray): smoothed version of the input, with equal shape
+
+    """
 
     if alpha is None:
         return series
@@ -490,14 +549,18 @@ def smooth_mult_trajectory(
 
 
 def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
-    """Fast implementation of a moving average function
+    """
 
-    Parameters:
-        - time_series (pd.Series): univariate time series to take the moving average of
-        - N (int): size of the convolution window used to compute the moving average
+    Fast implementation of a moving average function.
+
+    Args:
+        time_series (pd.Series): Uni-variate time series to take the moving average of.
+        lag (int): size of the convolution window used to compute the moving average.
 
     Returns:
-        -  moving_avg (pd.Series): univariate moving average over time_series"""
+        moving_avg (pd.Series): Uni-variate moving average over time_series.
+
+    """
 
     moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
 
@@ -512,22 +575,24 @@ def mask_outliers(
     n_std: int,
     mode: str,
 ) -> pd.DataFrame:
-    """Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
-    An outlier can be marked with one of two criteria:
-        1) the likelihood reported by DLC is below likelihood_tolerance
-        2) the deviation from a moving average model is greater than n_std
+    """
 
-    Parameters:
-        - time_series (pd.DataFrame): bivariate time series representing the x, y positions of a single body part
-        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
-        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
-        - lag (int): size of the convolution window used to compute the moving average
-        - n_std (int): number of standard deviations over the moving average to be considered an outlier
-        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
-        If "or", one is enough
+    Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
+    An outlier can be marked with one of two criteria: 1) the likelihood reported by DLC is below likelihood_tolerance,
+    and/or 2) the deviation from a moving average model is greater than n_std.
+
+    Args:
+        time_series (pd.DataFrame): Bi-variate time series representing the x, y positions of a single body part
+        likelihood (pd.DataFrame): Data frame with likelihood data per body part as extracted from deeplabcut
+        likelihood_tolerance (float): Minimum tolerated likelihood, below which an outlier is called
+        lag (int): Size of the convolution window used to compute the moving average
+        n_std (int): Number of standard deviations over the moving average to be considered an outlier
+        mode (str): If "and" (default) both x and y have to be marked in order to call an outlier. If "or", one is enough.
 
     Returns
-        - mask (pd.DataFrame): bivariate mask over time_series. True indicates an outlier"""
+        mask (pd.DataFrame): Bi-variate mask over time_series. True indicates an outlier.
+
+    """
 
     moving_avg_x = moving_average(time_series["x"], lag)
     moving_avg_y = moving_average(time_series["y"], lag)
@@ -561,21 +626,22 @@ def full_outlier_mask(
     n_std: int,
     mode: str,
 ) -> pd.DataFrame:
-    """Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
-    replaced by a boolean mask, where True indicates an outlier
+    """
 
-    Parameters:
-        - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
-        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
-        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
-        - exclude (str): body part to exclude from the analysis (to concatenate with bpart alignment)
-        - lag (int): size of the convolution window used to compute the moving average
-        - n_std (int): number of standard deviations over the moving average to be considered an outlier
-        - mode (str): if "and" (default) both x and y have to be marked in order to call an outlier.
-        If "or", one is enough
+    Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
+    replaced by a boolean mask, where True indicates an outlier.
+
+    Args:
+        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of a every body part
+        likelihood (pd.DataFrame): Data frame with likelihood data per body part as extracted from deeplabcut
+        likelihood_tolerance (float): Minimum tolerated likelihood, below which an outlier is called
+        exclude (str): Body part to exclude from the analysis (to concatenate with bpart alignment)
+        lag (int): Size of the convolution window used to compute the moving average
+        n_std (int): Number of standard deviations over the moving average to be considered an outlier
+        mode (str): If "and" (default) both x and y have to be marked in order to call an outlier. If "or", one is enough.
 
     Returns:
-        full_mask (pd.DataFrame): mask over all body parts in experiment. True indicates an outlier
+        full_mask (pd.DataFrame): Mask over all body parts in experiment. True indicates an outlier
 
     """
 
@@ -614,22 +680,24 @@ def interpolate_outliers(
     mode: str = "or",
     limit: int = 10,
 ) -> pd.DataFrame:
-    """Marks all outliers in experiment and replaces them using a univariate linear interpolation approach.
+    """
+
+    Marks all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
-    Parameters:
-        - experiment (pd.DataFrame): dataframe with time series representing the x, y positions of a every body part
-        - likelihood (pd.DataFrame): dataframe with likelihood data per body part as extracted from deeplabcut
-        - likelihood_tolerance (float): minimum tolerated likelihood, below which an outlier is called
-        - exclude (str): body part to exclude from the analysis (to concatenate with bpart alignment)
-        - lag (int): size of the convolution window used to compute the moving average
-        - n_std (int): number of standard deviations over the moving average to be considered an outlier
-        - mode (str): if "and" both x and y have to be marked in order to call an outlier.
-        If "or" (default), one is enough
-        - limit (int): maximum of consecutive outliers to interpolate. Defaults to 15
+    Args:
+        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of a every body part.
+        likelihood (pd.DataFrame): Data frame with likelihood data per body part as extracted from deeplabcut.
+        likelihood_tolerance (float): Minimum tolerated likelihood, below which an outlier is called.
+        exclude (str): Body part to exclude from the analysis (to concatenate with bpart alignment).
+        lag (int): Size of the convolution window used to compute the moving average.
+        n_std (int): Number of standard deviations over the moving average to be considered an outlier.
+        mode (str): If "and" both x and y have to be marked in order to call an outlier. If "or" (default), one is enough.
+        limit (int): Maximum of consecutive outliers to interpolate. Defaults to 10.
 
     Returns:
-        interpolated_exp (pd.DataFrame): Interpolated version of experiment
+        interpolated_exp (pd.DataFrame): Interpolated version of experiment.
+
     """
 
     interpolated_exp = experiment.copy()
@@ -652,10 +720,15 @@ def interpolate_outliers(
 
 def filter_columns(columns: list, selected_id: str) -> list:
     """
-    Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id
 
-    Parameters:
-        - columns: list of columns to filter
+    Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id.
+
+    Args:
+        columns (list): List of columns to filter.
+        selected_id (str): Animal ID to filter for.
+
+    Returns:
+        filtered_columns (list): List of filtered columns.
 
     """
 
@@ -691,29 +764,32 @@ def recognize_arena(
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
-    """Returns numpy.array with information about the arena recognised from the first frames
+    """
+
+    Returns numpy.array with information about the arena recognised from the first frames
     of the video. WARNING: estimates won't be reliable if the camera moves along the video.
 
-        Parameters:
-            - videos (list): relative paths of the videos to analise
-            - vid_index (int): element of videos to use
-            - path (str): full path of the directory where the videos are
-            - tables (dict): dictionary with DLC time series in DataFrames as values
-            - recoglimit (int): number of frames to use for position estimates
-            - high_fidelity (bool): if True, runs arena recognition on the whole video. Slow, but
-            potentially more accurate in some situations.
-            - arena_type (string): arena type; must be one of ['circular']
-            - detection_mode (str): algorithm to use to detect the arena. "cnn" uses a
-            pretrained model based on ResNet50 to predict the ellipse parameters from
-            the image. "rule-based" uses a simpler (and faster, but more prone to errors)
-            image segmentation approach.
-            - cnn_model (tf.keras.models.Model): model to use if detection_mode=="cnn"
+    Args:
+        videos (list): Relative paths of the videos to analise.
+        vid_index (int): Element of videos list to use.
+        path (str): Full path of the directory where the videos are.
+        tables (dict): Dictionary with DLC time series in DataFrames as values.
+        recoglimit (int): Number of frames to use for position estimates.
+        high_fidelity (bool): If True, runs arena recognition on the whole video. Slow, but
+        potentially more accurate in poor lighting conditions.
+        arena_type (string): Arena type; must be one of ['circular'].
+        detection_mode (str): Algorithm to use to detect the arena. "cnn" uses a
+        pretrained model based on ResNet50 to predict the ellipse parameters from
+        the image. "rule-based" (default) uses a simpler (and faster) image segmentation approach.
+        cnn_model (tf.keras.models.Model): Model to use if detection_mode=="cnn".
 
-        Returns:
-            - arena (np.array): 1D-array containing information about the arena.
-            "circular" (3-element-array) -> x-y position of the center and the radius
-            - h (int): height of the video in pixels
-            - w (int): width of the video in pixels"""
+    Returns:
+        arena (np.ndarray): 1D-array containing information about the arena.
+        "circular" (3-element-array) -> x-y position of the center and the radius.
+        h (int): Height of the video in pixels.
+        w (int): Width of the video in pixels.
+
+    """
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
@@ -793,20 +869,23 @@ def circular_arena_recognition(
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> np.array:
-    """Returns x,y position of the center, the lengths of the major and minor axes,
-    and the angle of the recognised arena
+    """
 
-    Parameters:
-        - frame (np.array): numpy.array representing an individual frame of a video
-        - detection_mode (str): algorithm to use to detect the arena. "cnn" uses a
+    Returns x,y position of the center, the lengths of the major and minor axes,
+    and the angle of the recognised arena.
+
+    Args:
+        frame (np.ndarray): numpy.ndarray representing an individual frame of a video
+        detection_mode (str): Algorithm to use to detect the arena. "cnn" uses a
         pretrained model based on ResNet50 to predict the ellipse parameters from
-        the image. "rule-based" uses a simpler (and faster, but more prone to errors)
-        image segmentation approach.
-        - cnn_model (tf.keras.models.Model): model to use if detection_mode=="cnn"
+        the image. "rule-based" uses a simpler (and faster) image segmentation approach.
+        cnn_model (tf.keras.models.Model): Model to use if detection_mode=="cnn".
 
     Returns:
-        - circles (np.array): 3-element-array containing x,y positions of the center
-        of the arena, and a third value indicating the radius"""
+        circles (np.ndarray): 3-element-array containing x,y positions of the center
+        of the arena, and a third value indicating the radius.
+
+    """
 
     if detection_mode == "rule-based":
 
@@ -867,21 +946,25 @@ def rolling_speed(
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
-    """Returns the average speed over n frames in pixels per frame
+    """
 
-    Parameters:
-        - dframe (pandas.DataFrame): position over time dataframe
-        - pause (int):  frame-length of the averaging window
-        - rounds (int): float rounding decimals
-        - deriv (int): position derivative order; 1 for speed,
-        2 for acceleration, 3 for jerk, etc
-        - center (str): for internal usage only; solves an issue
-        with pandas.MultiIndex that arises when centering frames
-        to a specific body part
+    Returns the average speed over n frames in pixels per frame.
+
+    Args:
+        dframe (pandas.DataFrame): Position over time dataframe.
+        window (int): Number of frames to average over.
+        rounds (int): Float rounding decimals.
+        deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
+        center (str): For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames
+        to a specific body part.
+        shift (int): Window shift for rolling speed calculation.
+        typ (str): Type of dataset. Intended for internal usage only.
 
     Returns:
-        - speeds (pd.DataFrame): containing 2D speeds for each body part
-        in the original data or their consequent derivatives"""
+        speeds (pd.DataFrame): Data frame containing 2D speeds for each body part in the original data or their
+        consequent derivatives.
+
+    """
 
     original_shape = dframe.shape
     if center:
@@ -929,16 +1012,19 @@ def rolling_speed(
 
 
 def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
-    """Fits a Gaussian Mixture Model to the provided data and returns evaluation metrics.
+    """
 
-    Parameters:
-        - x (numpy.array): data matrix to train the model
-        - n_components (int): number of Gaussian components to use
-        - cv_type (str): covariance matrix type to use.
-        Must be one of "spherical", "tied", "diag", "full"
+    Fits a Gaussian Mixture Model to the provided data and returns evaluation metrics.
+
+    Args:
+        x (numpy.ndarray): Data matrix to train the model
+        n_components (int): Number of Gaussian components to use
+        cv_type (str): Covariance matrix type to use.
+        Must be one of "spherical", "tied", "diag", "full".
 
     Returns:
-        - gmm_eval (list): model and associated BIC for downstream selection
+        - gmm_eval (list): model and associated BIC for downstream selection.
+
     """
 
     gmm = mixture.GaussianMixture(
@@ -949,6 +1035,7 @@ def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
     )
     gmm.fit(x)
     gmm_eval = [gmm, gmm.bic(x)]
+
     return gmm_eval
 
 
@@ -960,23 +1047,26 @@ def gmm_model_selection(
     n_cores: int = False,
     cv_types: Tuple = ("spherical", "tied", "diag", "full"),
 ) -> Tuple[List[list], List[np.ndarray], Union[int, Any]]:
-    """Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
-    a vector with the median BICs and an object with the overall best model
+    """
 
-     Parameters:
-         - x (pandas.DataFrame): data matrix to train the models
-         - n_components_range (range): generator with numbers of components to evaluate
-         - n_runs (int): number of bootstraps for each model
-         - part_size (int): size of bootstrap samples for each model
-         - n_cores (int): number of cores to use for computation
-         - cv_types (tuple): Covariance Matrices to try. All four available by default
+    Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
+    a vector with the median BICs and an object with the overall best model.
 
-     Returns:
-         - bic (list): All recorded BIC values for all attempted parameter combinations
-         (useful for plotting)
-         - m_bic(list): All minimum BIC values recorded throughout the process
-         (useful for plottinh)
-         - best_bic_gmm (sklearn.GMM): unfitted version of the best found model
+    Args:
+        x (pandas.DataFrame): Data matrix to train the models
+        n_components_range (range): Generator with numbers of components to evaluate
+        n_runs (int): Number of bootstraps for each model
+        part_size (int): Size of bootstrap samples for each model
+        n_cores (int): Number of cores to use for computation
+        cv_types (tuple): Covariance Matrices to try. All four available by default
+
+    Returns:
+        - bic (list): All recorded BIC values for all attempted parameter combinations
+        (useful for plotting)
+        - m_bic(list): All minimum BIC values recorded throughout the process
+        (useful for plottinh)
+        - best_bic_gmm (sklearn.GMM): Unfitted version of the best found model
+
     """
 
     # Set the default of n_cores to the most efficient value
@@ -1022,15 +1112,16 @@ def cluster_transition_matrix(
 ) -> Tuple[Union[nx.Graph, Any], np.ndarray]:
     """Computes the transition matrix between clusters and the autocorrelation in the sequence.
 
-    Parameters:
-        - cluster_sequence (numpy.array):
-        - nclusts (int):
-        - autocorrelation (bool):
-        - return_graph (bool):
+    Args:
+        cluster_sequence (numpy.array): Sequence of cluster assignments.
+        nclusts (int): Number of clusters in the sequence.
+        autocorrelation (bool): Whether to compute the autocorrelation of the sequence.
+        return_graph (bool): Whether to return the transition matrix as an networkx.DiGraph object.
 
     Returns:
-        - trans_normed (numpy.array / networkx.Graph:
-        - autocorr (numpy.array):
+        trans_normed (numpy.ndarray / networkx.Graph): Transition matrix as numpy.ndarray or networkx.DiGraph.
+        autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation
+        values on cluster assignment.
     """
 
     # Stores all possible transitions between clusters

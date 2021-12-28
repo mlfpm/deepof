@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "0c35bf1081badfa3f4b3989929bdb722f302f76d9c1dc366eddef48c5204cdc0"
+            "sha256": "99b9c45a40312e9d8605c9d0ece199d8a06a854f4d3a37276ae31a7284b4e53a"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -89,11 +89,11 @@
         },
         "attrs": {
             "hashes": [
-                "sha256:149e90d6d8ac20db7a955ad60cf0e6881a3f20d37096140088356da6c716b0b1",
-                "sha256:ef6aaac3ca6cd92904cdd0d83f629a15f18053ec84e6432106f7a4d04ae4f5fb"
+                "sha256:50f3c9b216dc9021042f71b392859a773b904ce1a029077f58f6598272432045",
+                "sha256:8f7335278dedd26b58c38e006338242cc0977f06d51579b2b8b87b9b33bff66c"
             ],
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4'",
-            "version": "==21.2.0"
+            "version": "==21.3.0"
         },
         "babel": {
             "hashes": [
@@ -2388,11 +2388,11 @@
         },
         "attrs": {
             "hashes": [
-                "sha256:149e90d6d8ac20db7a955ad60cf0e6881a3f20d37096140088356da6c716b0b1",
-                "sha256:ef6aaac3ca6cd92904cdd0d83f629a15f18053ec84e6432106f7a4d04ae4f5fb"
+                "sha256:50f3c9b216dc9021042f71b392859a773b904ce1a029077f58f6598272432045",
+                "sha256:8f7335278dedd26b58c38e006338242cc0977f06d51579b2b8b87b9b33bff66c"
             ],
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4'",
-            "version": "==21.2.0"
+            "version": "==21.3.0"
         },
         "babel": {
             "hashes": [
@@ -2998,6 +2998,13 @@
             "markers": "python_version >= '3.6'",
             "version": "==1.0.0"
         },
+        "pockets": {
+            "hashes": [
+                "sha256:68597934193c08a08eb2bf6a1d85593f627c22f9b065cc727a4f03f669d96d86",
+                "sha256:9320f1a3c6f7a9133fe3b571f283bcf3353cd70249025ae8d618e40e9f7e92b3"
+            ],
+            "version": "==0.9.1"
+        },
         "prompt-toolkit": {
             "hashes": [
                 "sha256:1bb05628c7d87b645974a1bad3f17612be0c29fa39af9f7688030163f680bad6",
@@ -3255,6 +3262,14 @@
             ],
             "markers": "python_version >= '3.5'",
             "version": "==1.0.1"
+        },
+        "sphinxcontrib-napoleon": {
+            "hashes": [
+                "sha256:407382beed396e9f2d7f3043fad6afda95719204a1e1a231ac865f40abcbfcf8",
+                "sha256:711e41a3974bdf110a484aec4c1a556799eb0b3f3b897521a018ad7e2db13fef"
+            ],
+            "index": "pypi",
+            "version": "==0.7"
         },
         "sphinxcontrib-qthelp": {
             "hashes": [

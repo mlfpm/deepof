@@ -1,7 +1,3 @@
-.. deepof documentation master file, created by
-   sphinx-quickstart on Wed Apr  7 16:42:11 2021.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
 |Pipeline| |Coverage| |CodeFactor| |Version| |MLFPM| |Black|
 
@@ -54,8 +50,19 @@ Alternatively, you can download our pre-built Docker image, which contains all c
 
    docker pull lucasmir/deepof:latest
 
-Formatting your data
---------------------
+What you need
+-------------
+DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
+Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Currently, DeepOF requires videos to be filmed from a top-view perspective, and follow a set of labels
+equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing **CD57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
+
+.. image:: _static/deepof_DLC_tagging.png
+   :width: 400
+   :align: center
+   :alt: DeepOF label scheme
+
+**NOTE**: Some DeepOF functions (such as climbing detection) currently require the user to film their animals in a round arena. This is scheduled to be
+updated in future releases.
 
 Basic usage
 -----------
@@ -136,13 +143,21 @@ you get a generative model for free).
 
 That's it for this (very basic) introduction. Check out the tutorials below for more advanced examples!
 
-Full API
-==================
-* :ref:`Advanced usage (full API documentation) <full_api_docs>`
+Full API documentation
+======================
+
+* `deepof.data (main data-wrangling module) <deepof.data.html>`_
+* `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
+* `deepof.models (deep unsupervised models) <deepof.models.html>`_
+* `deepof.model_utils (deep unsupervised models auxiliary functions) <deepof.model_utils.html>`_
+* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
+* `deepof.train_utils (deep unsupervised model training auxiliary functions) <deepof.train_utils.html>`_
+* `deepof.pose_utils (supervised pipeline annotation functions) <deepof.pose_utils.html>`_
+* `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
 
 Advanced tutorials
 ==================
-* :ref:`DeepOF supervised pipeline: detecting pre-defined behaviors`
-* :ref:`DeepOF unsupervised pipeline: exploring the behavioral space`
-* :ref:`Case study: Characterizing CSDS`
-
+* `Formatting your data: feature extraction from DLC output`
+* `DeepOF supervised pipeline: detecting pre-defined behaviors`
+* `DeepOF unsupervised pipeline: exploring the behavioral space`
+* `Case study: Characterizing CSDS`
