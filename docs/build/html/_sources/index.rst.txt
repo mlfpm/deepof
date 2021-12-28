@@ -1,10 +1,13 @@
 
-|Pipeline| |Coverage| |CodeFactor| |Version| |MLFPM| |Black|
+|Pipeline| |Coverage| |Docs| |CodeFactor| |Version| |MLFPM| |Black|
 
 .. |Pipeline| image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg
    :target: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines
 .. |Coverage| image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg
    :target: https://coverage.readthedocs.io/en/coverage-5.3/
+.. |Docs| image:: https://readthedocs.org/projects/deepof/badge/?version=latest
+   :target: https://deepof.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
 .. |Version| image:: https://img.shields.io/badge/release-v0.1.4-informational
