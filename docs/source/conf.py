@@ -13,7 +13,7 @@
 import os
 import sys
 
-sys.path.insert(0, "../../deepof/")
+sys.path.insert(0, "../../")
 import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
