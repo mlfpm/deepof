@@ -37,11 +37,11 @@ statsmodels = "*"
 setuptools = "*"
 scipy = "*"
 typing-extensions = "*"
+keras-tuner = "*"
 
 [dev-packages]
 coverage = "*"
 dash = "*"
-keras-tuner = "*"
 pytest = "*"
 hypothesis = "*"
 sphinx = "*"

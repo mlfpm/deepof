@@ -16,6 +16,7 @@ tqdm
 umap-learn
 pipfile
 keras
+keras-tuner
 ruptures
 openpyxl
 snakemake
