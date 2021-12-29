@@ -8,7 +8,6 @@ Submodules
    :maxdepth: 4
 
    deepof.data
-   deepof.deepof_train_unsupervised
    deepof.hypermodels
    deepof.model_utils
    deepof.models

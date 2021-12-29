@@ -57,7 +57,7 @@ What you need
 -------------
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Currently, DeepOF requires videos to be filmed from a top-view perspective, and follow a set of labels
-equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing **CD57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
+equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
    :width: 400

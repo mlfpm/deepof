@@ -6,13 +6,14 @@
 
 Data structures for preprocessing and wrangling of DLC output data.
 
-- Project: initial structure for specifying the characteristics of the project.
-- Coordinates: result of running the project. In charge of calling all relevant
+Project: initial structure for specifying the characteristics of the project.
+Coordinates: result of running the project. In charge of calling all relevant
 computations for getting the data into the desired shape
-- TableDict: python dict subclass for storing experimental instances as pandas.DataFrames.
+TableDict: python dict subclass for storing experimental instances as pandas.DataFrames.
 Contains methods for generating training and test sets ready for model training.
 
 """
+
 import copy
 import os
 import warnings
