@@ -66,38 +66,114 @@
              
   <section id="module-deepof.model_utils">
 <span id="deepof-model-utils-module"></span><h1>deepof.model_utils module<a class="headerlink" href="#module-deepof.model_utils" title="Permalink to this headline"></a></h1>
-<p>Functions and general utilities for the deepof tensorflow models. See documentation for details</p>
+<p>Functions, layers, regularizers, and general utilities for the unsupervised models within the deepof package.
+See deepof.models for details on the currently supported architectures.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.model_utils.log_loss">
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">log_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_true</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_x_q_given_z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.log_loss" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the negative log likelihood of the data given
+the output distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x_true</strong> – the true input</p></li>
+<li><p><strong>p_x_q_given_z</strong> – reconstruction using the output distribution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the negative log likelihood</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_shannon_entropy">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_shannon_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_shannon_entropy" title="Permalink to this definition"></a></dt>
 <dd><p>Computes Shannon entropy for a given tensor</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tensor</strong> (<em>tf.Tensor</em>) – tensor to compute the entropy for</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>entropy of the tensor</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tf.Tensor</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_k_nearest_neighbors">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_k_nearest_neighbors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_k_nearest_neighbors" title="Permalink to this definition"></a></dt>
 <dd><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> (<em>tf.Tensor</em>) – tensor to compute the k nearest neighbors for</p></li>
+<li><p><strong>k</strong> (<em>int</em>) – number of nearest neighbors to retrieve</p></li>
+<li><p><strong>index</strong> (<em>int</em>) – index of the vector to compute the k nearest neighbors for</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>indices of the k nearest neighbors</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tf.Tensor</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_neighbourhood_entropy">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_neighbourhood_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clusters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_neighbourhood_entropy" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Computes the neighbourhood entropy for a given vector in a tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – index of the vector to compute the neighbourhood entropy for</p></li>
+<li><p><strong>tensor</strong> (<em>tf.Tensor</em>) – tensor to compute the neighbourhood entropy for</p></li>
+<li><p><strong>clusters</strong> (<em>tf.Tensor</em>) – tensor containing the cluster labels for each vector in the tensor</p></li>
+<li><p><strong>k</strong> (<em>int</em>) – number of nearest neighbours to consider</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>neighbourhood entropy of the vector with the specified index</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tf.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">exponential_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">exponential_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.callbacks.Callback</span></code></p>
 <p>Simple class that allows to grow learning rate exponentially during training</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the exponential learning rate callback</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>factor</strong> (<em>float</em>) – factor by which to multiply the learning rate</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.on_batch_end">
-<span class="sig-name descname"><span class="pre">on_batch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.on_batch_end" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">on_batch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.on_batch_end" title="Permalink to this definition"></a></dt>
 <dd><p>This callback acts after processing each batch</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<em>int</em>) – current batch number</p></li>
+<li><p><strong>logs</strong> (<em>dict</em>) – dictionary containing the loss for the current batch</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -106,51 +182,186 @@
 <dt class="sig sig-object py" id="deepof.model_utils.find_learning_rate">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">find_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.find_learning_rate" title="Permalink to this definition"></a></dt>
 <dd><p>Trains the provided model for an epoch with an exponentially increasing learning rate</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>tf.keras.Model</em>) – model to train</p></li>
+<li><p><strong>X</strong> (<em>tf.Tensor</em>) – tensor containing the input data</p></li>
+<li><p><strong>y</strong> (<em>tf.Tensor</em>) – tensor containing the target data</p></li>
+<li><p><strong>epochs</strong> (<em>int</em>) – number of epochs to train the model for</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size to use for training</p></li>
+<li><p><strong>min_rate</strong> (<em>float</em>) – minimum learning rate to consider</p></li>
+<li><p><strong>max_rate</strong> (<em>float</em>) – maximum learning rate to consider</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>learning rate that resulted in the lowest loss</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.plot_lr_vs_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">plot_lr_vs_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">losses</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.plot_lr_vs_loss" title="Permalink to this definition"></a></dt>
 <dd><p>Plots learing rate versus the loss function of the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>rates</strong> (<em>np.ndarray</em>) – array containing the learning rates to plot in the x-axis</p></li>
+<li><p><strong>losses</strong> (<em>np.ndarray</em>) – array containing the losses to plot in the y-axis</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_kernel">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_kernel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></span><a class="headerlink" href="#deepof.model_utils.compute_kernel" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the MMD between the two specified vectors using a gaussian kernel.</p>
-<blockquote>
-<div><dl>
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>x (tf.Tensor): left tensor</p></li>
-<li><p>y (tf.Tensor): right tensor</p></li>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<em>tf.Tensor</em>) – left tensor</p></li>
+<li><p><strong>y</strong> (<em>tf.Tensor</em>) – right tensor</p></li>
 </ul>
 </dd>
-<dt>Returns</dt><dd><ul class="simple">
-<li><p>kernel (tf.Tensor): returns the result of applying the kernel, for</p></li>
-</ul>
-<p>each training instance</p>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>returns the result of applying the kernel, for
+each training instance</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>kernel (tf.Tensor)</p>
 </dd>
 </dl>
-</div></blockquote>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_mmd">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_mmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tensorflow.python.framework.ops.Tensor</span></span></span><a class="headerlink" href="#deepof.model_utils.compute_mmd" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the MMD between the two specified vectors using a gaussian kernel.</p>
-<blockquote>
-<div><dl>
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>tensors (tuple): tuple containing two tf.Tensor objects</p></li>
-</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tensors</strong> (<em>tuple</em>) – tuple containing two tf.Tensor objects</p>
 </dd>
-<dt>Returns</dt><dd><ul class="simple">
-<li><p>mmd (tf.Tensor): returns the maximum mean discrepancy for each</p></li>
-</ul>
-<p>training instance</p>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>returns the maximum mean discrepancy for each
+training instance</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>mmd (tf.Tensor)</p>
 </dd>
 </dl>
-</div></blockquote>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.GaussianMixtureLatent">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">GaussianMixtureLatent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.GaussianMixtureLatent" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.engine.training.Model</span></code></p>
+<p>Gaussian Mixture probabilistic latent space model. Used to represent the embedding of motion tracking data in a
+mixture of Gaussians with a specified number of components, with means, covariances and weights specified by
+neural network layers.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.GaussianMixtureLatent.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape:</span> <span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'ELBO'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_warmup:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_annealing_mode:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mc_kl:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmd_warmup:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmd_annealing_mode:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer:</span> <span class="pre">keras.optimizer_v2.optimizer_v2.OptimizerV2</span> <span class="pre">=</span> <span class="pre">&lt;keras.optimizer_v2.adam.Adam</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_loss:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cat_clusters:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cluster_variance:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.GaussianMixtureLatent.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the Gaussian Mixture Latent layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the Gaussian mixture.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
+<li><p><strong>loss</strong> (<em>str</em>) – loss function to use for training. Must be one of “ELBO”, “MMD”, or “ELBO+MMD”.</p></li>
+<li><p><strong>kl_warmup</strong> (<em>int</em>) – number of epochs to warm up the KL divergence.</p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>str</em>) – mode to use for annealing the KL divergence. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>mc_kl</strong> (<em>int</em>) – number of Monte Carlo samples to use for computing the KL divergence.</p></li>
+<li><p><strong>mmd_warmup</strong> (<em>int</em>) – number of epochs to warm up the MMD.</p></li>
+<li><p><strong>mmd_annealing_mode</strong> (<em>str</em>) – mode to use for annealing the MMD. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>optimizer</strong> (<em>tf.keras.optimizers.Optimizer</em>) – optimizer to use for training. The layer needs access to it in</p></li>
+<li><p><strong>weights.</strong> (<em>order to compute the KL and MMD annealing</em>) – </p></li>
+<li><p><strong>overlap_loss</strong> (<em>float</em>) – weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap</p></li>
+<li><p><strong>reg_cat_clusters</strong> (<em>bool</em>) – whether to use the penalize uneven cluster membership in the latent space.</p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>bool</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>**kwargs</strong> – keyword arguments passed to the parent class</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.GaussianMixtureLatent.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.GaussianMixtureLatent.call" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the output of the layer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">VectorQuantizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.engine.base_layer.Layer</span></code></p>
+<p>Vector quantizer layer, which quantizes the input vectors into a fixed number of clusters using L2 norm. Based on
+<a class="reference external" href="https://arxiv.org/pdf/1509.03700.pdf">https://arxiv.org/pdf/1509.03700.pdf</a>. Implementation based on <a class="reference external" href="https://keras.io/examples/generative/vq_vae/">https://keras.io/examples/generative/vq_vae/</a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the VQ layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_components</strong> (<em>int</em>) – number of embeddings to use</p></li>
+<li><p><strong>embedding_dim</strong> (<em>int</em>) – dimensionality of the embeddings</p></li>
+<li><p><strong>beta</strong> (<em>float</em>) – beta value for the loss function</p></li>
+<li><p><strong>**kwargs</strong> – additional arguments for the parent class</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.call" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the VQ layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>tf.Tensor</em>) – input tensor</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>output tensor</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>x (tf.Tensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer.get_code_indices">
+<span class="sig-name descname"><span class="pre">get_code_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flattened_inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.get_code_indices" title="Permalink to this definition"></a></dt>
+<dd><p>Getter for the code indices at any given time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>flattened_inputs</strong> (<em>tf.Tensor</em>) – flattened input tensor (encoder output)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>code indices tensor with cluster assignments.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>encoding_indices (tf.Tensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer.update_posterior_variances">
+<span class="sig-name descname"><span class="pre">update_posterior_variances</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.update_posterior_variances" title="Permalink to this definition"></a></dt>
+<dd><p>Updates the posterior variances of the codebook (not used while training, only later as a way
+of sampling the latent space.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -162,18 +373,47 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1506.01186.pd
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializes the scheduler.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>iterations</strong> (<em>int</em>) – number of iterations to train for</p></li>
+<li><p><strong>max_rate</strong> (<em>float</em>) – maximum learning rate</p></li>
+<li><p><strong>start_rate</strong> (<em>float</em>) – starting learning rate</p></li>
+<li><p><strong>last_iterations</strong> (<em>int</em>) – number of iterations to train for at the last rate</p></li>
+<li><p><strong>last_rate</strong> (<em>float</em>) – learning rate at the last iteration</p></li>
+<li><p><strong>log_dir</strong> (<em>str</em>) – directory to save the learning rate to</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_batch_begin">
-<span class="sig-name descname"><span class="pre">on_batch_begin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_batch_begin" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">on_batch_begin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_batch_begin" title="Permalink to this definition"></a></dt>
 <dd><p>Defines computations to perform for each batch</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<em>int</em>) – current batch number</p></li>
+<li><p><strong>logs</strong> (<em>dict</em>) – dictionary of logs</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_epoch_end">
-<span class="sig-name descname"><span class="pre">on_epoch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_epoch_end" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">on_epoch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_epoch_end" title="Permalink to this definition"></a></dt>
 <dd><p>Logs the learning rate to tensorboard</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>epoch</strong> (<em>int</em>) – current epoch number</p></li>
+<li><p><strong>logs</strong> (<em>dict</em>) – dictionary of logs</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -239,31 +479,15 @@ to the final model loss.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.KLDivergenceLayer.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warm_up_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annealing_mode</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.KLDivergenceLayer.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initialize the <cite>KLDivergenceAddLoss</cite> (placeholder) layer.</p>
+<dd><p>Initializes the KL Divergence layer</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>distribution_b</strong> – distribution instance corresponding to <cite>b</cite> as in
-<cite>KL[a, b]</cite>. The previous layer’s output is presumed to be a
-<cite>Distribution</cite> instance and is <cite>a</cite>).</p></li>
-<li><p><strong>use_exact_kl</strong> – Python <cite>bool</cite> indicating if KL divergence should be
-calculated exactly via <cite>tfp.distributions.kl_divergence</cite> or via Monte
-Carlo approximation.
-Default value: <cite>False</cite>.</p></li>
-<li><p><strong>test_points_reduce_axis</strong> – <cite>int</cite> vector or scalar representing dimensions
-over which to <cite>reduce_mean</cite> while calculating the Monte Carlo
-approximation of the KL divergence.  As is with all <cite>tf.reduce_*</cite> ops,
-<cite>None</cite> means reduce over all dimensions; <cite>()</cite> means reduce over none of
-them.
-Default value: <cite>()</cite> (i.e., no reduction).</p></li>
-<li><p><strong>test_points_fn</strong> – Python <cite>callable</cite> taking a <cite>Distribution</cite> instance and
-returning a <cite>Tensor</cite> used for random test points to approximate the KL
-divergence.
-Default value: <cite>tf.convert_to_tensor</cite>.</p></li>
-<li><p><strong>weight</strong> – Multiplier applied to the calculated KL divergence for each Keras
-batch member.
-Default value: <cite>None</cite> (i.e., do not weight each batch member).</p></li>
-<li><p><strong>**kwargs</strong> – Additional keyword arguments passed to <cite>tf.keras.Layer</cite>.</p></li>
+<li><p><strong>iters</strong> (<em>int</em>) – number of training iterations taken so far</p></li>
+<li><p><strong>warm_up_iters</strong> (<em>int</em>) – maximum number of training iterations for warmup</p></li>
+<li><p><strong>annealing_mode</strong> (<em>str</em>) – mode of annealing, either ‘linear’ or ‘sigmoid’</p></li>
+<li><p><strong>*args</strong> – additional positional arguments</p></li>
+<li><p><strong>**kwargs</strong> – additional keyword arguments</p></li>
 </ul>
 </dd>
 </dl>
@@ -291,8 +515,22 @@ Default value: <cite>None</cite> (i.e., do not weight each batch member).</p></l
 to the final model loss.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warm_up_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annealing_mode</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensorflow_probability.python.distributions.distribution.Distribution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warm_up_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annealing_mode</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MMDiscrepancyLayer.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the MMDiscrepancy layer</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size of the model</p></li>
+<li><p><strong>prior</strong> (<em>tfd.Distribution</em>) – prior distribution of the model</p></li>
+<li><p><strong>iters</strong> (<em>int</em>) – number of training iterations taken so far</p></li>
+<li><p><strong>warm_up_iters</strong> (<em>int</em>) – maximum number of training iterations for warmup</p></li>
+<li><p><strong>annealing_mode</strong> (<em>str</em>) – mode of annealing, either ‘linear’ or ‘sigmoid’</p></li>
+<li><p><strong>*args</strong> – additional positional arguments</p></li>
+<li><p><strong>**kwargs</strong> – additional keyword arguments</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.MMDiscrepancyLayer.get_config">
@@ -318,7 +556,21 @@ penalty to the loss function</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterOverlap.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializes the ClusterOverlap layer</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size of the model</p></li>
+<li><p><strong>encoding_dim</strong> (<em>int</em>) – dimension of the latent Gaussian Mixture</p></li>
+<li><p><strong>k</strong> (<em>int</em>) – number of nearest components of the latent Gaussian Mixture to consider</p></li>
+<li><p><strong>loss_weight</strong> (<em>float</em>) – weight of the regularization penalty applied to the local entropy of each</p></li>
+<li><p><strong>instance</strong> (<em>training</em>) – </p></li>
+<li><p><strong>*args</strong> – additional positional arguments</p></li>
+<li><p><strong>**kwargs</strong> – additional keyword arguments</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterOverlap.get_config">
@@ -336,12 +588,19 @@ penalty to the loss function</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MeanVarianceRegularizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MeanVarianceRegularizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.regularizers.Regularizer</span></code></p>
+<p>Regularizer class that penalizes the variance difference across latent Gaussian Mixture components</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MeanVarianceRegularizer.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes MeanVarianceRegularizer</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>strength</strong> (<em>float</em>) – strength of the regularization penalty</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.MeanVarianceRegularizer.get_config">

@@ -4,13 +4,15 @@
 
 """
 
-Data structures for preprocessing and wrangling of DLC output data.
+Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
+There are three main data structures to pay attention to:
+- :class:`~deepof.data.Project`, which serves as a configuration hub for the whole pipeline
+- :class:`~deepof.data.Coordinates`, which acts as an intermediary between project configuration and data, and contains
+a plethora of processing methods to apply, and
+- :class:`~deepof.data.TableDict`, which is the main data structure to store the data, having experiment IDs as keys
+and processed time-series as values in a dictionary-like object.
 
-Project: initial structure for specifying the characteristics of the project.
-Coordinates: result of running the project. In charge of calling all relevant
-computations for getting the data into the desired shape
-TableDict: python dict subclass for storing experimental instances as pandas.DataFrames.
-Contains methods for generating training and test sets ready for model training.
+For a detailed tutorial on how to use this module, see the advanced tutorials in the main section.
 
 """
 

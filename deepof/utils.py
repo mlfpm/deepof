@@ -4,7 +4,7 @@
 
 """
 
-Functions and general utilities for the deepof package. See documentation for details
+Functions and general utilities for the deepof package.
 
 """
 

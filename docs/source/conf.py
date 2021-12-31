@@ -61,6 +61,6 @@ html_static_path = ["_static"]
 
 # Autodoc default configuration
 autodoc_default_options = {
-    'member-order': 'bysource',
-    'special-members': '__init__',
+    "member-order": "bysource",
+    "special-members": "__init__",
 }
