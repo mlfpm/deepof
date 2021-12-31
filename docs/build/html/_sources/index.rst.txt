@@ -47,7 +47,8 @@ The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepo
 
    pip install deepof
 
-Alternatively, you can download our pre-built Docker image, which contains all compatible dependencies:
+Alternatively, you can download our pre-built `Docker image <https://hub.docker.com/repository/docker/lucasmiranda42/deepof>`_,
+which contains all compatible dependencies:
 
 .. code:: bash
 
