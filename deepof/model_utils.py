@@ -20,6 +20,7 @@ from tensorflow.keras.initializers import he_uniform, random_uniform
 from tensorflow.keras.layers import Layer, Input, BatchNormalization
 from tensorflow.keras.layers import Bidirectional, Dense, Dropout
 from tensorflow.keras.layers import GRU, RepeatVector, Reshape
+from tensorflow.keras.models import Model
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -358,6 +359,26 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             activity_regularizer=MeanVarianceRegularizer(0.05),
             kernel_initializer=random_uniform(),
         )
+        self.latent_distribution = tfpl.DistributionLambda(
+            make_distribution_fn=lambda gauss: tfd.mixture.Mixture(
+                cat=tfd.categorical.Categorical(
+                    probs=gauss[0],
+                ),
+                components=[
+                    tfd.Independent(
+                        tfd.Normal(
+                            loc=gauss[1][..., : self.latent_dim, k],
+                            scale=1e-3
+                            + tf.math.exp(gauss[1][..., self.latent_dim :, k]),
+                        ),
+                        reinterpreted_batch_ndims=1,
+                    )
+                    for k in range(self.n_components)
+                ],
+            ),
+            convert_to_tensor_fn="sample",
+            name="encoding_distribution",
+        )
 
         # Initialize the Gaussian Mixture prior with the specified number of components
         self.prior = tfd.MixtureSameFamily(
@@ -387,26 +408,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
         z_gauss = Reshape([2 * self.latent_dim, self.n_components])(z_gauss)
 
-        z = tfpl.DistributionLambda(
-            make_distribution_fn=lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(
-                    probs=gauss[0],
-                ),
-                components=[
-                    tfd.Independent(
-                        tfd.Normal(
-                            loc=gauss[1][..., : self.latent_dim, k],
-                            scale=1e-3
-                            + tf.math.exp(gauss[1][..., self.latent_dim :, k]),
-                        ),
-                        reinterpreted_batch_ndims=1,
-                    )
-                    for k in range(self.n_components)
-                ],
-            ),
-            convert_to_tensor_fn="sample",
-            name="encoding_distribution",
-        )([z_cat, z_gauss])
+        z = self.latent_distribution([z_cat, z_gauss])
 
         # Define and control custom loss functions
         if "ELBO" in self.loss:
@@ -439,9 +441,6 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 annealing_mode=self.mmd_annealing_mode,
             )(z)
 
-        # Dummy layer with no parameters, to retrieve the previous tensor
-        z = tf.keras.layers.Lambda(lambda t: t, name="latent_distribution")(z)
-
         # Tracks clustering metrics and adds a KNN regularizer if self.overlap_loss != 0
         if self.n_components > 1:
             z = ClusterOverlap(
@@ -452,6 +451,11 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             )([z, z_cat])
 
         return z, z_cat
+
+    @property
+    def model(self):
+        x = Input(self.seq_shape)
+        return Model(inputs=[x], outputs=self.call(x))
 
 
 class VectorQuantizer(tf.keras.layers.Layer):

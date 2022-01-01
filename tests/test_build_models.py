@@ -40,7 +40,7 @@ def test_GMVAE_build(
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,
         montecarlo_kl=montecarlo_kl,
-        number_of_components=number_of_components,
+        n_components=number_of_components,
         next_sequence_prediction=True,
         phenotype_prediction=True,
         supervised_prediction=True,
