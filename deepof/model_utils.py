@@ -454,8 +454,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
     @property
     def model(self):
-        x = Input(self.seq_shape)
-        return Model(inputs=[x], outputs=self.call(x))
+        x = Input(self.seq_shape[1:])
+        return Model(inputs=x, outputs=self.call(x), name="gaussian_mixture_latent")
 
 
 class VectorQuantizer(tf.keras.layers.Layer):

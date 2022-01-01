@@ -321,15 +321,8 @@ def get_vqvae(
     encoder_outputs = encoder(inputs)
     quantized_latents = vq_layer(encoder_outputs)
 
-    # Connect decoder
-    decoder_inputs = tf.keras.layers.Input(
-        shape=encoder.output.shape[1:], name="decoder_input"
-    )
-    reconstructions = decoder([inputs, decoder_inputs])
-
     encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
     quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
-    decoder = tf.keras.Model([inputs, decoder_inputs], reconstructions, name="decoder")
     vqvae = tf.keras.Model(
         quantizer.inputs, decoder([inputs, quantizer.outputs]), name="VQ-VAE"
     )
@@ -506,6 +499,15 @@ class VQVAE(tf.keras.models.Model):
 
         return vq_posterior
 
+    @property
+    def posterior(self):
+        """
+
+        Returns a mixture of Gaussians fit to the final state of the  VQ-VAE codebook.
+
+        """
+        return self.get_vq_posterior()
+
 
 # noinspection PyCallingNonCallable
 def get_gmvae(
@@ -572,7 +574,7 @@ def get_gmvae(
 
     encoder = get_deepof_encoder(input_shape[1:], latent_dim)
     latent_space = deepof.model_utils.GaussianMixtureLatent(
-        input_shape=input_shape,
+        input_shape=[input_shape[0], latent_dim],
         n_components=n_components,
         latent_dim=latent_dim,
         batch_size=batch_size,
@@ -587,7 +589,7 @@ def get_gmvae(
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         name="gaussian_mixture_latent",
-    )
+    ).model
     decoder = get_deepof_decoder(input_shape[1:], latent_dim)
 
     # Connect encoder and latent space
