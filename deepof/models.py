@@ -168,7 +168,7 @@ def get_deepof_decoder(
         input_shape (tuple): shape of the input data
         latent_dim (int): dimensionality of the latent space
         conv_filters (int): number of filters in the first convolutional layer
-        dense_layers (int): number of dense layers at the end of the encoder. Defaults to 1.
+        dense_layers (int): number of dense layers at the start of the decoder. Defaults to 1.
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         dense_units_1 (int): number of units in the first dense layer. Defaults to 64.
         dense_units_2 (int): number of units in the second dense layer. Defaults to 32.
@@ -287,6 +287,16 @@ def get_vqvae(
     latent_dim: int,
     n_components: int,
     beta: float = 0.25,
+    conv_filters=64,
+    dense_layers=1,
+    dense_activation="relu",
+    dense_units_1=64,
+    dense_units_2=32,
+    gru_units_1=128,
+    gru_units_2=64,
+    gru_unroll=True,
+    bidirectional_merge="concat",
+    dropout_rate=0.1,
 ):
     """
 
@@ -297,6 +307,16 @@ def get_vqvae(
         latent_dim (int): dimension of the latent space.
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
+        conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
+        dense_layers (int): number of dense layers at the end of the encoder and start of the decoder. Defaults to 1.
+        dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
+        dense_units_1 (int): number of units in the first dense layer in both encoder and decoder. Defaults to 64.
+        dense_units_2 (int): number of units in the second dense layer in both encoder and decoder. Defaults to 32.
+        gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
+        gru_units_2 (int): number of units in the second GRU layer in both encoder and decoder. Defaults to 64.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+        dropout_rate (float): dropout rate for the dropout layers in both encoder and decoder. Defaults to 0.1.
 
     Returns:
         encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -313,8 +333,33 @@ def get_vqvae(
         beta=beta,
         name="vector_quantizer",
     )
-    encoder = get_deepof_encoder(input_shape, latent_dim)
-    decoder = get_deepof_decoder(input_shape, latent_dim)
+    encoder = get_deepof_encoder(
+        input_shape,
+        latent_dim,
+        conv_filters=conv_filters,
+        dense_layers=dense_layers,
+        dense_activation=dense_activation,
+        dense_units_1=dense_units_1,
+        gru_units_1=gru_units_1,
+        gru_units_2=gru_units_2,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+        dropout_rate=dropout_rate,
+    )
+    decoder = get_deepof_decoder(
+        input_shape,
+        latent_dim,
+        conv_filters=conv_filters,
+        dense_layers=dense_layers,
+        dense_activation=dense_activation,
+        dense_units_1=dense_units_1,
+        dense_units_2=dense_units_2,
+        gru_units_1=gru_units_1,
+        gru_units_2=gru_units_2,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+        dropout_rate=dropout_rate,
+    )
 
     # Connect encoder and quantizer
     inputs = tf.keras.layers.Input(input_shape, name="encoder_input")
@@ -375,6 +420,16 @@ class VQVAE(tf.keras.models.Model):
             self.latent_dim,
             self.n_components,
             self.beta,
+            conv_filters=self.hparams["conv_filters"],
+            dense_layers=self.hparams["dense_layers"],
+            dense_activation=self.hparams["dense_activation"],
+            dense_units_1=self.hparams["dense_units_1"],
+            dense_units_2=self.hparams["dense_units_2"],
+            gru_units_1=self.hparams["gru_units_1"],
+            gru_units_2=self.hparams["gru_units_2"],
+            gru_unroll=self.hparams["gru_unroll"],
+            bidirectional_merge=self.hparams["bidirectional_merge"],
+            dropout_rate=self.hparams["dropout_rate"],
         )
 
         # Define metrics to track
@@ -404,6 +459,21 @@ class VQVAE(tf.keras.models.Model):
             self.val_vq_loss_tracker,
         ]
 
+    @property
+    def hparams(self):
+        return {
+            "conv_filters": 64,
+            "dense_layers": 1,
+            "dense_activation": "relu",
+            "dense_units_1": 64,
+            "dense_units_2": 32,
+            "gru_units_1": 128,
+            "gru_units_2": 64,
+            "gru_unroll": True,
+            "bidirectional_merge": "concat",
+            "dropout_rate": 0.1,
+        }
+
     @tf.function
     def train_step(self, data):
         """
@@ -413,8 +483,8 @@ class VQVAE(tf.keras.models.Model):
         """
 
         # Unpack data, repacking labels into a generator
-        x, y = data.element_spec
-        if isinstance(y, tf.data.Dataset):
+        x, y = data
+        if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
 
@@ -451,8 +521,8 @@ class VQVAE(tf.keras.models.Model):
         """
 
         # Unpack data, repacking labels into a generator
-        x, y = data.element_spec
-        if isinstance(y, tf.data.Dataset):
+        x, y = data
+        if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
 
@@ -531,6 +601,16 @@ def get_gmvae(
     phenotype_prediction: bool = False,
     supervised_prediction: bool = False,
     supervised_features: int = 6,
+    conv_filters=64,
+    dense_layers=1,
+    dense_activation="relu",
+    dense_units_1=64,
+    dense_units_2=32,
+    gru_units_1=128,
+    gru_units_2=64,
+    gru_unroll=True,
+    bidirectional_merge="concat",
+    dropout_rate=0.1,
 ):
     """
 
@@ -561,6 +641,17 @@ def get_gmvae(
             information in the latent space.
             supervised_features (int): number of features in the supervised prediction label matrix.
             Ignored if supervised prediction is null.
+            conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
+            dense_layers (int): number of dense layers at the end of the encoder and start of the decoder. Defaults to 1.
+            dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
+            dense_units_1 (int): number of units in the first dense layer in both encoder and decoder. Defaults to 64.
+            dense_units_2 (int): number of units in the second dense layer in both encoder and decoder. Defaults to 32.
+            gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
+            gru_units_2 (int): number of units in the second GRU layer in both encoder and decoder. Defaults to 64.
+            gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+            bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+            dropout_rate (float): dropout rate for the dropout layers in both encoder and decoder. Defaults to 0.1.
+
 
     Returns:
         encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -572,7 +663,19 @@ def get_gmvae(
 
     """
 
-    encoder = get_deepof_encoder(input_shape[1:], latent_dim)
+    encoder = get_deepof_encoder(
+        input_shape[1:],
+        latent_dim,
+        conv_filters=conv_filters,
+        dense_layers=dense_layers,
+        dense_activation=dense_activation,
+        dense_units_1=dense_units_1,
+        gru_units_1=gru_units_1,
+        gru_units_2=gru_units_2,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+        dropout_rate=dropout_rate,
+    )
     latent_space = deepof.model_utils.GaussianMixtureLatent(
         input_shape=[input_shape[0], latent_dim],
         n_components=n_components,
@@ -590,7 +693,20 @@ def get_gmvae(
         reg_cluster_variance=reg_cluster_variance,
         name="gaussian_mixture_latent",
     ).model
-    decoder = get_deepof_decoder(input_shape[1:], latent_dim)
+    decoder = get_deepof_decoder(
+        input_shape[1:],
+        latent_dim,
+        conv_filters=conv_filters,
+        dense_layers=dense_layers,
+        dense_activation=dense_activation,
+        dense_units_1=dense_units_1,
+        dense_units_2=dense_units_2,
+        gru_units_1=gru_units_1,
+        gru_units_2=gru_units_2,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+        dropout_rate=dropout_rate,
+    )
 
     # Connect encoder and latent space
     inputs = Input(input_shape[1:])
@@ -753,6 +869,16 @@ class GMVAE(tf.keras.models.Model):
             self.phenotype_prediction,
             self.supervised_prediction,
             self.supervised_features,
+            conv_filters=self.hparams["conv_filters"],
+            dense_layers=self.hparams["dense_layers"],
+            dense_activation=self.hparams["dense_activation"],
+            dense_units_1=self.hparams["dense_units_1"],
+            dense_units_2=self.hparams["dense_units_2"],
+            gru_units_1=self.hparams["gru_units_1"],
+            gru_units_2=self.hparams["gru_units_2"],
+            gru_unroll=self.hparams["gru_unroll"],
+            bidirectional_merge=self.hparams["bidirectional_merge"],
+            dropout_rate=self.hparams["dropout_rate"],
         )
 
         # Define metrics to track
@@ -844,6 +970,21 @@ class GMVAE(tf.keras.models.Model):
             metrics += [self.supervised_loss_tracker, self.val_supervised_loss_tracker]
 
         return metrics
+
+    @property
+    def hparams(self):
+        return {
+            "conv_filters": 64,
+            "dense_layers": 1,
+            "dense_activation": "relu",
+            "dense_units_1": 64,
+            "dense_units_2": 32,
+            "gru_units_1": 128,
+            "gru_units_2": 64,
+            "gru_unroll": True,
+            "bidirectional_merge": "concat",
+            "dropout_rate": 0.1,
+        }
 
     @property
     def prior(self):
