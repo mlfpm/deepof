@@ -21,17 +21,37 @@ tf.config.run_functions_eagerly(True)
 
 @settings(deadline=None, max_examples=10)
 @given(
-    encoding_size=st.integers(min_value=2, max_value=16),
+    latent_dim=st.integers(min_value=2, max_value=16),
+    n_components=st.integers(min_value=2, max_value=16),
+)
+def test_VQVAE_hypermodel_build(
+    latent_dim,
+    n_components,
+):
+    deepof.hypermodels.VQVAE(
+        latent_dim=latent_dim,
+        input_shape=(
+            100,
+            15,
+            10,
+        ),
+        n_components=n_components,
+    ).build(hp=HyperParameters())
+
+
+@settings(deadline=None, max_examples=10)
+@given(
+    latent_dim=st.integers(min_value=2, max_value=16),
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
     n_components=st.integers(min_value=1, max_value=5),
 )
 def test_GMVAE_hypermodel_build(
-    encoding_size,
+    latent_dim,
     loss,
     n_components,
 ):
     deepof.hypermodels.GMVAE(
-        encoding=encoding_size,
+        latent_dim=latent_dim,
         batch_size=64,
         input_shape=(
             100,

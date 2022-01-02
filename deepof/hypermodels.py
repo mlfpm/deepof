@@ -24,15 +24,13 @@ class VQVAE(HyperModel):
     def __init__(
         self,
         input_shape: tuple,
-        encoding: int,
-        batch_size: int,
+        latent_dim: int,
         learn_rate: float = 1e-3,
         n_components: int = 10,
     ):
         super().__init__()
         self.input_shape = input_shape
-        self.encoding = encoding
-        self.batch_size = batch_size
+        self.latent_dim = latent_dim
         self.learn_rate = learn_rate
         self.n_components = n_components
 
@@ -40,7 +38,7 @@ class VQVAE(HyperModel):
         """Retrieve hyperparameters to tune"""
 
         # Architectural hyperparameters
-        bidirectional_merge = "ave"
+        bidirectional_merge = "concat"
         clipvalue = 1.0
         conv_filters = hp.Int("conv_units", min_value=32, max_value=512, step=32)
         dense_2 = hp.Int("dense_units", min_value=32, max_value=512, step=32)
@@ -82,7 +80,7 @@ class VQVAE(HyperModel):
             lstm_units_1,
         ) = self.get_hparams(hp)
 
-        gmvaep = deepof.models.GMVAE(
+        vqvae = deepof.models.VQVAE(
             architecture_hparams={
                 "bidirectional_merge": "concat",
                 "clipvalue": clipvalue,
@@ -94,20 +92,11 @@ class VQVAE(HyperModel):
                 "units_lstm": lstm_units_1,
             },
             input_shape=self.input_shape,
-            latent_dim=self.encoding,
-            batch_size=self.batch_size,
-            kl_warmup_epochs=self.kl_warmup_epochs,
-            loss=self.loss,
-            mmd_warmup_epochs=self.mmd_warmup_epochs,
+            latent_dim=self.latent_dim,
             n_components=k,
-            overlap_loss=self.overlap_loss,
-            next_sequence_prediction=self.next_sequence_prediction,
-            phenotype_prediction=self.phenotype_prediction,
-            supervised_prediction=self.supervised_prediction,
-            supervised_features=self.supervised_features,
-        ).gmvae
+        ).vqvae
 
-        return gmvaep
+        return vqvae
 
 
 class GMVAE(HyperModel):
@@ -116,7 +105,7 @@ class GMVAE(HyperModel):
     def __init__(
         self,
         input_shape: tuple,
-        encoding: int,
+        latent_dim: int,
         batch_size: int,
         kl_warmup_epochs: int = 0,
         learn_rate: float = 1e-3,
@@ -132,7 +121,7 @@ class GMVAE(HyperModel):
     ):
         super().__init__()
         self.input_shape = input_shape
-        self.encoding = encoding
+        self.latent_dim = latent_dim
         self.batch_size = batch_size
         self.kl_warmup_epochs = kl_warmup_epochs
         self.learn_rate = learn_rate
@@ -154,7 +143,7 @@ class GMVAE(HyperModel):
         """Retrieve hyperparameters to tune"""
 
         # Architectural hyperparameters
-        bidirectional_merge = "ave"
+        bidirectional_merge = "concat"
         clipvalue = 1.0
         conv_filters = hp.Int("conv_units", min_value=32, max_value=512, step=32)
         dense_2 = hp.Int("dense_units", min_value=32, max_value=512, step=32)
@@ -208,7 +197,7 @@ class GMVAE(HyperModel):
                 "units_lstm": lstm_units_1,
             },
             input_shape=self.input_shape,
-            latent_dim=self.encoding,
+            latent_dim=self.latent_dim,
             batch_size=self.batch_size,
             kl_warmup_epochs=self.kl_warmup_epochs,
             loss=self.loss,
