@@ -345,7 +345,6 @@ class VQVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        train_variance: bool = True,
         latent_dim: int = 32,
         n_components: int = 15,
         beta: float = 0.25,
@@ -357,7 +356,6 @@ class VQVAE(tf.keras.models.Model):
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
-            train_variance (bool): Whether to train the variance of the embedding layer.
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss.
@@ -367,7 +365,6 @@ class VQVAE(tf.keras.models.Model):
 
         super(VQVAE, self).__init__(**kwargs)
         self.seq_shape = input_shape[1:]
-        self.train_variance = train_variance
         self.latent_dim = latent_dim
         self.n_components = n_components
         self.beta = beta
@@ -422,9 +419,7 @@ class VQVAE(tf.keras.models.Model):
             reconstructions = self.vqvae(x)
 
             # Compute losses
-            reconstruction_loss = (
-                tf.reduce_mean((y - reconstructions) ** 2) / self.train_variance
-            )
+            reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Backpropagation
@@ -458,9 +453,7 @@ class VQVAE(tf.keras.models.Model):
         reconstructions = self.vqvae(x)
 
         # Compute losses
-        reconstruction_loss = (
-            tf.reduce_mean((y - reconstructions) ** 2) / self.train_variance
-        )
+        reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Track losses
@@ -600,10 +593,6 @@ def get_gmvae(
     grouper = tf.keras.Model(inputs, categorical, name="grouper")
 
     # Connect decoder
-    decoder_inputs = tf.keras.layers.Input(
-        shape=encoder.output.shape[1:], name="decoder_input"
-    )
-    reconstructions = decoder([inputs, latent])
     gmvae_outputs = [decoder([inputs, embedding.outputs])]
 
     # Add additional (optional) branches departing from the latent space
@@ -881,9 +870,7 @@ class GMVAE(tf.keras.models.Model):
             reconstructions = self.gmvae(x)
 
             # Compute loss
-            reconstruction_loss = (
-                tf.reduce_mean((y - reconstructions) ** 2) / self.train_variance
-            )
+            reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
 
         # Backpropagation
@@ -894,13 +881,31 @@ class GMVAE(tf.keras.models.Model):
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.kl_loss_tracker.update_state(self.gmvae.kl_loss)
-            self.kl_loss_weight_tracker.update_state(self.gmvae.kl_weight)
+            self.kl_loss_tracker.update_state(
+                [
+                    metric
+                    for metric in self.gmvae.metrics
+                    if metric.name == "kl_divergence"
+                ][0]
+            )
+            self.kl_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+            )
         if "MMD" in self.loss:
-            self.mmd_loss_tracker.update_state(self.gmvae.mmd_loss)
-            self.mmd_loss_weight_tracker.update_state(self.gmvae.mmd_weight)
+            self.mmd_loss_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+            )
+            self.mmd_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
+                    0
+                ]
+            )
         if self.overlap_loss:
-            self.overlap_loss_tracker.update_state(self.gmvae.overlap_loss)
+            self.overlap_loss_tracker.update_state(
+                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
+                    0
+                ]
+            )
         if self.next_sequence_prediction:
             self.next_sequence_loss_tracker.update_state(self.gmvae.next_sequence_loss)
         if self.phenotype_prediction:
@@ -909,10 +914,26 @@ class GMVAE(tf.keras.models.Model):
             self.supervised_loss_tracker.update_state(self.gmvae.supervised_loss)
 
         # Track control metrics over the latent space
-        self.cluster_population_tracker.update_state(self.gmvae.cluster_population)
-        self.cluster_confidence_tracker.update_state(self.gmvae.cluster_confidence)
+        self.cluster_population_tracker.update_state(
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "number_of_populated_clusters"
+            ][0].result()
+        )
+        self.cluster_confidence_tracker.update_state(
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "confidence_in_selected_cluster"
+            ][0].result()
+        )
         self.local_cluster_entropy_tracker.update_state(
-            self.gmvae.local_cluster_entropy
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "local_cluster_entropy"
+            ][0].result()
         )
 
         # Log results (coupled with TensorBoard)
@@ -946,23 +967,42 @@ class GMVAE(tf.keras.models.Model):
 
         x, y = data
 
+        # Get outputs from the full model
+        reconstructions = self.gmvae(x)
+
         # Compute loss
-        reconstruction_loss = (
-            tf.reduce_mean((y - reconstructions) ** 2) / self.train_variance
-        )
+        reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
 
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.val_kl_loss_tracker.update_state(self.gmvae.kl_loss)
-            self.val_kl_loss_weight_tracker.update_state(self.gmvae.kl_weight)
+            self.val_kl_loss_tracker.update_state(
+                [
+                    metric
+                    for metric in self.gmvae.metrics
+                    if metric.name == "kl_divergence"
+                ][0]
+            )
+            self.val_kl_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+            )
         if "MMD" in self.loss:
-            self.val_mmd_loss_tracker.update_state(self.gmvae.mmd_loss)
-            self.val_mmd_loss_weight_tracker.update_state(self.gmvae.mmd_weight)
+            self.val_mmd_loss_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+            )
+            self.val_mmd_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
+                    0
+                ]
+            )
         if self.overlap_loss:
-            self.val_overlap_loss_tracker.update_state(self.gmvae.overlap_loss)
+            self.val_overlap_loss_tracker.update_state(
+                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
+                    0
+                ]
+            )
         if self.next_sequence_prediction:
             self.val_next_sequence_loss_tracker.update_state(
                 self.gmvae.next_sequence_loss
@@ -971,13 +1011,6 @@ class GMVAE(tf.keras.models.Model):
             self.val_phenotype_loss_tracker.update_state(self.gmvae.phenotype_loss)
         if self.supervised_prediction:
             self.val_supervised_loss_tracker.update_state(self.gmvae.supervised_loss)
-
-        # Track control metrics over the latent space
-        self.val_cluster_population_tracker.update_state(self.gmvae.cluster_population)
-        self.val_cluster_confidence_tracker.update_state(self.gmvae.cluster_confidence)
-        self.val_local_cluster_entropy_tracker.update_state(
-            self.gmvae.local_cluster_entropy
-        )
 
         # Log results (coupled with TensorBoard)
         log_dict = {

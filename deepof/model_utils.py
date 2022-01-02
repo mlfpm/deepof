@@ -975,12 +975,12 @@ class ClusterOverlap(Layer):
             **kwargs: additional keyword arguments
 
         """
+        super(ClusterOverlap, self).__init__(*args, **kwargs)
         self.batch_size = batch_size
         self.enc = encoding_dim
         self.k = k
         self.loss_weight = loss_weight
         self.min_confidence = 0.25
-        super(ClusterOverlap, self).__init__(*args, **kwargs)
 
     def get_config(self):  # pragma: no cover
         """
@@ -997,7 +997,7 @@ class ClusterOverlap(Layer):
         config.update({"min_confidence": self.min_confidence})
         return config
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, **kwargs):
         """
 
         Updates Layer's call method
@@ -1006,65 +1006,60 @@ class ClusterOverlap(Layer):
 
         encodings, categorical = inputs[0], inputs[1]
 
-        if training:
+        hard_groups = tf.math.argmax(categorical, axis=1)
+        max_groups = tf.reduce_max(categorical, axis=1)
 
-            hard_groups = tf.math.argmax(categorical, axis=1)
-            max_groups = tf.reduce_max(categorical, axis=1)
+        get_local_neighbourhood_entropy = partial(
+            get_neighbourhood_entropy,
+            tensor=encodings,
+            clusters=hard_groups,
+            k=self.k,
+        )
 
-            get_local_neighbourhood_entropy = partial(
-                get_neighbourhood_entropy,
-                tensor=encodings,
-                clusters=hard_groups,
-                k=self.k,
-            )
+        neighbourhood_entropy = tf.map_fn(
+            get_local_neighbourhood_entropy,
+            tf.constant(list(range(self.batch_size))),
+            dtype=tf.dtypes.float32,
+        )
 
-            purity_vector = tf.map_fn(
-                get_local_neighbourhood_entropy,
-                tf.constant(list(range(self.batch_size))),
-                dtype=tf.dtypes.float32,
-            )
-
-            ### CANDIDATE FOR REMOVAL. EXPLORE HOW USEFUL THIS REALLY IS ###
-            neighbourhood_entropy = purity_vector * max_groups
-
-            n_components = tf.cast(
-                tf.shape(
-                    tf.unique(
-                        tf.reshape(
-                            tf.gather(
-                                tf.cast(hard_groups, tf.dtypes.float32),
-                                tf.where(max_groups >= self.min_confidence),
-                                batch_dims=0,
-                            ),
-                            [-1],
+        n_components = tf.cast(
+            tf.shape(
+                tf.unique(
+                    tf.reshape(
+                        tf.gather(
+                            tf.cast(hard_groups, tf.dtypes.float32),
+                            tf.where(max_groups >= self.min_confidence),
+                            batch_dims=0,
                         ),
-                    )[0],
+                        [-1],
+                    ),
                 )[0],
-                tf.dtypes.float32,
-            )
+            )[0],
+            tf.dtypes.float32,
+        )
 
-            self.add_metric(
-                n_components,
-                name="number_of_populated_clusters",
-            )
+        self.add_metric(
+            n_components,
+            name="number_of_populated_clusters",
+        )
 
-            self.add_metric(
-                max_groups,
-                aggregation="mean",
-                name="average_confidence_in_selected_cluster",
-            )
+        self.add_metric(
+            max_groups,
+            aggregation="mean",
+            name="confidence_in_selected_cluster",
+        )
 
-            self.add_metric(
-                neighbourhood_entropy,
-                aggregation="mean",
-                name="average_neighbourhood_entropy",
-            )
+        self.add_metric(
+            neighbourhood_entropy,
+            aggregation="mean",
+            name="local_cluster_entropy",
+        )
 
-            if self.loss_weight:
-                # minimize local entropy
-                self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
-                # maximize number of clusters
-                # self.add_loss(-self.loss_weight * tf.reduce_mean(n_components))
+        if self.loss_weight:
+            # minimize local entropy
+            self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
+            # maximize number of clusters
+            # self.add_loss(-self.loss_weight * tf.reduce_mean(n_components))
 
         return encodings
 
