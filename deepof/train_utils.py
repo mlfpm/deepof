@@ -544,7 +544,7 @@ def tune_search(
         kl_warmup_epochs=kl_warmup_epochs,
         loss=loss,
         mmd_warmup_epochs=mmd_warmup_epochs,
-        number_of_components=k,
+        n_components=k,
         overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,

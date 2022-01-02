@@ -23,12 +23,12 @@ tf.config.run_functions_eagerly(True)
 @given(
     encoding_size=st.integers(min_value=2, max_value=16),
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    number_of_components=st.integers(min_value=1, max_value=5),
+    n_components=st.integers(min_value=1, max_value=5),
 )
 def test_GMVAE_hypermodel_build(
     encoding_size,
     loss,
-    number_of_components,
+    n_components,
 ):
     deepof.hypermodels.GMVAE(
         encoding=encoding_size,
@@ -39,6 +39,6 @@ def test_GMVAE_hypermodel_build(
             10,
         ),
         loss=loss,
-        number_of_components=number_of_components,
+        n_components=n_components,
         next_sequence_prediction=True,
     ).build(hp=HyperParameters())

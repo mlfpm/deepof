@@ -393,6 +393,7 @@ class VQVAE(tf.keras.models.Model):
         latent_dim: int = 32,
         n_components: int = 15,
         beta: float = 0.25,
+        architecture_hparams: dict = None,
         **kwargs,
     ):
         """
@@ -404,6 +405,7 @@ class VQVAE(tf.keras.models.Model):
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss.
+            architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
             **kwargs: Additional keyword arguments.
 
         """
@@ -413,6 +415,7 @@ class VQVAE(tf.keras.models.Model):
         self.latent_dim = latent_dim
         self.n_components = n_components
         self.beta = beta
+        self.architecture_hparams = architecture_hparams
 
         # Define VQ_VAE model
         self.encoder, self.decoder, self.quantizer, self.vqvae = get_vqvae(
@@ -461,7 +464,7 @@ class VQVAE(tf.keras.models.Model):
 
     @property
     def hparams(self):
-        return {
+        hparams = {
             "conv_filters": 64,
             "dense_layers": 1,
             "dense_activation": "relu",
@@ -473,6 +476,10 @@ class VQVAE(tf.keras.models.Model):
             "bidirectional_merge": "concat",
             "dropout_rate": 0.1,
         }
+        if self.architecture_hparams is not None:
+            hparams.update(self.architecture_hparams)
+
+        return hparams
 
     @tf.function
     def train_step(self, data):
@@ -793,6 +800,7 @@ class GMVAE(tf.keras.models.Model):
         phenotype_prediction: float = 0.0,
         supervised_prediction: float = 0.0,
         supervised_features: int = 6,
+        architecture_hparams: dict = None,
         **kwargs,
     ):
         """
@@ -822,6 +830,7 @@ class GMVAE(tf.keras.models.Model):
             information in the latent space.
             supervised_features (int): number of features in the supervised prediction label matrix.
             Ignored if supervised prediction is null.
+            architecture_hparams (dict): dictionary of hyperparameters for the architecture. Defaults to None.
             **kwargs:
 
         """
@@ -844,6 +853,7 @@ class GMVAE(tf.keras.models.Model):
         self.supervised_features = supervised_features
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
+        self.architecture_hparams = architecture_hparams
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
@@ -973,7 +983,7 @@ class GMVAE(tf.keras.models.Model):
 
     @property
     def hparams(self):
-        return {
+        hparams = {
             "conv_filters": 64,
             "dense_layers": 1,
             "dense_activation": "relu",
@@ -985,6 +995,10 @@ class GMVAE(tf.keras.models.Model):
             "bidirectional_merge": "concat",
             "dropout_rate": 0.1,
         }
+        if self.architecture_hparams is not None:
+            hparams.update(self.architecture_hparams)
+
+        return hparams
 
     @property
     def prior(self):
