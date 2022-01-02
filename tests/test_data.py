@@ -215,28 +215,36 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
             st.one_of(st.just(prun.supervised_annotation()), st.just(False))
         )
 
+    selected_id = None
+    if mode == "multi" and nodes == "all" and not ego:
+        selected_id = sampler.draw(st.one_of(st.just(None), st.just("B")))
+
     coords = prun.get_coords(
         center=center,
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
+        selected_id=selected_id,
     )
     speeds = prun.get_coords(
         speed=(speed if not ego and nodes == "all" else 0),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
+        selected_id=selected_id,
     )
     distances = prun.get_distances(
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
+        selected_id=selected_id,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
         propagate_annotations=propagate_annots,
+        selected_id=selected_id,
     )
 
     # deepof.coordinates testing
@@ -261,10 +269,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     assert len(list(table.filter_videos(["test"]).keys())) == 1
 
-    selected_id = None
-    if mode == "multi" and nodes == "all" and not ego:
-        selected_id = sampler.draw(st.one_of(st.just(None), st.just("B")))
-
     prep = table.preprocess(
         window_size=11,
         window_step=1,
@@ -278,7 +282,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
         shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
         shuffle=sampler.draw(st.booleans()),
-        selected_id=selected_id,
     )
 
     assert isinstance(prep[0], np.ndarray)

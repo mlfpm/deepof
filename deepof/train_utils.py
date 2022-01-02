@@ -195,78 +195,9 @@ def log_hyperparameters(phenotype_class: float, rec: str):
     return logparams, metrics
 
 
-# noinspection PyUnboundLocalVariable
-def tensorboard_metric_logging(
-    run_dir: str,
-    hpms: Any,
-    ae: Any,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    supervised_prediction: float,
-    rec: str,
-):
-    """Autoencoder metric logging in tensorboard"""
-
-    outputs = ae.predict(X_val)
-    idx_generator = (idx for idx in range(len(outputs)))
-
-    with tf.summary.create_file_writer(run_dir).as_default():
-        hp.hparams(hpms)  # record the values used in this trial
-        idx = next(idx_generator)
-
-        val_mae = tf.reduce_mean(
-            tf.keras.metrics.mean_absolute_error(y_val[idx], outputs[idx])
-        )
-        val_mse = tf.reduce_mean(
-            tf.keras.metrics.mean_squared_error(y_val[idx], outputs[idx])
-        )
-        tf.summary.scalar("val_{}mae".format(rec), val_mae, step=1)
-        tf.summary.scalar("val_{}mse".format(rec), val_mse, step=1)
-
-        if next_sequence_prediction:
-            idx = next(idx_generator)
-            pred_mae = tf.reduce_mean(
-                tf.keras.metrics.mean_absolute_error(y_val[idx], outputs[idx])
-            )
-            pred_mse = tf.reduce_mean(
-                tf.keras.metrics.mean_squared_error(y_val[idx], outputs[idx])
-            )
-            tf.summary.scalar(
-                "val_next_sequence_prediction_mae".format(rec), pred_mae, step=1
-            )
-            tf.summary.scalar(
-                "val_next_sequence_prediction_mse".format(rec), pred_mse, step=1
-            )
-
-        if phenotype_prediction:
-            idx = next(idx_generator)
-            pheno_acc = tf.keras.metrics.binary_accuracy(
-                y_val[idx], tf.squeeze(outputs[idx])
-            )
-            pheno_auc = tf.keras.metrics.AUC()
-            pheno_auc.update_state(y_val[idx], outputs[idx])
-            pheno_auc = pheno_auc.result().numpy()
-
-            tf.summary.scalar("phenotype_prediction_accuracy", pheno_acc, step=1)
-            tf.summary.scalar("phenotype_prediction_auc", pheno_auc, step=1)
-
-        if supervised_prediction:
-            idx = next(idx_generator)
-            rules_mae = tf.reduce_mean(
-                tf.keras.metrics.mean_absolute_error(y_val[idx], outputs[idx])
-            )
-            rules_mse = tf.reduce_mean(
-                tf.keras.metrics.mean_squared_error(y_val[idx], outputs[idx])
-            )
-            tf.summary.scalar("val_prediction_mae".format(rec), rules_mae, step=1)
-            tf.summary.scalar("val_prediction_mse".format(rec), rules_mse, step=1)
-
-
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    embedding_model: str,  # TODO: add option to use VQ-VAE instead
+    embedding_model: str,
     batch_size: int,
     encoding_size: int,
     epochs: int,
@@ -375,27 +306,49 @@ def autoencoder_fitting(
 
     # Build model
     with strategy.scope():
-        (encoder, generator, grouper, ae, prior, posterior,) = deepof.models.GMVAE(
-            architecture_hparams=({} if hparams is None else hparams),
-            batch_size=batch_size,
-            compile_model=True,
-            latent_dim=encoding_size,
-            kl_annealing_mode=kl_annealing_mode,
-            kl_warmup_epochs=kl_warmup,
-            loss=loss,
-            mmd_annealing_mode=mmd_annealing_mode,
-            mmd_warmup_epochs=mmd_warmup,
-            montecarlo_kl=montecarlo_kl,
-            n_components=n_components,
-            overlap_loss=overlap_loss,
-            next_sequence_prediction=next_sequence_prediction,
-            phenotype_prediction=phenotype_prediction,
-            supervised_prediction=supervised_prediction,
-            supervised_features=supervised_features,
-            reg_cat_clusters=reg_cat_clusters,
-            reg_cluster_variance=reg_cluster_variance,
-        ).build(X_train.shape)
-        return_list = (encoder, generator, grouper, ae)
+        if embedding_model == "VQVAE":
+            ae_models = deepof.models.VQVAE(
+                architecture_hparams=hparams,
+                input_shape=X_train.shape,
+                latent_dim=encoding_size,
+                n_components=n_components,
+            )
+            encoder, decoder, quantizer, ae = (
+                ae_models.encoder,
+                ae_models.decoder,
+                ae_models.quantizer,
+                ae_models.vqvae,
+            )
+            return_list = (encoder, decoder, quantizer, ae)
+
+        elif embedding_model == "GMVAE":
+            ae_models = deepof.models.GMVAE(
+                architecture_hparams=hparams,
+                input_shape=X_train.shape,
+                batch_size=batch_size,
+                latent_dim=encoding_size,
+                kl_annealing_mode=kl_annealing_mode,
+                kl_warmup_epochs=kl_warmup,
+                loss=loss,
+                mmd_annealing_mode=mmd_annealing_mode,
+                mmd_warmup_epochs=mmd_warmup,
+                montecarlo_kl=montecarlo_kl,
+                n_components=n_components,
+                overlap_loss=overlap_loss,
+                next_sequence_prediction=next_sequence_prediction,
+                phenotype_prediction=phenotype_prediction,
+                supervised_prediction=supervised_prediction,
+                supervised_features=supervised_features,
+                reg_cat_clusters=reg_cat_clusters,
+                reg_cluster_variance=reg_cluster_variance,
+            )
+            encoder, decoder, grouper, ae = (
+                ae_models.encoder,
+                ae_models.decoder,
+                ae_models.grouper,
+                ae_models.gmvae,
+            )
+            return_list = (encoder, decoder, grouper, ae)
 
     if pretrained:
         # If pretrained models are specified, load weights and return
@@ -447,6 +400,7 @@ def autoencoder_fitting(
         .with_options(options)
     )
 
+    ae.compile()
     ae.fit(
         x=train_dataset,
         epochs=epochs,
@@ -465,20 +419,6 @@ def autoencoder_fitting(
                 "trained_weights",
                 "{}_final_weights.h5".format(run_ID),
             )
-        )
-
-    if log_hparams:
-        # Logparams to tensorboard
-        tensorboard_metric_logging(
-            run_dir=os.path.join(output_path, "hparams", run_ID),
-            hpms=logparam,
-            ae=ae,
-            X_val=Xvals,
-            y_val=yvals,
-            next_sequence_prediction=next_sequence_prediction,
-            phenotype_prediction=phenotype_prediction,
-            supervised_prediction=supervised_prediction,
-            rec=rec,
         )
 
     return return_list

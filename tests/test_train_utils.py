@@ -83,12 +83,14 @@ def test_get_callbacks(
 
 @settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     phenotype_prediction=st.one_of(st.just(0.0), st.just(1.0)),
     supervised_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_autoencoder_fitting(
+    embedding_model,
     loss,
     next_sequence_prediction,
     supervised_prediction,
@@ -115,6 +117,7 @@ def test_autoencoder_fitting(
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,
+        embedding_model=embedding_model,
         batch_size=10,
         encoding_size=2,
         epochs=1,
