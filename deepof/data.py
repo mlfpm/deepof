@@ -1513,8 +1513,7 @@ class TableDict(dict):
         self,
         current_table_dict: table_dict,
         test_videos: int = 0,
-        selected_id: str = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple:
         """
 
         Generates training and test sets as numpy.array objects for model training. Intended for internal usage only.
@@ -1523,22 +1522,13 @@ class TableDict(dict):
         Args:
             current_table_dict (table_dict): table_dict object containing the data to be used for training.
             test_videos (int): Number of videos to be used for testing. Defaults to 0.
-            selected_id (str): select a single animal on multi animal settings. Defaults to None
-            (all animals are processed).
 
         Returns:
             tuple: Tuple containing training data, training labels (if any), test data, and test labels (if any).
 
         """
 
-        # Select tables from self.values and filter selected animals
-        if selected_id is not None:
-            raw_data = [
-                v.loc[:, deepof.utils.filter_columns(v.columns, selected_id)]
-                for v in current_table_dict.values()
-            ]
-        else:
-            raw_data = current_table_dict.values()
+        raw_data = current_table_dict.values()
 
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced
@@ -1636,7 +1626,6 @@ class TableDict(dict):
         sigma: float = 1.0,
         shift: float = 0.0,
         shuffle: bool = False,
-        selected_id: str = None,
     ) -> np.ndarray:
         """
 
@@ -1659,8 +1648,6 @@ class TableDict(dict):
             sigma (float): Sigma parameter for the Gaussian kernel used in the convolutional filter.
             shift (float): Shift parameter for the Gaussian kernel used in the convolutional filter.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
-            selected_id (str): In case of multiple animals, this parameter can be used to select only one of them
-            for further processing. If None (default) all animals are used.
 
         Returns:
             X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
@@ -1727,7 +1714,8 @@ class TableDict(dict):
 
         # Split videos and generate training and test sets
         X_train, y_train, X_test, y_test, test_index = self.get_training_set(
-            table_temp, test_videos, selected_id
+            table_temp,
+            test_videos,
         )
 
         if verbose:

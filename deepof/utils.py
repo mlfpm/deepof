@@ -425,7 +425,7 @@ def rolling_window(
         strides = (a.strides[0],) + a.strides
         rolled_a = np.lib.stride_tricks.as_strided(
             a, shape=shape, strides=strides, writeable=True
-        )[:window_step]
+        )[::window_step]
 
     return rolled_a, breakpoints
 

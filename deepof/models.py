@@ -411,15 +411,19 @@ class VQVAE(tf.keras.models.Model):
         Performs a training step.
 
         """
-        # Unpack data
-        x, y = data
+
+        # Unpack data, repacking labels into a generator
+        x, y = data.element_spec
+        if isinstance(y, tf.data.Dataset):
+            y = [y]
+        y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
             reconstructions = self.vqvae(x)
 
             # Compute losses
-            reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
+            reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Backpropagation
@@ -446,14 +450,17 @@ class VQVAE(tf.keras.models.Model):
 
         """
 
-        # Unpack data
-        x, y = data
+        # Unpack data, repacking labels into a generator
+        x, y = data.element_spec
+        if isinstance(y, tf.data.Dataset):
+            y = [y]
+        y = (labels for labels in y)
 
         # Get outputs from the full model
         reconstructions = self.vqvae(x)
 
         # Compute losses
-        reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
+        reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Track losses
@@ -654,7 +661,7 @@ class GMVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        batch_size: int = 256,
+        batch_size: int = 64,
         latent_dim: int = 4,
         kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 20,
@@ -862,19 +869,50 @@ class GMVAE(tf.keras.models.Model):
         return self.gmvae(inputs)
 
     def train_step(self, data):
+        """
 
+        Performs a training step.
+
+        """
+
+        # Unpack data, repacking labels into a generator
         x, y = data
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            reconstructions = self.gmvae(x)
+            outputs = self.gmvae(x)
+            if isinstance(outputs, list):
+                reconstructions = outputs[0]
+            else:
+                reconstructions = outputs
 
-            # Compute loss
-            reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
+            # Compute losses
+            reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
+            if self.next_sequence_prediction:
+                next_seq_predictions = [
+                    out for out in outputs if "predictor" in out.name
+                ][0]
+                next_seq_loss = tf.reduce_mean((next(y) - next_seq_predictions) ** 2)
+                total_loss += self.next_sequence_prediction * next_seq_loss
+            if self.phenotype_prediction:
+                pheno_predictions = [out for out in outputs if "phenotype" in out.name][
+                    0
+                ]
+                phenotype_loss = tf.reduce_mean((next(y) - pheno_predictions) ** 2)
+                total_loss += self.phenotype_prediction * phenotype_loss
+            if self.supervised_prediction:
+                sup_predictions = [out for out in outputs if "supervised" in out.name][
+                    0
+                ]
+                supervised_loss = tf.reduce_mean((next(y) - sup_predictions) ** 2)
+                total_loss += self.supervised_prediction * supervised_loss
 
         # Backpropagation
-        grads = tape.gradient(reconstruction_loss, self.gmvae.trainable_variables)
+        grads = tape.gradient(total_loss, self.gmvae.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.gmvae.trainable_variables))
 
         # Track losses
@@ -907,11 +945,11 @@ class GMVAE(tf.keras.models.Model):
                 ]
             )
         if self.next_sequence_prediction:
-            self.next_sequence_loss_tracker.update_state(self.gmvae.next_sequence_loss)
+            self.next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
-            self.phenotype_loss_tracker.update_state(self.gmvae.phenotype_loss)
+            self.phenotype_loss_tracker.update_state(phenotype_loss)
         if self.supervised_prediction:
-            self.supervised_loss_tracker.update_state(self.gmvae.supervised_loss)
+            self.supervised_loss_tracker.update_state(supervised_loss)
 
         # Track control metrics over the latent space
         self.cluster_population_tracker.update_state(
@@ -963,16 +1001,44 @@ class GMVAE(tf.keras.models.Model):
 
         return log_dict
 
+    # noinspection PyUnboundLocalVariable
     def test_step(self, data):
+        """
 
+        Performs a test step.
+
+        """
+
+        # Unpack data, repacking labels into a generator
         x, y = data
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         # Get outputs from the full model
-        reconstructions = self.gmvae(x)
+        outputs = self.gmvae(x)
+        if isinstance(outputs, list):
+            reconstructions = outputs[0]
+        else:
+            reconstructions = outputs
 
-        # Compute loss
-        reconstruction_loss = tf.reduce_mean((y - reconstructions) ** 2)
+        # Compute losses
+        reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
+        if self.next_sequence_prediction:
+            next_seq_predictions = [out for out in outputs if "predictor" in out.name][
+                0
+            ]
+            next_seq_loss = tf.reduce_mean((next(y) - next_seq_predictions) ** 2)
+            total_loss += self.next_sequence_prediction * next_seq_loss
+        if self.phenotype_prediction:
+            pheno_predictions = [out for out in outputs if "phenotype" in out.name][0]
+            phenotype_loss = tf.reduce_mean((next(y) - pheno_predictions) ** 2)
+            total_loss += self.phenotype_prediction * phenotype_loss
+        if self.supervised_prediction:
+            sup_predictions = [out for out in outputs if "supervised" in out.name][0]
+            supervised_loss = tf.reduce_mean((next(y) - sup_predictions) ** 2)
+            total_loss += self.supervised_prediction * supervised_loss
 
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
@@ -1004,13 +1070,11 @@ class GMVAE(tf.keras.models.Model):
                 ]
             )
         if self.next_sequence_prediction:
-            self.val_next_sequence_loss_tracker.update_state(
-                self.gmvae.next_sequence_loss
-            )
+            self.val_next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
-            self.val_phenotype_loss_tracker.update_state(self.gmvae.phenotype_loss)
+            self.val_phenotype_loss_tracker.update_state(phenotype_loss)
         if self.supervised_prediction:
-            self.val_supervised_loss_tracker.update_state(self.gmvae.supervised_loss)
+            self.val_supervised_loss_tracker.update_state(supervised_loss)
 
         # Log results (coupled with TensorBoard)
         log_dict = {
@@ -1040,125 +1104,3 @@ class GMVAE(tf.keras.models.Model):
             log_dict["supervised_loss"] = self.val_supervised_loss_tracker.result()
 
         return log_dict
-
-        # define individual branches as models
-        # encoder = Model(x, z, name="SEQ_2_SEQ_VEncoder")
-        # generator = Model([g, x], x_decoded, name="vae_reconstruction")
-        #
-        # model_outs = [generator([encoder.outputs, encoder.inputs])]
-        # model_losses = [deepof.model_utils.log_loss]
-        # model_metrics = {"vae_reconstruction": ["mae", "mse"]}
-        # loss_weights = [1.0]
-        #
-        # ##### If requested, instantiate next-sequence-prediction model branch
-        # if self.next_sequence_prediction > 0:
-        #     # Define and instantiate predictor
-        #     predictor = Dense(
-        #         self.DENSE_2,
-        #         activation=self.dense_activation,
-        #         kernel_initializer=he_uniform(),
-        #     )(z)
-        #     predictor = BatchNormalization()(predictor)
-        #     predictor = Model_P1(predictor)
-        #     predictor = BatchNormalization()(predictor)
-        #     predictor = RepeatVector(input_shape[1])(predictor)
-        #     predictor = Model_P2(predictor)
-        #     predictor = BatchNormalization()(predictor)
-        #     predictor = Model_P3(predictor)
-        #     predictor = BatchNormalization()(predictor)
-        #     predictor = Model_P4(predictor)
-        #     x_predicted_mean = Dense(
-        #         tfpl.IndependentNormal.params_size(input_shape[2:]) // 2
-        #     )(predictor)
-        #     x_predicted_var = tf.keras.activations.softplus(
-        #         Dense(tfpl.IndependentNormal.params_size(input_shape[2:]) // 2)(
-        #             predictor
-        #         )
-        #     )
-        #     x_predicted_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(
-        #         x_predicted_var
-        #     )
-        #     x_predicted = tfpl.DistributionLambda(
-        #         make_distribution_fn=lambda predicted: tfd.Masked(
-        #             tfd.Independent(
-        #                 tfd.Normal(
-        #                     loc=predicted[0],
-        #                     scale=predicted[1],
-        #                 ),
-        #                 reinterpreted_batch_ndims=1,
-        #             ),
-        #             validity_mask=tf.math.logical_not(
-        #                 tf.reduce_all(predicted[2] == 0.0, axis=2)
-        #             ),
-        #         ),
-        #         convert_to_tensor_fn="mean",
-        #         name="vae_prediction",
-        #     )([x_predicted_mean, x_predicted_var, x])
-        #
-        #     model_outs.append(x_predicted)
-        #     model_losses.append(log_loss)
-        #     model_metrics["vae_prediction"] = ["mae", "mse"]
-        #     loss_weights.append(self.next_sequence_prediction)
-        #
-        # ##### If requested, instantiate phenotype-prediction model branch
-        # if self.phenotype_prediction > 0:
-        #     pheno_pred = Model_PC1(z)
-        #     pheno_pred = Dense(tfpl.IndependentBernoulli.params_size(1))(pheno_pred)
-        #     pheno_pred = tfpl.IndependentBernoulli(
-        #         event_shape=1,
-        #         convert_to_tensor_fn=tfp.distributions.Distribution.mean,
-        #         name="phenotype_prediction",
-        #     )(pheno_pred)
-        #
-        #     model_outs.append(pheno_pred)
-        #     model_losses.append(log_loss)
-        #     model_metrics["phenotype_prediction"] = ["AUC", "accuracy"]
-        #     loss_weights.append(self.phenotype_prediction)
-        #
-        # ##### If requested, instantiate supervised-annotation-prediction model branch
-        # if self.supervised_prediction > 0:
-        #     supervised_trait_pred = Model_RC1(z)
-        #
-        #     supervised_trait_pred = Dense(
-        #         tfpl.IndependentBernoulli.params_size(self.supervised_features)
-        #     )(supervised_trait_pred)
-        #     supervised_trait_pred = tfpl.IndependentBernoulli(
-        #         event_shape=self.supervised_features,
-        #         convert_to_tensor_fn=tfp.distributions.Distribution.mean,
-        #         name="supervised_prediction",
-        #     )(supervised_trait_pred)
-        #
-        #     model_outs.append(supervised_trait_pred)
-        #     model_losses.append(log_loss)
-        #     model_metrics["supervised_prediction"] = [
-        #         "mae",
-        #         "mse",
-        #     ]
-        #     loss_weights.append(self.supervised_prediction)
-        #
-        # # define grouper and end-to-end autoencoder model
-        # grouper = Model(encoder.inputs, z_cat, name="Deep_Gaussian_Mixture_clustering")
-        # gmvaep = Model(
-        #     inputs=encoder.inputs,
-        #     outputs=model_outs,
-        #     name="SEQ_2_SEQ_GMVAE",
-        # )
-        #
-        # if self.compile:
-        #     gmvaep.compile(
-        #         loss=model_losses,
-        #         optimizer=self.optimizer,
-        #         metrics=model_metrics,
-        #         loss_weights=loss_weights,
-        #     )
-        #
-        # gmvaep.build(input_shape)
-        #
-        # return (
-        #     encoder,
-        #     generator,
-        #     grouper,
-        #     gmvaep,
-        #     self.prior,
-        #     posterior,
-        # )

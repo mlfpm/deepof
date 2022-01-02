@@ -419,8 +419,8 @@ def autoencoder_fitting(
         Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
 
     if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
+        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
+        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
 
         # Remove the used column (phenotype) from both y arrays
         y_train = y_train[:, 1:]
@@ -429,6 +429,10 @@ def autoencoder_fitting(
     if supervised_prediction > 0.0:
         ys += [y_train[-Xs.shape[0] :]]
         yvals += [y_val[-Xvals.shape[0] :]]
+
+    # Cast to float32
+    ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
+    yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
 
     # Convert data to tf.data.Dataset objects
     train_dataset = (
