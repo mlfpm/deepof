@@ -3,7 +3,7 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-with open('requirements.txt', "r") as fp:
+with open("requirements.txt", "r") as fp:
     install_requires = [pkg.replace("\n", "") for pkg in fp]
 
 setuptools.setup(

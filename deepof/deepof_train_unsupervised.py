@@ -66,6 +66,13 @@ parser.add_argument(
     default=1,
 )
 parser.add_argument(
+    "--embedding-model",
+    "-em",
+    help="deep autoencoder model to use for unsupervised behavioral exploration. Must be one of VQVAE (default) or GMVAE",
+    type=str,
+    default="VQVAE",
+)
+parser.add_argument(
     "--encoding-size",
     "-es",
     help="set the number of dimensions of the latent space. 16 by default",
@@ -268,6 +275,7 @@ arena_dims = args.arena_dims
 automatic_changepoints = args.automatic_changepoints
 batch_size = args.batch_size
 hypertun_trials = args.hpt_trials
+embedding_model = args.embedding_model
 encoding_size = args.encoding_size
 exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
 gaussian_filter = args.gaussian_filter
@@ -409,6 +417,7 @@ if not tune:
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
+        embedding_model=embedding_model,
         encoding_size=encoding_size,
         hparams={},
         kl_annealing_mode=kl_annealing_mode,
@@ -461,19 +470,28 @@ if not tune:
         curr_weights = trained_models[3].get_weights()
 
         # Load weights into a newly created model, buit with the current input shape
-        curr_deep_encoder, _, curr_deep_grouper, curr_ae, _, _ = deepof.models.GMVAE(
-            latent_dim=encoding_size,
-            n_components=k,
-            next_sequence_prediction=next_sequence_prediction,
-            phenotype_prediction=phenotype_prediction,
-            supervised_prediction=supervised_prediction,
-        ).build(curr_prep.shape)
+        if embedding_model == "VQVAE":
+            curr_deep_encoder, _, curr_deep_grouper, curr_ae = deepof.models.VQVAE(
+                latent_dim=encoding_size, n_components=k
+            )
+
+        elif embedding_model == "GMVAE":
+            curr_deep_encoder, _, curr_deep_grouper, curr_ae = deepof.models.GMVAE(
+                latent_dim=encoding_size,
+                n_components=k,
+                next_sequence_prediction=next_sequence_prediction,
+                phenotype_prediction=phenotype_prediction,
+                supervised_prediction=supervised_prediction,
+            ).build(curr_prep.shape)
+        # noinspection PyUnboundLocalVariable
         curr_ae.set_weights(curr_weights)
 
         # Embed current video in the autoencoder and add to the dictionary
+        # noinspection PyUnboundLocalVariable
         deep_encodings_per_video[key] = curr_deep_encoder.predict(curr_prep)
 
         # Obtain groupings for current video and add to the dictionary
+        # noinspection PyUnboundLocalVariable
         deep_assignments_per_video[key] = curr_deep_grouper.predict(curr_prep)
 
     with open(
@@ -497,11 +515,11 @@ else:
     run_ID, tensorboard_callback, entropy, onecycle = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
+        embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
         loss=loss,
-        window_size=window_size,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
@@ -515,6 +533,7 @@ else:
 
     best_hyperparameters, best_model = deepof.train_utils.tune_search(
         data=[X_train, y_train, X_val, y_val],
+        embedding_model=embedding_model,
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
         hpt_type=tune,

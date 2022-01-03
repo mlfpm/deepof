@@ -38,6 +38,8 @@ setuptools = "*"
 scipy = "*"
 typing-extensions = "*"
 keras-tuner = "*"
+intel-openmp = "==2021.4.0"
+tbb = "==2021.4.0"
 
 [dev-packages]
 coverage = "*"
