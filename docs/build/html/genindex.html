@@ -97,6 +97,8 @@
 </li>
         <li><a href="deepof.hypermodels.html#deepof.hypermodels.GMVAE.__init__">(deepof.hypermodels.GMVAE method)</a>
 </li>
+        <li><a href="deepof.hypermodels.html#deepof.hypermodels.VQVAE.__init__">(deepof.hypermodels.VQVAE method)</a>
+</li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.ClusterOverlap.__init__">(deepof.model_utils.ClusterOverlap method)</a>
 </li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.DenseTranspose.__init__">(deepof.model_utils.DenseTranspose method)</a>
@@ -157,9 +159,9 @@
       <li><a href="deepof.hypermodels.html#deepof.hypermodels.GMVAE.build">build() (deepof.hypermodels.GMVAE method)</a>
 
       <ul>
-        <li><a href="deepof.model_utils.html#deepof.model_utils.DenseTranspose.build">(deepof.model_utils.DenseTranspose method)</a>
+        <li><a href="deepof.hypermodels.html#deepof.hypermodels.VQVAE.build">(deepof.hypermodels.VQVAE method)</a>
 </li>
-        <li><a href="deepof.models.html#deepof.models.GMVAE.build">(deepof.models.GMVAE method)</a>
+        <li><a href="deepof.model_utils.html#deepof.model_utils.DenseTranspose.build">(deepof.model_utils.DenseTranspose method)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -183,6 +185,8 @@
 </li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.VectorQuantizer.call">(deepof.model_utils.VectorQuantizer method)</a>
 </li>
+        <li><a href="deepof.models.html#deepof.models.GMVAE.call">(deepof.models.GMVAE method)</a>
+</li>
         <li><a href="deepof.models.html#deepof.models.VQVAE.call">(deepof.models.VQVAE method)</a>
 </li>
       </ul></li>
@@ -190,10 +194,10 @@
 </li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.climb_wall">climb_wall() (in module deepof.pose_utils)</a>
 </li>
-      <li><a href="deepof.pose_utils.html#deepof.pose_utils.close_double_contact">close_double_contact() (in module deepof.pose_utils)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="deepof.pose_utils.html#deepof.pose_utils.close_double_contact">close_double_contact() (in module deepof.pose_utils)</a>
+</li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.close_single_contact">close_single_contact() (in module deepof.pose_utils)</a>
 </li>
       <li><a href="deepof.utils.html#deepof.utils.cluster_transition_matrix">cluster_transition_matrix() (in module deepof.utils)</a>
@@ -388,16 +392,12 @@
       <li><a href="deepof.hypermodels.html#deepof.hypermodels.GMVAE.get_hparams">get_hparams() (deepof.hypermodels.GMVAE method)</a>
 
       <ul>
-        <li><a href="deepof.models.html#deepof.models.GMVAE.get_hparams">(deepof.models.GMVAE static method)</a>
+        <li><a href="deepof.hypermodels.html#deepof.hypermodels.VQVAE.get_hparams">(deepof.hypermodels.VQVAE method)</a>
 </li>
       </ul></li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.get_k_nearest_neighbors">get_k_nearest_neighbors() (in module deepof.model_utils)</a>
 </li>
-      <li><a href="deepof.models.html#deepof.models.GMVAE.get_layers">get_layers() (deepof.models.GMVAE method)</a>
-</li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.get_neighbourhood_entropy">get_neighbourhood_entropy() (in module deepof.model_utils)</a>
-</li>
-      <li><a href="deepof.models.html#deepof.models.GMVAE.get_prior">get_prior() (deepof.models.GMVAE method)</a>
 </li>
       <li><a href="deepof.data.html#deepof.data.Coordinates.get_quality">get_quality() (deepof.data.Coordinates method)</a>
 </li>
@@ -424,6 +424,14 @@
 
 <h2 id="H">H</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="deepof.models.html#deepof.models.GMVAE.hparams">hparams (deepof.models.GMVAE property)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE.hparams">(deepof.models.VQVAE property)</a>
+</li>
+      </ul></li>
+  </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.huddle">huddle() (in module deepof.pose_utils)</a>
 </li>
@@ -479,12 +487,20 @@
 </li>
       <li><a href="deepof.data.html#deepof.data.TableDict.merge">merge() (deepof.data.TableDict method)</a>
 </li>
-      <li><a href="deepof.models.html#deepof.models.VQVAE.metrics">metrics (deepof.models.VQVAE property)</a>
+      <li><a href="deepof.models.html#deepof.models.GMVAE.metrics">metrics (deepof.models.GMVAE property)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE.metrics">(deepof.models.VQVAE property)</a>
 </li>
+      </ul></li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.MMDiscrepancyLayer">MMDiscrepancyLayer (class in deepof.model_utils)</a>
+</li>
+      <li><a href="deepof.model_utils.html#deepof.model_utils.GaussianMixtureLatent.model">model (deepof.model_utils.GaussianMixtureLatent property)</a>
 </li>
       <li><a href="deepof.visuals.html#deepof.visuals.model_comparison_plot">model_comparison_plot() (in module deepof.visuals)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     module
 
@@ -508,8 +524,6 @@
         <li><a href="deepof.visuals.html#module-deepof.visuals">deepof.visuals</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="deepof.utils.html#deepof.utils.moving_average">moving_average() (in module deepof.utils)</a>
 </li>
   </ul></td>
@@ -548,10 +562,16 @@
 </li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.plot_lr_vs_loss">plot_lr_vs_loss() (in module deepof.model_utils)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="deepof.visuals.html#deepof.visuals.plot_projection">plot_projection() (in module deepof.visuals)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="deepof.models.html#deepof.models.GMVAE.posterior">posterior (deepof.models.GMVAE property)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE.posterior">(deepof.models.VQVAE property)</a>
+</li>
+      </ul></li>
       <li><a href="deepof.data.html#deepof.data.TableDict.preprocess">preprocess() (deepof.data.TableDict method)</a>
 </li>
       <li><a href="deepof.models.html#deepof.models.GMVAE.prior">prior (deepof.models.GMVAE property)</a>
@@ -618,14 +638,20 @@
 </li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.tag_annotated_frames">tag_annotated_frames() (in module deepof.pose_utils)</a>
 </li>
-      <li><a href="deepof.train_utils.html#deepof.train_utils.tensorboard_metric_logging">tensorboard_metric_logging() (in module deepof.train_utils)</a>
+      <li><a href="deepof.models.html#deepof.models.GMVAE.test_step">test_step() (deepof.models.GMVAE method)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE.test_step">(deepof.models.VQVAE method)</a>
 </li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.models.html#deepof.models.VQVAE.test_step">test_step() (deepof.models.VQVAE method)</a>
+      <li><a href="deepof.models.html#deepof.models.GMVAE.train_step">train_step() (deepof.models.GMVAE method)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE.train_step">(deepof.models.VQVAE method)</a>
 </li>
-      <li><a href="deepof.models.html#deepof.models.VQVAE.train_step">train_step() (deepof.models.VQVAE method)</a>
-</li>
+      </ul></li>
       <li><a href="deepof.data.html#deepof.data.TableDict.tsne">tsne() (deepof.data.TableDict method)</a>
 </li>
       <li><a href="deepof.train_utils.html#deepof.train_utils.tune_search">tune_search() (in module deepof.train_utils)</a>
@@ -648,8 +674,12 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.models.html#deepof.models.VQVAE">VQVAE (class in deepof.models)</a>
+      <li><a href="deepof.hypermodels.html#deepof.hypermodels.VQVAE">VQVAE (class in deepof.hypermodels)</a>
+
+      <ul>
+        <li><a href="deepof.models.html#deepof.models.VQVAE">(class in deepof.models)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 

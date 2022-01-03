@@ -27,11 +27,14 @@ def test_VQVAE_build(
     latent_dim,
     n_components,
 ):
-    deepof.models.VQVAE(
+    vqvae = deepof.models.VQVAE(
         input_shape=(1000, 15, 10),
         latent_dim=latent_dim,
         n_components=n_components,
     )
+    vqvae.build((1000, 15, 10))
+    vqvae.compile()
+
 
 
 @settings(deadline=None, max_examples=25)
@@ -51,7 +54,7 @@ def test_GMVAE_build(
     number_of_components,
     annealing_mode,
 ):
-    deepof.models.GMVAE(
+    gmvae = deepof.models.GMVAE(
         input_shape=(1000, 15, 10),
         batch_size=64,
         loss=loss,
@@ -66,3 +69,6 @@ def test_GMVAE_build(
         kl_annealing_mode=annealing_mode,
         mmd_annealing_mode=annealing_mode,
     )
+    gmvae.build((1000, 15, 10))
+    gmvae.compile()
+
