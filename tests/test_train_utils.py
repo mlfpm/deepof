@@ -84,7 +84,7 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=16, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=32, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
@@ -123,7 +123,7 @@ def test_autoencoder_fitting(
         embedding_model=embedding_model,
         batch_size=10,
         encoding_size=2,
-        epochs=1,
+        epochs=2,
         kl_warmup=1,
         log_history=True,
         log_hparams=True,
@@ -139,7 +139,7 @@ def test_autoencoder_fitting(
 
 
 @settings(
-    max_examples=4,
+    max_examples=8,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
     derandomize=True,
