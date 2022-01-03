@@ -4,7 +4,7 @@
 
 """
 
-Simple utility functions used in deepof example scripts. These are not part of the main package
+Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels.
 
 """
 
@@ -27,14 +27,32 @@ tf.autograph.set_verbosity(0)
 
 
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
-    """Custom early stopping callback. Prevents the model from stopping before warmup is over"""
+    """
+
+    Custom early stopping callback. Prevents the model from stopping before warmup is over
+
+    """
 
     def __init__(self, start_epoch, *args, **kwargs):
+        """
+
+        Initializes the CustomStopper callback.
+
+        Args:
+            start_epoch: epoch from which performance will be taken into account when deciding whether to stop training.
+            *args: arguments passed to the callback.
+            **kwargs: keyword arguments passed to the callback.
+
+        """
         super(CustomStopper, self).__init__(*args, **kwargs)
         self.start_epoch = start_epoch
 
     def get_config(self):  # pragma: no cover
-        """Updates callback metadata"""
+        """
+
+        Updates callback metadata
+
+        """
 
         config = super().get_config().copy()
         config.update({"start_epoch": self.start_epoch})
@@ -46,8 +64,18 @@ class CustomStopper(tf.keras.callbacks.EarlyStopping):
 
 
 def load_treatments(train_path):
-    """Loads a dictionary containing the treatments per individual,
-    to be loaded as metadata in the coordinates class"""
+    """
+
+    Loads a dictionary containing the treatments per individual, to be loaded as metadata in the coordinates class.
+
+    Args:
+        train_path (str): path to the training data.
+
+    Returns:
+        dict: dictionary containing the treatments per individual.
+
+    """
+
     try:
         with open(
             os.path.join(
@@ -66,11 +94,12 @@ def load_treatments(train_path):
 def get_callbacks(
     X_train: np.array,
     batch_size: int,
-    phenotype_prediction: float,
-    next_sequence_prediction: float,
-    supervised_prediction: float,
-    overlap_loss: float,
-    loss: str,
+    embedding_model: str,
+    phenotype_prediction: float = 0.0,
+    next_sequence_prediction: float = 0.0,
+    supervised_prediction: float = 0.0,
+    overlap_loss: float = 0.0,
+    loss: str = "ELBO",
     loss_warmup: int = 0,
     warmup_mode: str = "none",
     input_type: str = False,
@@ -82,12 +111,33 @@ def get_callbacks(
     outpath: str = ".",
     run: int = False,
 ) -> List[Union[Any]]:
-    """Generates callbacks for model training, including:
-    - run_ID: run name, with coarse parameter details;
-    - tensorboard_callback: for real-time visualization;
-    - cp_callback: for checkpoint saving;
-    - onecycle: for learning rate scheduling;
-    - entropy: neighborhood entropy in the latent space;
+    """
+
+    Generates callbacks used for model training.
+
+    Args:
+        X_train (np.array): Training data
+        batch_size (int): Batch size
+        embedding_model (str): Embedding model used for training. Must be "VQVAE" or "GMVAE".
+        phenotype_prediction (float): Weight of the phenotype prediction loss.
+        next_sequence_prediction (float): Weight of the next sequence prediction loss.
+        supervised_prediction (float): Weight of the supervised prediction loss
+        overlap_loss (float): Weight of the overlap loss
+        loss (str): Loss function to use for training
+        loss_warmup (int): Number of epochs to warmup the loss function
+        warmup_mode (str): Warmup mode to use for training
+        input_type (str): Input type to use for training
+        cp (bool): Whether to use checkpointing or not
+        reg_cat_clusters (bool): Whether to use regularization on categorical clusters
+        reg_cluster_variance (bool): Whether to use regularization on cluster variance
+        entropy_knn (int): Number of nearest neighbors to use for entropy regularization
+        logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
+        outpath (str): Path to the output directory
+        run (int): Run number to use for checkpointing
+
+    Returns:
+        List[Union[Any]]: List of callbacks to be used for training
+
     """
 
     latreg = "none"
@@ -99,19 +149,35 @@ def get_callbacks(
         latreg = "categorical+variance"
 
     run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
-        "deepof_GMVAE",
+        "deepof_unsupervised_{}".format(embedding_model),
         ("_input_type={}".format(input_type) if input_type else "coords"),
-        ("_NSPred={}".format(next_sequence_prediction)),
-        ("_PPred={}".format(phenotype_prediction)),
-        ("_SupPred={}".format(supervised_prediction)),
-        ("_loss={}".format(loss)),
-        ("_overlap_loss={}".format(overlap_loss)),
-        ("_loss_warmup={}".format(loss_warmup)),
-        ("_warmup_mode={}".format(warmup_mode)),
+        (
+            ("_NSPred={}".format(next_sequence_prediction))
+            if embedding_model == "GMVAE"
+            else ""
+        ),
+        (
+            ("_PPred={}".format(phenotype_prediction))
+            if embedding_model == "GMVAE"
+            else ""
+        ),
+        (
+            ("_SupPred={}".format(supervised_prediction))
+            if embedding_model == "GMVAE"
+            else ""
+        ),
+        (("_loss={}".format(loss)) if embedding_model == "GMVAE" else ""),
+        (
+            ("_overlap_loss={}".format(overlap_loss))
+            if embedding_model == "GMVAE"
+            else ""
+        ),
+        (("_loss_warmup={}".format(loss_warmup)) if embedding_model == "GMVAE" else ""),
+        (("_warmup_mode={}".format(warmup_mode)) if embedding_model == "GMVAE" else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
-        ("_latreg={}".format(latreg)),
-        ("_entknn={}".format(entropy_knn)),
+        (("_latreg={}".format(latreg)) if embedding_model == "GMVAE" else ""),
+        (("_entknn={}".format(entropy_knn)) if embedding_model == "GMVAE" else ""),
         ("_run={}".format(run) if run else ""),
         ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
     )
@@ -145,7 +211,19 @@ def get_callbacks(
 
 
 def log_hyperparameters(phenotype_class: float, rec: str):
-    """Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning"""
+    """
+
+    Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning
+
+    Args:
+        phenotype_class (float): Phenotype class to use for training
+        rec (str): Record to use for training
+
+    Returns:
+        logparams (list): List containing the hyperparameters to log in tensorboard.
+        metrics (list): List containing the metrics to log in tensorboard.
+
+    """
 
     logparams = [
         hp.HParam(
@@ -226,7 +304,56 @@ def autoencoder_fitting(
     run: int = 0,
     strategy: tf.distribute.Strategy = "one_device",
 ):
-    """Implementation function for deepof.data.coordinates.deep_unsupervised_embedding"""
+    """
+
+    Implementation function for deepof.data.coordinates.deep_unsupervised_embedding. Trains the specified autoencoder
+    on the preprocessed data.
+
+    Args:
+        preprocessed_object (tuple): Tuple containing the preprocessed data.
+        embedding_model (str): Name of the embedding model to use. Must be one of "VQVAE" or "GMVAE".
+        batch_size (int): Batch size to use for training.
+        encoding_size (int): Encoding size to use for training.
+        epochs (int): Number of epochs to train the autoencoder for.
+        hparams (dict): Dictionary containing the hyperparameters to use for training.
+        kl_annealing_mode (str): Annealing mode to use for KL annealing. Must be one of "linear" or "sigmoid". Only used
+        if embedding_model is "GMVAE".
+        kl_warmup (int): Number of epochs to warmup KL annealing. Only used if embedding_model is "GMVAE".
+        log_history (bool): Whether to log the history of the autoencoder.
+        log_hparams (bool): Whether to log the hyperparameters used for training.
+        loss (str): Loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD". Only used if
+        embedding_model is "GMVAE".
+        mmd_annealing_mode (str): Annealing mode to use for MMD annealing. Must be one of "linear" or "sigmoid". Only used
+        if embedding_model is "GMVAE".
+        mmd_warmup (int): Number of epochs to warmup MMD annealing. Only used if embedding_model is "GMVAE".
+        montecarlo_kl (int): Number of Monte Carlo samples to use for KL annealing. Only used if embedding_model is
+        "GMVAE".
+        n_components (int): Number of components to use for the GMVAE.
+        output_path (str): Path to the output directory.
+        overlap_loss (float): Weight to use for the overlap loss. Only used if embedding_model is "GMVAE".
+        next_sequence_prediction (float): Weight to use for the next sequence prediction loss. Only used if embedding_model
+        is "GMVAE".
+        phenotype_prediction (float): Weight to use for the phenotype prediction loss. Only used if embedding_model is
+        "GMVAE".
+        supervised_prediction (float): Weight to use for the supervised prediction loss. Only used if embedding_model is
+        "GMVAE".
+        pretrained (str): Path to the pretrained weights to use for the autoencoder.
+        save_checkpoints (bool): Whether to save checkpoints during training.
+        save_weights (bool): Whether to save the weights of the autoencoder after training.
+        reg_cat_clusters (bool): Whether to use the categorical cluster regularization loss. Only used if embedding_model
+        is "GMVAE".
+        reg_cluster_variance (bool): Whether to use the cluster variance regularization loss. Only used if embedding_model
+        is "GMVAE".
+        entropy_knn (int): Number of nearest neighbors to use for the entropy regularization loss. Only used if embedding_model
+        is "GMVAE".
+        input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
+        run (int): Run number to use for logging.
+        strategy (tf.distribute.Strategy): Distribution strategy to use for training.
+
+    Returns:
+        List of trained models (encoder, decoder, grouper and full autoencoders.
+
+    """
 
     # Check if a GPU is available and if not, fall back to CPU
     if strategy == "one_device":
@@ -264,6 +391,7 @@ def autoencoder_fitting(
     run_ID, *cbacks = get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
+        embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
@@ -425,8 +553,9 @@ def autoencoder_fitting(
 
 
 def tune_search(
-    data: List[np.array],
+    data: tf.data.Dataset,
     encoding_size: int,
+    embedding_model: str,
     hypertun_trials: int,
     hpt_type: str,
     k: int,
@@ -443,31 +572,35 @@ def tune_search(
     n_epochs: int = 30,
     n_replicas: int = 1,
     outpath: str = "unsupervised_tuner_search",
-) -> Union[bool, Tuple[Any, Any]]:
-    """Define the search space using keras-tuner and bayesian optimization
+) -> tuple:
+    """
 
-    Parameters:
-        - train (np.array): dataset to train the model on
-        - test (np.array): dataset to validate the model on
-        - hypertun_trials (int): number of Bayesian optimization iterations to run
-        - hpt_type (str): specify one of Bayesian Optimization (bayopt) and Hyperband (hyperband)
-        - k (int) number of components of the Gaussian Mixture
-        - loss (str): one of [ELBO, MMD, ELBO+MMD]
-        - overlap_loss (float): assigns as weight to an extra loss term which
-        penalizes overlap between GM components
-        - phenotype_class (float): adds an extra regularizing neural network to the model,
-        which tries to predict the phenotype of the animal from which the sequence comes
-        - predictor (float): adds an extra regularizing neural network to the model,
-        which tries to predict the next frame from the current one
-        - project_name (str): ID of the current run
-        - callbacks (list): list of callbacks for the training loop
-        - n_epochs (int): optional. Number of epochs to train each run for
-        - n_replicas (int): optional. Number of replicas per parameter set. Higher values
-         will yield more robust results, but will affect performance severely
+    Define the search space using keras-tuner and hyperband or bayesian optimization
+
+    Args:
+        data (tf.data.Dataset): Dataset object for training and validation.
+        encoding_size (int): Size of the encoding layer.
+        embedding_model (str): Embedding model to use. Must be one of "VQVAE" or "GMVAE".
+        hypertun_trials (int): Number of hypertuning trials to run.
+        hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
+        k (int): Number of clusters on the latent space.
+        kl_warmup_epochs (int): Number of epochs to warmup KL loss. Only used if embedding_model is "GMVAE".
+        loss (str): Loss function to use. Must be one of "mmd", "kl", or "overlap". Only used if embedding_model is "GMVAE".
+        mmd_warmup_epochs (int): Number of epochs to warmup MMD loss. Only used if embedding_model is "GMVAE"
+        overlap_loss (float): Weight of the overlap loss. Only used if embedding_model is "GMVAE".
+        next_sequence_prediction (float): Weight of the next sequence prediction loss. Only used if embedding_model is "GMVAE".
+        phenotype_prediction (float): Weight of the phenotype prediction loss. Only used if embedding_model is "GMVAE".
+        supervised_prediction (float): Weight of the supervised prediction loss. Only used if embedding_model is "GMVAE".
+        project_name (str): Name of the project.
+        callbacks (List): List of callbacks to use.
+        batch_size (int): Batch size to use.
+        n_epochs (int): Maximum number of epochs to train for.
+        n_replicas (int): Number of replicas to use.
+        outpath (str): Path to save the results.
 
     Returns:
-        - best_hparams (dict): dictionary with the best retrieved hyperparameters
-        - best_run (tf.keras.Model): trained instance of the best model found
+        best_hparams (dict): Dictionary of the best hyperparameters.
+        best_run (str): Name of the best run.
 
     """
 
@@ -477,27 +610,34 @@ def tune_search(
         "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
 
-    hypermodel = deepof.hypermodels.GMVAE(
-        input_shape=X_train.shape,
-        batch_size=batch_size,
-        encoding=encoding_size,
-        kl_warmup_epochs=kl_warmup_epochs,
-        loss=loss,
-        mmd_warmup_epochs=mmd_warmup_epochs,
-        n_components=k,
-        overlap_loss=overlap_loss,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        supervised_prediction=supervised_prediction,
-        supervised_features=(
-            y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
-        ),
-    )
+    if embedding_model == "VQVAE":
+        hypermodel = deepof.hypermodels.VQVAE(
+            input_shape=X_train.shape,
+            latent_dim=encoding_size,
+            n_components=k,
+        )
 
-    tuner_objective = (
-        "val_mae" if not next_sequence_prediction else "val_vae_reconstruction_mae"
-    )
+    elif embedding_model == "GMVAE":
+        hypermodel = deepof.hypermodels.GMVAE(
+            input_shape=X_train.shape,
+            batch_size=batch_size,
+            latent_dim=encoding_size,
+            kl_warmup_epochs=kl_warmup_epochs,
+            loss=loss,
+            mmd_warmup_epochs=mmd_warmup_epochs,
+            n_components=k,
+            overlap_loss=overlap_loss,
+            next_sequence_prediction=next_sequence_prediction,
+            phenotype_prediction=phenotype_prediction,
+            supervised_prediction=supervised_prediction,
+            supervised_features=(
+                y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
+            ),
+        )
 
+    tuner_objective = "val_loss"
+
+    # noinspection PyUnboundLocalVariable
     hpt_params = {
         "hypermodel": hypermodel,
         "executions_per_trial": n_replicas,

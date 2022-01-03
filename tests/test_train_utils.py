@@ -43,6 +43,7 @@ def test_load_treatments():
         ),
     ),
     batch_size=st.integers(min_value=128, max_value=512),
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     loss=st.one_of(st.just("test_A"), st.just("test_B")),
     next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
     phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
@@ -52,6 +53,7 @@ def test_load_treatments():
 def test_get_callbacks(
     X_train,
     batch_size,
+    embedding_model,
     next_sequence_prediction,
     phenotype_prediction,
     supervised_prediction,
@@ -61,6 +63,7 @@ def test_get_callbacks(
     callbacks = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
+        embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
@@ -143,10 +146,12 @@ def test_autoencoder_fitting(
     stateful_step_count=1,
 )
 @given(
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     loss=st.one_of(st.just("ELBO"), st.just("MMD")),
 )
 def test_tune_search(
+    embedding_model,
     hpt_type,
     loss,
 ):
@@ -163,6 +168,7 @@ def test_tune_search(
         deepof.train_utils.get_callbacks(
             X_train=X_train,
             batch_size=25,
+            embedding_model=embedding_model,
             phenotype_prediction=phenotype_prediction,
             next_sequence_prediction=next_sequence_prediction,
             supervised_prediction=supervised_prediction,
@@ -181,6 +187,7 @@ def test_tune_search(
     deepof.train_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
         batch_size=25,
+        embedding_model=embedding_model,
         encoding_size=2,
         hpt_type=hpt_type,
         hypertun_trials=1,

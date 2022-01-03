@@ -4,7 +4,7 @@
 
 """
 
-keras hypermodels for hyperparameter tuning of deep autoencoders
+keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models
 
 """
 
@@ -19,7 +19,11 @@ tfpl = tfp.layers
 
 
 class VQVAE(HyperModel):
-    """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE"""
+    """
+
+    Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_VQVAE
+
+    """
 
     def __init__(
         self,
@@ -28,6 +32,18 @@ class VQVAE(HyperModel):
         learn_rate: float = 1e-3,
         n_components: int = 10,
     ):
+        """
+
+        VQVAE hypermodel for hyperparameter tuning.
+
+        Args:
+            input_shape (tuple): shape of the input tensor.
+            latent_dim (int): dimension of the latent space.
+            learn_rate (float): learning rate for the optimizer.
+            n_components (int): number of components in the quantization space.
+
+        """
+
         super().__init__()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -35,7 +51,11 @@ class VQVAE(HyperModel):
         self.n_components = n_components
 
     def get_hparams(self, hp):
-        """Retrieve hyperparameters to tune"""
+        """
+
+        Retrieve hyperparameters to tune
+
+        """
 
         # Architectural hyperparameters
         bidirectional_merge = "concat"
@@ -65,7 +85,11 @@ class VQVAE(HyperModel):
         )
 
     def build(self, hp):
-        """Overrides Hypermodel's build method"""
+        """
+
+        Overrides Hypermodel's build method
+
+        """
 
         # Hyperparameters to tune
         (
@@ -95,12 +119,17 @@ class VQVAE(HyperModel):
             latent_dim=self.latent_dim,
             n_components=k,
         ).vqvae
+        vqvae.compile()
 
         return vqvae
 
 
 class GMVAE(HyperModel):
-    """Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE"""
+    """
+
+    Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE
+
+    """
 
     def __init__(
         self,
@@ -117,8 +146,28 @@ class GMVAE(HyperModel):
         phenotype_prediction: float = 0.0,
         supervised_prediction: float = 0.0,
         supervised_features: int = 6,
-        prior: str = "standard_normal",
     ):
+        """
+
+        GMVAE hypermodel for hyperparameter tuning.
+
+        Args:
+            input_shape (tuple): shape of the input tensor.
+            latent_dim (int): dimension of the latent space.
+            batch_size (int): batch size for training.
+            kl_warmup_epochs (int): number of epochs to warmup KL loss.
+            learn_rate (float): learning rate for the optimizer.
+            loss (str): loss function to use.
+            mmd_warmup_epochs (int): number of epochs to warmup MMD loss.
+            n_components (int): number of components in the quantization space.
+            overlap_loss (float): weight of the overlap loss.
+            next_sequence_prediction (float): weight of the next sequence prediction loss.
+            phenotype_prediction (float): weight of the phenotype prediction loss.
+            supervised_prediction (float): weight of the supervised prediction loss.
+            supervised_features (int): number of features in the supervised prediction loss.
+
+        """
+
         super().__init__()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -133,14 +182,17 @@ class GMVAE(HyperModel):
         self.phenotype_prediction = phenotype_prediction
         self.supervised_prediction = supervised_prediction
         self.supervised_features = supervised_features
-        self.prior = prior
 
         assert (
             "ELBO" in self.loss or "MMD" in self.loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
     def get_hparams(self, hp):
-        """Retrieve hyperparameters to tune"""
+        """
+
+        Retrieve hyperparameters to tune
+
+        """
 
         # Architectural hyperparameters
         bidirectional_merge = "concat"
@@ -170,7 +222,11 @@ class GMVAE(HyperModel):
         )
 
     def build(self, hp):
-        """Overrides Hypermodel's build method"""
+        """
+
+        Overrides Hypermodel's build method
+
+        """
 
         # Hyperparameters to tune
         (
@@ -185,7 +241,7 @@ class GMVAE(HyperModel):
             lstm_units_1,
         ) = self.get_hparams(hp)
 
-        gmvaep = deepof.models.GMVAE(
+        gmvae = deepof.models.GMVAE(
             architecture_hparams={
                 "bidirectional_merge": "concat",
                 "clipvalue": clipvalue,
@@ -209,5 +265,6 @@ class GMVAE(HyperModel):
             supervised_prediction=self.supervised_prediction,
             supervised_features=self.supervised_features,
         ).gmvae
+        gmvae.compile()
 
-        return gmvaep
+        return gmvae
