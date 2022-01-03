@@ -426,30 +426,7 @@ has been trained/evaluated on actual data.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.models.GMVAE.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.GMVAE.call" title="Permalink to this definition"></a></dt>
-<dd><p>Calls the model on new inputs.</p>
-<p>In this case <cite>call</cite> just reapplies
-all ops in the graph to the new inputs
-(e.g. build a new computational graph from the provided inputs).</p>
-<p>Note: This method should not be called directly. It is only meant to be
-overridden when subclassing <cite>tf.keras.Model</cite>.
-To call a model on an input, always use the <cite>__call__</cite> method,
-i.e. <cite>model(inputs)</cite>, which relies on the underlying <cite>call</cite> method.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>inputs</strong> – Input tensor, or dict/list/tuple of input tensors.</p></li>
-<li><p><strong>training</strong> – Boolean or boolean scalar tensor, indicating whether to run
-the <cite>Network</cite> in training mode or inference mode.</p></li>
-<li><p><strong>mask</strong> – A mask or list of masks. A mask can be
-either a tensor or None (no mask).</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>A tensor if there is a single output, or
-a list of tensors if there are more than one outputs.</p>
-</dd>
-</dl>
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.models.GMVAE.train_step">

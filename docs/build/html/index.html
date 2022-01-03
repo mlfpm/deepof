@@ -72,7 +72,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p><a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines"><img alt="Pipeline" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg" /></a> <a class="reference external" href="https://coverage.readthedocs.io/en/coverage-5.3/"><img alt="Coverage" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg" /></a> <a class="reference external" href="https://deepof.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/deepof/badge/?version=latest" /></a> <a class="reference external" href="https://www.codefactor.io/repository/github/lucasmiranda42/deepof"><img alt="CodeFactor" src="https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="Version" src="https://img.shields.io/badge/release-v0.1.4-informational" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="MLFPM" src="https://img.shields.io/badge/funding-MLFPM-informational" /></a> <a class="reference external" href="https://github.com/psf/black"><img alt="Black" src="https://img.shields.io/badge/code%20style-black-black" /></a></p>
+  <p><a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines"><img alt="Pipeline" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg" /></a> <a class="reference external" href="https://coverage.readthedocs.io/en/coverage-5.3/"><img alt="Coverage" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg" /></a> <a class="reference external" href="https://deepof.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/deepof/badge/?version=latest" /></a> <a class="reference external" href="https://www.codefactor.io/repository/github/lucasmiranda42/deepof"><img alt="CodeFactor" src="https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="Version" src="https://img.shields.io/badge/release-v0.1.5-informational" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="MLFPM" src="https://img.shields.io/badge/funding-MLFPM-informational" /></a> <a class="reference external" href="https://github.com/psf/black"><img alt="Black" src="https://img.shields.io/badge/code%20style-black-black" /></a></p>
 <section id="welcome-to-deepof">
 <h1>Welcome to DeepOF!<a class="headerlink" href="#welcome-to-deepof" title="Permalink to this headline"></a></h1>
 <p>A suite for postprocessing time-series extracted from videos of freely moving rodents using <a class="reference external" href="http://www.mousemotorlab.org/deeplabcut">DeepLabCut</a></p>
@@ -94,7 +94,10 @@ compare user-defined experimental groups.</p>
 </div>
 <p>Alternatively, you can download our pre-built <a class="reference external" href="https://hub.docker.com/repository/docker/lucasmiranda42/deepof">Docker image</a>,
 which contains all compatible dependencies:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker pull lucasmir/deepof:latest
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># downloads the latest available image</span>
+docker pull lucasmir/deepof:latest
+<span class="c1"># runs the image in interactive mode, enabling you to open python and import deepof</span>
+docker run -it lucasmiranda42/deepof
 </pre></div>
 </div>
 </section>
