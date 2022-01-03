@@ -3,9 +3,12 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open('requirements.txt') as fp:
+    install_requires = fp.read()
+
 setuptools.setup(
     name="deepof",
-    version="0.1.4",
+    version="0.1.5",
     author="Lucas Miranda",
     author_email="lucas_miranda@psych.mpg.de",
     description="deepof (Deep Open Field): Open Field animal pose classification tool ",
@@ -15,29 +18,12 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
     ],
-    python_requires=">3.7",
+    python_requires=">3.8",
     platform="Platform independent",
     License="MIT",
     include_package_data=True,
-    install_requires=[
-        "tensorflow>=2.4",
-        "numpy",
-        "pandas",
-        "joblib",
-        "matplotlib",
-        "networkx",
-        "opencv-python",
-        "regex",
-        "scikit-learn",
-        "scipy",
-        "seaborn",
-        "sklearn",
-        "tables",
-        "tensorflow-probability",
-        "tqdm",
-        "umap-learn",
-    ],
+    install_requires=fp,
 )
