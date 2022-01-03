@@ -565,7 +565,7 @@ class VQVAE(tf.keras.models.Model):
 
         vq_posterior = tfd.MixtureSameFamily(
             mixture_distribution=tfd.categorical.Categorical(
-                probs=tf.ones(n_components) / (n_components)
+                probs=tf.ones(n_components) / n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
                 loc=tf.transpose(embeddings),
