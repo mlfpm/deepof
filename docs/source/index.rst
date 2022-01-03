@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.1.5-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.1.6-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://pypi.org/project/deepof/
@@ -52,9 +52,9 @@ which contains all compatible dependencies:
 
 .. code:: bash
 
-   # downloads the latest available image
-   docker pull lucasmir/deepof:latest
-   # runs the image in interactive mode, enabling you to open python and import deepof
+   # download the latest available image
+   docker pull lucasmiranda42/deepof:latest
+   # run the image in interactive mode, enabling you to open python and import deepof
    docker run -it lucasmiranda42/deepof
 
 What you need
