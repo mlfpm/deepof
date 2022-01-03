@@ -36,7 +36,6 @@ def test_VQVAE_build(
     vqvae.compile()
 
 
-
 @settings(deadline=None, max_examples=25)
 @given(
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
@@ -71,4 +70,3 @@ def test_GMVAE_build(
     )
     gmvae.build((1000, 15, 10))
     gmvae.compile()
-

@@ -452,7 +452,7 @@ class VQVAE(tf.keras.models.Model):
         return self.vqvae(inputs)
 
     @property
-    def metrics(self):
+    def metrics(self):  # pragma: no cover
         return [
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,

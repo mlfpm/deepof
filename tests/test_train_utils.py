@@ -22,6 +22,8 @@ import deepof.data
 import deepof.model_utils
 import deepof.train_utils
 
+tf.config.run_functions_eagerly(True)
+
 
 def test_load_treatments():
     assert deepof.train_utils.load_treatments("tests") is None
@@ -123,7 +125,7 @@ def test_autoencoder_fitting(
         embedding_model=embedding_model,
         batch_size=10,
         encoding_size=2,
-        epochs=2,
+        epochs=1,
         kl_warmup=1,
         log_history=True,
         log_hparams=True,
