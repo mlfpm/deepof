@@ -31,7 +31,6 @@ tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
 
-
 # noinspection PyCallingNonCallable
 def get_deepof_encoder(
     input_shape,
@@ -482,7 +481,7 @@ class VQVAE(tf.keras.models.Model):
         return hparams
 
     @tf.function
-    def train_step(self, data):
+    def train_step(self, data):  # pragma: no cover
         """
 
         Performs a training step.
@@ -520,7 +519,7 @@ class VQVAE(tf.keras.models.Model):
         }
 
     @tf.function
-    def test_step(self, data):
+    def test_step(self, data):  # pragma: no cover
         """
 
         Performs a test step.
@@ -954,7 +953,7 @@ class GMVAE(tf.keras.models.Model):
         )
 
     @property
-    def metrics(self):
+    def metrics(self):  # pragma: no cover
         metrics = [
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,
@@ -1020,10 +1019,12 @@ class GMVAE(tf.keras.models.Model):
 
         pass  # TODO: compute posterior on the full dataset and store here
 
+    @tf.function
     def call(self, inputs):
         return self.gmvae(inputs)
 
-    def train_step(self, data):
+    @tf.function
+    def train_step(self, data):  # pragma: no cover
         """
 
         Performs a training step.
@@ -1157,7 +1158,8 @@ class GMVAE(tf.keras.models.Model):
         return log_dict
 
     # noinspection PyUnboundLocalVariable
-    def test_step(self, data):
+    @tf.function
+    def test_step(self, data):  # pragma: no cover
         """
 
         Performs a test step.
