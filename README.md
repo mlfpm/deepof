@@ -100,8 +100,8 @@ the clusters at any given time), an abstract distribution (a multivariate Gaussi
  That's it for this (very basic) introduction. More detailed documentation, tutorials and method explanation will follow,
  so stay tuned!
 
-
-> This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No. 813533
-> <div align="center">
->  <img width="200" height="200" src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Flag_of_Europe.svg/255px-Flag_of_Europe.svg.png">
-></div>
+---
+ This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No.  813533
+ <div align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Flag_of_Europe.svg/255px-Flag_of_Europe.svg.png">
+</div>
