@@ -101,7 +101,10 @@ the clusters at any given time), an abstract distribution (a multivariate Gaussi
  so stay tuned!
 
 ---
+
  This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No.  813533
  <div align="center">
   <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Flag_of_Europe.svg/255px-Flag_of_Europe.svg.png">
 </div>
+
+---
