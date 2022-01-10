@@ -150,7 +150,7 @@ you get a generative model for free).
 
 That's it for this (very basic) introduction. Check out the tutorials below for more advanced examples!
 
-Full API documentation
+Full API reference
 ======================
 
 * `deepof.data (main data-wrangling module) <deepof.data.html>`_

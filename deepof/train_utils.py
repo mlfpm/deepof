@@ -606,6 +606,14 @@ def tune_search(
 
     X_train, y_train, X_val, y_val = data
 
+    # Gets the number of supervised features
+    try:
+        supervised_features = (
+            y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
+        )
+    except IndexError:
+        supervised_features = 0
+
     assert hpt_type in ["bayopt", "hyperband"], (
         "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
@@ -630,9 +638,7 @@ def tune_search(
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
             supervised_prediction=supervised_prediction,
-            supervised_features=(
-                y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
-            ),
+            supervised_features=supervised_features,
         )
 
     tuner_objective = "val_loss"

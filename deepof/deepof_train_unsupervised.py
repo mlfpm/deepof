@@ -63,7 +63,7 @@ parser.add_argument(
     "-k",
     help="set the number of components for the GMVAE(P) model. Defaults to 1",
     type=int,
-    default=1,
+    default=5,
 )
 parser.add_argument(
     "--embedding-model",
@@ -269,40 +269,45 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-animal_id = args.animal_id
-animal_to_preprocess = args.animal_to_preprocess
-arena_dims = args.arena_dims
-automatic_changepoints = args.automatic_changepoints
-batch_size = args.batch_size
-hypertun_trials = args.hpt_trials
-embedding_model = args.embedding_model
-encoding_size = args.encoding_size
-exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
-gaussian_filter = args.gaussian_filter
-hparams = args.hyperparameters if args.hyperparameters is not None else {}
-input_type = args.input_type
-k = args.components
-kl_annealing_mode = args.kl_annealing_mode
-kl_wu = args.kl_warmup
-entropy_knn = args.entropy_knn
-entropy_samples = args.entropy_samples
-latent_reg = args.latent_reg
-loss = args.loss
-mmd_annealing_mode = args.mmd_annealing_mode
-mmd_wu = args.mmd_warmup
-mc_kl = args.montecarlo_kl
-output_path = os.path.join(args.output_path)
-overlap_loss = float(args.overlap_loss)
-next_sequence_prediction = float(args.next_sequence_prediction)
-phenotype_prediction = float(args.phenotype_prediction)
-supervised_prediction = float(args.supervised_prediction)
-smooth_alpha = args.smooth_alpha
-train_path = os.path.abspath(args.train_path)
-tune = args.hyperparameter_tuning
-val_num = args.val_num
-window_size = args.window_size
-window_step = args.window_step
-run = args.run
+try:
+    animal_id = args.animal_id
+    animal_to_preprocess = args.animal_to_preprocess
+    arena_dims = args.arena_dims
+    automatic_changepoints = args.automatic_changepoints
+    batch_size = args.batch_size
+    hypertun_trials = args.hpt_trials
+    embedding_model = args.embedding_model
+    encoding_size = args.encoding_size
+    exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
+    gaussian_filter = args.gaussian_filter
+    hparams = args.hyperparameters if args.hyperparameters is not None else {}
+    input_type = args.input_type
+    k = args.components
+    kl_annealing_mode = args.kl_annealing_mode
+    kl_wu = args.kl_warmup
+    entropy_knn = args.entropy_knn
+    entropy_samples = args.entropy_samples
+    latent_reg = args.latent_reg
+    loss = args.loss
+    mmd_annealing_mode = args.mmd_annealing_mode
+    mmd_wu = args.mmd_warmup
+    mc_kl = args.montecarlo_kl
+    output_path = os.path.join(args.output_path)
+    overlap_loss = float(args.overlap_loss)
+    next_sequence_prediction = float(args.next_sequence_prediction)
+    phenotype_prediction = float(args.phenotype_prediction)
+    supervised_prediction = float(args.supervised_prediction)
+    smooth_alpha = args.smooth_alpha
+    train_path = os.path.abspath(args.train_path)
+    tune = args.hyperparameter_tuning
+    val_num = args.val_num
+    window_size = args.window_size
+    window_step = args.window_step
+    run = args.run
+except TypeError:
+    raise ValueError(
+        "One or more mandatory arguments are missing. Use --help for details on how to run the CLI"
+    )
 
 if not train_path:
     raise ValueError("Set a valid data path for the training to run")
@@ -358,10 +363,18 @@ coords = project_coords.get_coords(
     propagate_annotations=(
         False if not supervised_prediction else project_coords.supervised_annotation()
     ),
+    selected_id=animal_to_preprocess,
 )
-speeds = project_coords.get_coords(speed=1)
-distances = project_coords.get_distances()
-angles = project_coords.get_angles()
+speeds = project_coords.get_coords(
+    speed=1,
+    selected_id=animal_to_preprocess,
+)
+distances = project_coords.get_distances(
+    selected_id=animal_to_preprocess,
+)
+angles = project_coords.get_angles(
+    selected_id=animal_to_preprocess,
+)
 coords_distances = coords.merge(distances)
 coords_angles = coords.merge(angles)
 dists_angles = distances.merge(angles)
@@ -375,7 +388,6 @@ def batch_preprocess(tab_dict):
         window_size=window_size,
         window_step=window_step,
         automatic_changepoints=automatic_changepoints,
-        selected_id=animal_to_preprocess,
         scale="standard",
         conv_filter=gaussian_filter,
         sigma=1,
@@ -512,7 +524,7 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-    run_ID, tensorboard_callback, entropy, onecycle = deepof.train_utils.get_callbacks(
+    run_ID, tensorboard_callback, onecycle = deepof.train_utils.get_callbacks(
         X_train=X_train,
         batch_size=batch_size,
         embedding_model=embedding_model,
@@ -533,6 +545,7 @@ else:
 
     best_hyperparameters, best_model = deepof.train_utils.tune_search(
         data=[X_train, y_train, X_val, y_val],
+        batch_size=batch_size,
         embedding_model=embedding_model,
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
@@ -549,7 +562,6 @@ else:
         callbacks=[
             tensorboard_callback,
             onecycle,
-            entropy,
             deepof.train_utils.CustomStopper(
                 monitor="val_loss",
                 patience=5,
