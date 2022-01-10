@@ -6,7 +6,7 @@
 .. |Coverage| image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg
    :target: https://coverage.readthedocs.io/en/coverage-5.3/
 .. |Docs| image:: https://readthedocs.org/projects/deepof/badge/?version=latest
-   :target: https://deepof.readthedocs.io/en/latest/?badge=latest
+   :target: https://deepof.readthedocs.io/en/latest
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
