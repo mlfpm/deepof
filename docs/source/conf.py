@@ -59,7 +59,7 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-# Change the icon displayed in the web browser tab for the docs
+# Change the icon displayed in the sidebar and the web browser tab for the docs
 html_favicon = 'deepof.ico'
 
 # Autodoc default configuration
