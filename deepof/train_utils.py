@@ -245,11 +245,8 @@ def log_hyperparameters(phenotype_class: float, rec: str):
             description="loss function",
         ),
     ]
+    metrics = []
 
-    metrics = [
-        hp.Metric("val_{}mae".format(rec), display_name="val_{}mae".format(rec)),
-        hp.Metric("val_{}mse".format(rec), display_name="val_{}mse".format(rec)),
-    ]
     if phenotype_class:
         logparams.append(
             hp.HParam(
@@ -378,7 +375,7 @@ def autoencoder_fitting(
         tf.data.experimental.AutoShardPolicy.DATA
     )
 
-    # Defines what to log on tensorboard (useful for keeping track of different models)
+    # Defines hyperparameters to log on tensorboard (useful for keeping track of different models)
     logparam = {
         "encoding": encoding_size,
         "k": n_components,
@@ -435,22 +432,22 @@ def autoencoder_fitting(
     # Build model
     with strategy.scope():
         if embedding_model == "VQVAE":
-            ae_models = deepof.models.VQVAE(
+            ae_full_model = deepof.models.VQVAE(
                 architecture_hparams=hparams,
                 input_shape=X_train.shape,
                 latent_dim=encoding_size,
                 n_components=n_components,
             )
             encoder, decoder, quantizer, ae = (
-                ae_models.encoder,
-                ae_models.decoder,
-                ae_models.quantizer,
-                ae_models.vqvae,
+                ae_full_model.encoder,
+                ae_full_model.decoder,
+                ae_full_model.quantizer,
+                ae_full_model.vqvae,
             )
             return_list = (encoder, decoder, quantizer, ae)
 
         elif embedding_model == "GMVAE":
-            ae_models = deepof.models.GMVAE(
+            ae_full_model = deepof.models.GMVAE(
                 architecture_hparams=hparams,
                 input_shape=X_train.shape,
                 batch_size=batch_size,
@@ -471,10 +468,10 @@ def autoencoder_fitting(
                 reg_cluster_variance=reg_cluster_variance,
             )
             encoder, decoder, grouper, ae = (
-                ae_models.encoder,
-                ae_models.decoder,
-                ae_models.grouper,
-                ae_models.gmvae,
+                ae_full_model.encoder,
+                ae_full_model.decoder,
+                ae_full_model.grouper,
+                ae_full_model.gmvae,
             )
             return_list = (encoder, decoder, grouper, ae)
 
@@ -528,8 +525,10 @@ def autoencoder_fitting(
         .with_options(options)
     )
 
-    ae.compile()
-    ae.fit(
+    ae_full_model.compile(
+        optimizer=tf.keras.optimizers.Nadam(learning_rate=1e-4, clipvalue=0.75)
+    )
+    ae_full_model.fit(
         x=train_dataset,
         epochs=epochs,
         verbose=1,
