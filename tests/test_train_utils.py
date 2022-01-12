@@ -22,7 +22,7 @@ import deepof.data
 import deepof.model_utils
 import deepof.train_utils
 
-tf.config.run_functions_eagerly(True)
+tf.config.run_functions_eagerly(False)
 
 
 def test_load_treatments():
