@@ -1101,7 +1101,7 @@ class Coordinates:
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         embedding_model: str = "GMVAE",
-        batch_size: int = 256,
+        batch_size: int = 64,
         encoding_size: int = 4,
         epochs: int = 50,
         hparams: dict = None,

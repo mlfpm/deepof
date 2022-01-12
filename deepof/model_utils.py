@@ -86,7 +86,7 @@ def get_k_nearest_neighbors(tensor, k, index):
     """
     query = tf.gather(tensor, index, batch_dims=0)
     distances = tf.norm(tensor - query, axis=1)
-    max_distance = tf.sort(distances)[k]
+    max_distance = tf.gather(tf.sort(distances), k)
     neighbourhood_mask = distances < max_distance
     return tf.squeeze(tf.where(neighbourhood_mask))
 
@@ -978,7 +978,7 @@ class ClusterOverlap(Layer):
         super(ClusterOverlap, self).__init__(*args, **kwargs)
         self.batch_size = batch_size
         self.enc = encoding_dim
-        self.k = k
+        self.k = k if k < (batch_size - 1) else (batch_size - 1)
         self.loss_weight = loss_weight
         self.min_confidence = 0.25
 

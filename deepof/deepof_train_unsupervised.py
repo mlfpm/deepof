@@ -23,9 +23,9 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument(
-    "--animal-id",
-    "-id",
-    help="Id of the animal to use. Empty string by default",
+    "--animal-ids",
+    "-ids",
+    help="Id of the animals in the loaded dataset to use. Empty string by default",
     type=str,
     default="",
 )
@@ -56,10 +56,10 @@ parser.add_argument(
     "-bs",
     help="set training batch size. Defaults to 256",
     type=int,
-    default=256,
+    default=64,
 )
 parser.add_argument(
-    "--components",
+    "--n-components",
     "-k",
     help="set the number of components for the GMVAE(P) model. Defaults to 1",
     type=int,
@@ -168,7 +168,7 @@ parser.add_argument(
     "-l",
     help="Sets the loss function for the variational model. "
     "It has to be one of ELBO+MMD, ELBO or MMD. Defaults to ELBO+MMD",
-    default="ELBO+MMD",
+    default="ELBO",
     type=str,
 )
 parser.add_argument(
@@ -204,7 +204,7 @@ parser.add_argument(
     "-ol",
     help="If > 0, adds a regularization term controlling for local cluster assignment entropy in the latent space",
     type=float,
-    default=0,
+    default=0.0,
 )
 parser.add_argument(
     "--next-sequence-prediction",
@@ -270,10 +270,12 @@ parser.add_argument(
 args = parser.parse_args()
 
 try:
-    animal_id = args.animal_id
+    animal_ids = args.animal_ids
     animal_to_preprocess = args.animal_to_preprocess
     arena_dims = args.arena_dims
     automatic_changepoints = args.automatic_changepoints
+    if automatic_changepoints == "False":
+        automatic_changepoints = False
     batch_size = args.batch_size
     hypertun_trials = args.hpt_trials
     embedding_model = args.embedding_model
@@ -282,7 +284,7 @@ try:
     gaussian_filter = args.gaussian_filter
     hparams = args.hyperparameters if args.hyperparameters is not None else {}
     input_type = args.input_type
-    k = args.components
+    n_components = args.n_components
     kl_annealing_mode = args.kl_annealing_mode
     kl_wu = args.kl_warmup
     entropy_knn = args.entropy_knn
@@ -328,7 +330,7 @@ treatment_dict = deepof.train_utils.load_treatments(train_path)
 # Logs hyperparameters  if specified on the --logparam CLI argument
 logparam = {
     "encoding": encoding_size,
-    "k": k,
+    "k": n_components,
     "loss": loss,
 }
 if next_sequence_prediction:
@@ -340,7 +342,7 @@ if supervised_prediction:
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
-    animal_ids=animal_id.split(","),
+    animal_ids=animal_ids.split(","),
     arena="circular",
     arena_dims=arena_dims,
     enable_iterative_imputation=True,
@@ -440,7 +442,7 @@ if not tune:
         mmd_annealing_mode=mmd_annealing_mode,
         mmd_warmup=mmd_wu,
         montecarlo_kl=mc_kl,
-        n_components=k,
+        n_components=n_components,
         output_path=output_path,
         overlap_loss=overlap_loss,
         next_sequence_prediction=next_sequence_prediction,
@@ -483,7 +485,9 @@ if not tune:
         # Load weights into a newly created model, buit with the current input shape
         if embedding_model == "VQVAE":
             ae_models = deepof.models.VQVAE(
-                input_shape=curr_prep.shape, latent_dim=encoding_size, n_components=k
+                input_shape=curr_prep.shape,
+                latent_dim=encoding_size,
+                n_components=n_components,
             )
             curr_deep_encoder, curr_deep_grouper, curr_ae = (
                 ae_models.encoder,
@@ -495,7 +499,7 @@ if not tune:
             ae_models = deepof.models.GMVAE(
                 input_shape=curr_prep.shape,
                 latent_dim=encoding_size,
-                n_components=k,
+                n_components=n_components,
                 next_sequence_prediction=next_sequence_prediction,
                 phenotype_prediction=phenotype_prediction,
                 supervised_prediction=supervised_prediction,
@@ -519,7 +523,7 @@ if not tune:
 
     with open(
         "csds_unsupervised_encodings_k={}latreg={}_overlap_loss={}_run={}.pkl".format(
-            k, latent_reg, overlap_loss, run
+            n_components, latent_reg, overlap_loss, run
         ),
         "wb",
     ) as x:
@@ -561,7 +565,7 @@ else:
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
-        k=k,
+        k=n_components,
         kl_warmup_epochs=kl_wu,
         loss=loss,
         mmd_warmup_epochs=mmd_wu,
