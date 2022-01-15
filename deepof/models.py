@@ -490,9 +490,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        if not isinstance(y, tuple):
-            y = [y]
-        y = iter(labels)
+        y = iter(y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
@@ -528,9 +526,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        if not isinstance(y, tuple):
-            y = [y]
-        y = iter(labels)
+        y = iter(y)
 
         # Get outputs from the full model
         reconstructions = self.vqvae(x)
@@ -1033,14 +1029,12 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        if not isinstance(y, tuple):
-            y = [y]
-        y = iter(labels)
+        y = iter(y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
             outputs = self.gmvae(x)
-            if isinstance(outputs, list):
+            if isinstance(outputs, tuple):
                 outputs = iter(outputs)
                 reconstructions = next(outputs)
             else:
@@ -1128,13 +1122,15 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        if not isinstance(y, tuple):
-            y = [y]
-        y = iter(labels)
+        y = iter(y)
 
         # Get outputs from the full model
-        outputs = iter(self.gmvae(x))
-        reconstructions = next(outputs)
+        outputs = self.gmvae(x)
+        if isinstance(outputs, tuple):
+            outputs = iter(outputs)
+            reconstructions = next(outputs)
+        else:
+            reconstructions = outputs
 
         # Compute losses
         reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
