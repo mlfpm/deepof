@@ -490,11 +490,13 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(tf.data.Dataset.from_tensors(y))
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            reconstructions = self.call(x)
+            reconstructions = self.vqvae(x)
 
             # Compute losses
             reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
@@ -526,10 +528,12 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(tf.data.Dataset.from_tensors(y))
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         # Get outputs from the full model
-        reconstructions = self.call(x)
+        reconstructions = self.vqvae(x)
 
         # Compute losses
         reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
@@ -1029,14 +1033,16 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(tf.data.Dataset.from_tensors(y))
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            outputs = self.call(x)
-            if isinstance(outputs, tuple):
-                outputs = iter(tf.data.Dataset.from_tensors(outputs))
-                reconstructions = next(outputs)
+            outputs = self.gmvae(x)
+            tf.print(outputs)
+            if isinstance(outputs, list):
+                reconstructions = outputs[0]
             else:
                 reconstructions = outputs
 
@@ -1044,15 +1050,21 @@ class GMVAE(tf.keras.models.Model):
             reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
             if self.next_sequence_prediction:
-                next_seq_predictions = next(outputs)
+                next_seq_predictions = [
+                    out for out in outputs if "predictor" in out.name
+                ][0]
                 next_seq_loss = tf.reduce_mean((next(y) - next_seq_predictions) ** 2)
                 total_loss += self.next_sequence_prediction * next_seq_loss
             if self.phenotype_prediction:
-                pheno_predictions = next(outputs)
+                pheno_predictions = [out for out in outputs if "phenotype" in out.name][
+                    0
+                ]
                 phenotype_loss = tf.reduce_mean((next(y) - pheno_predictions) ** 2)
                 total_loss += self.phenotype_prediction * phenotype_loss
             if self.supervised_prediction:
-                sup_predictions = next(outputs)
+                sup_predictions = [out for out in outputs if "supervised" in out.name][
+                    0
+                ]
                 supervised_loss = tf.reduce_mean((next(y) - sup_predictions) ** 2)
                 total_loss += self.supervised_prediction * supervised_loss
 
@@ -1061,17 +1073,34 @@ class GMVAE(tf.keras.models.Model):
         self.optimizer.apply_gradients(zip(grads, self.gmvae.trainable_variables))
 
         # Track losses
-        metrics = iter(tf.data.Dataset.from_tensors(self.gmvae.metrics))
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.kl_loss_tracker.update_state(next(metrics).result())
-            self.kl_loss_weight_tracker.update_state(next(metrics).result())
+            self.kl_loss_tracker.update_state(
+                [
+                    metric
+                    for metric in self.gmvae.metrics
+                    if metric.name == "kl_divergence"
+                ][0]
+            )
+            self.kl_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+            )
         if "MMD" in self.loss:
-            self.mmd_loss_tracker.update_state(next(metrics).result())
-            self.mmd_loss_weight_tracker.update_state(next(metrics).result())
+            self.mmd_loss_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+            )
+            self.mmd_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
+                    0
+                ]
+            )
         if self.overlap_loss:
-            self.overlap_loss_tracker.update_state(next(metrics).result())
+            self.overlap_loss_tracker.update_state(
+                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
+                    0
+                ]
+            )
         if self.next_sequence_prediction:
             self.next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
@@ -1080,9 +1109,27 @@ class GMVAE(tf.keras.models.Model):
             self.supervised_loss_tracker.update_state(supervised_loss)
 
         # Track control metrics over the latent space
-        self.cluster_population_tracker.update_state(next(metrics).result())
-        self.cluster_confidence_tracker.update_state(next(metrics).result())
-        self.local_cluster_entropy_tracker.update_state(next(metrics).result())
+        self.cluster_population_tracker.update_state(
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "number_of_populated_clusters"
+            ][0].result()
+        )
+        self.cluster_confidence_tracker.update_state(
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "confidence_in_selected_cluster"
+            ][0].result()
+        )
+        self.local_cluster_entropy_tracker.update_state(
+            [
+                metric
+                for metric in self.gmvae.metrics
+                if metric.name == "local_cluster_entropy"
+            ][0].result()
+        )
 
         # Log results (coupled with TensorBoard)
         log_dict = {
@@ -1122,13 +1169,14 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(tf.data.Dataset.from_tensors(y))
+        if not isinstance(y, tuple):
+            y = [y]
+        y = (labels for labels in y)
 
         # Get outputs from the full model
-        outputs = self.call(x)
-        if isinstance(outputs, tuple):
-            outputs = iter(tf.data.Dataset.from_tensors(outputs))
-            reconstructions = next(outputs)
+        outputs = self.gmvae(x)
+        if isinstance(outputs, list):
+            reconstructions = outputs[0]
         else:
             reconstructions = outputs
 
@@ -1136,30 +1184,49 @@ class GMVAE(tf.keras.models.Model):
         reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
         if self.next_sequence_prediction:
-            next_seq_predictions = next(outputs)
+            next_seq_predictions = [out for out in outputs if "predictor" in out.name][
+                0
+            ]
             next_seq_loss = tf.reduce_mean((next(y) - next_seq_predictions) ** 2)
             total_loss += self.next_sequence_prediction * next_seq_loss
         if self.phenotype_prediction:
-            pheno_predictions = next(outputs)
+            pheno_predictions = [out for out in outputs if "phenotype" in out.name][0]
             phenotype_loss = tf.reduce_mean((next(y) - pheno_predictions) ** 2)
             total_loss += self.phenotype_prediction * phenotype_loss
         if self.supervised_prediction:
-            sup_predictions = next(outputs)
+            sup_predictions = [out for out in outputs if "supervised" in out.name][0]
             supervised_loss = tf.reduce_mean((next(y) - sup_predictions) ** 2)
             total_loss += self.supervised_prediction * supervised_loss
 
         # Track losses
-        metrics = iter(tf.data.Dataset.from_tensors(self.gmvae.metrics))
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.val_kl_loss_tracker.update_state(next(metrics).result())
-            self.val_kl_loss_weight_tracker.update_state(next(metrics).result())
+            self.val_kl_loss_tracker.update_state(
+                [
+                    metric
+                    for metric in self.gmvae.metrics
+                    if metric.name == "kl_divergence"
+                ][0]
+            )
+            self.val_kl_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+            )
         if "MMD" in self.loss:
-            self.val_mmd_loss_tracker.update_state(next(metrics).result())
-            self.val_mmd_loss_weight_tracker.update_state(next(metrics).result())
+            self.val_mmd_loss_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+            )
+            self.val_mmd_loss_weight_tracker.update_state(
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
+                    0
+                ]
+            )
         if self.overlap_loss:
-            self.val_overlap_loss_tracker.update_state(next(metrics).result())
+            self.val_overlap_loss_tracker.update_state(
+                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
+                    0
+                ]
+            )
         if self.next_sequence_prediction:
             self.val_next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
