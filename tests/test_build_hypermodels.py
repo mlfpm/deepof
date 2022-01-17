@@ -16,8 +16,6 @@ from keras_tuner import HyperParameters
 import deepof.hypermodels
 import tensorflow as tf
 
-tf.config.run_functions_eagerly(True)
-
 
 @settings(deadline=None, max_examples=10)
 @given(
