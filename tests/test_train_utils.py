@@ -22,6 +22,8 @@ import deepof.data
 import deepof.model_utils
 import deepof.train_utils
 
+tf.config.run_functions_eagerly(False)
+
 
 def test_load_treatments():
     assert deepof.train_utils.load_treatments("tests") is None
