@@ -284,8 +284,8 @@ def test_align_trajectories(data, mode_idx):
         assert np.allclose(aligned, data)
 
 
-@settings(deadline=None)
-@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=1000))))
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
 def test_smooth_boolean_array(a):
     smooth = deepof.utils.smooth_boolean_array(a)
 
