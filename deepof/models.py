@@ -363,10 +363,11 @@ def get_vqvae(
     # Connect encoder and quantizer
     inputs = tf.keras.layers.Input(input_shape, name="encoder_input")
     encoder_outputs = encoder(inputs)
-    quantized_latents = vq_layer(encoder_outputs)
+    quantized_latents, soft_counts = vq_layer(encoder_outputs)
 
     encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
     quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
+    soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
     vqvae = tf.keras.Model(
         quantizer.inputs, decoder([inputs, quantizer.outputs]), name="VQ-VAE"
     )
@@ -375,6 +376,7 @@ def get_vqvae(
         encoder,
         decoder,
         quantizer,
+        soft_quantizer,
         vqvae,
     )
 
@@ -417,7 +419,13 @@ class VQVAE(tf.keras.models.Model):
         self.architecture_hparams = architecture_hparams
 
         # Define VQ_VAE model
-        self.encoder, self.decoder, self.quantizer, self.vqvae = get_vqvae(
+        (
+            self.encoder,
+            self.decoder,
+            self.quantizer,
+            self.soft_quantizer,
+            self.vqvae,
+        ) = get_vqvae(
             self.seq_shape,
             self.latent_dim,
             self.n_components,
@@ -440,11 +448,13 @@ class VQVAE(tf.keras.models.Model):
             name="reconstruction_loss"
         )
         self.vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
+        self.cluster_population = tf.keras.metrics.Mean(name="cluster_population")
         self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
         self.val_vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
+        self.val_cluster_population = tf.keras.metrics.Mean(name="cluster_population")
 
     @tf.function
     def call(self, inputs):
@@ -456,9 +466,11 @@ class VQVAE(tf.keras.models.Model):
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,
             self.vq_loss_tracker,
+            self.cluster_population,
             self.val_total_loss_tracker,
             self.val_reconstruction_loss_tracker,
             self.val_vq_loss_tracker,
+            self.val_cluster_population,
         ]
 
     @property
@@ -506,16 +518,24 @@ class VQVAE(tf.keras.models.Model):
         grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.vqvae.trainable_variables))
 
+        # Compute populated clusters
+        unique_indices = tf.unique(
+            tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
+        ).y
+        populated_clusters = tf.shape(unique_indices)[0] / self.n_components
+
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.vq_loss_tracker.update_state(sum(self.vqvae.losses))
+        self.cluster_population.update_state(populated_clusters)
 
         # Log results (coupled with TensorBoard)
         return {
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
+            "cluster_population": self.cluster_population.result(),
         }
 
     @tf.function
@@ -539,16 +559,24 @@ class VQVAE(tf.keras.models.Model):
         reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
+        # Compute populated clusters
+        unique_indices = tf.unique(
+            tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
+        ).y
+        populated_clusters = tf.shape(unique_indices)[0] / self.n_components
+
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.val_vq_loss_tracker.update_state(sum(self.vqvae.losses))
+        self.val_cluster_population.update_state(populated_clusters)
 
         # Log results (to couple with TensorBoard in future implementations)
         return {
             "loss": self.val_total_loss_tracker.result(),
             "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
             "vq_loss": self.val_vq_loss_tracker.result(),
+            "cluster_population": self.val_cluster_population.result(),
         }
 
     def get_vq_posterior(self):
@@ -1040,7 +1068,6 @@ class GMVAE(tf.keras.models.Model):
         with tf.GradientTape() as tape:
             # Get outputs from the full model
             outputs = self.gmvae(x)
-            tf.print(outputs)
             if isinstance(outputs, list):
                 reconstructions = outputs[0]
             else:

@@ -518,8 +518,15 @@ class VectorQuantizer(tf.keras.layers.Layer):
         flattened = tf.reshape(x, [-1, self.embedding_dim])
 
         # Quantize input using the codebook
-        encoding_indices = tf.cast(self.get_code_indices(flattened), tf.int32)
+        encoding_indices = tf.cast(
+            self.get_code_indices(input_shape, flattened), tf.int32
+        )
+        soft_counts = self.get_code_indices(
+            input_shape, flattened, return_soft_counts=True
+        )
+
         encodings = tf.one_hot(encoding_indices, self.n_components)
+
         quantized = tf.matmul(encodings, self.embeddings, transpose_b=True)
         quantized = tf.reshape(quantized, input_shape)
 
@@ -536,15 +543,18 @@ class VectorQuantizer(tf.keras.layers.Layer):
         # Straight-through estimator (copy gradients through the undiferentiable layer)
         quantized = x + tf.stop_gradient(quantized - x)
 
-        return quantized
+        return quantized, soft_counts
 
-    def get_code_indices(self, flattened_inputs):  # pragma: no cover
+    def get_code_indices(self, input_shape, flattened_inputs, return_soft_counts=False):
         """
 
         Getter for the code indices at any given time.
 
         Args:
+            input_shape (tf.Tensor): input shape
             flattened_inputs (tf.Tensor): flattened input tensor (encoder output)
+            return_soft_counts (bool): whether to return soft counts based on the distance to the codes, instead of
+            the code indices
 
         Returns:
             encoding_indices (tf.Tensor): code indices tensor with cluster assignments.
@@ -558,9 +568,16 @@ class VectorQuantizer(tf.keras.layers.Layer):
             - 2 * similarity
         )
 
-        # Return index of the closest code
-        encoding_indices = tf.argmin(distances, axis=1)
-        return encoding_indices
+        if return_soft_counts:
+            # Compute soft counts based on the distance to the codes
+            similarity = tf.reshape(similarity, [-1, self.n_components])
+            soft_counts = tf.nn.softmax(similarity, axis=1)
+            return soft_counts
+
+        else:
+            # Return index of the closest code
+            encoding_indices = tf.argmin(distances, axis=1)
+            return encoding_indices
 
     def update_posterior_variances(self):  # pragma: no cover
         """

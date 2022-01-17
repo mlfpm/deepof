@@ -15,13 +15,14 @@ import os
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
+embedding_model = ["VQVAE", "GMVAE"]
 warmup_epochs = [15]
 warmup_mode = ["sigmoid"]
 automatic_changepoints = ["rbf"]  # [None, "rbf", "linear"]
-animal_to_preprocess = [None]  # [None, "B", "W"]
+animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
-overlap_loss = [0.0, 0.1]  # [0.1, 0.2, 0.5, 0.75, 1.]
-encodings = [4]  # [2, 4, 6, 8, 10, 12, 14, 16]
+overlap_loss = [0.0, 0.25]  # [0.1, 0.2, 0.5, 0.75, 1.]
+encodings = [4, 8, 16]  # [2, 4, 6, 8, 10, 12, 14, 16]
 cluster_numbers = list(range(5, 21))  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["categorical+variance"]
 entropy_knn = [10]

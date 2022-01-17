@@ -498,6 +498,8 @@ if not tune:
         elif embedding_model == "GMVAE":
             ae_models = deepof.models.GMVAE(
                 input_shape=curr_prep.shape,
+                batch_size=batch_size,
+                loss=loss,
                 latent_dim=encoding_size,
                 n_components=n_components,
                 next_sequence_prediction=next_sequence_prediction,
@@ -522,8 +524,8 @@ if not tune:
         deep_assignments_per_video[key] = curr_deep_grouper.predict(curr_prep)
 
     with open(
-        "csds_unsupervised_encodings_k={}latreg={}_overlap_loss={}_run={}.pkl".format(
-            n_components, latent_reg, overlap_loss, run
+        "deepof_{}_csds_unsupervised_encodings_k={}latreg={}_overlap_loss={}_run={}.pkl".format(
+            embedding_model, n_components, latent_reg, overlap_loss, run
         ),
         "wb",
     ) as x:
