@@ -181,6 +181,9 @@ def test_dense_transpose():
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")))
 def test_KLDivergenceLayer(annealing_mode):
+
+    tf.config.run_functions_eagerly(True)
+
     X = tf.random.uniform([10, 2], 0, 10)
     y = np.random.randint(0, 1, [10, 1])
 
@@ -225,6 +228,8 @@ def test_KLDivergenceLayer(annealing_mode):
     fit = test_model.fit(X, [y, y], epochs=1, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
     assert test_model.losses[0] == test_model.losses[1]
+
+    tf.config.run_functions_eagerly(False)
 
 
 # noinspection PyUnresolvedReferences
