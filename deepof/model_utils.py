@@ -29,26 +29,26 @@ tfpl = tfp.layers
 
 # Helper functions and classes
 @tf.function
-def log_loss(x_true, p_x_q_given_z):
-    """
-
-    Computes the negative log likelihood of the data given
-    the output distribution
-
-    Args:
-        x_true: the true input
-        p_x_q_given_z: reconstruction using the output distribution
-
-    Returns:
-        the negative log likelihood
-
-    """
-
-    return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
+# def log_loss(x_true, p_x_q_given_z):
+#     """
+#
+#     Computes the negative log likelihood of the data given
+#     the output distribution
+#
+#     Args:
+#         x_true: the true input
+#         p_x_q_given_z: reconstruction using the output distribution
+#
+#     Returns:
+#         the negative log likelihood
+#
+#     """
+#
+#     return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
 
 
 @tf.function
-def compute_shannon_entropy(tensor):
+def compute_shannon_entropy(tensor):  # pragma: no cover
     """
 
     Computes Shannon entropy for a given tensor
@@ -70,7 +70,7 @@ def compute_shannon_entropy(tensor):
 
 
 @tf.function
-def get_k_nearest_neighbors(tensor, k, index):
+def get_k_nearest_neighbors(tensor, k, index):  # pragma: no cover
     """
 
     Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index
@@ -92,7 +92,7 @@ def get_k_nearest_neighbors(tensor, k, index):
 
 
 @tf.function
-def get_neighbourhood_entropy(index, tensor, clusters, k):
+def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
     """
 
     Computes the neighbourhood entropy for a given vector in a tensor.
@@ -203,7 +203,7 @@ def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     plt.ylabel("Loss")
 
 
-def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
+def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:  # pragma: no cover
     """
 
     Computes the MMD between the two specified vectors using a gaussian kernel.
@@ -234,7 +234,7 @@ def compute_kernel(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:
+def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:  # pragma: no cover
     """
 
     Computes the MMD between the two specified vectors using a gaussian kernel.
@@ -500,7 +500,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
             name="codebook_posterior_scale",
         )
 
-    def call(self, x):
+    def call(self, x):  # pragma: no cover
         """
 
         Computes the VQ layer.
@@ -538,7 +538,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
         return quantized
 
-    def get_code_indices(self, flattened_inputs):
+    def get_code_indices(self, flattened_inputs):  # pragma: no cover
         """
 
         Getter for the code indices at any given time.
@@ -562,7 +562,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
         encoding_indices = tf.argmin(distances, axis=1)
         return encoding_indices
 
-    def update_posterior_variances(self):
+    def update_posterior_variances(self):  # pragma: no cover
         """
 
         Updates the posterior variances of the codebook (not used while training, only later as a way
@@ -703,7 +703,7 @@ class MCDropout(tf.keras.layers.Dropout):
 
     """
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs):  # pragma: no cover
         """
 
         Overrides the call method of the subclassed function
@@ -760,7 +760,7 @@ class DenseTranspose(Layer):
         )
         super().build(batch_input_shape)
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, **kwargs):  # pragma: no cover
         """Updates Layer's call method"""
 
         z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
@@ -814,7 +814,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         config.update({"_annealing_mode": self._annealing_mode})
         return config
 
-    def call(self, distribution_a):
+    def call(self, distribution_a):  # pragma: no cover
         """
 
         Updates Layer's call method
@@ -908,7 +908,7 @@ class MMDiscrepancyLayer(Layer):
         config.update({"_annealing_mode": self._annealing_mode})
         return config
 
-    def call(self, z, **kwargs):
+    def call(self, z, **kwargs):  # pragma: no cover
         """
 
         Updates Layer's call method
@@ -997,7 +997,7 @@ class ClusterOverlap(Layer):
         config.update({"min_confidence": self.min_confidence})
         return config
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, **kwargs):  # pragma: no cover
         """
 
         Updates Layer's call method
