@@ -490,11 +490,11 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(y)
+        y = iter(tf.data.Dataset.from_tensors(y))
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            reconstructions = self.vqvae(x)
+            reconstructions = self.call(x)
 
             # Compute losses
             reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
@@ -526,10 +526,10 @@ class VQVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(y)
+        y = iter(tf.data.Dataset.from_tensors(y))
 
         # Get outputs from the full model
-        reconstructions = self.vqvae(x)
+        reconstructions = self.call(x)
 
         # Compute losses
         reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
@@ -1029,13 +1029,13 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(y)
+        y = iter(tf.data.Dataset.from_tensors(y))
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            outputs = self.gmvae(x)
+            outputs = self.call(x)
             if isinstance(outputs, tuple):
-                outputs = iter(outputs)
+                outputs = iter(tf.data.Dataset.from_tensors(outputs))
                 reconstructions = next(outputs)
             else:
                 reconstructions = outputs
@@ -1061,17 +1061,17 @@ class GMVAE(tf.keras.models.Model):
         self.optimizer.apply_gradients(zip(grads, self.gmvae.trainable_variables))
 
         # Track losses
-        metrics = iter(self.gmvae.metrics)
+        metrics = iter(tf.data.Dataset.from_tensors(self.gmvae.metrics))
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.kl_loss_tracker.update_state(next(metrics))
-            self.kl_loss_weight_tracker.update_state(next(metrics))
+            self.kl_loss_tracker.update_state(next(metrics).result())
+            self.kl_loss_weight_tracker.update_state(next(metrics).result())
         if "MMD" in self.loss:
-            self.mmd_loss_tracker.update_state(next(metrics))
-            self.mmd_loss_weight_tracker.update_state(next(metrics))
+            self.mmd_loss_tracker.update_state(next(metrics).result())
+            self.mmd_loss_weight_tracker.update_state(next(metrics).result())
         if self.overlap_loss:
-            self.overlap_loss_tracker.update_state(next(metrics))
+            self.overlap_loss_tracker.update_state(next(metrics).result())
         if self.next_sequence_prediction:
             self.next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
@@ -1122,12 +1122,12 @@ class GMVAE(tf.keras.models.Model):
 
         # Unpack data, repacking labels into a generator
         x, y = data
-        y = iter(y)
+        y = iter(tf.data.Dataset.from_tensors(y))
 
         # Get outputs from the full model
-        outputs = self.gmvae(x)
+        outputs = self.call(x)
         if isinstance(outputs, tuple):
-            outputs = iter(outputs)
+            outputs = iter(tf.data.Dataset.from_tensors(outputs))
             reconstructions = next(outputs)
         else:
             reconstructions = outputs
@@ -1149,17 +1149,17 @@ class GMVAE(tf.keras.models.Model):
             total_loss += self.supervised_prediction * supervised_loss
 
         # Track losses
-        metrics = iter(self.gmvae.metrics)
+        metrics = iter(tf.data.Dataset.from_tensors(self.gmvae.metrics))
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.loss:
-            self.val_kl_loss_tracker.update_state(next(metrics))
-            self.val_kl_loss_weight_tracker.update_state(next(metrics))
+            self.val_kl_loss_tracker.update_state(next(metrics).result())
+            self.val_kl_loss_weight_tracker.update_state(next(metrics).result())
         if "MMD" in self.loss:
-            self.val_mmd_loss_tracker.update_state(next(metrics))
-            self.val_mmd_loss_weight_tracker.update_state(next(metrics))
+            self.val_mmd_loss_tracker.update_state(next(metrics).result())
+            self.val_mmd_loss_weight_tracker.update_state(next(metrics).result())
         if self.overlap_loss:
-            self.val_overlap_loss_tracker.update_state(next(metrics))
+            self.val_overlap_loss_tracker.update_state(next(metrics).result())
         if self.next_sequence_prediction:
             self.val_next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
