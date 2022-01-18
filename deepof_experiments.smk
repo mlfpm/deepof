@@ -51,34 +51,13 @@ rule deepof_experiments:
         #
         # Train a variety of models
         expand(
-            outpath + "train_models/trained_weights/"
-            "deepof_"
-            "GMVAE_input_type={input_type}_"
-            "NSPred={nspredweight}_"
-            "PPred={phenpredweight}_"
-            "SupPred={supervisedweight}_"
-            "loss={loss}_"
-            "overlap_loss={overlap_loss}_"
-            "loss_warmup={warmup}_"
-            "warmup_mode={warmup_mode}_"
-            "encoding={encs}_"
-            "k={k}_"
-            "latreg={latreg}_"
-            "entknn={entknn}_"
-            "run={run}_"
-            "final_weights.h5",
+            outpath
+            + "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latreg={}_overlap_loss={}_run={}.pkl",
+            embedding_model=embedding_model,
             input_type=input_types,
-            loss=losses,
-            overlap_loss=overlap_loss,
-            warmup=warmup_epochs,
-            warmup_mode=warmup_mode,
-            encs=encodings,
             k=cluster_numbers,
             latreg=latent_reg,
-            entknn=entropy_knn,
-            nspredweight=next_sequence_pred_weights,
-            phenpredweight=phenotype_pred_weights,
-            supervisedweight=supervised_pred_weights,
+            overlap_loss=overlap_loss,
             run=run,
         ),
 
@@ -131,24 +110,11 @@ rule train_models:
             "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/Data_for_deepof_SI/JB08_files_SI"
         ),
     output:
-        trained_models=outpath + "train_models/trained_weights/"
-        "deepof_"
-        "GMVAE_input_type={input_type}_"
-        "NSPred={nspredweight}_"
-        "PPred={phenpredweight}_"
-        "SupPred={supervisedweight}_"
-        "loss={loss}_"
-        "overlap_loss={overlap_loss}_"
-        "loss_warmup={warmup}_"
-        "warmup_mode={warmup_mode}_"
-        "encoding={encs}_"
-        "k={k}_"
-        "latreg={latreg}_"
-        "entknn={entknn}_"
-        "run={run}_"
-        "final_weights.h5",
+        trained_models=outpath
+        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
+        "--embedding-model {wildcards.embedding_model} "
         "--train-path {input.data_path} "
         "--val-num 5 "
         "--animal-id B,W "
