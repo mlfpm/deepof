@@ -519,10 +519,11 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
         # Quantize input using the codebook
         encoding_indices = tf.cast(
-            self.get_code_indices(input_shape, flattened), tf.int32
+            self.get_code_indices(
+                flattened, return_soft_counts=False), tf.int32
         )
         soft_counts = self.get_code_indices(
-            input_shape, flattened, return_soft_counts=True
+            flattened, return_soft_counts=True
         )
 
         encodings = tf.one_hot(encoding_indices, self.n_components)
@@ -545,7 +546,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
         return quantized, soft_counts
 
-    def get_code_indices(self, input_shape, flattened_inputs, return_soft_counts=False):
+    def get_code_indices(self, flattened_inputs, return_soft_counts=False): # pragma: no cover
         """
 
         Getter for the code indices at any given time.
