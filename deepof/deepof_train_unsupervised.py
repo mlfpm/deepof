@@ -526,8 +526,14 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latreg={}_overlap_loss={}_run={}.pkl".format(
-                embedding_model, input_type, n_components, latent_reg, overlap_loss, run
+            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_overlap_loss={}_run={}.pkl".format(
+                embedding_model,
+                input_type,
+                n_components,
+                encoding_size,
+                latent_reg,
+                overlap_loss,
+                run,
             ),
         ),
         "wb",

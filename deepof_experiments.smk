@@ -23,14 +23,14 @@ animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]  # , "MMD", "ELBO+MMD"]
 overlap_loss = [0.0, 0.25]  # [0.1, 0.2, 0.5, 0.75, 1.]
 encodings = [4, 8, 16]  # [2, 4, 6, 8, 10, 12, 14, 16]
-cluster_numbers = list(range(5, 21))  # [1, 5, 10, 15, 20, 25]
+cluster_numbers = [6, 12, 18]  # list(range(5, 21))  # [1, 5, 10, 15, 20, 25]
 latent_reg = ["categorical+variance"]
 entropy_knn = [10]
 next_sequence_pred_weights = [0.0]
 phenotype_pred_weights = [0.0]
 supervised_pred_weights = [0.0]
 input_types = ["coords"]
-run = list(range(1, 4))
+run = [1]  # Zlist(range(1, 4))
 
 
 rule deepof_experiments:
@@ -52,10 +52,11 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latreg={}_overlap_loss={}_run={}.pkl",
+            + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
             embedding_model=embedding_model,
             input_type=input_types,
             k=cluster_numbers,
+            latdim=encodings,
             latreg=latent_reg,
             overlap_loss=overlap_loss,
             run=run,
@@ -107,11 +108,11 @@ rule coarse_hyperparameter_tuning:
 rule train_models:
     input:
         data_path=ancient(
-            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/Data_for_deepof_SI/JB08_files_SI"
+            "/u/lucasmir/Projects/DLC/DeepOF/Projects/DeepOF_Stress_paper/Tagged_videos/Data_for_deepof_SI/JB08_files_SI",
         ),
     output:
         trained_models=outpath
-        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
+        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--embedding-model {wildcards.embedding_model} "
@@ -122,19 +123,19 @@ rule train_models:
         "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
         "--components {wildcards.k} "
         "--input-type {wildcards.input_type} "
-        "--next-sequence-prediction {wildcards.nspredweight} "
-        "--phenotype-prediction {wildcards.phenpredweight} "
-        "--supervised-prediction {wildcards.supervisedweight} "
+        "--next-sequence-prediction 0.0 "
+        "--phenotype-prediction 0.0 "
+        "--supervised-prediction 0.0 "
         "--latent-reg {wildcards.latreg} "
-        "--loss {wildcards.loss} "
+        "--loss ELBO "
         "--overlap-loss {wildcards.overlap_loss} "
-        "--kl-annealing-mode {wildcards.warmup_mode} "
-        "--kl-warmup {wildcards.warmup} "
-        "--mmd-annealing-mode {wildcards.warmup_mode} "
-        "--mmd-warmup {wildcards.warmup} "
+        "--kl-annealing-mode sigmoid "
+        "--kl-warmup 15 "
+        "--mmd-annealing-mode sigmoid "
+        "--mmd-warmup 15 "
         "--montecarlo-kl 10 "
-        "--encoding-size {wildcards.encs} "
-        "--entropy-knn {wildcards.entknn} "
+        "--encoding-size {wildcards.latdim} "
+        "--entropy-knn 10 "
         "--batch-size 64 "
         "--window-size 5 "
         "--window-step 1 "
