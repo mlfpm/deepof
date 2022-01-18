@@ -121,7 +121,7 @@ rule train_models:
         "--animal-id B,W "
         "--animal-to-preprocess B "
         "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
-        "--components {wildcards.k} "
+        "--n-components {wildcards.k} "
         "--input-type {wildcards.input_type} "
         "--next-sequence-prediction 0.0 "
         "--phenotype-prediction 0.0 "
