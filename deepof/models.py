@@ -524,12 +524,8 @@ class VQVAE(tf.keras.models.Model):
         ).y
         populated_clusters = tf.shape(unique_indices)[0]
 
-        # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
-        # can stop training.
-        has_not_collapsed = tf.cast(populated_clusters > 1, tf.float32)
-
         # Track losses
-        self.total_loss_tracker.update_state(total_loss / (has_not_collapsed + 1e-8))
+        self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.cluster_population.update_state(populated_clusters)
@@ -572,6 +568,7 @@ class VQVAE(tf.keras.models.Model):
         # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
         # can stop training.
         has_not_collapsed = tf.cast(populated_clusters > 1, tf.float32)
+        tf.print(has_not_collapsed)
 
         # Track losses
         self.val_total_loss_tracker.update_state(
