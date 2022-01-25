@@ -466,7 +466,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
         self.beta = beta
 
         # Initialize embeddings
-        w_init = tf.random_uniform_initializer()
+        w_init = tf.random_normal_initializer(stddev=1.0 / self.embedding_dim)
         self.embeddings = tf.Variable(
             initial_value=w_init(
                 shape=(self.embedding_dim, self.n_components), dtype="float32"
