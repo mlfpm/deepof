@@ -29,25 +29,6 @@ tfpl = tfp.layers
 
 # Helper functions and classes
 @tf.function
-# def log_loss(x_true, p_x_q_given_z):
-#     """
-#
-#     Computes the negative log likelihood of the data given
-#     the output distribution
-#
-#     Args:
-#         x_true: the true input
-#         p_x_q_given_z: reconstruction using the output distribution
-#
-#     Returns:
-#         the negative log likelihood
-#
-#     """
-#
-#     return -tf.reduce_sum(p_x_q_given_z.log_prob(x_true))
-
-
-@tf.function
 def compute_shannon_entropy(tensor):  # pragma: no cover
     """
 
