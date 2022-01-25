@@ -522,11 +522,11 @@ class VQVAE(tf.keras.models.Model):
         unique_indices = tf.unique(
             tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
         ).y
-        populated_clusters = tf.shape(unique_indices)[0] / self.n_components
+        populated_clusters = tf.shape(unique_indices)[0]
 
         # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
         # can stop training.
-        has_not_collapsed = tf.cast(populated_clusters >= 0.25, tf.float32)
+        has_not_collapsed = tf.cast(populated_clusters > 1, tf.float32)
 
         # Track losses
         self.total_loss_tracker.update_state(total_loss / (has_not_collapsed + 1e-8))
@@ -567,11 +567,11 @@ class VQVAE(tf.keras.models.Model):
         unique_indices = tf.unique(
             tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
         ).y
-        populated_clusters = tf.shape(unique_indices)[0] / self.n_components
+        populated_clusters = tf.shape(unique_indices)[0]
 
         # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
         # can stop training.
-        has_not_collapsed = tf.cast(populated_clusters >= 0.25, tf.float32)
+        has_not_collapsed = tf.cast(populated_clusters > 1, tf.float32)
 
         # Track losses
         self.val_total_loss_tracker.update_state(
