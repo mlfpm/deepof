@@ -514,21 +514,22 @@ class VQVAE(tf.keras.models.Model):
             reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
+        # Backpropagation
+        grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, self.vqvae.trainable_variables))
+
         # Compute populated clusters
         unique_indices = tf.unique(
             tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
         ).y
         populated_clusters = tf.shape(unique_indices)[0] / self.n_components
 
-        # Backpropagation if posterior has not collapsed
-        if populated_clusters > 0.25:
-            # If posterior has collapsed, we don't backpropagate and just
-            # return the loss. Early stopping will terminate training.
-            grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
-            self.optimizer.apply_gradients(zip(grads, self.vqvae.trainable_variables))
+        # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
+        # can stop training.
+        has_not_collapsed = tf.cast(populated_clusters >= 0.25, tf.float32)
 
         # Track losses
-        self.total_loss_tracker.update_state(total_loss)
+        self.total_loss_tracker.update_state(total_loss / (has_not_collapsed + 1e-8))
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.cluster_population.update_state(populated_clusters)
@@ -568,8 +569,14 @@ class VQVAE(tf.keras.models.Model):
         ).y
         populated_clusters = tf.shape(unique_indices)[0] / self.n_components
 
+        # Flag if the codebook has collapsed. If so, the loss is increased so that EarlyStopping
+        # can stop training.
+        has_not_collapsed = tf.cast(populated_clusters >= 0.25, tf.float32)
+
         # Track losses
-        self.val_total_loss_tracker.update_state(total_loss)
+        self.val_total_loss_tracker.update_state(
+            total_loss / (has_not_collapsed + 1e-8)
+        )
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.val_vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.val_cluster_population.update_state(populated_clusters)
