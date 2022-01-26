@@ -108,37 +108,6 @@ def test_compute_mmd(tensor):
 
 
 # noinspection PyUnresolvedReferences
-def test_one_cycle_scheduler():
-    cycle1 = deepof.model_utils.one_cycle_scheduler(
-        iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
-    )
-    assert isinstance(cycle1._interpolate(1, 2, 0.2, 0.5), float)
-
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    onecycle = deepof.model_utils.one_cycle_scheduler(
-        X.shape[0] // 100 * 10,
-        max_rate=0.005,
-    )
-
-    fit = test_model.fit(
-        X, y, callbacks=[onecycle], epochs=10, batch_size=100, verbose=0
-    )
-    assert isinstance(fit, tf.keras.callbacks.History)
-    assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
-    assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
-
-
-# noinspection PyUnresolvedReferences
 def test_MCDropout():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
@@ -277,22 +246,6 @@ def test_MMDiscrepancyLayer(annealing_mode):
 
     fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
     assert isinstance(fit, tf.keras.callbacks.History)
-
-
-def test_find_learning_rate():
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-    test_model.build(X.shape)
-
-    deepof.model_utils.find_learning_rate(test_model, X, y)
 
 
 def test_mean_variance_regularizer():

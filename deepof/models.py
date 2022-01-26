@@ -393,7 +393,7 @@ class VQVAE(tf.keras.models.Model):
         input_shape: tuple,
         latent_dim: int = 32,
         n_components: int = 15,
-        beta: float = 0.4,
+        beta: float = 0.8,
         architecture_hparams: dict = None,
         **kwargs,
     ):

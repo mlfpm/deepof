@@ -33,6 +33,73 @@ def test_load_treatments():
     )
 
 
+# noinspection PyUnresolvedReferences
+def test_one_cycle_scheduler():
+    cycle1 = deepof.train_utils.OneCycleScheduler(
+        iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
+    )
+    assert isinstance(cycle1._interpolate(1, 2, 0.2, 0.5), float)
+
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    onecycle = deepof.train_utils.OneCycleScheduler(
+        X.shape[0] // 100 * 10,
+        max_rate=0.005,
+    )
+
+    fit = test_model.fit(
+        X, y, callbacks=[onecycle], epochs=10, batch_size=100, verbose=0
+    )
+    assert isinstance(fit, tf.keras.callbacks.History)
+    assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
+    assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
+
+
+def test_find_learning_rate():
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
+    )
+    test_model.build(X.shape)
+
+    deepof.train_utils.find_learning_rate(test_model, X, y)
+
+
+def test_mode_collapse_control():
+    mode_collapse = deepof.train_utils.ModeCollapseControl(monitor="loss")
+
+    X = np.random.uniform(0, 10, [1500, 5])
+    y = np.random.randint(0, 2, [1500, 1])
+
+    test_model = tf.keras.Sequential()
+    test_model.add(tf.keras.layers.Dense(1))
+
+    test_model.compile(
+        loss=tf.keras.losses.binary_crossentropy,
+        optimizer=tf.keras.optimizers.SGD(),
+    )
+
+    fit = test_model.fit(
+        X, y, callbacks=[mode_collapse], epochs=10, batch_size=100, verbose=0
+    )
+    assert isinstance(fit, tf.keras.callbacks.History)
+
+
 @given(
     X_train=arrays(
         shape=st.tuples(st.integers(min_value=1, max_value=1000), st.just(24)),
@@ -80,7 +147,7 @@ def test_get_callbacks(
         [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
     )
     assert np.any(
-        [isinstance(i, deepof.model_utils.one_cycle_scheduler) for i in callbacks]
+        [isinstance(i, deepof.model_utils.OneCycleScheduler) for i in callbacks]
     )
 
 

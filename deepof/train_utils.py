@@ -19,7 +19,7 @@ from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
-import deepof.model_utils
+import deepof.train_utils
 
 # Ignore warning with no downstream effect
 tf.get_logger().setLevel("ERROR")
@@ -89,6 +89,255 @@ def load_treatments(train_path):
         treatment_dict = None
 
     return treatment_dict
+
+
+class ExponentialLearningRate(tf.keras.callbacks.Callback):
+    """
+
+    Simple class that allows to grow learning rate exponentially during training
+
+    """
+
+    def __init__(self, factor: float):
+        """
+
+        Initializes the exponential learning rate callback
+
+        Args:
+            factor(float): factor by which to multiply the learning rate
+
+        """
+        super().__init__()
+        self.factor = factor
+        self.rates = []
+        self.losses = []
+
+    # noinspection PyMethodOverriding
+    def on_batch_end(self, batch: int, logs: dict):
+        """
+
+        This callback acts after processing each batch
+
+        Args:
+            batch (int): current batch number
+            logs (dict): dictionary containing the loss for the current batch
+
+        """
+
+        self.rates.append(K.get_value(self.model.optimizer.lr))
+        self.losses.append(logs["loss"])
+        K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
+
+
+def find_learning_rate(
+    model, X, y, epochs=1, batch_size=32, min_rate=10 ** -5, max_rate=10
+):
+    """
+
+    Trains the provided model for an epoch with an exponentially increasing learning rate
+
+    Args:
+        model (tf.keras.Model): model to train
+        X (tf.Tensor): tensor containing the input data
+        y (tf.Tensor): tensor containing the target data
+        epochs (int): number of epochs to train the model for
+        batch_size (int): batch size to use for training
+        min_rate (float): minimum learning rate to consider
+        max_rate (float): maximum learning rate to consider
+
+    Returns:
+        float: learning rate that resulted in the lowest loss
+
+    """
+
+    init_weights = model.get_weights()
+    iterations = len(X) // batch_size * epochs
+    factor = K.exp(K.log(max_rate / min_rate) / iterations)
+    init_lr = K.get_value(model.optimizer.lr)
+    K.set_value(model.optimizer.lr, min_rate)
+    exp_lr = ExponentialLearningRate(factor)
+    model.fit(X, y, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
+    K.set_value(model.optimizer.lr, init_lr)
+    model.set_weights(init_weights)
+    return exp_lr.rates, exp_lr.losses
+
+
+# Custom auxiliary classes
+class OneCycleScheduler(tf.keras.callbacks.Callback):
+    """
+
+    One cycle learning rate scheduler.
+    Based on https://arxiv.org/pdf/1506.01186.pdf
+
+    """
+
+    def __init__(
+        self,
+        iterations: int,
+        max_rate: float,
+        start_rate: float = None,
+        last_iterations: int = None,
+        last_rate: float = None,
+        log_dir: str = ".",
+    ):
+        """
+
+        Initializes the scheduler.
+
+        Args:
+            iterations (int): number of iterations to train for
+            max_rate (float): maximum learning rate
+            start_rate (float): starting learning rate
+            last_iterations (int): number of iterations to train for at the last rate
+            last_rate (float): learning rate at the last iteration
+            log_dir (str): directory to save the learning rate to
+
+        """
+        super().__init__()
+        self.iterations = iterations
+        self.max_rate = max_rate
+        self.start_rate = start_rate or max_rate / 10
+        self.last_iterations = last_iterations or iterations // 10 + 1
+        self.half_iteration = (iterations - self.last_iterations) // 2
+        self.last_rate = last_rate or self.start_rate / 1000
+        self.iteration = 0
+        self.history = {}
+        self.log_dir = log_dir
+
+    def _interpolate(self, iter1: int, iter2: int, rate1: float, rate2: float) -> float:
+        return (rate2 - rate1) * (self.iteration - iter1) / (iter2 - iter1) + rate1
+
+    # noinspection PyMethodOverriding,PyTypeChecker
+    def on_batch_begin(self, batch: int, logs: dict):
+        """
+
+        Defines computations to perform for each batch
+
+        Args:
+            batch (int): current batch number
+            logs (dict): dictionary of logs
+
+        """
+
+        self.history.setdefault("lr", []).append(K.get_value(self.model.optimizer.lr))
+
+        if self.iteration < self.half_iteration:
+            rate = self._interpolate(
+                0, self.half_iteration, self.start_rate, self.max_rate
+            )
+        elif self.iteration < 2 * self.half_iteration:
+            rate = self._interpolate(
+                self.half_iteration,
+                2 * self.half_iteration,
+                self.max_rate,
+                self.start_rate,
+            )
+        else:
+            rate = self._interpolate(
+                2 * self.half_iteration,
+                self.iterations,
+                self.start_rate,
+                self.last_rate,
+            )
+            rate = max(rate, self.last_rate)
+        self.iteration += 1
+        K.set_value(self.model.optimizer.lr, rate)
+
+    def on_epoch_end(self, epoch: int, logs: dict = None):
+        """
+
+        Logs the learning rate to tensorboard
+
+        Args:
+           epoch (int): current epoch number
+           logs (dict): dictionary of logs
+
+        """
+
+        writer = tf.summary.create_file_writer(self.log_dir)
+
+        with writer.as_default():
+            tf.summary.scalar(
+                "learning_rate",
+                data=self.model.optimizer.lr,
+                step=epoch,
+            )
+
+
+# Custom auxiliary classes
+# noinspection PyAttributeOutsideInit
+class ModeCollapseControl(tf.keras.callbacks.Callback):
+    """
+
+    Callback to control the mode collapse in VQVAE models.
+
+    """
+
+    def __init__(
+        self,
+        min_delta: float = 3,
+        monitor: str = "val_cluster_population",
+    ):
+        """
+
+        Initializes the callback.
+
+        Args:
+            min_delta (int): minimum populated clusters delta between epochs to consider to stop training.
+            monitor (str): name of the metric to monitor.
+
+        """
+        super().__init__()
+        self.min_delta = min_delta
+        self.monitor = monitor
+
+    def on_train_begin(self, logs=None):
+        # Allow instances to be re-used
+        self.stopped_epoch = 0
+        self.last_metric_value = None
+        self.best_weights = None
+
+    def on_epoch_end(self, epoch: int, logs: dict = None):
+        """
+
+        Logs the learning rate to tensorboard
+
+        Args:
+           epoch (int): current epoch number
+           logs (dict): dictionary of logs
+
+        """
+
+        current = logs.get(self.monitor)
+
+        if current is None:
+            # Use training metric if validation data is not provided
+            current = logs.get(self.monitor.replace("val_", ""))
+
+            if current is None:
+                raise ValueError(
+                    "Early stopping requires {} available!".format(self.monitor)
+                )
+
+        # Check for complete collapse (only one cluster is currently populated)
+        if current == 1:
+            self.model.stop_training = True
+
+        # Check for a significant drop (of at least min_delta with respect to the last epoch)
+        if epoch > 1:
+            delta = self.last_metric_value - current
+            if delta > self.min_delta:
+                self.model.stop_training = True
+
+        self.last_metric_value = current
+
+        # Restore best weights if training was stopped
+        if self.model.stop_training:
+            self.stopped_epoch = epoch
+            self.model.set_weights(self.best_weights)
+
+        else:
+            self.best_weights = self.model.get_weights()
 
 
 def get_callbacks(
@@ -189,13 +438,18 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    onecycle = deepof.model_utils.one_cycle_scheduler(
+    onecycle = deepof.train_utils.OneCycleScheduler(
         X_train.shape[0] // batch_size * 250,
         max_rate=0.005,
         log_dir=os.path.join(outpath, "metrics", run_ID),
     )
 
     callbacks = [run_ID, tensorboard_callback, onecycle]
+
+    # Add mode collapse callback for VQVAE models
+    if embedding_model == "VQVAE":
+        mode_collapse_callback = deepof.train_utils.ModeCollapseCallback()
+        callbacks.append(mode_collapse_callback)
 
     if cp:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(
