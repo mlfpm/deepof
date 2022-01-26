@@ -285,7 +285,7 @@ def get_vqvae(
     input_shape: tuple,
     latent_dim: int,
     n_components: int,
-    beta: float = 0.1,
+    beta: float = 0.8,
     conv_filters=64,
     dense_layers=1,
     dense_activation="relu",
@@ -393,7 +393,7 @@ class VQVAE(tf.keras.models.Model):
         input_shape: tuple,
         latent_dim: int = 32,
         n_components: int = 15,
-        beta: float = 0.1,
+        beta: float = 0.4,
         architecture_hparams: dict = None,
         **kwargs,
     ):

@@ -480,26 +480,14 @@ def autoencoder_fitting(
         ae.load_weights(pretrained)
         return return_list
 
-    if embedding_model == "GMVAE":
-        callbacks_ = cbacks + [
-            CustomStopper(
-                monitor="val_loss",
-                patience=15,
-                restore_best_weights=True,
-                start_epoch=max(kl_warmup, mmd_warmup),
-            ),
-        ]
-    elif embedding_model == "VQVAE":
-        callbacks_ = cbacks + [
-            CustomStopper(
-                monitor="val_cluster_population",
-                patience=10,
-                restore_best_weights=True,
-                start_epoch=25,
-            ),
-        ]
-
-    # Fit model
+    callbacks_ = cbacks + [
+        CustomStopper(
+            monitor="val_loss",
+            patience=15,
+            restore_best_weights=True,
+            start_epoch=max(kl_warmup, mmd_warmup),
+        ),
+    ]
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
