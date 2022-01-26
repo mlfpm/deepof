@@ -512,19 +512,17 @@ class VQVAE(tf.keras.models.Model):
 
             # Compute losses
             reconstruction_loss = tf.reduce_mean((next(y) - reconstructions) ** 2)
-
-            # Compute populated clusters
-            unique_indices = tf.unique(
-                tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
-            ).y
-            populated_clusters = tf.shape(unique_indices)[0]
-            cluster_population_loss = self.n_components - populated_clusters
-
-            total_loss = reconstruction_loss + cluster_population_loss + sum(self.vqvae.losses)
+            total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Backpropagation
         grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.vqvae.trainable_variables))
+
+        # Compute populated clusters
+        unique_indices = tf.unique(
+            tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
+        ).y
+        populated_clusters = tf.shape(unique_indices)[0]
 
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
