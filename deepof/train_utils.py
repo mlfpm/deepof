@@ -359,6 +359,7 @@ def get_callbacks(
     logparam: dict = None,
     outpath: str = ".",
     run: int = False,
+    tuning: bool = False,
 ) -> List[Union[Any]]:
     """
 
@@ -383,6 +384,7 @@ def get_callbacks(
         logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
         outpath (str): Path to the output directory
         run (int): Run number to use for checkpointing
+        tuning (bool): Whether the callbacks will be used for hyperparameter tuning or not.
 
     Returns:
         List[Union[Any]]: List of callbacks to be used for training
@@ -447,7 +449,7 @@ def get_callbacks(
     callbacks = [run_ID, tensorboard_callback, onecycle]
 
     # Add mode collapse callback for VQVAE models
-    if embedding_model == "VQVAE":
+    if embedding_model == "VQVAE" and tuning==False:
         mode_collapse_callback = deepof.train_utils.ModeCollapseControl()
         callbacks.append(mode_collapse_callback)
 

@@ -248,6 +248,7 @@ def test_tune_search(
             entropy_knn=5,
             outpath="unsupervised_tuner_search",
             logparam={"encoding": 16, "k": 5},
+            tuning=True,
         )
     )[1:]
 

@@ -11,12 +11,13 @@ usage: python -m examples.model_training -h
 
 import argparse
 import os
+import pickle
+
+import numpy as np
 
 import deepof.data
 import deepof.train_utils
 import deepof.utils
-import numpy as np
-import pickle
 
 parser = argparse.ArgumentParser(
     description="Autoencoder training for DeepOF animal pose recognition"
@@ -567,6 +568,7 @@ else:
         outpath=output_path,
         overlap_loss=overlap_loss,
         run=run,
+        tuning=True,
     )
 
     best_hyperparameters, best_model = deepof.train_utils.tune_search(
