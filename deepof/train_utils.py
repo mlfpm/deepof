@@ -15,11 +15,11 @@ from typing import Tuple, Union, Any, List
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
-import deepof.train_utils
 
 # Ignore warning with no downstream effect
 tf.get_logger().setLevel("ERROR")
@@ -329,15 +329,15 @@ class ModeCollapseControl(tf.keras.callbacks.Callback):
             if delta > self.min_delta:
                 self.model.stop_training = True
 
-        self.last_metric_value = current
-
-        # Restore best weights if training was stopped
-        if self.model.stop_training:
-            self.stopped_epoch = epoch
-            self.model.set_weights(self.best_weights)
+            # Restore best weights if training was stopped
+            if self.model.stop_training:
+                self.stopped_epoch = epoch
+                self.model.set_weights(self.best_weights)
 
         else:
             self.best_weights = self.model.get_weights()
+
+        self.last_metric_value = current
 
 
 def get_callbacks(
@@ -448,7 +448,7 @@ def get_callbacks(
 
     # Add mode collapse callback for VQVAE models
     if embedding_model == "VQVAE":
-        mode_collapse_callback = deepof.train_utils.ModeCollapseCallback()
+        mode_collapse_callback = deepof.train_utils.ModeCollapseControl()
         callbacks.append(mode_collapse_callback)
 
     if cp:

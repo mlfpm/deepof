@@ -147,7 +147,7 @@ def test_get_callbacks(
         [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
     )
     assert np.any(
-        [isinstance(i, deepof.model_utils.OneCycleScheduler) for i in callbacks]
+        [isinstance(i, deepof.train_utils.OneCycleScheduler) for i in callbacks]
     )
 
 
@@ -195,7 +195,7 @@ def test_autoencoder_fitting(
         log_history=True,
         log_hparams=True,
         mmd_warmup=1,
-        n_components=2,
+        n_components=5,
         loss=loss,
         overlap_loss=0.1,
         next_sequence_prediction=next_sequence_prediction,
@@ -247,7 +247,7 @@ def test_tune_search(
             overlap_loss=overlap_loss,
             entropy_knn=5,
             outpath="unsupervised_tuner_search",
-            logparam={"encoding": 2, "k": 5},
+            logparam={"encoding": 16, "k": 5},
         )
     )[1:]
 
@@ -255,7 +255,7 @@ def test_tune_search(
         data=[X_train, y_train, X_train, y_train],
         batch_size=25,
         embedding_model=embedding_model,
-        encoding_size=2,
+        encoding_size=16,
         hpt_type=hpt_type,
         hypertun_trials=1,
         k=5,

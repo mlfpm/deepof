@@ -104,8 +104,6 @@
 </li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.DenseTranspose.__init__">(deepof.model_utils.DenseTranspose method)</a>
 </li>
-        <li><a href="deepof.model_utils.html#deepof.model_utils.exponential_learning_rate.__init__">(deepof.model_utils.exponential_learning_rate method)</a>
-</li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.GaussianMixtureLatent.__init__">(deepof.model_utils.GaussianMixtureLatent method)</a>
 </li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.KLDivergenceLayer.__init__">(deepof.model_utils.KLDivergenceLayer method)</a>
@@ -114,8 +112,6 @@
 </li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.MMDiscrepancyLayer.__init__">(deepof.model_utils.MMDiscrepancyLayer method)</a>
 </li>
-        <li><a href="deepof.model_utils.html#deepof.model_utils.one_cycle_scheduler.__init__">(deepof.model_utils.one_cycle_scheduler method)</a>
-</li>
         <li><a href="deepof.model_utils.html#deepof.model_utils.VectorQuantizer.__init__">(deepof.model_utils.VectorQuantizer method)</a>
 </li>
         <li><a href="deepof.models.html#deepof.models.GMVAE.__init__">(deepof.models.GMVAE method)</a>
@@ -123,6 +119,12 @@
         <li><a href="deepof.models.html#deepof.models.VQVAE.__init__">(deepof.models.VQVAE method)</a>
 </li>
         <li><a href="deepof.train_utils.html#deepof.train_utils.CustomStopper.__init__">(deepof.train_utils.CustomStopper method)</a>
+</li>
+        <li><a href="deepof.train_utils.html#deepof.train_utils.ExponentialLearningRate.__init__">(deepof.train_utils.ExponentialLearningRate method)</a>
+</li>
+        <li><a href="deepof.train_utils.html#deepof.train_utils.ModeCollapseControl.__init__">(deepof.train_utils.ModeCollapseControl method)</a>
+</li>
+        <li><a href="deepof.train_utils.html#deepof.train_utils.OneCycleScheduler.__init__">(deepof.train_utils.OneCycleScheduler method)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -310,7 +312,7 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.exponential_learning_rate">exponential_learning_rate (class in deepof.model_utils)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.ExponentialLearningRate">ExponentialLearningRate (class in deepof.train_utils)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -326,7 +328,7 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.find_learning_rate">find_learning_rate() (in module deepof.model_utils)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.find_learning_rate">find_learning_rate() (in module deepof.train_utils)</a>
 </li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.following_path">following_path() (in module deepof.pose_utils)</a>
 </li>
@@ -462,13 +464,11 @@
 </li>
       <li><a href="deepof.data.html#deepof.data.Project.load_tables">load_tables() (deepof.data.Project method)</a>
 </li>
-      <li><a href="deepof.train_utils.html#deepof.train_utils.load_treatments">load_treatments() (in module deepof.train_utils)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.train_utils.html#deepof.train_utils.log_hyperparameters">log_hyperparameters() (in module deepof.train_utils)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.load_treatments">load_treatments() (in module deepof.train_utils)</a>
 </li>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.log_loss">log_loss() (in module deepof.model_utils)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.log_hyperparameters">log_hyperparameters() (in module deepof.train_utils)</a>
 </li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.look_around">look_around() (in module deepof.pose_utils)</a>
 </li>
@@ -495,6 +495,8 @@
 </li>
       </ul></li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.MMDiscrepancyLayer">MMDiscrepancyLayer (class in deepof.model_utils)</a>
+</li>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.ModeCollapseControl">ModeCollapseControl (class in deepof.train_utils)</a>
 </li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.GaussianMixtureLatent.model">model (deepof.model_utils.GaussianMixtureLatent property)</a>
 </li>
@@ -533,19 +535,23 @@
 <h2 id="O">O</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.one_cycle_scheduler.on_batch_begin">on_batch_begin() (deepof.model_utils.one_cycle_scheduler method)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.OneCycleScheduler.on_batch_begin">on_batch_begin() (deepof.train_utils.OneCycleScheduler method)</a>
 </li>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.exponential_learning_rate.on_batch_end">on_batch_end() (deepof.model_utils.exponential_learning_rate method)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.ExponentialLearningRate.on_batch_end">on_batch_end() (deepof.train_utils.ExponentialLearningRate method)</a>
 </li>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.one_cycle_scheduler.on_epoch_end">on_epoch_end() (deepof.model_utils.one_cycle_scheduler method)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.CustomStopper.on_epoch_end">on_epoch_end() (deepof.train_utils.CustomStopper method)</a>
 
       <ul>
-        <li><a href="deepof.train_utils.html#deepof.train_utils.CustomStopper.on_epoch_end">(deepof.train_utils.CustomStopper method)</a>
+        <li><a href="deepof.train_utils.html#deepof.train_utils.ModeCollapseControl.on_epoch_end">(deepof.train_utils.ModeCollapseControl method)</a>
+</li>
+        <li><a href="deepof.train_utils.html#deepof.train_utils.OneCycleScheduler.on_epoch_end">(deepof.train_utils.OneCycleScheduler method)</a>
 </li>
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.model_utils.html#deepof.model_utils.one_cycle_scheduler">one_cycle_scheduler (class in deepof.model_utils)</a>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.ModeCollapseControl.on_train_begin">on_train_begin() (deepof.train_utils.ModeCollapseControl method)</a>
+</li>
+      <li><a href="deepof.train_utils.html#deepof.train_utils.OneCycleScheduler">OneCycleScheduler (class in deepof.train_utils)</a>
 </li>
       <li><a href="deepof.pose_utils.html#deepof.pose_utils.outside_ellipse">outside_ellipse() (in module deepof.pose_utils)</a>
 </li>

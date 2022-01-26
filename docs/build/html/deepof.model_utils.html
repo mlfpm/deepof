@@ -70,24 +70,6 @@
 <p>Functions, layers, regularizers, and general utilities for the unsupervised models within the deepof package.
 See deepof.models for details on the currently supported architectures.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="deepof.model_utils.log_loss">
-<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">log_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_true</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_x_q_given_z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.log_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the negative log likelihood of the data given
-the output distribution</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x_true</strong> – the true input</p></li>
-<li><p><strong>p_x_q_given_z</strong> – reconstruction using the output distribution</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the negative log likelihood</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_shannon_entropy">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_shannon_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_shannon_entropy" title="Permalink to this definition"></a></dt>
 <dd><p>Computes Shannon entropy for a given tensor</p>
@@ -143,63 +125,6 @@ the output distribution</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>tf.Tensor</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">exponential_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.callbacks.Callback</span></code></p>
-<p>Simple class that allows to grow learning rate exponentially during training</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initializes the exponential learning rate callback</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>factor</strong> (<em>float</em>) – factor by which to multiply the learning rate</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.model_utils.exponential_learning_rate.on_batch_end">
-<span class="sig-name descname"><span class="pre">on_batch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.exponential_learning_rate.on_batch_end" title="Permalink to this definition"></a></dt>
-<dd><p>This callback acts after processing each batch</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<em>int</em>) – current batch number</p></li>
-<li><p><strong>logs</strong> (<em>dict</em>) – dictionary containing the loss for the current batch</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="deepof.model_utils.find_learning_rate">
-<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">find_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.find_learning_rate" title="Permalink to this definition"></a></dt>
-<dd><p>Trains the provided model for an epoch with an exponentially increasing learning rate</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> (<em>tf.keras.Model</em>) – model to train</p></li>
-<li><p><strong>X</strong> (<em>tf.Tensor</em>) – tensor containing the input data</p></li>
-<li><p><strong>y</strong> (<em>tf.Tensor</em>) – tensor containing the target data</p></li>
-<li><p><strong>epochs</strong> (<em>int</em>) – number of epochs to train the model for</p></li>
-<li><p><strong>batch_size</strong> (<em>int</em>) – batch size to use for training</p></li>
-<li><p><strong>min_rate</strong> (<em>float</em>) – minimum learning rate to consider</p></li>
-<li><p><strong>max_rate</strong> (<em>float</em>) – maximum learning rate to consider</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>learning rate that resulted in the lowest loss</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
 </dd>
 </dl>
 </dd></dl>
@@ -346,11 +271,16 @@ neural network layers.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.VectorQuantizer.get_code_indices">
-<span class="sig-name descname"><span class="pre">get_code_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flattened_inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.get_code_indices" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_code_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flattened_inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_soft_counts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.VectorQuantizer.get_code_indices" title="Permalink to this definition"></a></dt>
 <dd><p>Getter for the code indices at any given time.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>flattened_inputs</strong> (<em>tf.Tensor</em>) – flattened input tensor (encoder output)</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tf.Tensor</em>) – input shape</p></li>
+<li><p><strong>flattened_inputs</strong> (<em>tf.Tensor</em>) – flattened input tensor (encoder output)</p></li>
+<li><p><strong>return_soft_counts</strong> (<em>bool</em>) – whether to return soft counts based on the distance to the codes, instead of</p></li>
+<li><p><strong>indices</strong> (<em>the code</em>) – </p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>code indices tensor with cluster assignments.</p>
@@ -371,68 +301,14 @@ of sampling the latent space.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">one_cycle_scheduler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.callbacks.Callback</span></code></p>
-<p>One cycle learning rate scheduler.
-Based on <a class="reference external" href="https://arxiv.org/pdf/1506.01186.pdf">https://arxiv.org/pdf/1506.01186.pdf</a></p>
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initializes the scheduler.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>iterations</strong> (<em>int</em>) – number of iterations to train for</p></li>
-<li><p><strong>max_rate</strong> (<em>float</em>) – maximum learning rate</p></li>
-<li><p><strong>start_rate</strong> (<em>float</em>) – starting learning rate</p></li>
-<li><p><strong>last_iterations</strong> (<em>int</em>) – number of iterations to train for at the last rate</p></li>
-<li><p><strong>last_rate</strong> (<em>float</em>) – learning rate at the last iteration</p></li>
-<li><p><strong>log_dir</strong> (<em>str</em>) – directory to save the learning rate to</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_batch_begin">
-<span class="sig-name descname"><span class="pre">on_batch_begin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_batch_begin" title="Permalink to this definition"></a></dt>
-<dd><p>Defines computations to perform for each batch</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<em>int</em>) – current batch number</p></li>
-<li><p><strong>logs</strong> (<em>dict</em>) – dictionary of logs</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.model_utils.one_cycle_scheduler.on_epoch_end">
-<span class="sig-name descname"><span class="pre">on_epoch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.one_cycle_scheduler.on_epoch_end" title="Permalink to this definition"></a></dt>
-<dd><p>Logs the learning rate to tensorboard</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>epoch</strong> (<em>int</em>) – current epoch number</p></li>
-<li><p><strong>logs</strong> (<em>dict</em>) – dictionary of logs</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="deepof.model_utils.MCDropout">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">MCDropout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MCDropout" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">keras.layers.core.Dropout</span></code></p>
-<p>Equivalent to tf.keras.layers.Dropout, but with training mode enabled at prediction time.
+<p>Equivalent to tf.keras.layers.Dropout, th training mode enabled at prediction time.
 Useful for Montecarlo predictions</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.MCDropout.call">
-<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MCDropout.call" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.MCDropout.call" title="Permalink to this definition"></a></dt>
 <dd><p>Overrides the call method of the subclassed function</p>
 </dd></dl>
 
