@@ -500,7 +500,7 @@ if not tune:
             ae_models = deepof.models.GMVAE(
                 input_shape=curr_prep.shape,
                 batch_size=batch_size,
-                loss=loss,
+                latent_loss=loss,
                 latent_dim=encoding_size,
                 n_components=n_components,
                 next_sequence_prediction=next_sequence_prediction,

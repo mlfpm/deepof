@@ -256,7 +256,7 @@ class GMVAE(HyperModel):
             latent_dim=self.latent_dim,
             batch_size=self.batch_size,
             kl_warmup_epochs=self.kl_warmup_epochs,
-            loss=self.loss,
+            latent_loss=self.loss,
             mmd_warmup_epochs=self.mmd_warmup_epochs,
             n_components=k,
             overlap_loss=self.overlap_loss,

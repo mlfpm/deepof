@@ -449,7 +449,7 @@ def get_callbacks(
     callbacks = [run_ID, tensorboard_callback, onecycle]
 
     # Add mode collapse callback for VQVAE models
-    if embedding_model == "VQVAE" and tuning==False:
+    if embedding_model == "VQVAE" and tuning == False:
         mode_collapse_callback = deepof.train_utils.ModeCollapseControl()
         callbacks.append(mode_collapse_callback)
 
@@ -710,7 +710,7 @@ def autoencoder_fitting(
                 latent_dim=encoding_size,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
-                loss=loss,
+                latent_loss=loss,
                 mmd_annealing_mode=mmd_annealing_mode,
                 mmd_warmup_epochs=mmd_warmup,
                 montecarlo_kl=montecarlo_kl,

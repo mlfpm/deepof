@@ -11,17 +11,13 @@ deep autoencoder models for unsupervised pose detection. Currently, two main mod
 
 """
 
-from typing import Dict, Tuple
-
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model, Sequential
-from tensorflow.keras.activations import softplus
-from tensorflow.keras.initializers import he_uniform, random_uniform
+from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import BatchNormalization, Bidirectional
 from tensorflow.keras.layers import Dense, Dropout, GRU
-from tensorflow.keras.layers import RepeatVector, Reshape
+from tensorflow.keras.layers import RepeatVector
 from tensorflow.keras.optimizers import Nadam
 from tensorflow_addons.layers import SpectralNormalization
 
@@ -715,7 +711,7 @@ def get_gmvae(
         n_components=n_components,
         latent_dim=latent_dim,
         batch_size=batch_size,
-        loss=loss,
+        latent_loss=loss,
         kl_warmup=kl_warmup,
         kl_annealing_mode=kl_annealing_mode,
         mc_kl=mc_kl,
@@ -815,7 +811,7 @@ class GMVAE(tf.keras.models.Model):
         latent_dim: int = 4,
         kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 20,
-        loss: str = "ELBO",
+        latent_loss: str = "ELBO",
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 20,
         montecarlo_kl: int = 10,
@@ -840,7 +836,7 @@ class GMVAE(tf.keras.models.Model):
             latent_dim (int): Dimensionality of the latent space.
             kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
             kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
-            loss (str): Loss function to use. Can be one of 'ELBO', 'MMD', and 'ELBO+MMD'.
+            latent_loss (str): Loss function to use. Can be one of 'ELBO', 'MMD', and 'ELBO+MMD'.
             mmd_annealing_mode (str): Annealing mode for MMD annealing. Can be one of 'linear' and 'sigmoid'.
             mmd_warmup_epochs (int): Number of epochs to warmup MMD annealing.
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
@@ -867,7 +863,7 @@ class GMVAE(tf.keras.models.Model):
         self.latent_dim = latent_dim
         self.kl_annealing_mode = kl_annealing_mode
         self.kl_warmup = kl_warmup_epochs
-        self.loss = loss
+        self.latent_loss = latent_loss
         self.mc_kl = montecarlo_kl
         self.mmd_annealing_mode = mmd_annealing_mode
         self.mmd_warmup = mmd_warmup_epochs
@@ -883,7 +879,7 @@ class GMVAE(tf.keras.models.Model):
         self.architecture_hparams = architecture_hparams
 
         assert (
-            "ELBO" in self.loss or "MMD" in self.loss
+            "ELBO" in self.latent_loss or "MMD" in self.latent_loss
         ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
 
         # Define GMVAE model
@@ -892,7 +888,7 @@ class GMVAE(tf.keras.models.Model):
             self.n_components,
             self.latent_dim,
             self.batch_size,
-            self.loss,
+            self.latent_loss,
             self.kl_warmup,
             self.kl_annealing_mode,
             self.mc_kl,
@@ -929,12 +925,12 @@ class GMVAE(tf.keras.models.Model):
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
             self.kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
             self.val_kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
             self.val_kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             self.mmd_loss_tracker = tf.keras.metrics.Mean(name="mmd_loss")
             self.mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
             self.val_mmd_loss_tracker = tf.keras.metrics.Mean(name="mmd_loss")
@@ -988,10 +984,10 @@ class GMVAE(tf.keras.models.Model):
             self.val_total_loss_tracker,
             self.val_reconstruction_loss_tracker,
         ]
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             metrics += [self.kl_loss_tracker, self.kl_loss_weight_tracker]
             metrics += [self.val_kl_loss_tracker, self.val_kl_loss_weight_tracker]
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             metrics += [self.mmd_loss_tracker, self.mmd_loss_weight_tracker]
             metrics += [self.val_mmd_loss_tracker, self.val_mmd_loss_weight_tracker]
         if self.overlap_loss:
@@ -1102,25 +1098,29 @@ class GMVAE(tf.keras.models.Model):
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             self.kl_loss_tracker.update_state(
                 [
                     metric
                     for metric in self.gmvae.metrics
                     if metric.name == "kl_divergence"
-                ][0]
+                ][0].result()
             )
             self.kl_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][
+                    0
+                ].result()
             )
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             self.mmd_loss_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][
+                    0
+                ].result()
             )
             self.mmd_loss_weight_tracker.update_state(
                 [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
                     0
-                ]
+                ].result()
             )
         if self.overlap_loss:
             self.overlap_loss_tracker.update_state(
@@ -1168,10 +1168,10 @@ class GMVAE(tf.keras.models.Model):
         }
 
         # Add optional metrics to final log dict
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             log_dict["kl_loss"] = self.kl_loss_tracker.result()
             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             log_dict["mmd_loss"] = self.mmd_loss_tracker.result()
             log_dict["mmd_weight"] = self.mmd_loss_weight_tracker.result()
         if self.overlap_loss:
@@ -1228,25 +1228,29 @@ class GMVAE(tf.keras.models.Model):
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             self.val_kl_loss_tracker.update_state(
                 [
                     metric
                     for metric in self.gmvae.metrics
                     if metric.name == "kl_divergence"
-                ][0]
+                ][0].result()
             )
             self.val_kl_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][0]
+                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][
+                    0
+                ].result()
             )
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             self.val_mmd_loss_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][0]
+                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][
+                    0
+                ].result()
             )
             self.val_mmd_loss_weight_tracker.update_state(
                 [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
                     0
-                ]
+                ].result()
             )
         if self.overlap_loss:
             self.val_overlap_loss_tracker.update_state(
@@ -1271,10 +1275,10 @@ class GMVAE(tf.keras.models.Model):
         }
 
         # Add optional metrics to final log dict
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             log_dict["kl_loss"] = self.val_kl_loss_tracker.result()
             log_dict["kl_weight"] = self.val_kl_loss_weight_tracker.result()
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             log_dict["mmd_loss"] = self.val_mmd_loss_tracker.result()
             log_dict["mmd_weight"] = self.val_mmd_loss_weight_tracker.result()
         if self.overlap_loss:

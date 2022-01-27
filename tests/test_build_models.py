@@ -11,9 +11,9 @@ Testing module for deepof.models
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-import deepof.models
+
 import deepof.model_utils
-import tensorflow as tf
+import deepof.models
 
 
 @settings(deadline=None, max_examples=25)
@@ -54,7 +54,7 @@ def test_GMVAE_build(
     gmvae = deepof.models.GMVAE(
         input_shape=(1000, 15, 10),
         batch_size=64,
-        loss=loss,
+        latent_loss=loss,
         kl_warmup_epochs=kl_warmup_epochs,
         mmd_warmup_epochs=mmd_warmup_epochs,
         montecarlo_kl=montecarlo_kl,

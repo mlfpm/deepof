@@ -10,11 +10,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
 import sys
 
 sys.path.insert(0, "../../")
-import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
 
@@ -60,7 +58,7 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 # Change the icon displayed in the sidebar and the web browser tab for the docs
-html_favicon = 'deepof.ico'
+html_favicon = "deepof.ico"
 
 # Autodoc default configuration
 autodoc_default_options = {

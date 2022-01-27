@@ -17,9 +17,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import backend as K
 from tensorflow.keras.initializers import he_uniform, random_uniform
-from tensorflow.keras.layers import Layer, Input, BatchNormalization
-from tensorflow.keras.layers import Bidirectional, Dense, Dropout
-from tensorflow.keras.layers import GRU, RepeatVector, Reshape
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Layer, Input
+from tensorflow.keras.layers import Reshape
 from tensorflow.keras.models import Model
 
 tfb = tfp.bijectors
@@ -187,7 +187,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         n_components: int,
         latent_dim: int,
         batch_size: int,
-        loss: str = "ELBO",
+        latent_loss: str = "ELBO",
         kl_warmup: int = 10,
         kl_annealing_mode: str = "linear",
         mc_kl: int = 10,
@@ -208,7 +208,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             n_components (int): number of components in the Gaussian mixture.
             latent_dim (int): dimensionality of the latent space.
             batch_size (int): batch size for training.
-            loss (str): loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD".
+            latent_loss (str): loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD".
             kl_warmup (int): number of epochs to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
@@ -228,7 +228,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.n_components = n_components
         self.latent_dim = latent_dim
         self.batch_size = batch_size
-        self.loss = loss
+        self.latent_loss = latent_loss
         self.kl_warmup = kl_warmup
         self.kl_annealing_mode = kl_annealing_mode
         self.mc_kl = mc_kl
@@ -321,7 +321,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z = self.latent_distribution([z_cat, z_gauss])
 
         # Define and control custom loss functions
-        if "ELBO" in self.loss:
+        if "ELBO" in self.latent_loss:
             kl_warm_up_iters = tf.cast(
                 self.kl_warmup * (self.seq_shape[0] // self.batch_size + 1),
                 tf.int64,
@@ -337,7 +337,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 annealing_mode=self.kl_annealing_mode,
             )(z)
 
-        if "MMD" in self.loss:
+        if "MMD" in self.latent_loss:
             mmd_warm_up_iters = tf.cast(
                 self.mmd_warmup * (self.seq_shape[0] // self.batch_size + 1),
                 tf.int64,
