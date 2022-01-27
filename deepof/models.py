@@ -810,7 +810,7 @@ class GMVAE(tf.keras.models.Model):
         batch_size: int = 64,
         latent_dim: int = 4,
         kl_annealing_mode: str = "sigmoid",
-        kl_warmup_epochs: int = 20,
+        kl_warmup_epochs: int = 10,
         latent_loss: str = "ELBO",
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 20,
