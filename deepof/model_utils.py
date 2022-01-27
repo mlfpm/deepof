@@ -193,7 +193,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         mc_kl: int = 10,
         mmd_warmup: int = 10,
         mmd_annealing_mode: str = "linear",
-        optimizer: tf.keras.optimizers.Optimizer = tf.keras.optimizers.Adam(),
+        optimizer: tf.keras.optimizers.Optimizer = None,
         overlap_loss: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
@@ -365,7 +365,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
     @property
     def model(self):
         x = Input(self.seq_shape[1:])
-        return Model(inputs=x, outputs=self.call(x), name="gaussian_mixture_latent")
+        gm_model = Model(inputs=x, outputs=self.call(x), name="gaussian_mixture_latent")
+        gm_model.optimizer = self.optimizer
+        return gm_model
 
 
 class VectorQuantizer(tf.keras.layers.Layer):
