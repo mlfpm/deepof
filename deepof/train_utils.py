@@ -559,8 +559,7 @@ def autoencoder_fitting(
 ):
     """
 
-    Implementation function for deepof.data.coordinates.deep_unsupervised_embedding. Trains the specified autoencoder
-    on the preprocessed data.
+    Trains the specified autoencoder on the preprocessed data.
 
     Args:
         preprocessed_object (tuple): Tuple containing the preprocessed data.
@@ -694,6 +693,9 @@ def autoencoder_fitting(
                 latent_dim=encoding_size,
                 n_components=n_components,
             )
+            ae_full_model.optimizer = tf.keras.optimizers.Nadam(
+                learning_rate=1e-4, clipvalue=0.75
+            )
             encoder, decoder, quantizer, ae = (
                 ae_full_model.encoder,
                 ae_full_model.decoder,
@@ -781,9 +783,7 @@ def autoencoder_fitting(
         .with_options(options)
     )
 
-    ae_full_model.compile(
-        optimizer=tf.keras.optimizers.Nadam(learning_rate=1e-4, clipvalue=0.75)
-    )
+    ae_full_model.compile(optimizer=ae_full_model.optimizer)
     ae_full_model.fit(
         x=train_dataset,
         epochs=epochs,

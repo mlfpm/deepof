@@ -621,9 +621,6 @@ def get_gmvae(
     mc_kl: int = 10,
     mmd_warmup: int = 15,
     mmd_annealing_mode: str = "linear",
-    optimizer: tf.keras.optimizers.Optimizer = tf.keras.optimizers.Nadam(
-        learning_rate=1e-4, clipvalue=0.75
-    ),
     overlap_loss: float = 0.0,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
@@ -657,8 +654,6 @@ def get_gmvae(
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
-            optimizer (tf.keras.optimizers.Optimizer): optimizer to use for training. The layer needs access to it in
-            order to compute the KL and MMD annealing weights.
             overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
@@ -717,12 +712,11 @@ def get_gmvae(
         mc_kl=mc_kl,
         mmd_warmup=mmd_warmup,
         mmd_annealing_mode=mmd_annealing_mode,
-        optimizer=optimizer,
         overlap_loss=overlap_loss,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         name="gaussian_mixture_latent",
-    ).model
+    )
     decoder = get_deepof_decoder(
         input_shape[1:],
         latent_dim,
@@ -884,24 +878,23 @@ class GMVAE(tf.keras.models.Model):
 
         # Define GMVAE model
         self.encoder, self.decoder, self.grouper, self.gmvae = get_gmvae(
-            self.seq_shape,
-            self.n_components,
-            self.latent_dim,
-            self.batch_size,
-            self.latent_loss,
-            self.kl_warmup,
-            self.kl_annealing_mode,
-            self.mc_kl,
-            self.mmd_warmup,
-            self.mmd_annealing_mode,
-            self.optimizer,
-            self.overlap_loss,
-            self.reg_cat_clusters,
-            self.reg_cluster_variance,
-            self.next_sequence_prediction,
-            self.phenotype_prediction,
-            self.supervised_prediction,
-            self.supervised_features,
+            input_shape=self.seq_shape,
+            n_components=self.n_components,
+            latent_dim=self.latent_dim,
+            batch_size=self.batch_size,
+            loss=self.latent_loss,
+            kl_warmup=self.kl_warmup,
+            kl_annealing_mode=self.kl_annealing_mode,
+            mc_kl=self.mc_kl,
+            mmd_warmup=self.mmd_warmup,
+            mmd_annealing_mode=self.mmd_annealing_mode,
+            overlap_loss=self.overlap_loss,
+            reg_cat_clusters=self.reg_cat_clusters,
+            reg_cluster_variance=self.reg_cluster_variance,
+            next_sequence_prediction=self.next_sequence_prediction,
+            phenotype_prediction=self.phenotype_prediction,
+            supervised_prediction=self.supervised_prediction,
+            supervised_features=self.supervised_features,
             conv_filters=self.hparams["conv_filters"],
             dense_layers=self.hparams["dense_layers"],
             dense_activation=self.hparams["dense_activation"],
@@ -913,6 +906,9 @@ class GMVAE(tf.keras.models.Model):
             bidirectional_merge=self.hparams["bidirectional_merge"],
             dropout_rate=self.hparams["dropout_rate"],
         )
+        # Propagate the optimizer to all relevant sub-models, to enable metric annealing
+        self.gmvae.optimizer = self.optimizer
+        self.gmvae.get_layer("gaussian_mixture_latent").optimizer = self.optimizer
 
         # Define metrics to track
 
@@ -1102,25 +1098,29 @@ class GMVAE(tf.keras.models.Model):
             self.kl_loss_tracker.update_state(
                 [
                     metric
-                    for metric in self.gmvae.metrics
+                    for metric in self.gmvae.get_layer(
+                        "gaussian_mixture_latent"
+                    ).metrics
                     if metric.name == "kl_divergence"
                 ][0].result()
             )
+            # noinspection PyProtectedMember
             self.kl_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][
-                    0
-                ].result()
+                self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
             )
         if "MMD" in self.latent_loss:
             self.mmd_loss_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][
-                    0
-                ].result()
+                [
+                    metric
+                    for metric in self.gmvae.get_layer(
+                        "gaussian_mixture_latent"
+                    ).metrics
+                    if metric.name == "mmd"
+                ][0].result()
             )
+            # noinspection PyProtectedMember
             self.mmd_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
-                    0
-                ].result()
+                self.gmvae.get_layer("gaussian_mixture_latent").mmd_layer._mmd_weight
             )
         if self.overlap_loss:
             self.overlap_loss_tracker.update_state(
@@ -1139,21 +1139,21 @@ class GMVAE(tf.keras.models.Model):
         self.cluster_population_tracker.update_state(
             [
                 metric
-                for metric in self.gmvae.metrics
+                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
                 if metric.name == "number_of_populated_clusters"
             ][0].result()
         )
         self.cluster_confidence_tracker.update_state(
             [
                 metric
-                for metric in self.gmvae.metrics
+                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
                 if metric.name == "confidence_in_selected_cluster"
             ][0].result()
         )
         self.local_cluster_entropy_tracker.update_state(
             [
                 metric
-                for metric in self.gmvae.metrics
+                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
                 if metric.name == "local_cluster_entropy"
             ][0].result()
         )
@@ -1237,9 +1237,7 @@ class GMVAE(tf.keras.models.Model):
                 ][0].result()
             )
             self.val_kl_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "kl_rate"][
-                    0
-                ].result()
+                self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
             )
         if "MMD" in self.latent_loss:
             self.val_mmd_loss_tracker.update_state(
@@ -1248,9 +1246,12 @@ class GMVAE(tf.keras.models.Model):
                 ].result()
             )
             self.val_mmd_loss_weight_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd_rate"][
-                    0
-                ].result()
+                # noinspection PyProtectedMember
+                self.mmd_loss_weight_tracker.update_state(
+                    self.gmvae.get_layer(
+                        "gaussian_mixture_latent"
+                    ).mmd_layer._mmd_weight
+                )
             )
         if self.overlap_loss:
             self.val_overlap_loss_tracker.update_state(

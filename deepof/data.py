@@ -31,7 +31,6 @@ from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
-from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
@@ -1106,12 +1105,12 @@ class Coordinates:
         epochs: int = 50,
         hparams: dict = None,
         kl_annealing_mode: str = "linear",
-        kl_warmup: int = 0,
+        kl_warmup: int = 15,
         log_history: bool = True,
         log_hparams: bool = False,
         loss: str = "ELBO",
         mmd_annealing_mode: str = "linear",
-        mmd_warmup: int = 0,
+        mmd_warmup: int = 15,
         montecarlo_kl: int = 10,
         n_components: int = 10,
         overlap_loss: float = 0,

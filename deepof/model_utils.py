@@ -18,9 +18,9 @@ import tensorflow_probability as tfp
 from tensorflow.keras import backend as K
 from tensorflow.keras.initializers import he_uniform, random_uniform
 from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Layer, Input
+from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Reshape
-from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Nadam
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -188,12 +188,11 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         latent_dim: int,
         batch_size: int,
         latent_loss: str = "ELBO",
-        kl_warmup: int = 10,
+        kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
         mc_kl: int = 10,
-        mmd_warmup: int = 10,
+        mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
-        optimizer: tf.keras.optimizers.Optimizer = None,
         overlap_loss: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
@@ -214,8 +213,6 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
-            optimizer (tf.keras.optimizers.Optimizer): optimizer to use for training. The layer needs access to it in
-            order to compute the KL and MMD annealing weights.
             overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
@@ -234,8 +231,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.mc_kl = mc_kl
         self.mmd_warmup = mmd_warmup
         self.mmd_annealing_mode = mmd_annealing_mode
-        self.optimizer = optimizer
         self.overlap_loss = overlap_loss
+        self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
 
@@ -304,6 +301,39 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 ),
             ),
         )
+        self.cluster_overlap_layer = ClusterOverlap(
+            batch_size=self.batch_size,
+            encoding_dim=self.latent_dim,
+            k=self.n_components,
+            loss_weight=self.overlap_loss,
+        )
+
+        # Initialize metric layers
+        if "ELBO" in self.latent_loss:
+            self.kl_warm_up_iters = tf.cast(
+                self.kl_warmup * (self.seq_shape[0] // self.batch_size),
+                tf.int64,
+            )
+            self.kl_layer = KLDivergenceLayer(
+                distribution_b=self.prior,
+                test_points_fn=lambda q: q.sample(self.mc_kl),
+                test_points_reduce_axis=0,
+                iters=self.optimizer.iterations,
+                warm_up_iters=self.kl_warm_up_iters,
+                annealing_mode=self.kl_annealing_mode,
+            )
+        if "MMD" in self.latent_loss:
+            self.mmd_warm_up_iters = tf.cast(
+                self.mmd_warmup * (self.seq_shape[0] // self.batch_size),
+                tf.int64,
+            )
+            self.mmd_layer = MMDiscrepancyLayer(
+                batch_size=self.batch_size,
+                prior=self.prior,
+                iters=self.optimizer.iterations,
+                warm_up_iters=self.mmd_warm_up_iters,
+                annealing_mode=self.mmd_annealing_mode,
+            )
 
     def call(self, inputs):
         """
@@ -322,52 +352,25 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         # Define and control custom loss functions
         if "ELBO" in self.latent_loss:
-            kl_warm_up_iters = tf.cast(
-                self.kl_warmup * (self.seq_shape[0] // self.batch_size + 1),
-                tf.int64,
-            )
+
+            # Update KL weight based on the current iteration
+            self.kl_layer._iters = self.optimizer.iterations
 
             # noinspection PyCallingNonCallable
-            z = KLDivergenceLayer(
-                distribution_b=self.prior,
-                test_points_fn=lambda q: q.sample(self.mc_kl),
-                test_points_reduce_axis=0,
-                iters=self.optimizer.iterations,
-                warm_up_iters=kl_warm_up_iters,
-                annealing_mode=self.kl_annealing_mode,
-            )(z)
+            z = self.kl_layer(z)
 
         if "MMD" in self.latent_loss:
-            mmd_warm_up_iters = tf.cast(
-                self.mmd_warmup * (self.seq_shape[0] // self.batch_size + 1),
-                tf.int64,
-            )
 
-            z = MMDiscrepancyLayer(
-                batch_size=self.batch_size,
-                prior=self.prior,
-                iters=self.optimizer.iterations,
-                warm_up_iters=mmd_warm_up_iters,
-                annealing_mode=self.mmd_annealing_mode,
-            )(z)
+            # Update MMD weight based on the current iteration
+            self.mmd_layer._iters = self.optimizer.iterations
+
+            z = self.mmd_layer(z)
 
         # Tracks clustering metrics and adds a KNN regularizer if self.overlap_loss != 0
         if self.n_components > 1:
-            z = ClusterOverlap(
-                batch_size=self.batch_size,
-                encoding_dim=self.latent_dim,
-                k=self.n_components,
-                loss_weight=self.overlap_loss,
-            )([z, z_cat])
+            z = self.cluster_overlap_layer([z, z_cat])
 
         return z, z_cat
-
-    @property
-    def model(self):
-        x = Input(self.seq_shape[1:])
-        gm_model = Model(inputs=x, outputs=self.call(x), name="gaussian_mixture_latent")
-        gm_model.optimizer = self.optimizer
-        return gm_model
 
 
 class VectorQuantizer(tf.keras.layers.Layer):
@@ -626,6 +629,9 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         self._iters = iters
         self._warm_up_iters = warm_up_iters
         self._annealing_mode = annealing_mode
+        self._kl_weight = tf.Variable(
+            1.0, trainable=False, dtype=tf.float32, name="kl_weight"
+        )
 
     def get_config(self):  # pragma: no cover
         """
@@ -639,6 +645,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         config.update({"_iters": self._iters})
         config.update({"_warm_up_iters": self._warm_up_iters})
         config.update({"_annealing_mode": self._annealing_mode})
+        config.update({"_kl_weight": self._kl_weight})
         return config
 
     def call(self, distribution_a):  # pragma: no cover
@@ -651,21 +658,22 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         # Define and update KL weight for warmup
         if self._warm_up_iters > 0:
             if self._annealing_mode in ["linear", "sigmoid"]:
-                kl_weight = tf.cast(
+                self._kl_weight = tf.cast(
                     K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
                 )
                 if self._annealing_mode == "sigmoid":
-                    kl_weight = tf.math.sigmoid(
-                        (2 * kl_weight - 1) / (kl_weight - kl_weight ** 2)
+                    self._kl_weight = tf.math.sigmoid(
+                        (2 * self._kl_weight - 1)
+                        / (self._kl_weight - self._kl_weight ** 2)
                     )
             else:
                 raise NotImplementedError(
                     "annealing_mode must be one of 'linear' and 'sigmoid'"
                 )
         else:
-            kl_weight = tf.cast(1.0, tf.float32)
+            self._kl_weight = tf.cast(1.0, tf.float32)
 
-        kl_batch = kl_weight * self._regularizer(distribution_a)
+        kl_batch = self._kl_weight * self._regularizer(distribution_a)
 
         self.add_loss(kl_batch, inputs=[distribution_a])
         self.add_metric(
@@ -673,8 +681,6 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
             aggregation="mean",
             name="kl_divergence",
         )
-        # noinspection PyProtectedMember
-        self.add_metric(kl_weight, aggregation="mean", name="kl_rate")
 
         return distribution_a
 
@@ -719,6 +725,9 @@ class MMDiscrepancyLayer(Layer):
         self._iters = iters
         self._warm_up_iters = warm_up_iters
         self._annealing_mode = annealing_mode
+        self._mmd_weight = tf.Variable(
+            1.0, trainable=False, dtype=tf.float32, name="mmd_weight"
+        )
 
     def get_config(self):  # pragma: no cover
         """
@@ -733,6 +742,7 @@ class MMDiscrepancyLayer(Layer):
         config.update({"_warmup_iters": self._warm_up_iters})
         config.update({"prior": self.prior})
         config.update({"_annealing_mode": self._annealing_mode})
+        config.update({"_mmd_weight": self._mmd_weight})
         return config
 
     def call(self, z, **kwargs):  # pragma: no cover
@@ -747,25 +757,25 @@ class MMDiscrepancyLayer(Layer):
         # Define and update MMD weight for warmup
         if self._warm_up_iters > 0:
             if self._annealing_mode in ["linear", "sigmoid"]:
-                mmd_weight = tf.cast(
+                self._mmd_weight = tf.cast(
                     K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
                 )
                 if self._annealing_mode == "sigmoid":
-                    mmd_weight = tf.math.sigmoid(
-                        (2 * mmd_weight - 1) / (mmd_weight - mmd_weight ** 2)
+                    self._mmd_weight = tf.math.sigmoid(
+                        (2 * self._mmd_weight - 1)
+                        / (self._mmd_weight - self._mmd_weight ** 2)
                     )
             else:
                 raise NotImplementedError(
                     "annealing_mode must be one of 'linear' and 'sigmoid'"
                 )
         else:
-            mmd_weight = tf.cast(1.0, tf.float32)
+            self._mmd_weight = tf.cast(1.0, tf.float32)
 
-        mmd_batch = mmd_weight * compute_mmd((true_samples, z))
+        mmd_batch = self._mmd_weight * compute_mmd((true_samples, z))
 
         self.add_loss(K.mean(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
-        self.add_metric(mmd_weight, aggregation="mean", name="mmd_rate")
 
         return z
 
