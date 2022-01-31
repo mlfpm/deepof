@@ -335,7 +335,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 annealing_mode=self.mmd_annealing_mode,
             )
 
-    def call(self, inputs):
+    def call(self, inputs):  # pragma: no cover
         """
 
         Computes the output of the layer.
