@@ -15,7 +15,7 @@ import os
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
-embedding_model = ["GMVAE"]#, "GMVAE"]
+embedding_model = ["GMVAE", "VQVAE"]
 warmup_epochs = [15]
 warmup_mode = ["sigmoid"]
 automatic_changepoints = ["rbf"]  # [None, "rbf", "linear"]
