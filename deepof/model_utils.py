@@ -495,10 +495,9 @@ class VectorQuantizer(tf.keras.layers.Layer):
             soft_counts = tf.nn.softmax(similarity, axis=1)
             return soft_counts
 
-        else:
-            # Return index of the closest code
-            encoding_indices = tf.argmin(distances, axis=1)
-            return encoding_indices
+        # Return index of the closest code
+        encoding_indices = tf.argmin(distances, axis=1)
+        return encoding_indices
 
     def update_posterior_variances(self):  # pragma: no cover
         """

@@ -1037,7 +1037,7 @@ class GMVAE(tf.keras.models.Model):
 
         """
 
-        pass  # TODO: compute posterior on the full dataset and store here
+        # TODO: compute posterior on the full dataset and store here
 
     @tf.function
     def call(self, inputs):
