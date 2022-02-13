@@ -292,18 +292,20 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mixture_distribution=tfd.categorical.Categorical(
                 probs=tf.ones(self.n_components) / self.n_components
             ),
-            components_distribution=tfd.MultivariateNormalDiag(
-                loc=tfp.mcmc.sample_halton_sequence(
-                    num_results=self.n_components,
-                    dim=self.latent_dim,
-                    dtype=tf.float32,
-                    randomized=False,
-                    seed=None,
-                    name="GMVAE_prior_initialization",
-                ),
-                scale_diag=(
-                    tf.ones([self.n_components, self.latent_dim])
-                    / (2 * self.n_components)
+            components_distribution=tfd.Independent(
+                tfd.Normal(
+                    loc=tfp.mcmc.sample_halton_sequence(
+                        num_results=self.n_components,
+                        dim=self.latent_dim,
+                        dtype=tf.float32,
+                        randomized=False,
+                        seed=None,
+                        name="GMVAE_prior_initialization",
+                    ),
+                    scale=(
+                        tf.ones([self.n_components, self.latent_dim])
+                        / (2 * self.n_components)
+                    ),
                 ),
             ),
         )
