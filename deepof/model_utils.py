@@ -276,7 +276,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                         tfd.Normal(
                             loc=gauss[1][..., : self.latent_dim, k],
                             scale=1e-3
-                            + tf.math.exp(gauss[1][..., self.latent_dim :, k]),
+                            + tf.math.softplus(gauss[1][..., self.latent_dim :, k]),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -301,7 +301,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                     seed=None,
                     name="GMVAE_prior_initialization",
                 ),
-                scale_diag=tfb.Exp()(
+                scale_diag=(
                     tf.ones([self.n_components, self.latent_dim])
                     / (2 * self.n_components)
                 ),
