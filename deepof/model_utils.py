@@ -190,7 +190,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         latent_loss: str = "ELBO",
         kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 10,
+        mc_kl: int = 1000,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         overlap_loss: float = 0.0,
