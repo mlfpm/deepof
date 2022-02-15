@@ -453,8 +453,8 @@ class VQVAE(tf.keras.models.Model):
         self.val_cluster_population = tf.keras.metrics.Mean(name="cluster_population")
 
     @tf.function
-    def call(self, inputs):
-        return self.vqvae(inputs)
+    def call(self, inputs, **kwargs):
+        return self.vqvae(inputs, **kwargs)
 
     @property
     def metrics(self):  # pragma: no cover
@@ -504,7 +504,7 @@ class VQVAE(tf.keras.models.Model):
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            reconstructions = self.vqvae(x)
+            outputs = self.vqvae(x, training=True)
 
             # Compute losses
             reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y))) / 4
@@ -790,7 +790,7 @@ def get_gmvae(
     )
 
 
-# noinspection PyDefaultArgument,PyCallingNonCallable
+# # noinspection PyDefaultArgument,PyCallingNonCallable
 class GMVAE(tf.keras.models.Model):
     """
 
@@ -802,14 +802,14 @@ class GMVAE(tf.keras.models.Model):
         self,
         input_shape: tuple,
         batch_size: int = 64,
-        latent_dim: int = 4,
+        latent_dim: int = 16,
         kl_annealing_mode: str = "linear",
         kl_warmup_epochs: int = 15,
         latent_loss: str = "ELBO",
         mmd_annealing_mode: str = "linear",
         mmd_warmup_epochs: int = 15,
         montecarlo_kl: int = 10,
-        n_components: int = 1,
+        n_components: int = 15,
         overlap_loss: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
@@ -874,7 +874,7 @@ class GMVAE(tf.keras.models.Model):
 
         assert (
             "ELBO" in self.latent_loss or "MMD" in self.latent_loss
-        ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
+        ), "loss must be one of ELBO (default), MMD or ELBO+MMD"
 
         # Define GMVAE model
         self.encoder, self.decoder, self.grouper, self.gmvae = get_gmvae(
@@ -922,14 +922,10 @@ class GMVAE(tf.keras.models.Model):
             name="reconstruction_loss"
         )
         if "ELBO" in self.latent_loss:
-            self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
             self.kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
-            self.val_kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
             self.val_kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
         if "MMD" in self.latent_loss:
-            self.mmd_loss_tracker = tf.keras.metrics.Mean(name="mmd_loss")
             self.mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
-            self.val_mmd_loss_tracker = tf.keras.metrics.Mean(name="mmd_loss")
             self.val_mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
         if self.overlap_loss:
             self.overlap_loss_tracker = tf.keras.metrics.Mean(name="overlap_loss")
@@ -952,26 +948,6 @@ class GMVAE(tf.keras.models.Model):
                 name="supervised_loss"
             )
 
-        # Track control metrics over the latent space
-        self.cluster_population_tracker = tf.keras.metrics.Mean(
-            name="cluster_population"
-        )
-        self.cluster_confidence_tracker = tf.keras.metrics.Mean(
-            name="cluster_confidence"
-        )
-        self.local_cluster_entropy_tracker = tf.keras.metrics.Mean(
-            name="local_cluster_entropy"
-        )
-        self.val_cluster_population_tracker = tf.keras.metrics.Mean(
-            name="cluster_population"
-        )
-        self.val_cluster_confidence_tracker = tf.keras.metrics.Mean(
-            name="cluster_confidence"
-        )
-        self.val_local_cluster_entropy_tracker = tf.keras.metrics.Mean(
-            name="local_cluster_entropy"
-        )
-
     @property
     def metrics(self):  # pragma: no cover
         metrics = [
@@ -981,11 +957,11 @@ class GMVAE(tf.keras.models.Model):
             self.val_reconstruction_loss_tracker,
         ]
         if "ELBO" in self.latent_loss:
-            metrics += [self.kl_loss_tracker, self.kl_loss_weight_tracker]
-            metrics += [self.val_kl_loss_tracker, self.val_kl_loss_weight_tracker]
+            metrics += [self.kl_loss_weight_tracker]
+            metrics += [self.val_kl_loss_weight_tracker]
         if "MMD" in self.latent_loss:
-            metrics += [self.mmd_loss_tracker, self.mmd_loss_weight_tracker]
-            metrics += [self.val_mmd_loss_tracker, self.val_mmd_loss_weight_tracker]
+            metrics += [self.mmd_loss_weight_tracker]
+            metrics += [self.val_mmd_loss_weight_tracker]
         if self.overlap_loss:
             metrics += [self.overlap_loss_tracker, self.val_overlap_loss_tracker]
         if self.next_sequence_prediction:
@@ -997,6 +973,8 @@ class GMVAE(tf.keras.models.Model):
             metrics += [self.phenotype_loss_tracker, self.val_phenotype_loss_tracker]
         if self.supervised_prediction:
             metrics += [self.supervised_loss_tracker, self.val_supervised_loss_tracker]
+
+        metrics += self.gmvae.metrics
 
         return metrics
 
@@ -1040,8 +1018,8 @@ class GMVAE(tf.keras.models.Model):
         # TODO: compute posterior on the full dataset and store here
 
     @tf.function
-    def call(self, inputs):
-        return self.gmvae(inputs)
+    def call(self, inputs, **kwargs):
+        return self.gmvae(inputs, **kwargs)
 
     @tf.function
     def train_step(self, data):  # pragma: no cover
@@ -1059,7 +1037,7 @@ class GMVAE(tf.keras.models.Model):
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            outputs = self.gmvae(x)
+            outputs = self.gmvae(x, training=True)
             if isinstance(outputs, list):
                 reconstructions = outputs[0]
             else:
@@ -1095,29 +1073,11 @@ class GMVAE(tf.keras.models.Model):
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.latent_loss:
-            self.kl_loss_tracker.update_state(
-                [
-                    metric
-                    for metric in self.gmvae.get_layer(
-                        "gaussian_mixture_latent"
-                    ).metrics
-                    if metric.name == "kl_divergence"
-                ][0].result()
-            )
             # noinspection PyProtectedMember
             self.kl_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
             )
         if "MMD" in self.latent_loss:
-            self.mmd_loss_tracker.update_state(
-                [
-                    metric
-                    for metric in self.gmvae.get_layer(
-                        "gaussian_mixture_latent"
-                    ).metrics
-                    if metric.name == "mmd"
-                ][0].result()
-            )
             # noinspection PyProtectedMember
             self.mmd_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").mmd_layer._mmd_weight
@@ -1135,44 +1095,16 @@ class GMVAE(tf.keras.models.Model):
         if self.supervised_prediction:
             self.supervised_loss_tracker.update_state(supervised_loss)
 
-        # Track control metrics over the latent space
-        self.cluster_population_tracker.update_state(
-            [
-                metric
-                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
-                if metric.name == "number_of_populated_clusters"
-            ][0].result()
-        )
-        self.cluster_confidence_tracker.update_state(
-            [
-                metric
-                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
-                if metric.name == "confidence_in_selected_cluster"
-            ][0].result()
-        )
-        self.local_cluster_entropy_tracker.update_state(
-            [
-                metric
-                for metric in self.gmvae.get_layer("gaussian_mixture_latent").metrics
-                if metric.name == "local_cluster_entropy"
-            ][0].result()
-        )
-
         # Log results (coupled with TensorBoard)
         log_dict = {
             "total_loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
-            "cluster_population": self.cluster_population_tracker.result(),
-            "cluster_confidence": self.cluster_confidence_tracker.result(),
-            "local_cluster_entropy": self.local_cluster_entropy_tracker.result(),
         }
 
         # Add optional metrics to final log dict
         if "ELBO" in self.latent_loss:
-            log_dict["kl_loss"] = self.kl_loss_tracker.result()
             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
         if "MMD" in self.latent_loss:
-            log_dict["mmd_loss"] = self.mmd_loss_tracker.result()
             log_dict["mmd_weight"] = self.mmd_loss_weight_tracker.result()
         if self.overlap_loss:
             log_dict["overlap_loss"] = self.overlap_loss_tracker.result()
@@ -1183,7 +1115,8 @@ class GMVAE(tf.keras.models.Model):
         if self.supervised_prediction:
             log_dict["supervised_loss"] = self.supervised_loss_tracker.result()
 
-        return log_dict
+        # Log to TensorBoard, both explitly and implicitly (within model) tracked metrics
+        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
 
     # noinspection PyUnboundLocalVariable
     @tf.function
@@ -1201,7 +1134,7 @@ class GMVAE(tf.keras.models.Model):
         y = (labels for labels in y)
 
         # Get outputs from the full model
-        outputs = self.gmvae(x)
+        outputs = self.gmvae(x, training=False)
         if isinstance(outputs, list):
             reconstructions = outputs[0]
         else:
@@ -1229,22 +1162,10 @@ class GMVAE(tf.keras.models.Model):
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "ELBO" in self.latent_loss:
-            self.val_kl_loss_tracker.update_state(
-                [
-                    metric
-                    for metric in self.gmvae.metrics
-                    if metric.name == "kl_divergence"
-                ][0].result()
-            )
             self.val_kl_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
             )
         if "MMD" in self.latent_loss:
-            self.val_mmd_loss_tracker.update_state(
-                [metric for metric in self.gmvae.metrics if metric.name == "mmd"][
-                    0
-                ].result()
-            )
             self.val_mmd_loss_weight_tracker.update_state(
                 # noinspection PyProtectedMember
                 self.mmd_loss_weight_tracker.update_state(
@@ -1270,17 +1191,12 @@ class GMVAE(tf.keras.models.Model):
         log_dict = {
             "total_loss": self.val_total_loss_tracker.result(),
             "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
-            "cluster_population": self.val_cluster_population_tracker.result(),
-            "cluster_confidence": self.val_cluster_confidence_tracker.result(),
-            "local_cluster_entropy": self.val_local_cluster_entropy_tracker.result(),
         }
 
         # Add optional metrics to final log dict
         if "ELBO" in self.latent_loss:
-            log_dict["kl_loss"] = self.val_kl_loss_tracker.result()
             log_dict["kl_weight"] = self.val_kl_loss_weight_tracker.result()
         if "MMD" in self.latent_loss:
-            log_dict["mmd_loss"] = self.val_mmd_loss_tracker.result()
             log_dict["mmd_weight"] = self.val_mmd_loss_weight_tracker.result()
         if self.overlap_loss:
             log_dict["overlap_loss"] = self.val_overlap_loss_tracker.result()
@@ -1293,4 +1209,4 @@ class GMVAE(tf.keras.models.Model):
         if self.supervised_prediction:
             log_dict["supervised_loss"] = self.val_supervised_loss_tracker.result()
 
-        return log_dict
+        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}

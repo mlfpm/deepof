@@ -261,7 +261,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             name="cluster_variances",
             activation=None,
             kernel_regularizer=(
-                tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
+                tf.keras.regularizers.l2(0.01)
+                if self.reg_cluster_variance
+                else None  # CHECK HERE
             ),
             activity_regularizer=MeanVarianceRegularizer(0.05),
             kernel_initializer=random_uniform(),
@@ -276,7 +278,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                         tfd.Normal(
                             loc=gauss[1][..., : self.latent_dim, k],
                             scale=1e-3
-                            + tf.math.softplus(gauss[1][..., self.latent_dim :, k]),
+                            + tf.keras.activations.softplus(
+                                gauss[1][..., self.latent_dim :, k]
+                            ),
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -292,14 +296,12 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mixture_distribution=tfd.categorical.Categorical(
                 probs=tf.ones(self.n_components) / self.n_components
             ),
-            components_distribution=tfd.Independent(
-                tfd.Normal(
-                    loc=he_uniform()(shape=(self.n_components, self.latent_dim)),
-                    scale=(
-                        tf.ones([self.n_components, self.latent_dim])
-                        / (2 * self.n_components)
-                    ),
+            components_distribution=tfd.MultivariateNormalDiag(
+                loc=tf.keras.initializers.he_uniform()(
+                    [self.n_components, self.latent_dim],
                 ),
+                scale_diag=tf.ones([self.n_components, self.latent_dim])
+                / self.n_components,
             ),
         )
         self.cluster_overlap_layer = ClusterOverlap(
@@ -817,7 +819,6 @@ class ClusterOverlap(Layer):
         self.enc = encoding_dim
         self.k = k if k < (batch_size - 1) else (batch_size - 1)
         self.loss_weight = loss_weight
-        self.min_confidence = 0.25
 
     def get_config(self):  # pragma: no cover
         """
@@ -859,13 +860,14 @@ class ClusterOverlap(Layer):
             dtype=tf.dtypes.float32,
         )
 
+        min_confidence = 0.25  # 2 * 1 / tf.shape(hard_groups)[1]
         n_components = tf.cast(
             tf.shape(
                 tf.unique(
                     tf.reshape(
                         tf.gather(
                             tf.cast(hard_groups, tf.dtypes.float32),
-                            tf.where(max_groups >= self.min_confidence),
+                            tf.where(max_groups >= min_confidence),
                             batch_dims=0,
                         ),
                         [-1],
