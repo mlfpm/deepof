@@ -297,11 +297,16 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 probs=tf.ones(self.n_components) / self.n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
-                loc=tf.keras.initializers.he_uniform()(
-                    [self.n_components, self.latent_dim],
+                loc=tfp.mcmc.sample_halton_sequence(
+                    num_results=self.n_components,
+                    dim=self.latent_dim,
+                    dtype=tf.float32,
+                    randomized=False,
+                    seed=None,
+                    name="GMVAE_prior_initialization",
                 ),
                 scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / self.n_components,
+                / (2 * self.n_components),
             ),
         )
         self.cluster_overlap_layer = ClusterOverlap(
@@ -832,7 +837,6 @@ class ClusterOverlap(Layer):
         config.update({"enc": self.enc})
         config.update({"k": self.k})
         config.update({"loss_weight": self.loss_weight})
-        config.update({"min_confidence": self.min_confidence})
         return config
 
     def call(self, inputs, **kwargs):  # pragma: no cover
@@ -860,7 +864,7 @@ class ClusterOverlap(Layer):
             dtype=tf.dtypes.float32,
         )
 
-        min_confidence = 0.25  # 2 * 1 / tf.shape(hard_groups)[1]
+        min_confidence = tf.cast(2 * 1 / tf.shape(categorical)[1], tf.float32)
         n_components = tf.cast(
             tf.shape(
                 tf.unique(

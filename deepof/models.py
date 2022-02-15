@@ -281,7 +281,7 @@ def get_vqvae(
     input_shape: tuple,
     latent_dim: int,
     n_components: int,
-    beta: float = 10.0,
+    beta: float = 1.0,
     conv_filters=64,
     dense_layers=1,
     dense_activation="relu",
@@ -389,7 +389,7 @@ class VQVAE(tf.keras.models.Model):
         input_shape: tuple,
         latent_dim: int = 32,
         n_components: int = 15,
-        beta: float = 10.0,
+        beta: float = 1.0,
         architecture_hparams: dict = None,
         **kwargs,
     ):
@@ -504,10 +504,10 @@ class VQVAE(tf.keras.models.Model):
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            outputs = self.vqvae(x, training=True)
+            reconstructions = self.vqvae(x, training=True)
 
             # Compute losses
-            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y))) / 4
+            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Backpropagation
@@ -549,10 +549,10 @@ class VQVAE(tf.keras.models.Model):
         y = (labels for labels in y)
 
         # Get outputs from the full model
-        reconstructions = self.vqvae(x)
+        reconstructions = self.vqvae(x, training=False)
 
         # Compute losses
-        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y))) / 4
+        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Compute populated clusters
@@ -1194,10 +1194,6 @@ class GMVAE(tf.keras.models.Model):
         }
 
         # Add optional metrics to final log dict
-        if "ELBO" in self.latent_loss:
-            log_dict["kl_weight"] = self.val_kl_loss_weight_tracker.result()
-        if "MMD" in self.latent_loss:
-            log_dict["mmd_weight"] = self.val_mmd_loss_weight_tracker.result()
         if self.overlap_loss:
             log_dict["overlap_loss"] = self.val_overlap_loss_tracker.result()
         if self.next_sequence_prediction:
