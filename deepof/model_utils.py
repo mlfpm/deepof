@@ -297,16 +297,12 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 probs=tf.ones(self.n_components) / self.n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
-                loc=tfp.mcmc.sample_halton_sequence(
-                    num_results=self.n_components,
-                    dim=self.latent_dim,
-                    dtype=tf.float32,
-                    randomized=False,
-                    seed=None,
-                    name="GMVAE_prior_initialization",
+                loc=tf.keras.initializers.orthogonal(gain=1.0)(
+                    [self.n_components, self.latent_dim],
                 ),
-                scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / (2 * self.n_components),
+                scale_diag=tfb.Softplus()(
+                    tf.ones([self.n_components, self.latent_dim]) / self.n_components
+                ),
             ),
         )
         self.cluster_overlap_layer = ClusterOverlap(
@@ -325,7 +321,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
                 test_points_fn=lambda q: q.sample(self.mc_kl),
-                test_points_reduce_axis=0,
+                test_points_reduce_axis=None,
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
                 annealing_mode=self.kl_annealing_mode,
@@ -632,7 +628,6 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         """
 
         super(KLDivergenceLayer, self).__init__(*args, **kwargs)
-        self.is_placeholder = True
         self._iters = iters
         self._warm_up_iters = warm_up_iters
         self._annealing_mode = annealing_mode
@@ -648,7 +643,6 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         """
 
         config = super().get_config().copy()
-        config.update({"is_placeholder": self.is_placeholder})
         config.update({"_iters": self._iters})
         config.update({"_warm_up_iters": self._warm_up_iters})
         config.update({"_annealing_mode": self._annealing_mode})

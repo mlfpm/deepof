@@ -30,9 +30,7 @@ tfpl = tfp.layers
 # noinspection PyCallingNonCallable
 def get_deepof_encoder(
     input_shape,
-    latent_dim,
     conv_filters=64,
-    dense_layers=1,
     dense_activation="relu",
     dense_units_1=64,
     gru_units_1=128,
@@ -48,7 +46,6 @@ def get_deepof_encoder(
 
     Args:
         input_shape (tuple): shape of the input data
-        latent_dim (int): dimensionality of the latent space
         conv_filters (int): number of filters in the first convolutional layer
         dense_layers (int): number of dense layers at the end of the encoder. Defaults to 1.
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
@@ -115,23 +112,15 @@ def get_deepof_encoder(
         )
     )(encoder)
     encoder = BatchNormalization()(encoder)
-
-    dense_layers = [
-        Dense(
-            latent_dim,
-            activation=dense_activation,
-            # kernel_constraint=UnitNorm(axis=0),
-            kernel_initializer=he_uniform(),
-            use_bias=True,
-        )
-        for _ in range(dense_layers)
-    ]
-    encoder_output = []
-    for layer in dense_layers:
-        encoder_output.append(layer)
-        encoder_output.append(BatchNormalization())
-
-    encoder_output = Sequential(encoder_output)(encoder)
+    encoder = Dropout(dropout_rate)(encoder)
+    encoder = Dense(
+        dense_units_1 // 2,
+        activation=dense_activation,
+        # kernel_constraint=UnitNorm(axis=0),
+        kernel_initializer=he_uniform(),
+        use_bias=True,
+    )(encoder)
+    encoder_output = BatchNormalization()(encoder)
 
     return Model(x, encoder_output, name="deepof_encoder")
 
@@ -290,7 +279,7 @@ def get_vqvae(
     gru_units_2=64,
     gru_unroll=True,
     bidirectional_merge="concat",
-    dropout_rate=0.1,
+    dropout_rate=0.0,
 ):
     """
 
@@ -329,7 +318,6 @@ def get_vqvae(
     )
     encoder = get_deepof_encoder(
         input_shape,
-        latent_dim,
         conv_filters=conv_filters,
         dense_layers=dense_layers,
         dense_activation=dense_activation,
@@ -689,7 +677,6 @@ def get_gmvae(
 
     encoder = get_deepof_encoder(
         input_shape[1:],
-        latent_dim,
         conv_filters=conv_filters,
         dense_layers=dense_layers,
         dense_activation=dense_activation,
@@ -701,7 +688,7 @@ def get_gmvae(
         dropout_rate=dropout_rate,
     )
     latent_space = deepof.model_utils.GaussianMixtureLatent(
-        input_shape=[input_shape[0], latent_dim],
+        input_shape=[input_shape[0], dense_units_2],
         n_components=n_components,
         latent_dim=latent_dim,
         batch_size=batch_size,
@@ -789,7 +776,7 @@ def get_gmvae(
     )
 
 
-# # noinspection PyDefaultArgument,PyCallingNonCallable
+# noinspection PyDefaultArgument,PyCallingNonCallable
 class GMVAE(tf.keras.models.Model):
     """
 
@@ -801,11 +788,11 @@ class GMVAE(tf.keras.models.Model):
         self,
         input_shape: tuple,
         batch_size: int = 64,
-        latent_dim: int = 16,
-        kl_annealing_mode: str = "linear",
+        latent_dim: int = 4,
+        kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 15,
         latent_loss: str = "ELBO",
-        mmd_annealing_mode: str = "linear",
+        mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 15,
         montecarlo_kl: int = 10,
         n_components: int = 15,
@@ -1043,25 +1030,25 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs
 
             # Compute losses
-            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
+            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
             if self.next_sequence_prediction:
                 next_seq_predictions = [
                     out for out in outputs if "predictor" in out.name
                 ][0]
-                next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
+                next_seq_loss = -tf.reduce_mean(next_seq_predictions.log_prob(next(y)))
                 total_loss += self.next_sequence_prediction * next_seq_loss
             if self.phenotype_prediction:
                 pheno_predictions = [out for out in outputs if "phenotype" in out.name][
                     0
                 ]
-                phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
+                phenotype_loss = -tf.reduce_mean(pheno_predictions.log_prob(next(y)))
                 total_loss += self.phenotype_prediction * phenotype_loss
             if self.supervised_prediction:
                 sup_predictions = [out for out in outputs if "supervised" in out.name][
                     0
                 ]
-                supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
+                supervised_loss = -tf.reduce_mean(sup_predictions.log_prob(next(y)))
                 total_loss += self.supervised_prediction * supervised_loss
 
         # Backpropagation
@@ -1140,21 +1127,21 @@ class GMVAE(tf.keras.models.Model):
             reconstructions = outputs
 
         # Compute losses
-        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
+        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
         if self.next_sequence_prediction:
             next_seq_predictions = [out for out in outputs if "predictor" in out.name][
                 0
             ]
-            next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
+            next_seq_loss = -tf.reduce_mean(next_seq_predictions.log_prob(next(y)))
             total_loss += self.next_sequence_prediction * next_seq_loss
         if self.phenotype_prediction:
             pheno_predictions = [out for out in outputs if "phenotype" in out.name][0]
-            phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
+            phenotype_loss = -tf.reduce_mean(pheno_predictions.log_prob(next(y)))
             total_loss += self.phenotype_prediction * phenotype_loss
         if self.supervised_prediction:
             sup_predictions = [out for out in outputs if "supervised" in out.name][0]
-            supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
+            supervised_loss = -tf.reduce_mean(sup_predictions.log_prob(next(y)))
             total_loss += self.supervised_prediction * supervised_loss
 
         # Track losses
