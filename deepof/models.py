@@ -33,6 +33,7 @@ def get_deepof_encoder(
     conv_filters=64,
     dense_activation="relu",
     dense_units_1=64,
+    dense_units_2=32,
     gru_units_1=128,
     gru_units_2=64,
     gru_unroll=True,
@@ -47,9 +48,9 @@ def get_deepof_encoder(
     Args:
         input_shape (tuple): shape of the input data
         conv_filters (int): number of filters in the first convolutional layer
-        dense_layers (int): number of dense layers at the end of the encoder. Defaults to 1.
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         dense_units_1 (int): number of units in the first dense layer. Defaults to 64.
+        dense_units_2 (int): number of units in the final dense layer. Defaults to 32.
         gru_units_1 (int): number of units in the first GRU layer. Defaults to 128.
         gru_units_2 (int): number of units in the second GRU layer. Defaults to 64.
         gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
@@ -114,7 +115,7 @@ def get_deepof_encoder(
     encoder = BatchNormalization()(encoder)
     encoder = Dropout(dropout_rate)(encoder)
     encoder = Dense(
-        dense_units_1 // 2,
+        dense_units_2,
         activation=dense_activation,
         # kernel_constraint=UnitNorm(axis=0),
         kernel_initializer=he_uniform(),
@@ -321,6 +322,7 @@ def get_vqvae(
         conv_filters=conv_filters,
         dense_activation=dense_activation,
         dense_units_1=dense_units_1,
+        dense_units_2=latent_dim,
         gru_units_1=gru_units_1,
         gru_units_2=gru_units_2,
         gru_unroll=gru_unroll,
