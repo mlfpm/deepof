@@ -319,7 +319,6 @@ def get_vqvae(
     encoder = get_deepof_encoder(
         input_shape,
         conv_filters=conv_filters,
-        dense_layers=dense_layers,
         dense_activation=dense_activation,
         dense_units_1=dense_units_1,
         gru_units_1=gru_units_1,
@@ -678,7 +677,6 @@ def get_gmvae(
     encoder = get_deepof_encoder(
         input_shape[1:],
         conv_filters=conv_filters,
-        dense_layers=dense_layers,
         dense_activation=dense_activation,
         dense_units_1=dense_units_1,
         gru_units_1=gru_units_1,
