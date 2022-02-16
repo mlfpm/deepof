@@ -518,11 +518,16 @@ if not tune:
 
         # Embed current video in the autoencoder and add to the dictionary
         # noinspection PyUnboundLocalVariable
-        deep_encodings_per_video[key] = curr_deep_encoder.predict(curr_prep)
+        mean_encodings = curr_deep_encoder(curr_prep)
+        if embedding_model == "GMVAE":
+            # The default convert_to_tensor method for the GMVAE encoder is to sample
+            # when using it for prediction, it is better to store the mean.
+            mean_encodings = mean_encodings.mean()
+        deep_encodings_per_video[key] = mean_encodings
 
         # Obtain groupings for current video and add to the dictionary
         # noinspection PyUnboundLocalVariable
-        deep_assignments_per_video[key] = curr_deep_grouper.predict(curr_prep)
+        deep_assignments_per_video[key] = curr_deep_grouper(curr_prep)
 
     with open(
         os.path.join(
