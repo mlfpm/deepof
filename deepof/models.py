@@ -131,8 +131,7 @@ def get_deepof_encoder(
         encoder_output.append(layer)
         encoder_output.append(BatchNormalization())
 
-    encoder = Sequential(encoder_output)(encoder)
-    encoder_output = Dropout(dropout_rate)(encoder)
+    encoder_output = Sequential(encoder_output)(encoder)
 
     return Model(x, encoder_output, name="deepof_encoder")
 
