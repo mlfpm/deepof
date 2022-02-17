@@ -1030,25 +1030,25 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs
 
             # Compute losses
-            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
+            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
             if self.next_sequence_prediction:
                 next_seq_predictions = [
                     out for out in outputs if "predictor" in out.name
                 ][0]
-                next_seq_loss = -tf.reduce_mean(next_seq_predictions.log_prob(next(y)))
+                next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
                 total_loss += self.next_sequence_prediction * next_seq_loss
             if self.phenotype_prediction:
                 pheno_predictions = [out for out in outputs if "phenotype" in out.name][
                     0
                 ]
-                phenotype_loss = -tf.reduce_mean(pheno_predictions.log_prob(next(y)))
+                phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
                 total_loss += self.phenotype_prediction * phenotype_loss
             if self.supervised_prediction:
                 sup_predictions = [out for out in outputs if "supervised" in out.name][
                     0
                 ]
-                supervised_loss = -tf.reduce_mean(sup_predictions.log_prob(next(y)))
+                supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
                 total_loss += self.supervised_prediction * supervised_loss
 
         # Backpropagation
@@ -1127,21 +1127,21 @@ class GMVAE(tf.keras.models.Model):
             reconstructions = outputs
 
         # Compute losses
-        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
+        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
         if self.next_sequence_prediction:
             next_seq_predictions = [out for out in outputs if "predictor" in out.name][
                 0
             ]
-            next_seq_loss = -tf.reduce_mean(next_seq_predictions.log_prob(next(y)))
+            next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
             total_loss += self.next_sequence_prediction * next_seq_loss
         if self.phenotype_prediction:
             pheno_predictions = [out for out in outputs if "phenotype" in out.name][0]
-            phenotype_loss = -tf.reduce_mean(pheno_predictions.log_prob(next(y)))
+            phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
             total_loss += self.phenotype_prediction * phenotype_loss
         if self.supervised_prediction:
             sup_predictions = [out for out in outputs if "supervised" in out.name][0]
-            supervised_loss = -tf.reduce_mean(sup_predictions.log_prob(next(y)))
+            supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
             total_loss += self.supervised_prediction * supervised_loss
 
         # Track losses

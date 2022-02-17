@@ -325,7 +325,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
                 test_points_fn=lambda q: q.sample(self.mc_kl),
-                test_points_reduce_axis=None,
+                test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
                 annealing_mode=self.kl_annealing_mode,
@@ -779,7 +779,7 @@ class MMDiscrepancyLayer(Layer):
 
         mmd_batch = self._mmd_weight * compute_mmd((true_samples, z))
 
-        self.add_loss(K.mean(mmd_batch), inputs=z)
+        self.add_loss(K.sum(mmd_batch), inputs=z)
         self.add_metric(mmd_batch, aggregation="mean", name="mmd")
 
         return z
