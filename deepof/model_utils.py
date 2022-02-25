@@ -856,16 +856,11 @@ class ClusterOverlap(Layer):
             dtype=tf.dtypes.float32,
         )
 
-        min_confidence = tf.cast(2 * 1 / tf.shape(categorical)[1], tf.float32)
         n_components = tf.cast(
             tf.shape(
                 tf.unique(
                     tf.reshape(
-                        tf.gather(
-                            tf.cast(hard_groups, tf.dtypes.float32),
-                            tf.where(max_groups >= min_confidence),
-                            batch_dims=0,
-                        ),
+                        tf.cast(hard_groups, tf.dtypes.float32),
                         [-1],
                     ),
                 )[0],
