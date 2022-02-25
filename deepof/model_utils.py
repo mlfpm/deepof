@@ -297,16 +297,10 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 probs=tf.ones(self.n_components) / self.n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
-                loc=tfp.mcmc.sample_halton_sequence(
-                    num_results=self.n_components,
-                    dim=self.latent_dim,
-                    dtype=tf.float32,
-                    randomized=False,
-                    seed=None,
-                    name="GMVAE_prior_initialization",
-                ),
+                loc=K.random_uniform([self.n_components, self.latent_dim]),
                 scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / (2 * self.n_components),
+                / self.n_components
+                * 2,
             ),
         )
         self.cluster_overlap_layer = ClusterOverlap(
