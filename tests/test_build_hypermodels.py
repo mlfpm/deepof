@@ -13,14 +13,14 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from keras_tuner import HyperParameters
+
 import deepof.hypermodels
-import tensorflow as tf
 
 
 @settings(deadline=None, max_examples=10)
 @given(
-    latent_dim=st.integers(min_value=2, max_value=16),
-    n_components=st.integers(min_value=2, max_value=16),
+    latent_dim=st.integers(min_value=2, max_value=16).filter(lambda x: x % 2 == 0),
+    n_components=st.integers(min_value=2, max_value=16).filter(lambda x: x % 2 == 0),
 )
 def test_VQVAE_hypermodel_build(
     latent_dim,
@@ -39,9 +39,9 @@ def test_VQVAE_hypermodel_build(
 
 @settings(deadline=None, max_examples=10)
 @given(
-    latent_dim=st.integers(min_value=2, max_value=16),
+    latent_dim=st.integers(min_value=2, max_value=16).filter(lambda x: x % 2 == 0),
     loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
-    n_components=st.integers(min_value=1, max_value=5),
+    n_components=st.integers(min_value=1, max_value=5).filter(lambda x: x % 2 == 0),
 )
 def test_GMVAE_hypermodel_build(
     latent_dim,
