@@ -348,6 +348,7 @@ def get_callbacks(
     next_sequence_prediction: float = 0.0,
     supervised_prediction: float = 0.0,
     overlap_loss: float = 0.0,
+    gram_loss: float = 1.0,
     loss: str = "ELBO",
     loss_warmup: int = 0,
     warmup_mode: str = "none",
@@ -373,6 +374,7 @@ def get_callbacks(
         next_sequence_prediction (float): Weight of the next sequence prediction loss.
         supervised_prediction (float): Weight of the supervised prediction loss
         overlap_loss (float): Weight of the overlap loss
+        gram_loss (float): Weight of the gram loss
         loss (str): Loss function to use for training
         loss_warmup (int): Number of epochs to warmup the loss function
         warmup_mode (str): Warmup mode to use for training
@@ -399,7 +401,7 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
         "deepof_unsupervised_{}".format(embedding_model),
         ("_input_type={}".format(input_type) if input_type else "coords"),
         (
@@ -423,6 +425,7 @@ def get_callbacks(
             if embedding_model == "GMVAE"
             else ""
         ),
+        ("_gram_loss={}".format(gram_loss)),
         (("_loss_warmup={}".format(loss_warmup)) if embedding_model == "GMVAE" else ""),
         (("_warmup_mode={}".format(warmup_mode)) if embedding_model == "GMVAE" else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
@@ -653,6 +656,7 @@ def autoencoder_fitting(
         loss=loss,
         loss_warmup=kl_warmup,
         overlap_loss=overlap_loss,
+        gram_loss=gram_loss,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
         cp=save_checkpoints,

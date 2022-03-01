@@ -22,22 +22,20 @@ automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]
 overlap_loss = [0.0]
-encodings = [4, 8, 16, 32]
-cluster_numbers = [6, 8, 10, 12, 14]
+gram_loss = [0.0, 0.5, 1.0]
+encodings = [4, 6, 8, 10, 12, 14, 16]
+cluster_numbers = [6, 8, 10, 12, 14, 16]
 latent_reg = ["categorical+variance"]
 entropy_knn = [10]
 next_sequence_pred_weights = [0.0]
 phenotype_pred_weights = [0.0]
 supervised_pred_weights = [0.0]
 input_types = ["coords"]
-run = [1]
+run = [1, 2, 3]
 
 
 rule deepof_experiments:
     input:
-        # Elliptical arena detection
-        # "/u/lucasmir/Projects/DLC/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
-        #
         # Hyperparameter tuning
         # expand(
         #     os.path.join(
@@ -52,28 +50,16 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
+            + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_overlap_loss={overlap_loss}_run={run}.pkl",
             embedding_model=embedding_model,
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
             latreg=latent_reg,
             overlap_loss=overlap_loss,
+            gram_loss=gram_loss,
             run=run,
         ),
-
-
-rule elliptical_arena_detector:
-    input:
-        to_exec="/u/lucasmir/Projects/DLC/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena_blank.ipynb",
-    output:
-        exec="/u/lucasmir/Projects/DLC/DeepOF/deepof/supplementary_notebooks/recognise_elliptical_arena.ipynb",
-    shell:
-        "papermill {input.to_exec} "
-        "-p vid_path './supplementary_notebooks/' "
-        "-p log_path './logs/' "
-        "-p out_path './deepof/trained_models/' "
-        "{output.exec}"
 
 
 rule coarse_hyperparameter_tuning:
@@ -112,7 +98,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_overlap_loss={overlap_loss}_run={run}.pkl",
+        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_overlap_loss={overlap_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--embedding-model {wildcards.embedding_model} "
@@ -129,6 +115,7 @@ rule train_models:
         "--latent-reg {wildcards.latreg} "
         "--loss ELBO "
         "--overlap-loss {wildcards.overlap_loss} "
+        "--gram-loss {wildcards.gram_loss} "
         "--kl-annealing-mode sigmoid "
         "--kl-warmup 15 "
         "--mmd-annealing-mode sigmoid "

@@ -541,12 +541,13 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_overlap_loss={}_run={}.pkl".format(
+            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_overlap_loss={}_run={}.pkl".format(
                 embedding_model,
                 input_type,
                 n_components,
                 encoding_size,
                 latent_reg,
+                gram_loss,
                 overlap_loss,
                 run,
             ),
@@ -581,6 +582,7 @@ else:
         logparam=logparam,
         outpath=output_path,
         overlap_loss=overlap_loss,
+        gram_loss=gram_loss,
         run=run,
         tuning=True,
     )
