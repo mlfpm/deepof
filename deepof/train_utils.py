@@ -544,6 +544,7 @@ def autoencoder_fitting(
     n_components: int,
     output_path: str,
     overlap_loss: float,
+    gram_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
     supervised_prediction: float,
@@ -583,6 +584,8 @@ def autoencoder_fitting(
         n_components (int): Number of components to use for the GMVAE.
         output_path (str): Path to the output directory.
         overlap_loss (float): Weight to use for the overlap loss. Only used if embedding_model is "GMVAE".
+        gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
+        penalizes the correlation between the dimensions in the latent space.
         next_sequence_prediction (float): Weight to use for the next sequence prediction loss. Only used if embedding_model
         is "GMVAE".
         phenotype_prediction (float): Weight to use for the phenotype prediction loss. Only used if embedding_model is
@@ -692,6 +695,7 @@ def autoencoder_fitting(
                 input_shape=X_train.shape,
                 latent_dim=encoding_size,
                 n_components=n_components,
+                reg_gram=gram_loss,
             )
             ae_full_model.optimizer = tf.keras.optimizers.Nadam(
                 learning_rate=1e-4, clipvalue=0.75
@@ -718,6 +722,7 @@ def autoencoder_fitting(
                 montecarlo_kl=montecarlo_kl,
                 n_components=n_components,
                 overlap_loss=overlap_loss,
+                reg_gram=gram_loss,
                 next_sequence_prediction=next_sequence_prediction,
                 phenotype_prediction=phenotype_prediction,
                 supervised_prediction=supervised_prediction,
@@ -818,6 +823,7 @@ def tune_search(
     loss: str,
     mmd_warmup_epochs: int,
     overlap_loss: float,
+    gram_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
     supervised_prediction: float,
@@ -843,6 +849,8 @@ def tune_search(
         loss (str): Loss function to use. Must be one of "mmd", "kl", or "overlap". Only used if embedding_model is "GMVAE".
         mmd_warmup_epochs (int): Number of epochs to warmup MMD loss. Only used if embedding_model is "GMVAE"
         overlap_loss (float): Weight of the overlap loss. Only used if embedding_model is "GMVAE".
+        gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
+        between dimensions in the latent space.
         next_sequence_prediction (float): Weight of the next sequence prediction loss. Only used if embedding_model is "GMVAE".
         phenotype_prediction (float): Weight of the phenotype prediction loss. Only used if embedding_model is "GMVAE".
         supervised_prediction (float): Weight of the supervised prediction loss. Only used if embedding_model is "GMVAE".
@@ -878,6 +886,7 @@ def tune_search(
             input_shape=X_train.shape,
             latent_dim=encoding_size,
             n_components=k,
+            reg_gram=gram_loss,
         )
 
     elif embedding_model == "GMVAE":
@@ -890,6 +899,7 @@ def tune_search(
             mmd_warmup_epochs=mmd_warmup_epochs,
             n_components=k,
             overlap_loss=overlap_loss,
+            reg_gram=gram_loss,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,
             supervised_prediction=supervised_prediction,

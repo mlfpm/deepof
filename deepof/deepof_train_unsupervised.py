@@ -208,6 +208,13 @@ parser.add_argument(
     default=0.0,
 )
 parser.add_argument(
+    "--gram-loss",
+    "-gram",
+    help="If > 0, adds a regularization term controlling for correlation between dimensions in the latent space",
+    type=float,
+    default=1.0,
+)
+parser.add_argument(
     "--next-sequence-prediction",
     "-nspred",
     help="Activates the next sequence prediction branch of the variational Seq 2 Seq model with the specified weight. "
@@ -297,6 +304,7 @@ try:
     mc_kl = args.montecarlo_kl
     output_path = os.path.join(args.output_path)
     overlap_loss = float(args.overlap_loss)
+    gram_loss = float(args.gram_loss)
     next_sequence_prediction = float(args.next_sequence_prediction)
     phenotype_prediction = float(args.phenotype_prediction)
     supervised_prediction = float(args.supervised_prediction)
@@ -446,6 +454,7 @@ if not tune:
         n_components=n_components,
         output_path=output_path,
         overlap_loss=overlap_loss,
+        gram_loss=gram_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
         supervised_prediction=supervised_prediction,

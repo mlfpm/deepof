@@ -207,6 +207,7 @@ def get_vqvae(
     latent_dim: int,
     n_components: int,
     beta: float = 10.0,
+    reg_gram: float = 1.0,
     conv_filters=16,
     dense_activation="relu",
     gru_units_1=32,
@@ -222,6 +223,7 @@ def get_vqvae(
         latent_dim (int): dimension of the latent space.
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
+        reg_gram (float): regularization parameter for the Gram matrix.
         conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
         dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
@@ -241,6 +243,7 @@ def get_vqvae(
         n_components,
         latent_dim,
         beta=beta,
+        reg_gram=reg_gram,
         name="vector_quantizer",
     )
     encoder = get_deepof_encoder(
@@ -296,6 +299,7 @@ class VQVAE(tf.keras.models.Model):
         latent_dim: int = 4,
         n_components: int = 15,
         beta: float = 10.0,
+        reg_gram: float = 1.0,
         architecture_hparams: dict = None,
         **kwargs,
     ):
@@ -307,7 +311,8 @@ class VQVAE(tf.keras.models.Model):
             input_shape (tuple): Shape of the input to the full model.
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
-            beta (float): Beta parameter of the VQ loss.
+            beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
+            reg_gram (float): Regularization parameter for the Gram matrix.
             architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
             **kwargs: Additional keyword arguments.
 
@@ -318,6 +323,7 @@ class VQVAE(tf.keras.models.Model):
         self.latent_dim = latent_dim
         self.n_components = n_components
         self.beta = beta
+        self.reg_gram = reg_gram
         self.architecture_hparams = architecture_hparams
 
         # Define VQ_VAE model
@@ -332,6 +338,7 @@ class VQVAE(tf.keras.models.Model):
             self.latent_dim,
             self.n_components,
             self.beta,
+            self.reg_gram,
             conv_filters=self.hparams["conv_filters"],
             dense_activation=self.hparams["dense_activation"],
             gru_units_1=self.hparams["gru_units_1"],
@@ -424,12 +431,14 @@ class VQVAE(tf.keras.models.Model):
         self.cluster_population.update_state(populated_clusters)
 
         # Log results (coupled with TensorBoard)
-        return {
+        log_dict = {
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
             "cluster_population": self.cluster_population.result(),
         }
+
+        return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
 
     @tf.function
     def test_step(self, data):  # pragma: no cover
@@ -464,13 +473,15 @@ class VQVAE(tf.keras.models.Model):
         self.val_vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.val_cluster_population.update_state(populated_clusters)
 
-        # Log results (to couple with TensorBoard in future implementations)
-        return {
-            "loss": self.val_total_loss_tracker.result(),
-            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
-            "vq_loss": self.val_vq_loss_tracker.result(),
-            "cluster_population": self.val_cluster_population.result(),
+        # Log results (coupled with TensorBoard)
+        log_dict = {
+            "loss": self.total_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "vq_loss": self.vq_loss_tracker.result(),
+            "cluster_population": self.cluster_population.result(),
         }
+
+        return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
 
     def get_vq_posterior(self):
         """
@@ -519,6 +530,7 @@ def get_gmvae(
     mmd_warmup: int = 15,
     mmd_annealing_mode: str = "linear",
     overlap_loss: float = 0.0,
+    reg_gram: float = 1.0,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
     next_sequence_prediction: bool = False,
@@ -547,6 +559,7 @@ def get_gmvae(
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
             overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap.
+            reg_gram (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_gram_matrix.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             next_sequence_prediction (bool): whether to add a next sequence prediction loss, which regularizes the
@@ -595,6 +608,7 @@ def get_gmvae(
         mmd_warmup=mmd_warmup,
         mmd_annealing_mode=mmd_annealing_mode,
         overlap_loss=overlap_loss,
+        reg_gram=reg_gram,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
         name="gaussian_mixture_latent",
@@ -688,6 +702,7 @@ class GMVAE(tf.keras.models.Model):
         montecarlo_kl: int = 10,
         n_components: int = 15,
         overlap_loss: float = 0.0,
+        reg_gram: float = 1.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         next_sequence_prediction: float = 0.0,
@@ -713,6 +728,7 @@ class GMVAE(tf.keras.models.Model):
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
             n_components (int): Number of mixture components in the latent space.
             overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap.
+            reg_gram (float): weight of the gram matrix regularization loss.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             next_sequence_prediction (bool): whether to add a next sequence prediction loss, which regularizes the
@@ -741,6 +757,7 @@ class GMVAE(tf.keras.models.Model):
         self.n_components = n_components
         self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
         self.overlap_loss = overlap_loss
+        self.reg_gram = reg_gram
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
         self.supervised_prediction = supervised_prediction
@@ -766,6 +783,7 @@ class GMVAE(tf.keras.models.Model):
             mmd_warmup=self.mmd_warmup,
             mmd_annealing_mode=self.mmd_annealing_mode,
             overlap_loss=self.overlap_loss,
+            reg_gram=self.reg_gram,
             reg_cat_clusters=self.reg_cat_clusters,
             reg_cluster_variance=self.reg_cluster_variance,
             next_sequence_prediction=self.next_sequence_prediction,

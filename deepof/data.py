@@ -1114,7 +1114,8 @@ class Coordinates:
         mmd_warmup: int = 15,
         montecarlo_kl: int = 10,
         n_components: int = 10,
-        overlap_loss: float = 0,
+        overlap_loss: float = 0.0,
+        gram_loss: float = 1.0,
         output_path: str = "unsupervised_trained_models",
         next_sequence_prediction: float = 0,
         phenotype_prediction: float = 0,
@@ -1152,6 +1153,8 @@ class Coordinates:
             n_components (int): Number of latent clusters for the embedding model to use.
             overlap_loss (float): Weight of the overlap loss, which adds a regularization term to GMVAE models which
             penalizes the overlap between the clusters.
+            gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
+            penalizes the correlation between the dimensions in the latent space.
             output_path (str): Path to save the trained model and all log files.
             next_sequence_prediction (float): Weight of the next sequence prediction loss, used as a regularizer.
             phenotype_prediction (float): Weight of the phenotype prediction loss, used to guide training towards using
@@ -1196,6 +1199,7 @@ class Coordinates:
             montecarlo_kl=montecarlo_kl,
             n_components=n_components,
             overlap_loss=overlap_loss,
+            gram_loss=gram_loss,
             output_path=output_path,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,

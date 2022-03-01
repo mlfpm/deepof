@@ -94,6 +94,30 @@ def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
     return neigh_entropy
 
 
+def compute_gram_loss(latent_means, weight=1.0, batch_size=64):
+    """
+
+    Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
+    space.
+    Based on Variational Animal Motion Embedding (VAME) https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
+
+    Args:
+        latent_means: tensor containing the means of the latent distribution
+        weight: weight of the Gram loss in the total loss function
+        batch_size: batch size of the data to compute the Gram loss for.
+
+    Returns:
+        tf.Tensor: Gram loss
+
+    """
+    gram_matrix = (tf.transpose(latent_means) @ latent_means) / tf.cast(
+        batch_size, tf.float32
+    )
+    s = tf.linalg.svd(gram_matrix, compute_uv=False)
+    s = tf.sqrt(tf.maximum(s, 1e-9))
+    return weight * tf.reduce_sum(s)
+
+
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     """
 
@@ -194,6 +218,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         overlap_loss: float = 0.0,
+        reg_gram: float = 1.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         **kwargs,
@@ -214,6 +239,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
             overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap
+            reg_gram (float): weight of the Gram matrix regularization loss.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             **kwargs: keyword arguments passed to the parent class
@@ -232,6 +258,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.mmd_warmup = mmd_warmup
         self.mmd_annealing_mode = mmd_annealing_mode
         self.overlap_loss = overlap_loss
+        self.reg_gram = reg_gram
         self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
@@ -346,6 +373,14 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         z_cat = self.z_cat(inputs)
         z_gauss_mean = self.z_gauss_mean(inputs)
+
+        if self.reg_gram:
+            gram_loss = compute_gram_loss(
+                z_gauss_mean, weight=self.reg_gram, batch_size=self.batch_size
+            )
+            self.add_loss(gram_loss)
+            self.add_metric(gram_loss, name="gram_loss")
+
         z_gauss_var = self.z_gauss_var(inputs)
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
         z_gauss = Reshape([2 * self.latent_dim, self.n_components])(z_gauss)
@@ -375,7 +410,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         return z, z_cat
 
 
-class VectorQuantizer(tf.keras.layers.Layer):
+class VectorQuantizer(tf.keras.models.Model):
     """
 
     Vector quantizer layer, which quantizes the input vectors into a fixed number of clusters using L2 norm. Based on
@@ -383,7 +418,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, n_components, embedding_dim, beta, **kwargs):
+    def __init__(self, n_components, embedding_dim, beta, reg_gram, **kwargs):
         """
 
         Initializes the VQ layer.
@@ -392,6 +427,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
             n_components (int): number of embeddings to use
             embedding_dim (int): dimensionality of the embeddings
             beta (float): beta value for the loss function
+            reg_gram (float): regularization parameter for the Gram matrix
             **kwargs: additional arguments for the parent class
 
         """
@@ -400,6 +436,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
         self.embedding_dim = embedding_dim
         self.n_components = n_components
         self.beta = beta
+        self.reg_gram = reg_gram
 
         # Initialize embeddings
         w_init = tf.random_uniform_initializer()
@@ -444,6 +481,14 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
         quantized = tf.matmul(encodings, self.embeddings, transpose_b=True)
         quantized = tf.reshape(quantized, input_shape)
+
+        # Add a disentangling penalty to the codebook
+        if self.reg_gram:
+            gram_loss = compute_gram_loss(
+                self.embeddings, weight=self.reg_gram, batch_size=input_shape[0]
+            )
+            self.add_loss(gram_loss)
+            self.add_metric(gram_loss, name="gram_loss")
 
         # Update posterior variance
         self.update_posterior_variances()
