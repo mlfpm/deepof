@@ -1102,14 +1102,14 @@ class Coordinates:
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         embedding_model: str = "GMVAE",
         batch_size: int = 64,
-        encoding_size: int = 4,
+        latent_dim: int = 4,
         epochs: int = 50,
         hparams: dict = None,
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
         log_history: bool = True,
         log_hparams: bool = False,
-        loss: str = "ELBO",
+        latent_loss: str = "ELBO",
         mmd_annealing_mode: str = "linear",
         mmd_warmup: int = 15,
         montecarlo_kl: int = 10,
@@ -1138,7 +1138,7 @@ class Coordinates:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
             embedding_model (str): Model to use for unsupervised embedding. Must be one of "VQVAE" and "GMVAE".
             batch_size (int): Batch size for training.
-            encoding_size (int): Dimention size of the latent space.
+            latent_dim (int): Dimention size of the latent space.
             epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
             will stop training when validation loss stops decreasing.
             hparams (dict): Hyperparameters for the model. See deepof.models for more details.
@@ -1146,7 +1146,7 @@ class Coordinates:
             kl_warmup (int): Number of epochs to warm up the KL divergence.
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
-            loss (str): Loss function to use. Must be one of "VQ", "ELBO", "MMD", and "ELBO+MMD".
+            latent_loss (str): Loss function to use. Must be one of "VQ", "ELBO", "MMD", and "ELBO+MMD".
             mmd_annealing_mode (str): Mode for annealing the MMD loss. Must be one of "linear" and "sigmoid".
             mmd_warmup (int): Number of epochs to warm up the MMD loss.
             montecarlo_kl (int): Number of Monte Carlo samples to take for the Monte-Carlo KL divergence.
@@ -1186,14 +1186,14 @@ class Coordinates:
             preprocessed_object=preprocessed_object,
             embedding_model=embedding_model,
             batch_size=batch_size,
-            encoding_size=encoding_size,
+            latent_dim=latent_dim,
             epochs=epochs,
             hparams=hparams,
             kl_annealing_mode=kl_annealing_mode,
             kl_warmup=kl_warmup,
             log_history=log_history,
             log_hparams=log_hparams,
-            loss=loss,
+            latent_loss=latent_loss,
             mmd_annealing_mode=mmd_annealing_mode,
             mmd_warmup=mmd_warmup,
             montecarlo_kl=montecarlo_kl,

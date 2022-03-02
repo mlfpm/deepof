@@ -207,7 +207,7 @@ def get_vqvae(
     latent_dim: int,
     n_components: int,
     beta: float = 10.0,
-    reg_gram: float = 1.0,
+    reg_gram: float = 0.0,
     conv_filters=16,
     dense_activation="relu",
     gru_units_1=32,
@@ -299,7 +299,7 @@ class VQVAE(tf.keras.models.Model):
         latent_dim: int = 4,
         n_components: int = 15,
         beta: float = 10.0,
-        reg_gram: float = 1.0,
+        reg_gram: float = 0.0,
         architecture_hparams: dict = None,
         **kwargs,
     ):
@@ -352,13 +352,17 @@ class VQVAE(tf.keras.models.Model):
             name="reconstruction_loss"
         )
         self.vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
-        self.cluster_population = tf.keras.metrics.Mean(name="cluster_population")
+        self.cluster_population = tf.keras.metrics.Mean(
+            name="number_of_populated_clusters"
+        )
         self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
         self.val_vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
-        self.val_cluster_population = tf.keras.metrics.Mean(name="cluster_population")
+        self.val_cluster_population = tf.keras.metrics.Mean(
+            name="number_of_populated_clusters"
+        )
 
     @tf.function
     def call(self, inputs, **kwargs):
@@ -435,7 +439,7 @@ class VQVAE(tf.keras.models.Model):
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
-            "cluster_population": self.cluster_population.result(),
+            "number_of_populated_clusters": self.cluster_population.result(),
         }
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
@@ -478,43 +482,10 @@ class VQVAE(tf.keras.models.Model):
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
-            "cluster_population": self.cluster_population.result(),
+            "number_of_populated_clusters": self.cluster_population.result(),
         }
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
-
-    def get_vq_posterior(self):
-        """
-
-        Returns the posterior distribution of the VQ-VAE.
-
-        """
-
-        n_components = self.vqvae.get_layer("vector_quantizer").n_components
-        embeddings = self.vqvae.get_layer("vector_quantizer").embeddings
-        embedding_scales = self.vqvae.get_layer("vector_quantizer").embedding_scales
-
-        vq_posterior = tfd.MixtureSameFamily(
-            mixture_distribution=tfd.categorical.Categorical(
-                probs=tf.ones(n_components) / n_components
-            ),
-            components_distribution=tfd.MultivariateNormalDiag(
-                loc=tf.transpose(embeddings),
-                scale_diag=embedding_scales,
-            ),
-            name="vq_posterior",
-        )
-
-        return vq_posterior
-
-    @property
-    def posterior(self):
-        """
-
-        Returns a mixture of Gaussians fit to the final state of the  VQ-VAE codebook.
-
-        """
-        return self.get_vq_posterior()
 
 
 # noinspection PyCallingNonCallable
@@ -525,12 +496,12 @@ def get_gmvae(
     batch_size: int,
     loss: str = "ELBO",
     kl_warmup: int = 15,
-    kl_annealing_mode: str = "linear",
-    mc_kl: int = 1000,
+    kl_annealing_mode: str = "sigmoid",
+    mc_kl: int = 10,
     mmd_warmup: int = 15,
-    mmd_annealing_mode: str = "linear",
+    mmd_annealing_mode: str = "sigmoid",
     overlap_loss: float = 0.0,
-    reg_gram: float = 1.0,
+    reg_gram: float = 0.0,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
     next_sequence_prediction: bool = False,
@@ -702,7 +673,7 @@ class GMVAE(tf.keras.models.Model):
         montecarlo_kl: int = 10,
         n_components: int = 15,
         overlap_loss: float = 0.0,
-        reg_gram: float = 1.0,
+        reg_gram: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         next_sequence_prediction: float = 0.0,

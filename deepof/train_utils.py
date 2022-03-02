@@ -276,7 +276,7 @@ class ModeCollapseControl(tf.keras.callbacks.Callback):
     def __init__(
         self,
         min_delta: float = 3,
-        monitor: str = "val_cluster_population",
+        monitor: str = "val_number_of_populated_clusters",
     ):
         """
 
@@ -349,7 +349,7 @@ def get_callbacks(
     supervised_prediction: float = 0.0,
     overlap_loss: float = 0.0,
     gram_loss: float = 1.0,
-    loss: str = "ELBO",
+    latent_loss: str = "ELBO",
     loss_warmup: int = 0,
     warmup_mode: str = "none",
     input_type: str = False,
@@ -375,7 +375,7 @@ def get_callbacks(
         supervised_prediction (float): Weight of the supervised prediction loss
         overlap_loss (float): Weight of the overlap loss
         gram_loss (float): Weight of the gram loss
-        loss (str): Loss function to use for training
+        latent_loss (str): Loss function to use for training
         loss_warmup (int): Number of epochs to warmup the loss function
         warmup_mode (str): Warmup mode to use for training
         input_type (str): Input type to use for training
@@ -419,7 +419,7 @@ def get_callbacks(
             if embedding_model == "GMVAE"
             else ""
         ),
-        (("_loss={}".format(loss)) if embedding_model == "GMVAE" else ""),
+        (("_loss={}".format(latent_loss)) if embedding_model == "GMVAE" else ""),
         (
             ("_overlap_loss={}".format(overlap_loss))
             if embedding_model == "GMVAE"
@@ -533,14 +533,14 @@ def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     embedding_model: str,
     batch_size: int,
-    encoding_size: int,
+    latent_dim: int,
     epochs: int,
     hparams: dict,
     kl_annealing_mode: str,
     kl_warmup: int,
     log_history: bool,
     log_hparams: bool,
-    loss: str,
+    latent_loss: str,
     mmd_annealing_mode: str,
     mmd_warmup: int,
     montecarlo_kl: int,
@@ -569,7 +569,7 @@ def autoencoder_fitting(
         preprocessed_object (tuple): Tuple containing the preprocessed data.
         embedding_model (str): Name of the embedding model to use. Must be one of "VQVAE" or "GMVAE".
         batch_size (int): Batch size to use for training.
-        encoding_size (int): Encoding size to use for training.
+        latent_dim (int): Encoding size to use for training.
         epochs (int): Number of epochs to train the autoencoder for.
         hparams (dict): Dictionary containing the hyperparameters to use for training.
         kl_annealing_mode (str): Annealing mode to use for KL annealing. Must be one of "linear" or "sigmoid". Only used
@@ -577,7 +577,7 @@ def autoencoder_fitting(
         kl_warmup (int): Number of epochs to warmup KL annealing. Only used if embedding_model is "GMVAE".
         log_history (bool): Whether to log the history of the autoencoder.
         log_hparams (bool): Whether to log the hyperparameters used for training.
-        loss (str): Loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD". Only used if
+        latent_loss (str): Loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD". Only used if
         embedding_model is "GMVAE".
         mmd_annealing_mode (str): Annealing mode to use for MMD annealing. Must be one of "linear" or "sigmoid". Only used
         if embedding_model is "GMVAE".
@@ -627,9 +627,6 @@ def autoencoder_fitting(
     if batch_size > preprocessed_object[0].shape[0]:
         batch_size = preprocessed_object[0].shape[0]
 
-    # To avoid stability issues
-    tf.keras.backend.clear_session()
-
     # Set options for tf.data.Datasets
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = (
@@ -638,9 +635,9 @@ def autoencoder_fitting(
 
     # Defines hyperparameters to log on tensorboard (useful for keeping track of different models)
     logparam = {
-        "encoding": encoding_size,
+        "encoding": latent_dim,
         "k": n_components,
-        "loss": loss,
+        "loss": latent_loss,
     }
     if phenotype_prediction:
         logparam["pheno_weight"] = phenotype_prediction
@@ -653,7 +650,7 @@ def autoencoder_fitting(
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
-        loss=loss,
+        latent_loss=latent_loss,
         loss_warmup=kl_warmup,
         overlap_loss=overlap_loss,
         gram_loss=gram_loss,
@@ -697,7 +694,7 @@ def autoencoder_fitting(
             ae_full_model = deepof.models.VQVAE(
                 architecture_hparams=hparams,
                 input_shape=X_train.shape,
-                latent_dim=encoding_size,
+                latent_dim=latent_dim,
                 n_components=n_components,
                 reg_gram=gram_loss,
             )
@@ -717,10 +714,10 @@ def autoencoder_fitting(
                 architecture_hparams=hparams,
                 input_shape=X_train.shape,
                 batch_size=batch_size,
-                latent_dim=encoding_size,
+                latent_dim=latent_dim,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
-                latent_loss=loss,
+                latent_loss=latent_loss,
                 mmd_annealing_mode=mmd_annealing_mode,
                 mmd_warmup_epochs=mmd_warmup,
                 montecarlo_kl=montecarlo_kl,
@@ -785,20 +782,22 @@ def autoencoder_fitting(
         .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .shuffle(buffer_size=X_train.shape[0])
         .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
     )
     val_dataset = (
         tf.data.Dataset.from_tensor_slices((tf.cast(Xvals, tf.float32), tuple(yvals)))
         .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
     )
 
     ae_full_model.compile(optimizer=ae_full_model.optimizer)
     ae_full_model.fit(
         x=train_dataset,
         epochs=epochs,
-        verbose=1,
         validation_data=val_dataset,
         callbacks=callbacks_,
+        verbose=1,
     )
 
     if not os.path.exists(os.path.join(output_path, "trained_weights")):

@@ -13,8 +13,10 @@ from functools import partial
 from typing import Any, Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from scipy.spatial.distance import pdist
 from tensorflow.keras import backend as K
 from tensorflow.keras.initializers import he_uniform, random_uniform
 from tensorflow.keras.layers import Dense
@@ -118,6 +120,34 @@ def compute_gram_loss(latent_means, weight=1.0, batch_size=64):
     return weight * tf.reduce_sum(s)
 
 
+def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
+    """
+    Initializes the prior latent means in a spread-out fashion,
+    obtained by iteratively picking samples from a uniform distribution
+    while maximizing the minimum euclidean distance between means.
+
+    Args:
+        shape: shape of the latent space.
+        samples: number of samples to draw from the uniform distribution.
+
+    Returns:
+        tf.Tensor: the initialized latent means.
+
+    """
+
+    current_result = None
+    current_dist = None
+
+    for i in range(samples):
+        means = tf.keras.initializers.he_normal()(shape)
+        min_dist = np.min(pdist(means, metric="euclidean"))
+        if current_result is None or min_dist > current_dist:
+            current_result = means
+            current_dist = min_dist
+
+    return current_result.numpy()
+
+
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     """
 
@@ -214,11 +244,11 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         latent_loss: str = "ELBO",
         kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 1000,
+        mc_kl: int = 10,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         overlap_loss: float = 0.0,
-        reg_gram: float = 1.0,
+        reg_gram: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         **kwargs,
@@ -246,7 +276,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         """
 
-        super().__init__(**kwargs)
+        super(GaussianMixtureLatent, self).__init__(**kwargs)
         self.seq_shape = input_shape
         self.n_components = n_components
         self.latent_dim = latent_dim
@@ -288,9 +318,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             name="cluster_variances",
             activation=None,
             kernel_regularizer=(
-                tf.keras.regularizers.l2(0.01)
-                if self.reg_cluster_variance
-                else None  # CHECK HERE
+                tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
             ),
             activity_regularizer=MeanVarianceRegularizer(0.05),
             kernel_initializer=random_uniform(),
@@ -324,10 +352,17 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 probs=tf.ones(self.n_components) / self.n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
-                loc=K.random_uniform([self.n_components, self.latent_dim]),
+                loc=tf.Variable(
+                    far_uniform_initializer(
+                        [self.n_components, self.latent_dim],
+                        samples=10000,
+                    ),
+                    name="prior_means",
+                    trainable=True,
+                ),
                 scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / self.n_components
-                * 2,
+                / (1.5 * self.n_components),
+                name="prior_scales",
             ),
         )
         self.cluster_overlap_layer = ClusterOverlap(
@@ -374,18 +409,18 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z_cat = self.z_cat(inputs)
         z_gauss_mean = self.z_gauss_mean(inputs)
 
-        if self.reg_gram:
-            gram_loss = compute_gram_loss(
-                z_gauss_mean, weight=self.reg_gram, batch_size=self.batch_size
-            )
-            self.add_loss(gram_loss)
-            self.add_metric(gram_loss, name="gram_loss")
-
         z_gauss_var = self.z_gauss_var(inputs)
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
         z_gauss = Reshape([2 * self.latent_dim, self.n_components])(z_gauss)
 
         z = self.latent_distribution([z_cat, z_gauss])
+
+        if self.reg_gram:
+            gram_loss = compute_gram_loss(
+                z, weight=self.reg_gram, batch_size=self.batch_size
+            )
+            self.add_loss(gram_loss)
+            self.add_metric(gram_loss, name="gram_loss")
 
         # Define and control custom loss functions
         if "ELBO" in self.latent_loss:
@@ -418,7 +453,9 @@ class VectorQuantizer(tf.keras.models.Model):
 
     """
 
-    def __init__(self, n_components, embedding_dim, beta, reg_gram, **kwargs):
+    def __init__(
+        self, n_components, embedding_dim, beta, reg_gram: float = 0.0, **kwargs
+    ):
         """
 
         Initializes the VQ layer.
@@ -432,7 +469,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         """
 
-        super().__init__(**kwargs)
+        super(VectorQuantizer, self).__init__(**kwargs)
         self.embedding_dim = embedding_dim
         self.n_components = n_components
         self.beta = beta
