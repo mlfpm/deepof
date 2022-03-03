@@ -96,7 +96,7 @@ def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
     return neigh_entropy
 
 
-def compute_gram_loss(latent_means, weight=1.0, batch_size=64):
+def compute_gram_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
     """
 
     Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
@@ -506,6 +506,15 @@ class VectorQuantizer(tf.keras.models.Model):
 
         # Compute input shape and flatten, keeping the embedding dimension intact
         input_shape = tf.shape(x)
+
+        # Add a disentangling penalty to the codebook
+        if self.reg_gram:
+            gram_loss = compute_gram_loss(
+                x, weight=self.reg_gram, batch_size=input_shape[0]
+            )
+            self.add_loss(gram_loss)
+            self.add_metric(gram_loss, name="gram_loss")
+
         flattened = tf.reshape(x, [-1, self.embedding_dim])
 
         # Quantize input using the codebook
@@ -519,14 +528,6 @@ class VectorQuantizer(tf.keras.models.Model):
         quantized = tf.matmul(encodings, self.embeddings, transpose_b=True)
         quantized = tf.reshape(quantized, input_shape)
 
-        # Add a disentangling penalty to the codebook
-        if self.reg_gram:
-            gram_loss = compute_gram_loss(
-                self.embeddings, weight=self.reg_gram, batch_size=input_shape[0]
-            )
-            self.add_loss(gram_loss)
-            self.add_metric(gram_loss, name="gram_loss")
-
         # Update posterior variance
         self.update_posterior_variances()
 
@@ -535,7 +536,7 @@ class VectorQuantizer(tf.keras.models.Model):
             (tf.stop_gradient(quantized) - x) ** 2
         )
         codebook_loss = tf.reduce_mean((quantized - tf.stop_gradient(x)) ** 2)
-        self.add_loss(commitment_loss + codebook_loss)
+        self.add_loss(4 * commitment_loss + codebook_loss)
 
         # Straight-through estimator (copy gradients through the undiferentiable layer)
         quantized = x + tf.stop_gradient(quantized - x)
