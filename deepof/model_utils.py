@@ -532,10 +532,10 @@ class VectorQuantizer(tf.keras.models.Model):
         self.update_posterior_variances()
 
         # Compute vector quantization loss, and add it to the layer
-        commitment_loss = self.beta * tf.reduce_mean(
+        commitment_loss = self.beta * tf.reduce_sum(
             (tf.stop_gradient(quantized) - x) ** 2
         )
-        codebook_loss = tf.reduce_mean((quantized - tf.stop_gradient(x)) ** 2)
+        codebook_loss = tf.reduce_sum((quantized - tf.stop_gradient(x)) ** 2)
         self.add_loss(4 * commitment_loss + codebook_loss)
 
         # Straight-through estimator (copy gradients through the undiferentiable layer)

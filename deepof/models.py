@@ -415,7 +415,7 @@ class VQVAE(tf.keras.models.Model):
             reconstructions = self.vqvae(x, training=True)
 
             # Compute losses
-            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
+            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Backpropagation
@@ -462,7 +462,7 @@ class VQVAE(tf.keras.models.Model):
         reconstructions = self.vqvae(x, training=False)
 
         # Compute losses
-        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(next(y)))
+        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
         # Compute populated clusters

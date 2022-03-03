@@ -746,7 +746,8 @@ def autoencoder_fitting(
 
     callbacks_ = cbacks + [
         CustomStopper(
-            monitor="val_loss",
+            monitor="val_number_of_populated_clusters",
+            mode="max",
             patience=15,
             restore_best_weights=True,
             start_epoch=max(kl_warmup, mmd_warmup),
