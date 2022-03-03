@@ -32,7 +32,6 @@ def test_VQVAE_build(
     )
     vqvae.build((1000, 15, 10))
     vqvae.compile()
-    vqvae.get_vq_posterior()
 
 
 @settings(deadline=None, max_examples=25)
