@@ -479,10 +479,10 @@ class VQVAE(tf.keras.models.Model):
 
         # Log results (coupled with TensorBoard)
         log_dict = {
-            "loss": self.total_loss_tracker.result(),
-            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
-            "vq_loss": self.vq_loss_tracker.result(),
-            "number_of_populated_clusters": self.cluster_population.result(),
+            "loss": self.val_total_loss_tracker.result(),
+            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
+            "vq_loss": self.val_vq_loss_tracker.result(),
+            "number_of_populated_clusters": self.val_cluster_population.result(),
         }
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}

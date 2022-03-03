@@ -484,12 +484,6 @@ class VectorQuantizer(tf.keras.models.Model):
             trainable=True,
             name="vqvae_codebook",
         )
-        self.embedding_scales = tf.Variable(
-            initial_value=tf.ones([self.n_components, self.embedding_dim])
-            / self.n_components,
-            trainable=False,
-            name="codebook_posterior_scale",
-        )
 
     def call(self, x):  # pragma: no cover
         """
@@ -527,9 +521,6 @@ class VectorQuantizer(tf.keras.models.Model):
 
         quantized = tf.matmul(encodings, self.embeddings, transpose_b=True)
         quantized = tf.reshape(quantized, input_shape)
-
-        # Update posterior variance
-        self.update_posterior_variances()
 
         # Compute vector quantization loss, and add it to the layer
         commitment_loss = self.beta * tf.reduce_sum(
@@ -570,42 +561,13 @@ class VectorQuantizer(tf.keras.models.Model):
 
         if return_soft_counts:
             # Compute soft counts based on the distance to the codes
-            similarity = tf.reshape(similarity, [-1, self.n_components])
+            similarity = tf.reshape(1 / distances, [-1, self.n_components])
             soft_counts = tf.nn.softmax(similarity, axis=1)
             return soft_counts
 
         # Return index of the closest code
         encoding_indices = tf.argmin(distances, axis=1)
         return encoding_indices
-
-    def update_posterior_variances(self):  # pragma: no cover
-        """
-
-        Updates the posterior variances of the codebook (not used while training, only later as a way
-        of sampling the latent space.
-
-        """
-        # Compute L2-norm distance amongst codes, to estimate stdev for each cluster
-        code_similarity = tf.matmul(tf.transpose(self.embeddings), self.embeddings)
-        code_distances = (
-            tf.reduce_sum(tf.transpose(self.embeddings) ** 2, axis=1, keepdims=True)
-            + tf.reduce_sum(self.embeddings ** 2, axis=0)
-            - 2 * code_similarity
-        )
-
-        code_scales = []
-        # Compute the standard deviation of each cluster as their distance to
-        # their closest embedding / 1.96 (leaver 0.05 probability of overlap assumin
-        # an isotropic Gaussian distribution)
-        for code in range(self.n_components):
-            code_scale = code_distances[code][
-                tf.argsort(code_distances[code], axis=0, stable=True)[1]
-            ]
-            code_scales.append(
-                tf.ones([1, self.embedding_dim]) * code_scale / (self.embedding_dim / 2)
-            )
-
-        self.embedding_scales.assign(tf.concat(code_scales, axis=0))
 
 
 # Custom Layers
