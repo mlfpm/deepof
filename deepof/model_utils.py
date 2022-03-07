@@ -237,6 +237,41 @@ def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:  # pragma: no cover
     return mmd
 
 
+def compute_siwae(prior, likelihood, posterior, x, T):
+    """
+
+    Computes the SIWAE loss between the prior, likelihood and posterior. Bsed on the paper:
+    https://arxiv.org/pdf/2003.01687.pdf
+
+    Args:
+        prior: prior distribution
+        likelihood:
+        posterior: posterior distribution
+        x: input tensor
+        T: number of samples to draw from the posterior distribution
+
+    Returns:
+
+    """
+
+    q = posterior(x)
+    z = q.components_dist.sample(T)
+    z = tf.transpose(z, perm=[2, 0, 1, 3])
+    loss_n = (
+        tf.math.reduce_logsumexp(
+            (
+                -tf.math.log(T)
+                + tf.math.log_softmax(mixture_dist.logits)[:, None, :]
+                + prior.log_prior(z)
+                + likelihood(z).log_prob(x)
+                - q.log_prob(z)
+            ),
+            axis=[0, 1],
+        ),
+    )
+    return tf.math.reduce_mean(loss_n, axis=0)
+
+
 class GaussianMixtureLatent(tf.keras.models.Model):
     """
 

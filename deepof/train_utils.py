@@ -450,8 +450,6 @@ def autoencoder_fitting(
 
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
-        X_train=X_train,
-        batch_size=batch_size,
         embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,

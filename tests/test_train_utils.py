@@ -186,8 +186,6 @@ def test_tune_search(
 
     callbacks = list(
         deepof.train_utils.get_callbacks(
-            X_train=X_train,
-            batch_size=25,
             embedding_model=embedding_model,
             phenotype_prediction=phenotype_prediction,
             next_sequence_prediction=next_sequence_prediction,
@@ -202,7 +200,6 @@ def test_tune_search(
             entropy_knn=5,
             outpath="unsupervised_tuner_search",
             logparam={"encoding": 16, "k": 5},
-            tuning=True,
         )
     )[1:]
 

@@ -676,7 +676,7 @@ class GMVAE(tf.keras.models.Model):
         latent_loss: str = "ELBO",
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 15,
-        montecarlo_kl: int = 10,
+        montecarlo_kl: int = 1000,
         n_components: int = 15,
         n_cluster_loss: float = 1.0,
         reg_gram: float = 1.0,
@@ -728,7 +728,7 @@ class GMVAE(tf.keras.models.Model):
         self.kl_annealing_mode = kl_annealing_mode
         self.kl_warmup = kl_warmup_epochs
         self.latent_loss = latent_loss
-        self.mc_kl = montecarlo_kl
+        self.mc_kl = montecarlo_kl * n_components
         self.mmd_annealing_mode = mmd_annealing_mode
         self.mmd_warmup = mmd_warmup_epochs
         self.n_components = n_components
