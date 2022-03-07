@@ -16,7 +16,6 @@ from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-from hypothesis.extra.numpy import arrays
 
 import deepof.data
 import deepof.model_utils
@@ -31,37 +30,6 @@ def test_load_treatments():
         ),
         dict,
     )
-
-
-# noinspection PyUnresolvedReferences
-def test_one_cycle_scheduler():
-    cycle1 = deepof.train_utils.OneCycleScheduler(
-        iterations=5, max_rate=1.0, start_rate=0.1, last_iterations=2, last_rate=0.3
-    )
-    assert isinstance(cycle1._interpolate(1, 2, 0.2, 0.5), float)
-
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    onecycle = deepof.train_utils.OneCycleScheduler(
-        X.shape[0] // 100 * 10,
-        max_rate=0.005,
-    )
-
-    fit = test_model.fit(
-        X, y, callbacks=[onecycle], epochs=10, batch_size=100, verbose=0
-    )
-    assert isinstance(fit, tf.keras.callbacks.History)
-    assert onecycle.history["lr"][4] > onecycle.history["lr"][1]
-    assert onecycle.history["lr"][4] > onecycle.history["lr"][-1]
 
 
 def test_find_learning_rate():
@@ -101,40 +69,27 @@ def test_mode_collapse_control():
 
 
 @given(
-    X_train=arrays(
-        shape=st.tuples(st.integers(min_value=1, max_value=1000), st.just(24)),
-        dtype=float,
-        elements=st.floats(
-            min_value=0.0,
-            max_value=1,
-        ),
-    ),
-    batch_size=st.integers(min_value=128, max_value=512),
     embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     loss=st.one_of(st.just("test_A"), st.just("test_B")),
     next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
     phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
     supervised_prediction=st.floats(min_value=0.0, max_value=1.0),
-    overlap_loss=st.floats(min_value=0.0, max_value=1.0),
+    n_cluster_loss=st.floats(min_value=0.0, max_value=1.0),
 )
 def test_get_callbacks(
-    X_train,
-    batch_size,
     embedding_model,
     next_sequence_prediction,
     phenotype_prediction,
     supervised_prediction,
-    overlap_loss,
+    n_cluster_loss,
     loss,
 ):
     callbacks = deepof.train_utils.get_callbacks(
-        X_train=X_train,
-        batch_size=batch_size,
         embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
-        n_cluster_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         latent_loss=loss,
         input_type=False,
         cp=True,
@@ -145,9 +100,6 @@ def test_get_callbacks(
     assert np.any([isinstance(i, str) for i in callbacks])
     assert np.any(
         [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
-    )
-    assert np.any(
-        [isinstance(i, deepof.train_utils.OneCycleScheduler) for i in callbacks]
     )
 
 
@@ -224,7 +176,7 @@ def test_tune_search(
     loss,
 ):
 
-    overlap_loss = 0.1
+    n_cluster_loss = 0.1
     next_sequence_prediction = 0.1
     phenotype_prediction = 0.1
     supervised_prediction = 0.1
@@ -245,7 +197,7 @@ def test_tune_search(
             cp=False,
             reg_cat_clusters=True,
             reg_cluster_variance=True,
-            n_cluster_loss=overlap_loss,
+            n_cluster_loss=n_cluster_loss,
             gram_loss=0.1,
             entropy_knn=5,
             outpath="unsupervised_tuner_search",
@@ -265,7 +217,7 @@ def test_tune_search(
         kl_warmup_epochs=0,
         loss=loss,
         mmd_warmup_epochs=0,
-        n_cluster_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         gram_loss=0.1,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,

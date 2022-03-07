@@ -40,7 +40,7 @@ def test_VQVAE_build(
     kl_warmup_epochs=st.integers(min_value=0, max_value=1),
     mmd_warmup_epochs=st.integers(min_value=0, max_value=1),
     montecarlo_kl=st.integers(min_value=1, max_value=2),
-    n_components=st.integers(min_value=1, max_value=2).filter(lambda x: x % 2 == 0),
+    n_components=st.integers(min_value=2, max_value=4).filter(lambda x: x % 2 == 0),
     annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")),
 )
 def test_GMVAE_build(
@@ -62,7 +62,7 @@ def test_GMVAE_build(
         next_sequence_prediction=True,
         phenotype_prediction=True,
         supervised_prediction=True,
-        n_cluster_loss=True,
+        n_cluster_loss=1.0,
         kl_annealing_mode=annealing_mode,
         mmd_annealing_mode=annealing_mode,
     )

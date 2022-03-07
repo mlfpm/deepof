@@ -255,7 +255,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         latent_loss: str = "ELBO",
         kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 10,
+        mc_kl: int = 1000,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         n_cluster_loss: float = 0.0,
@@ -316,7 +316,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             // 2,
             name="cluster_means",
             activation="linear",
-            # activity_regularizer=(tf.keras.regularizers.l1(10e-5)),
+            activity_regularizer=None,
             kernel_initializer=he_uniform(),
         )
         self.z_gauss_var = Dense(
@@ -366,7 +366,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 ),
                 scale_diag=tf.Variable(
                     tf.ones([self.n_components, self.latent_dim])
-                    / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32)),
+                    / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
                     name="prior_scales",
                     trainable=False,
                 ),
@@ -374,6 +374,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         )
         self.cluster_control_layer = ClusterControl(
             batch_size=self.batch_size,
+            n_components=self.n_components,
             encoding_dim=self.latent_dim,
             k=self.n_components,
             loss_weight=self.n_cluster_loss,
@@ -851,6 +852,7 @@ class ClusterControl(Layer):
     def __init__(
         self,
         batch_size: int,
+        n_components: int,
         encoding_dim: int,
         k: int = 15,
         loss_weight: float = 1.0,
@@ -863,6 +865,7 @@ class ClusterControl(Layer):
 
         Args:
             batch_size (int): batch size of the model
+            n_components (int): number of components in the latent Gaussian Mixture
             encoding_dim (int): dimension of the latent Gaussian Mixture
             k (int): number of nearest components of the latent Gaussian Mixture to consider
             loss_weight (float): weight of the regularization penalty applied to the local entropy of each
@@ -873,6 +876,7 @@ class ClusterControl(Layer):
         """
         super(ClusterControl, self).__init__(*args, **kwargs)
         self.batch_size = batch_size
+        self.n_components = n_components
         self.enc = encoding_dim
         self.k = k
         self.loss_weight = loss_weight
@@ -886,6 +890,7 @@ class ClusterControl(Layer):
 
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
+        config.update({"n_components": self.n_components})
         config.update({"enc": self.enc})
         config.update({"k": self.k})
         config.update({"loss_weight": self.loss_weight})
@@ -932,6 +937,15 @@ class ClusterControl(Layer):
             tf.dtypes.float32,
         )
 
+        # Calculate the number of elements in each cluster, by counting the number of elements in hard_groups
+        # that are equal to the corresponding cluster number
+        cluster_size_entropy = compute_shannon_entropy(hard_groups)
+
+        self.add_metric(
+            cluster_size_entropy,
+            name="cluster_size_entropy",
+        )
+
         self.add_metric(
             n_components,
             name="number_of_populated_clusters",
@@ -950,10 +964,8 @@ class ClusterControl(Layer):
         )
 
         if self.loss_weight:
-
             self.add_loss(self.loss_weight * tf.reduce_sum(-n_components))
-            self.add_loss(self.loss_weight * tf.reduce_sum(neighbourhood_entropy))
-            self.add_loss(self.loss_weight * tf.reduce_sum(-max_groups))
+            self.add_loss(self.loss_weight * tf.reduce_sum(-cluster_size_entropy))
 
         return encodings
 

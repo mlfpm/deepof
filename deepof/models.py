@@ -66,7 +66,6 @@ def get_deepof_encoder(
         use_bias=False,
     )(x)
     encoder = tf.keras.layers.Masking(mask_value=0.0)(encoder)
-    encoder = LayerNormalization()(encoder)
     encoder = Bidirectional(
         GRU(
             gru_units_1,
@@ -170,6 +169,7 @@ def get_deepof_decoder(
     x_decoded_mean = TimeDistributed(
         Dense(tfpl.IndependentNormal.params_size(input_shape[1:]) // 2)
     )(generator)
+    x_decoded_mean = LayerNormalization()(x_decoded_mean)
     x_decoded = tfpl.DistributionLambda(
         make_distribution_fn=lambda decoded: tfd.Masked(
             tfd.Independent(
@@ -495,7 +495,7 @@ def get_gmvae(
     loss: str = "ELBO",
     kl_warmup: int = 15,
     kl_annealing_mode: str = "sigmoid",
-    mc_kl: int = 10,
+    mc_kl: int = 1000,
     mmd_warmup: int = 15,
     mmd_annealing_mode: str = "sigmoid",
     n_cluster_loss: float = 1.0,
@@ -604,9 +604,17 @@ def get_gmvae(
 
     # Add additional (optional) branches departing from the latent space
     if next_sequence_prediction:
-        predictor = get_deepof_decoder(input_shape[1:], latent_dim)
+        predictor = get_deepof_decoder(
+            input_shape[1:],
+            latent_dim,
+            conv_filters=conv_filters,
+            dense_activation=dense_activation,
+            gru_units_1=gru_units_1,
+            gru_unroll=gru_unroll,
+            bidirectional_merge=bidirectional_merge,
+        )
         predictor._name = "deepof_predictor"
-        gmvae_outputs.append(predictor([inputs, embedding.outputs]))
+        gmvae_outputs.append(predictor([embedding.outputs, inputs]))
 
     if (
         phenotype_prediction

@@ -163,85 +163,7 @@ def find_learning_rate(
     return exp_lr.rates, exp_lr.losses
 
 
-# Custom auxiliary classes
-# noinspection PyAttributeOutsideInit
-class ModeCollapseControl(tf.keras.callbacks.Callback):
-    """
-
-    Callback to control the mode collapse in VQVAE models.
-
-    """
-
-    def __init__(
-        self,
-        min_delta: float = 3,
-        monitor: str = "val_number_of_populated_clusters",
-    ):
-        """
-
-        Initializes the callback.
-
-        Args:
-            min_delta (int): minimum populated clusters delta between epochs to consider to stop training.
-            monitor (str): name of the metric to monitor.
-
-        """
-        super().__init__()
-        self.min_delta = min_delta
-        self.monitor = monitor
-
-    def on_train_begin(self, logs=None):
-        # Allow instances to be re-used
-        self.stopped_epoch = 0
-        self.last_metric_value = None
-        self.best_weights = None
-
-    def on_epoch_end(self, epoch: int, logs: dict = None):
-        """
-
-        Logs the learning rate to tensorboard
-
-        Args:
-           epoch (int): current epoch number
-           logs (dict): dictionary of logs
-
-        """
-
-        current = logs.get(self.monitor)
-
-        if current is None:
-            # Use training metric if validation data is not provided
-            current = logs.get(self.monitor.replace("val_", ""))
-
-            if current is None:
-                raise ValueError(
-                    "Early stopping requires {} available!".format(self.monitor)
-                )
-
-        # Check for complete collapse (only one cluster is currently populated)
-        if current == 1:
-            self.model.stop_training = True
-
-        # Check for a significant drop (of at least min_delta with respect to the last epoch)
-        if epoch > 1:
-            delta = self.last_metric_value - current
-            if delta > self.min_delta:
-                self.model.stop_training = True
-
-            # Restore best weights if training was stopped
-            if self.model.stop_training:
-                self.stopped_epoch = epoch
-                self.model.set_weights(self.best_weights)
-
-        else:
-            self.best_weights = self.model.get_weights()
-
-        self.last_metric_value = current
-
-
 def get_callbacks(
-    X_train: np.array,
-    batch_size: int,
     embedding_model: str,
     phenotype_prediction: float = 0.0,
     next_sequence_prediction: float = 0.0,
@@ -259,15 +181,12 @@ def get_callbacks(
     logparam: dict = None,
     outpath: str = ".",
     run: int = False,
-    tuning: bool = False,
 ) -> List[Union[Any]]:
     """
 
     Generates callbacks used for model training.
 
     Args:
-        X_train (np.array): Training data
-        batch_size (int): Batch size
         embedding_model (str): Embedding model used for training. Must be "VQVAE" or "GMVAE".
         phenotype_prediction (float): Weight of the phenotype prediction loss.
         next_sequence_prediction (float): Weight of the next sequence prediction loss.
@@ -285,7 +204,6 @@ def get_callbacks(
         logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
         outpath (str): Path to the output directory
         run (int): Run number to use for checkpointing
-        tuning (bool): Whether the callbacks will be used for hyperparameter tuning or not.
 
     Returns:
         List[Union[Any]]: List of callbacks to be used for training
@@ -342,18 +260,7 @@ def get_callbacks(
         profile_batch=2,
     )
 
-    onecycle = deepof.train_utils.OneCycleScheduler(
-        X_train.shape[0] // batch_size * 250,
-        max_rate=0.005,
-        log_dir=os.path.join(outpath, "metrics", run_ID),
-    )
-
-    callbacks = [run_ID, tensorboard_callback, onecycle]
-
-    # Add mode collapse callback for VQVAE models
-    if embedding_model == "VQVAE" and tuning == False:
-        mode_collapse_callback = deepof.train_utils.ModeCollapseControl()
-        callbacks.append(mode_collapse_callback)
+    callbacks = [run_ID, tensorboard_callback]
 
     if cp:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(
