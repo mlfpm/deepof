@@ -94,7 +94,8 @@ def load_treatments(train_path):
 class ExponentialLearningRate(tf.keras.callbacks.Callback):
     """
 
-    Simple class that allows to grow learning rate exponentially during training
+    Simple class that allows to grow learning rate exponentially during training.
+    Used to trigger optimal learning rate search in deepof.train_utils.find_learning_rate.
 
     """
 
@@ -160,108 +161,6 @@ def find_learning_rate(
     K.set_value(model.optimizer.lr, init_lr)
     model.set_weights(init_weights)
     return exp_lr.rates, exp_lr.losses
-
-
-# Custom auxiliary classes
-class OneCycleScheduler(tf.keras.callbacks.Callback):
-    """
-
-    One cycle learning rate scheduler.
-    Based on https://arxiv.org/pdf/1506.01186.pdf
-
-    """
-
-    def __init__(
-        self,
-        iterations: int,
-        max_rate: float,
-        start_rate: float = None,
-        last_iterations: int = None,
-        last_rate: float = None,
-        log_dir: str = ".",
-    ):
-        """
-
-        Initializes the scheduler.
-
-        Args:
-            iterations (int): number of iterations to train for
-            max_rate (float): maximum learning rate
-            start_rate (float): starting learning rate
-            last_iterations (int): number of iterations to train for at the last rate
-            last_rate (float): learning rate at the last iteration
-            log_dir (str): directory to save the learning rate to
-
-        """
-        super().__init__()
-        self.iterations = iterations
-        self.max_rate = max_rate
-        self.start_rate = start_rate or max_rate / 10
-        self.last_iterations = last_iterations or iterations // 10 + 1
-        self.half_iteration = (iterations - self.last_iterations) // 2
-        self.last_rate = last_rate or self.start_rate / 1000
-        self.iteration = 0
-        self.history = {}
-        self.log_dir = log_dir
-
-    def _interpolate(self, iter1: int, iter2: int, rate1: float, rate2: float) -> float:
-        return (rate2 - rate1) * (self.iteration - iter1) / (iter2 - iter1) + rate1
-
-    # noinspection PyMethodOverriding,PyTypeChecker
-    def on_batch_begin(self, batch: int, logs: dict):
-        """
-
-        Defines computations to perform for each batch
-
-        Args:
-            batch (int): current batch number
-            logs (dict): dictionary of logs
-
-        """
-
-        self.history.setdefault("lr", []).append(K.get_value(self.model.optimizer.lr))
-
-        if self.iteration < self.half_iteration:
-            rate = self._interpolate(
-                0, self.half_iteration, self.start_rate, self.max_rate
-            )
-        elif self.iteration < 2 * self.half_iteration:
-            rate = self._interpolate(
-                self.half_iteration,
-                2 * self.half_iteration,
-                self.max_rate,
-                self.start_rate,
-            )
-        else:
-            rate = self._interpolate(
-                2 * self.half_iteration,
-                self.iterations,
-                self.start_rate,
-                self.last_rate,
-            )
-            rate = max(rate, self.last_rate)
-        self.iteration += 1
-        K.set_value(self.model.optimizer.lr, rate)
-
-    def on_epoch_end(self, epoch: int, logs: dict = None):
-        """
-
-        Logs the learning rate to tensorboard
-
-        Args:
-           epoch (int): current epoch number
-           logs (dict): dictionary of logs
-
-        """
-
-        writer = tf.summary.create_file_writer(self.log_dir)
-
-        with writer.as_default():
-            tf.summary.scalar(
-                "learning_rate",
-                data=self.model.optimizer.lr,
-                step=epoch,
-            )
 
 
 # Custom auxiliary classes
@@ -347,7 +246,7 @@ def get_callbacks(
     phenotype_prediction: float = 0.0,
     next_sequence_prediction: float = 0.0,
     supervised_prediction: float = 0.0,
-    overlap_loss: float = 0.0,
+    n_cluster_loss: float = 0.0,
     gram_loss: float = 1.0,
     latent_loss: str = "ELBO",
     loss_warmup: int = 0,
@@ -373,7 +272,7 @@ def get_callbacks(
         phenotype_prediction (float): Weight of the phenotype prediction loss.
         next_sequence_prediction (float): Weight of the next sequence prediction loss.
         supervised_prediction (float): Weight of the supervised prediction loss
-        overlap_loss (float): Weight of the overlap loss
+        n_cluster_loss (float): Weight of the n_cluster_loss
         gram_loss (float): Weight of the gram loss
         latent_loss (str): Loss function to use for training
         loss_warmup (int): Number of epochs to warmup the loss function
@@ -421,7 +320,7 @@ def get_callbacks(
         ),
         (("_loss={}".format(latent_loss)) if embedding_model == "GMVAE" else ""),
         (
-            ("_overlap_loss={}".format(overlap_loss))
+            ("_n_cluster_loss={}".format(n_cluster_loss))
             if embedding_model == "GMVAE"
             else ""
         ),
@@ -546,7 +445,7 @@ def autoencoder_fitting(
     montecarlo_kl: int,
     n_components: int,
     output_path: str,
-    overlap_loss: float,
+    n_cluster_loss: float,
     gram_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
@@ -586,7 +485,7 @@ def autoencoder_fitting(
         "GMVAE".
         n_components (int): Number of components to use for the GMVAE.
         output_path (str): Path to the output directory.
-        overlap_loss (float): Weight to use for the overlap loss. Only used if embedding_model is "GMVAE".
+        n_cluster_loss (float): Weight to use for the n_cluster_loss. Only used if embedding_model is "GMVAE".
         gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
         penalizes the correlation between the dimensions in the latent space.
         next_sequence_prediction (float): Weight to use for the next sequence prediction loss. Only used if embedding_model
@@ -652,7 +551,7 @@ def autoencoder_fitting(
         supervised_prediction=supervised_prediction,
         latent_loss=latent_loss,
         loss_warmup=kl_warmup,
-        overlap_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
@@ -722,7 +621,7 @@ def autoencoder_fitting(
                 mmd_warmup_epochs=mmd_warmup,
                 montecarlo_kl=montecarlo_kl,
                 n_components=n_components,
-                overlap_loss=overlap_loss,
+                n_cluster_loss=n_cluster_loss,
                 reg_gram=gram_loss,
                 next_sequence_prediction=next_sequence_prediction,
                 phenotype_prediction=phenotype_prediction,
@@ -826,7 +725,7 @@ def tune_search(
     kl_warmup_epochs: int,
     loss: str,
     mmd_warmup_epochs: int,
-    overlap_loss: float,
+    n_cluster_loss: float,
     gram_loss: float,
     next_sequence_prediction: float,
     phenotype_prediction: float,
@@ -850,9 +749,9 @@ def tune_search(
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
         kl_warmup_epochs (int): Number of epochs to warmup KL loss. Only used if embedding_model is "GMVAE".
-        loss (str): Loss function to use. Must be one of "mmd", "kl", or "overlap". Only used if embedding_model is "GMVAE".
+        loss (str): Loss function to use. Must be one of "mmd", "kl", or "n_cluster". Only used if embedding_model is "GMVAE".
         mmd_warmup_epochs (int): Number of epochs to warmup MMD loss. Only used if embedding_model is "GMVAE"
-        overlap_loss (float): Weight of the overlap loss. Only used if embedding_model is "GMVAE".
+        n_cluster_loss (float): Weight of the n_cluster_loss loss. Only used if embedding_model is "GMVAE".
         gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
         between dimensions in the latent space.
         next_sequence_prediction (float): Weight of the next sequence prediction loss. Only used if embedding_model is "GMVAE".
@@ -902,7 +801,7 @@ def tune_search(
             loss=loss,
             mmd_warmup_epochs=mmd_warmup_epochs,
             n_components=k,
-            overlap_loss=overlap_loss,
+            n_cluster_loss=n_cluster_loss,
             reg_gram=gram_loss,
             next_sequence_prediction=next_sequence_prediction,
             phenotype_prediction=phenotype_prediction,

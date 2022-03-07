@@ -129,7 +129,7 @@ class GMVAE(HyperModel):
         loss: str = "ELBO+MMD",
         mmd_warmup_epochs: int = 0,
         n_components: int = 10,
-        overlap_loss: float = False,
+        n_cluster_loss: float = False,
         reg_gram: float = 1.0,
         next_sequence_prediction: float = 0.0,
         phenotype_prediction: float = 0.0,
@@ -149,7 +149,7 @@ class GMVAE(HyperModel):
             loss (str): loss function to use.
             mmd_warmup_epochs (int): number of epochs to warmup MMD loss.
             n_components (int): number of components in the quantization space.
-            overlap_loss (float): weight of the overlap loss.
+            n_cluster_loss (float): weight of the n_cluster_loss.
             reg_gram (float): regularization parameter for the Gram matrix of the latent embeddings.
             next_sequence_prediction (float): weight of the next sequence prediction loss.
             phenotype_prediction (float): weight of the phenotype prediction loss.
@@ -167,7 +167,7 @@ class GMVAE(HyperModel):
         self.loss = loss
         self.mmd_warmup_epochs = mmd_warmup_epochs
         self.n_components = n_components
-        self.overlap_loss = overlap_loss
+        self.n_cluster_loss = n_cluster_loss
         self.reg_gram = reg_gram
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
@@ -234,7 +234,7 @@ class GMVAE(HyperModel):
             latent_loss=self.loss,
             mmd_warmup_epochs=self.mmd_warmup_epochs,
             n_components=k,
-            overlap_loss=self.overlap_loss,
+            n_cluster_loss=self.n_cluster_loss,
             reg_gram=self.reg_gram,
             next_sequence_prediction=self.next_sequence_prediction,
             phenotype_prediction=self.phenotype_prediction,

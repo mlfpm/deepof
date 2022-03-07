@@ -62,7 +62,7 @@ def test_GMVAE_build(
         next_sequence_prediction=True,
         phenotype_prediction=True,
         supervised_prediction=True,
-        overlap_loss=True,
+        n_cluster_loss=True,
         kl_annealing_mode=annealing_mode,
         mmd_annealing_mode=annealing_mode,
     )

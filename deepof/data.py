@@ -1114,7 +1114,7 @@ class Coordinates:
         mmd_warmup: int = 15,
         montecarlo_kl: int = 10,
         n_components: int = 10,
-        overlap_loss: float = 0.0,
+        n_cluster_loss: float = 0.0,
         gram_loss: float = 1.0,
         output_path: str = "unsupervised_trained_models",
         next_sequence_prediction: float = 0,
@@ -1151,8 +1151,8 @@ class Coordinates:
             mmd_warmup (int): Number of epochs to warm up the MMD loss.
             montecarlo_kl (int): Number of Monte Carlo samples to take for the Monte-Carlo KL divergence.
             n_components (int): Number of latent clusters for the embedding model to use.
-            overlap_loss (float): Weight of the overlap loss, which adds a regularization term to GMVAE models which
-            penalizes the overlap between the clusters.
+            n_cluster_loss (float): Weight of the n_cluster_loss, which adds a regularization term to GMVAE models which
+            maximizes the number of populated clusters in the latent space.
             gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
             output_path (str): Path to save the trained model and all log files.
@@ -1169,7 +1169,7 @@ class Coordinates:
             categories in the categorical features.
             reg_cluster_variance (bool): Whether to penalize the latent space of GMVAE models based on variance
             differences across clusters.
-            entropy_knn (int): Number of nearest neighbors to use for the entropy computation in overlap_loss.
+            entropy_knn (int): Number of nearest neighbors to use for the entropy computation in n_cluster_loss.
             input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict
             for more details.
             run (int): Run number for the model. Used to save the model and log files. Optional.
@@ -1198,7 +1198,7 @@ class Coordinates:
             mmd_warmup=mmd_warmup,
             montecarlo_kl=montecarlo_kl,
             n_components=n_components,
-            overlap_loss=overlap_loss,
+            n_cluster_loss=n_cluster_loss,
             gram_loss=gram_loss,
             output_path=output_path,
             next_sequence_prediction=next_sequence_prediction,

@@ -201,11 +201,11 @@ parser.add_argument(
     default=".",
 )
 parser.add_argument(
-    "--overlap-loss",
-    "-ol",
-    help="If > 0, adds a regularization term controlling for local cluster assignment entropy in the latent space",
+    "--n-cluster-loss",
+    "-nloss",
+    help="If > 0, adds a regularization term that maximizes the number of clusters in the latent space",
     type=float,
-    default=0.0,
+    default=1.0,
 )
 parser.add_argument(
     "--gram-loss",
@@ -303,7 +303,7 @@ try:
     mmd_wu = args.mmd_warmup
     mc_kl = args.montecarlo_kl
     output_path = os.path.join(args.output_path)
-    overlap_loss = float(args.overlap_loss)
+    n_cluster_loss = float(args.n_cluster_loss)
     gram_loss = float(args.gram_loss)
     next_sequence_prediction = float(args.next_sequence_prediction)
     phenotype_prediction = float(args.phenotype_prediction)
@@ -453,7 +453,7 @@ if not tune:
         montecarlo_kl=mc_kl,
         n_components=n_components,
         output_path=output_path,
-        overlap_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,
@@ -541,14 +541,14 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_overlap_loss={}_run={}.pkl".format(
+            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_n_cluster_loss={}_run={}.pkl".format(
                 embedding_model,
                 input_type,
                 n_components,
                 encoding_size,
                 latent_reg,
                 gram_loss,
-                overlap_loss,
+                n_cluster_loss,
                 run,
             ),
         ),
@@ -581,7 +581,7 @@ else:
         entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
-        overlap_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         run=run,
         tuning=True,
@@ -598,7 +598,7 @@ else:
         kl_warmup_epochs=kl_wu,
         loss=loss,
         mmd_warmup_epochs=mmd_wu,
-        overlap_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         next_sequence_prediction=next_sequence_prediction,
         phenotype_prediction=phenotype_prediction,

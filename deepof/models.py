@@ -15,10 +15,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import Input, Model
 from tensorflow.keras.initializers import he_uniform
-from tensorflow.keras.layers import BatchNormalization, Bidirectional
-from tensorflow.keras.layers import Dense, GRU, RepeatVector
+from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
+from tensorflow.keras.layers import LayerNormalization, Bidirectional
 from tensorflow.keras.optimizers import Nadam
-from tensorflow_addons.layers import SpectralNormalization
 
 import deepof.model_utils
 
@@ -30,10 +29,10 @@ tfpl = tfp.layers
 def get_deepof_encoder(
     input_shape,
     latent_dim,
-    conv_filters=16,
+    conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
-    gru_unroll=True,
+    gru_unroll=False,
     bidirectional_merge="concat",
 ):
     """
@@ -47,7 +46,7 @@ def get_deepof_encoder(
         conv_filters (int): number of filters in the first convolutional layer
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer. Defaults to 128.
-        gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
         bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
     Returns:
@@ -57,19 +56,17 @@ def get_deepof_encoder(
 
     # Define and instantiate encoder
     x = Input(shape=input_shape)
-    encoder = tf.keras.layers.Masking(mask_value=0.0)(x)
-    encoder = SpectralNormalization(
-        tf.keras.layers.Conv1D(
-            filters=conv_filters,
-            kernel_size=5,
-            strides=1,  # Increased strides to yield shorter sequences
-            padding="same",
-            activation=dense_activation,
-            kernel_initializer=he_uniform(),
-            use_bias=True,
-        )
-    )(encoder)
-    encoder = BatchNormalization()(encoder)
+    encoder = tf.keras.layers.Conv1D(
+        filters=conv_filters,
+        kernel_size=5,
+        strides=1,  # Increased strides yield shorter sequences
+        padding="same",
+        activation=dense_activation,
+        kernel_initializer=he_uniform(),
+        use_bias=False,
+    )(x)
+    encoder = tf.keras.layers.Masking(mask_value=0.0)(encoder)
+    encoder = LayerNormalization()(encoder)
     encoder = Bidirectional(
         GRU(
             gru_units_1,
@@ -77,36 +74,35 @@ def get_deepof_encoder(
             recurrent_activation="sigmoid",
             return_sequences=True,
             unroll=gru_unroll,
-            # kernel_constraint=UnitNorm(axis=0),
             use_bias=True,
         ),
         merge_mode=bidirectional_merge,
     )(encoder)
-    encoder = BatchNormalization()(encoder)
-    encoder_output = Bidirectional(
+    encoder = LayerNormalization()(encoder)
+    encoder = Bidirectional(
         GRU(
-            latent_dim // 2,
+            gru_units_1 // 2,
             activation="tanh",
             recurrent_activation="sigmoid",
             return_sequences=False,
             unroll=gru_unroll,
-            # kernel_constraint=UnitNorm(axis=0),
             use_bias=True,
         ),
         merge_mode=bidirectional_merge,
     )(encoder)
+    encoder_output = LayerNormalization()(encoder)
 
-    return Model(x, encoder_output, name="stateseg_encoder")
+    return Model(x, encoder_output, name="deepof_encoder")
 
 
 # noinspection PyCallingNonCallable
 def get_deepof_decoder(
     input_shape,
     latent_dim,
-    conv_filters=16,
+    conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
-    gru_unroll=True,
+    gru_unroll=False,
     bidirectional_merge="concat",
 ):
 
@@ -122,7 +118,7 @@ def get_deepof_decoder(
         conv_filters (int): number of filters in the first convolutional layer
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer. Defaults to 128.
-        gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
         bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
     Returns:
@@ -132,23 +128,23 @@ def get_deepof_decoder(
     """
 
     # Define and instantiate generator
-    x = Input(shape=input_shape)  # Encoder input, used to generate an output mask
     g = Input(shape=latent_dim)  # Decoder input, shaped as the latent space
+    x = Input(shape=input_shape)  # Encoder input, used to generate an output mask
+    validity_mask = tf.math.logical_not(tf.reduce_all(x == 0.0, axis=2))
 
     generator = RepeatVector(input_shape[0])(g)
     generator = Bidirectional(
         GRU(
-            latent_dim // 2,
+            gru_units_1 // 2,
             activation="tanh",
             recurrent_activation="sigmoid",
             return_sequences=True,
             unroll=gru_unroll,
-            # kernel_constraint=UnitNorm(axis=1),
             use_bias=True,
         ),
         merge_mode=bidirectional_merge,
-    )(generator)
-    generator = BatchNormalization()(generator)
+    )(generator, mask=validity_mask)
+    generator = LayerNormalization()(generator)
     generator = Bidirectional(
         GRU(
             gru_units_1,
@@ -156,49 +152,52 @@ def get_deepof_decoder(
             recurrent_activation="sigmoid",
             return_sequences=True,
             unroll=gru_unroll,
-            # kernel_constraint=UnitNorm(axis=1),
             use_bias=True,
         ),
         merge_mode=bidirectional_merge,
     )(generator)
-    generator = BatchNormalization()(generator)
-    generator = SpectralNormalization(
-        tf.keras.layers.Conv1D(
-            filters=conv_filters,
-            kernel_size=5,
-            strides=1,
-            padding="same",
-            activation=dense_activation,
-            kernel_initializer=he_uniform(),
-            use_bias=True,
-        )
+    generator = LayerNormalization()(generator)
+    generator = tf.keras.layers.Conv1D(
+        filters=conv_filters,
+        kernel_size=5,
+        strides=1,
+        padding="same",
+        activation=dense_activation,
+        kernel_initializer=he_uniform(),
+        use_bias=False,
     )(generator)
-    generator = BatchNormalization()(generator)
-    x_decoded_mean = Dense(tfpl.IndependentNormal.params_size(input_shape[1:]) // 2)(
-        generator
-    )
-    x_decoded_var = tf.keras.activations.softplus(
-        Dense(tfpl.IndependentNormal.params_size(input_shape[1:]) // 2)(generator)
-    )
-    x_decoded_var = tf.keras.layers.Lambda(lambda v: 1e-3 + v)(x_decoded_var)
+    generator = LayerNormalization()(generator)
+    x_decoded_mean = TimeDistributed(
+        Dense(tfpl.IndependentNormal.params_size(input_shape[1:]) // 2)
+    )(generator)
     x_decoded = tfpl.DistributionLambda(
         make_distribution_fn=lambda decoded: tfd.Masked(
             tfd.Independent(
                 tfd.Normal(
                     loc=decoded[0],
-                    scale=decoded[1],
+                    scale=tf.ones_like(decoded[0]),
                 ),
                 reinterpreted_batch_ndims=1,
             ),
-            validity_mask=tf.math.logical_not(tf.reduce_all(decoded[2] == 0.0, axis=2)),
+            validity_mask=decoded[1],
         ),
         convert_to_tensor_fn="mean",
-        name="vae_reconstruction",
-    )(
-        [x_decoded_mean, x_decoded_var, x]
-    )  # x is the input to the encoder! That we use to get the mask
+    )([x_decoded_mean, validity_mask])
 
-    return Model([x, g], x_decoded, name="stateseg_decoder")
+    # Zero out values that are not in the initial mask
+    x_decoded = tfpl.DistributionLambda(
+        make_distribution_fn=lambda decoded: tfd.Masked(
+            tfd.TransformedDistribution(
+                decoded[0],
+                tfb.Scale(tf.cast(tf.expand_dims(decoded[1], axis=2), tf.float32)),
+                name="vae_reconstruction",
+            ),
+            validity_mask=decoded[1],
+        ),
+        convert_to_tensor_fn="mean",
+    )([x_decoded, validity_mask])
+
+    return Model([g, x], x_decoded, name="deepof_decoder")
 
 
 # noinspection PyCallingNonCallable
@@ -208,10 +207,10 @@ def get_vqvae(
     n_components: int,
     beta: float = 10.0,
     reg_gram: float = 0.0,
-    conv_filters=16,
+    conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
-    gru_unroll=True,
+    gru_unroll=False,
     bidirectional_merge="concat",
 ):
     """
@@ -227,7 +226,7 @@ def get_vqvae(
         conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
         dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
-        gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
         bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
     Returns:
@@ -274,7 +273,7 @@ def get_vqvae(
     quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
     soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
     vqvae = tf.keras.Model(
-        quantizer.inputs, decoder([inputs, quantizer.outputs]), name="VQ-VAE"
+        quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
     )
 
     return (
@@ -384,11 +383,10 @@ class VQVAE(tf.keras.models.Model):
     @property
     def hparams(self):
         hparams = {
-            "conv_filters": 16,
+            "conv_filters": 64,
             "dense_activation": "relu",
             "gru_units_1": 32,
-            "gru_units_2": 16,
-            "gru_unroll": True,
+            "gru_unroll": False,
             "bidirectional_merge": "concat",
         }
         if self.architecture_hparams is not None:
@@ -500,18 +498,18 @@ def get_gmvae(
     mc_kl: int = 10,
     mmd_warmup: int = 15,
     mmd_annealing_mode: str = "sigmoid",
-    overlap_loss: float = 0.0,
-    reg_gram: float = 0.0,
+    n_cluster_loss: float = 1.0,
+    reg_gram: float = 1.0,
     reg_cat_clusters: bool = False,
     reg_cluster_variance: bool = False,
     next_sequence_prediction: bool = False,
     phenotype_prediction: bool = False,
     supervised_prediction: bool = False,
     supervised_features: int = 6,
-    conv_filters=16,
+    conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
-    gru_unroll=True,
+    gru_unroll=False,
     bidirectional_merge="concat",
 ):
     """
@@ -529,7 +527,7 @@ def get_gmvae(
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
-            overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap.
+            n_cluster_loss (float): weight of the n_cluster_loss as described in deepof.mode_utils.ClusterControl.
             reg_gram (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_gram_matrix.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
@@ -545,7 +543,7 @@ def get_gmvae(
             conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
             dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
             gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
-            gru_unroll (bool): whether to unroll the GRU layers. Defaults to True.
+            gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
             bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
     Returns:
@@ -578,7 +576,7 @@ def get_gmvae(
         mc_kl=mc_kl,
         mmd_warmup=mmd_warmup,
         mmd_annealing_mode=mmd_annealing_mode,
-        overlap_loss=overlap_loss,
+        n_cluster_loss=n_cluster_loss,
         reg_gram=reg_gram,
         reg_cat_clusters=reg_cat_clusters,
         reg_cluster_variance=reg_cluster_variance,
@@ -602,7 +600,7 @@ def get_gmvae(
     grouper = tf.keras.Model(inputs, categorical, name="grouper")
 
     # Connect decoder
-    gmvae_outputs = [decoder([inputs, embedding.outputs])]
+    gmvae_outputs = [decoder([embedding.outputs, inputs])]
 
     # Add additional (optional) branches departing from the latent space
     if next_sequence_prediction:
@@ -672,8 +670,8 @@ class GMVAE(tf.keras.models.Model):
         mmd_warmup_epochs: int = 15,
         montecarlo_kl: int = 10,
         n_components: int = 15,
-        overlap_loss: float = 0.0,
-        reg_gram: float = 0.0,
+        n_cluster_loss: float = 1.0,
+        reg_gram: float = 1.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         next_sequence_prediction: float = 0.0,
@@ -698,7 +696,7 @@ class GMVAE(tf.keras.models.Model):
             mmd_warmup_epochs (int): Number of epochs to warmup MMD annealing.
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
             n_components (int): Number of mixture components in the latent space.
-            overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap.
+            n_cluster_loss (float): weight of the n_cluster_loss as described in deepof.mode_utils.ClusterControl.
             reg_gram (float): weight of the gram matrix regularization loss.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
@@ -727,7 +725,7 @@ class GMVAE(tf.keras.models.Model):
         self.mmd_warmup = mmd_warmup_epochs
         self.n_components = n_components
         self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
-        self.overlap_loss = overlap_loss
+        self.n_cluster_loss = n_cluster_loss
         self.reg_gram = reg_gram
         self.next_sequence_prediction = next_sequence_prediction
         self.phenotype_prediction = phenotype_prediction
@@ -753,7 +751,7 @@ class GMVAE(tf.keras.models.Model):
             mc_kl=self.mc_kl,
             mmd_warmup=self.mmd_warmup,
             mmd_annealing_mode=self.mmd_annealing_mode,
-            overlap_loss=self.overlap_loss,
+            n_cluster_loss=self.n_cluster_loss,
             reg_gram=self.reg_gram,
             reg_cat_clusters=self.reg_cat_clusters,
             reg_cluster_variance=self.reg_cluster_variance,
@@ -788,9 +786,6 @@ class GMVAE(tf.keras.models.Model):
         if "MMD" in self.latent_loss:
             self.mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
             self.val_mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
-        if self.overlap_loss:
-            self.overlap_loss_tracker = tf.keras.metrics.Mean(name="overlap_loss")
-            self.val_overlap_loss_tracker = tf.keras.metrics.Mean(name="overlap_loss")
         if self.next_sequence_prediction:
             self.next_sequence_loss_tracker = tf.keras.metrics.Mean(
                 name="next_sequence_loss"
@@ -823,8 +818,6 @@ class GMVAE(tf.keras.models.Model):
         if "MMD" in self.latent_loss:
             metrics += [self.mmd_loss_weight_tracker]
             metrics += [self.val_mmd_loss_weight_tracker]
-        if self.overlap_loss:
-            metrics += [self.overlap_loss_tracker, self.val_overlap_loss_tracker]
         if self.next_sequence_prediction:
             metrics += [
                 self.next_sequence_loss_tracker,
@@ -842,10 +835,9 @@ class GMVAE(tf.keras.models.Model):
     @property
     def hparams(self):
         hparams = {
-            "conv_filters": 16,
+            "conv_filters": 64,
             "dense_activation": "relu",
             "gru_units_1": 32,
-            "gru_units_2": 16,
             "gru_unroll": True,
             "bidirectional_merge": "concat",
         }
@@ -939,12 +931,6 @@ class GMVAE(tf.keras.models.Model):
             self.mmd_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").mmd_layer._mmd_weight
             )
-        if self.overlap_loss:
-            self.overlap_loss_tracker.update_state(
-                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
-                    0
-                ]
-            )
         if self.next_sequence_prediction:
             self.next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
@@ -963,8 +949,6 @@ class GMVAE(tf.keras.models.Model):
             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
         if "MMD" in self.latent_loss:
             log_dict["mmd_weight"] = self.mmd_loss_weight_tracker.result()
-        if self.overlap_loss:
-            log_dict["overlap_loss"] = self.overlap_loss_tracker.result()
         if self.next_sequence_prediction:
             log_dict["next_sequence_loss"] = self.next_sequence_loss_tracker.result()
         if self.phenotype_prediction:
@@ -1031,12 +1015,6 @@ class GMVAE(tf.keras.models.Model):
                     ).mmd_layer._mmd_weight
                 )
             )
-        if self.overlap_loss:
-            self.val_overlap_loss_tracker.update_state(
-                [loss for loss in self.gmvae.losses if "cluster_overlap" in loss.name][
-                    0
-                ]
-            )
         if self.next_sequence_prediction:
             self.val_next_sequence_loss_tracker.update_state(next_seq_loss)
         if self.phenotype_prediction:
@@ -1051,8 +1029,6 @@ class GMVAE(tf.keras.models.Model):
         }
 
         # Add optional metrics to final log dict
-        if self.overlap_loss:
-            log_dict["overlap_loss"] = self.val_overlap_loss_tracker.result()
         if self.next_sequence_prediction:
             log_dict[
                 "next_sequence_loss"

@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import cdist
 from tensorflow.keras import backend as K
-from tensorflow.keras.initializers import he_uniform, random_uniform
+from tensorflow.keras.initializers import he_uniform, random_normal
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Reshape
@@ -128,24 +128,35 @@ def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
 
     Args:
         shape: shape of the latent space.
-        samples: number of samples to draw from the uniform distribution.
+        samples: number of initial candidates draw from the uniform distribution.
 
     Returns:
         tf.Tensor: the initialized latent means.
 
     """
 
-    current_result = None
-    current_dist = None
+    init_shape = (samples, shape[1])
 
-    for i in range(samples):
-        means = tf.keras.initializers.he_normal()(shape)
-        min_dist = np.min(pdist(means, metric="euclidean"))
-        if current_result is None or min_dist > current_dist:
-            current_result = means
-            current_dist = min_dist
+    # Initialize latent mean candidates with a uniform distribution
+    init_means = tf.keras.initializers.variance_scaling(
+        scale=init_shape[0], distribution="uniform"
+    )(init_shape)
 
-    return current_result.numpy()
+    # Select the first random candidate as the first cluster mean
+    final_samples, init_means = init_means[0][np.newaxis, :], init_means[1:]
+
+    # Iteratively complete the mean set by adding new candidates, which maximize the minimum euclidean distance
+    # with all existing means.
+    for i in range(shape[0] - 1):
+        max_dist = cdist(final_samples, init_means, metric="euclidean")
+        max_dist = np.argmax(np.min(max_dist, axis=0))
+
+        final_samples = np.concatenate(
+            [final_samples, init_means[max_dist][np.newaxis, :]]
+        )
+        init_means = np.delete(init_means, max_dist, 0)
+
+    return final_samples
 
 
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
@@ -247,7 +258,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         mc_kl: int = 10,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
-        overlap_loss: float = 0.0,
+        n_cluster_loss: float = 0.0,
         reg_gram: float = 0.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
@@ -268,7 +279,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
-            overlap_loss (float): weight of the overlap loss as described in deepof.mode_utils.ClusterOverlap
+            n_cluster_loss (float): weight of the clustering loss as described in deepof.mode_utils.ClusterControl
             reg_gram (float): weight of the Gram matrix regularization loss.
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
@@ -287,7 +298,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.mc_kl = mc_kl
         self.mmd_warmup = mmd_warmup
         self.mmd_annealing_mode = mmd_annealing_mode
-        self.overlap_loss = overlap_loss
+        self.n_cluster_loss = n_cluster_loss
         self.reg_gram = reg_gram
         self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
         self.reg_cat_clusters = reg_cat_clusters
@@ -298,30 +309,26 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.n_components,
             name="cluster_assignment",
             activation="softmax",
-            activity_regularizer=(
-                tf.keras.regularizers.l1_l2(l1=0.01, l2=0.01)
-                if self.reg_cat_clusters
-                else None
-            ),
+            activity_regularizer=None,
         )
         self.z_gauss_mean = Dense(
             tfpl.IndependentNormal.params_size(self.latent_dim * self.n_components)
             // 2,
             name="cluster_means",
-            activation=None,
-            activity_regularizer=(tf.keras.regularizers.l1(10e-5)),
+            activation="linear",
+            # activity_regularizer=(tf.keras.regularizers.l1(10e-5)),
             kernel_initializer=he_uniform(),
         )
         self.z_gauss_var = Dense(
             tfpl.IndependentNormal.params_size(self.latent_dim * self.n_components)
             // 2,
             name="cluster_variances",
-            activation=None,
+            activation="softplus",
             kernel_regularizer=(
                 tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
             ),
-            activity_regularizer=MeanVarianceRegularizer(0.05),
-            kernel_initializer=random_uniform(),
+            activity_regularizer=MeanVarianceRegularizer(0.1),
+            kernel_initializer=random_normal(stddev=0.01),
         )
         self.latent_distribution = tfpl.DistributionLambda(
             make_distribution_fn=lambda gauss: tfd.mixture.Mixture(
@@ -332,10 +339,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                     tfd.Independent(
                         tfd.Normal(
                             loc=gauss[1][..., : self.latent_dim, k],
-                            scale=1e-3
-                            + tf.keras.activations.softplus(
-                                gauss[1][..., self.latent_dim :, k]
-                            ),
+                            scale=1e-3 + gauss[1][..., self.latent_dim :, k],
                         ),
                         reinterpreted_batch_ndims=1,
                     )
@@ -358,18 +362,21 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                         samples=10000,
                     ),
                     name="prior_means",
-                    trainable=True,
+                    trainable=False,
                 ),
-                scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / (1.5 * self.n_components),
-                name="prior_scales",
+                scale_diag=tf.Variable(
+                    tf.ones([self.n_components, self.latent_dim])
+                    / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32)),
+                    name="prior_scales",
+                    trainable=False,
+                ),
             ),
         )
-        self.cluster_overlap_layer = ClusterOverlap(
+        self.cluster_control_layer = ClusterControl(
             batch_size=self.batch_size,
             encoding_dim=self.latent_dim,
             k=self.n_components,
-            loss_weight=self.overlap_loss,
+            loss_weight=self.n_cluster_loss,
         )
 
         # Initialize metric layers
@@ -408,8 +415,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         z_cat = self.z_cat(inputs)
         z_gauss_mean = self.z_gauss_mean(inputs)
-
         z_gauss_var = self.z_gauss_var(inputs)
+        z_gauss_var = tf.keras.layers.ActivityRegularization(l2=0.01)(z_gauss_var)
+
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
         z_gauss = Reshape([2 * self.latent_dim, self.n_components])(z_gauss)
 
@@ -438,9 +446,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
             z = self.mmd_layer(z)
 
-        # Tracks clustering metrics and adds a KNN regularizer if self.overlap_loss != 0
+        # Tracks clustering metrics and adds a KNN regularizer if self.n_cluster_loss != 0
         if self.n_components > 1:
-            z = self.cluster_overlap_layer([z, z_cat])
+            z = self.cluster_control_layer([z, z_cat])
 
         return z, z_cat
 
@@ -475,6 +483,12 @@ class VectorQuantizer(tf.keras.models.Model):
         self.beta = beta
         self.reg_gram = reg_gram
 
+        # Initialize embedding layer
+        self.embedding = tf.keras.layers.Dense(
+            self.embedding_dim,
+            kernel_initializer="he_uniform",
+        )
+
         # Initialize embeddings
         w_init = tf.random_uniform_initializer()
         self.embeddings = tf.Variable(
@@ -499,6 +513,7 @@ class VectorQuantizer(tf.keras.models.Model):
         """
 
         # Compute input shape and flatten, keeping the embedding dimension intact
+        x = self.embedding(x)
         input_shape = tf.shape(x)
 
         # Add a disentangling penalty to the codebook
@@ -527,7 +542,7 @@ class VectorQuantizer(tf.keras.models.Model):
             (tf.stop_gradient(quantized) - x) ** 2
         )
         codebook_loss = tf.reduce_sum((quantized - tf.stop_gradient(x)) ** 2)
-        self.add_loss(4 * commitment_loss + codebook_loss)
+        self.add_loss(commitment_loss + codebook_loss)
 
         # Straight-through estimator (copy gradients through the undiferentiable layer)
         quantized = x + tf.stop_gradient(quantized - x)
@@ -824,12 +839,12 @@ class MMDiscrepancyLayer(Layer):
         return z
 
 
-class ClusterOverlap(Layer):
+class ClusterControl(Layer):
     """
 
-    Identity layer that measures the overlap between the components of the latent Gaussian Mixture
-    using the the entropy of the nearest neighbourhood. If self.loss_weight > 0, it adds a regularization
-    penalty to the loss function
+    Identity layer that evaluates different clustering metrics between the components of the latent Gaussian Mixture
+    using the entropy of the nearest neighbourhood. If self.loss_weight > 0, it also adds a regularization
+    penalty to the loss function which attempts to maximize the number of populated clusters during training.
 
     """
 
@@ -837,14 +852,14 @@ class ClusterOverlap(Layer):
         self,
         batch_size: int,
         encoding_dim: int,
-        k: int = 25,
-        loss_weight: float = 0.0,
+        k: int = 15,
+        loss_weight: float = 1.0,
         *args,
         **kwargs,
     ):
         """
 
-        Initializes the ClusterOverlap layer
+        Initializes the ClusterControl layer
 
         Args:
             batch_size (int): batch size of the model
@@ -856,10 +871,10 @@ class ClusterOverlap(Layer):
             **kwargs: additional keyword arguments
 
         """
-        super(ClusterOverlap, self).__init__(*args, **kwargs)
+        super(ClusterControl, self).__init__(*args, **kwargs)
         self.batch_size = batch_size
         self.enc = encoding_dim
-        self.k = k if k < (batch_size - 1) else (batch_size - 1)
+        self.k = k
         self.loss_weight = loss_weight
 
     def get_config(self):  # pragma: no cover
@@ -888,6 +903,10 @@ class ClusterOverlap(Layer):
         hard_groups = tf.math.argmax(categorical, axis=1)
         max_groups = tf.reduce_max(categorical, axis=1)
 
+        # Reduce k if it's too big when compared to the number of instances
+        if self.k >= self.batch_size // 4:
+            self.k = self.batch_size // 4
+
         get_local_neighbourhood_entropy = partial(
             get_neighbourhood_entropy,
             tensor=encodings,
@@ -897,7 +916,7 @@ class ClusterOverlap(Layer):
 
         neighbourhood_entropy = tf.map_fn(
             get_local_neighbourhood_entropy,
-            tf.constant(list(range(self.batch_size))),
+            tf.range(tf.shape(encodings)[0]),
             dtype=tf.dtypes.float32,
         )
 
@@ -931,10 +950,10 @@ class ClusterOverlap(Layer):
         )
 
         if self.loss_weight:
-            # minimize local entropy
-            self.add_loss(self.loss_weight * tf.reduce_mean(neighbourhood_entropy))
-            # maximize number of clusters
-            # self.add_loss(-self.loss_weight * tf.reduce_mean(n_components))
+
+            self.add_loss(self.loss_weight * tf.reduce_sum(-n_components))
+            self.add_loss(self.loss_weight * tf.reduce_sum(neighbourhood_entropy))
+            self.add_loss(self.loss_weight * tf.reduce_sum(-max_groups))
 
         return encodings
 

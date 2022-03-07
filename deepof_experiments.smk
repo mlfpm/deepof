@@ -21,7 +21,7 @@ warmup_mode = ["sigmoid"]
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]  # [None, "B", "W"]
 losses = ["ELBO"]
-overlap_loss = [0.0]
+n_cluster_loss = [0.0]
 gram_loss = [1.0]
 encodings = [4, 6, 8, 12, 16]
 cluster_numbers = [6, 8, 10, 12, 14, 16]
@@ -50,13 +50,13 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_overlap_loss={overlap_loss}_run={run}.pkl",
+            + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_n_cluster_loss={n_cluster}_run={run}.pkl",
             embedding_model=embedding_model,
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
             latreg=latent_reg,
-            overlap_loss=overlap_loss,
+            n_cluster=n_cluster_loss,
             gram_loss=gram_loss,
             run=run,
         ),
@@ -98,7 +98,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_overlap_loss={overlap_loss}_run={run}.pkl",
+        + "deepof_{embedding_model}_csds_unsupervised_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_n_cluster_loss={n_cluster}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--embedding-model {wildcards.embedding_model} "
@@ -114,7 +114,7 @@ rule train_models:
         "--supervised-prediction 0.0 "
         "--latent-reg {wildcards.latreg} "
         "--loss ELBO "
-        "--overlap-loss {wildcards.overlap_loss} "
+        "--n-cluster-loss {wildcards.n_cluster} "
         "--gram-loss {wildcards.gram_loss} "
         "--kl-annealing-mode sigmoid "
         "--kl-warmup 15 "
