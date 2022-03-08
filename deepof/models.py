@@ -909,7 +909,7 @@ class GMVAE(tf.keras.models.Model):
                     self.decoder,
                     self.encoder,
                     seq_inputs,
-                    self.batch_size,
+                    self.n_components,
                 )
                 total_loss += siwae_loss
 
@@ -1014,7 +1014,7 @@ class GMVAE(tf.keras.models.Model):
                 self.decoder,
                 self.encoder,
                 seq_inputs,
-                self.batch_size,
+                self.n_components,
             )
             total_loss += siwae_loss
 
