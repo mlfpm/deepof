@@ -175,8 +175,10 @@ class GMVAE(HyperModel):
         self.supervised_features = supervised_features
 
         assert (
-            "ELBO" in self.loss or "MMD" in self.loss
-        ), "loss must be one of ELBO, MMD or ELBO+MMD (default)"
+            "SIWAE" in self.latent_loss
+            or "SELBO" in self.latent_loss
+            or "MMD" in self.latent_loss
+        ), "loss must be one of SIWAE, SELBO (default), MMD, SIWAE+MMD, or SELBO+MMD"
 
     def get_hparams(self, hp):
         """

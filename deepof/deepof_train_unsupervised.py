@@ -130,7 +130,7 @@ parser.add_argument(
 parser.add_argument(
     "--kl-annealing-mode",
     "-klam",
-    help="Weight annealing to use for ELBO loss. Can be one of 'linear' and 'sigmoid'",
+    help="Weight annealing to use for SELBO loss. Can be one of 'linear' and 'sigmoid'",
     default="linear",
     type=str,
 )
@@ -168,8 +168,8 @@ parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
-    "It has to be one of SIWAE+MMD, ELBO+MMD, SIWAE, ELBO or MMD. Defaults to SIWAE",
-    default="SIWAE",
+    "It has to be one of SIWAE+MMD, SELBO+MMD, SIWAE, SELBO or MMD. Defaults to SIWAE",
+    default="SELBO",
     type=str,
 )
 parser.add_argument(

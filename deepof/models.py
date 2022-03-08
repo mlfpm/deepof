@@ -492,10 +492,10 @@ def get_gmvae(
     n_components: int,
     latent_dim: int,
     batch_size: int,
-    loss: str = "ELBO",
+    loss: str = "SELBO",
     kl_warmup: int = 15,
     kl_annealing_mode: str = "sigmoid",
-    mc_kl: int = 1000,
+    mc_kl: int = 100,
     mmd_warmup: int = 15,
     mmd_annealing_mode: str = "sigmoid",
     n_cluster_loss: float = 1.0,
@@ -521,7 +521,7 @@ def get_gmvae(
             n_components (int): number of components in the Gaussian mixture.
             latent_dim (int): dimensionality of the latent space.
             batch_size (int): batch size for training.
-            loss (str): loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD".
+            loss (str): loss function to use for training. Must be one of "SELBO", "MMD", or "SELBO+MMD".
             kl_warmup (int): number of epochs to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
@@ -566,7 +566,7 @@ def get_gmvae(
         bidirectional_merge=bidirectional_merge,
     )
     latent_space = deepof.model_utils.GaussianMixtureLatent(
-        input_shape=[input_shape[0], latent_dim],
+        input_shape=input_shape[0],
         n_components=n_components,
         latent_dim=latent_dim,
         batch_size=batch_size,
@@ -673,7 +673,7 @@ class GMVAE(tf.keras.models.Model):
         latent_dim: int = 4,
         kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 15,
-        latent_loss: str = "ELBO",
+        latent_loss: str = "SELBO",
         mmd_annealing_mode: str = "sigmoid",
         mmd_warmup_epochs: int = 15,
         montecarlo_kl: int = 1000,
@@ -699,7 +699,7 @@ class GMVAE(tf.keras.models.Model):
             latent_dim (int): Dimensionality of the latent space.
             kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
             kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
-            latent_loss (str): Loss function to use. Can be one of 'SIWAE', 'ELBO', 'MMD', 'SIWAE+MMD', and 'ELBO+MMD'.
+            latent_loss (str): Loss function to use. Can be one of 'SIWAE', 'SELBO', 'MMD', 'SIWAE+MMD', and 'SELBO+MMD'.
             mmd_annealing_mode (str): Annealing mode for MMD annealing. Can be one of 'linear' and 'sigmoid'.
             mmd_warmup_epochs (int): Number of epochs to warmup MMD annealing.
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
@@ -745,9 +745,9 @@ class GMVAE(tf.keras.models.Model):
 
         assert (
             "SIWAE" in self.latent_loss
-            or "ELBO" in self.latent_loss
+            or "SELBO" in self.latent_loss
             or "MMD" in self.latent_loss
-        ), "loss must be one of SIWAE (default), ELBO (default), MMD, SIWAE+MMD, or ELBO+MMD"
+        ), "loss must be one of SIWAE, SELBO (default), MMD, SIWAE+MMD, or SELBO+MMD"
 
         # Define GMVAE model
         self.encoder, self.decoder, self.grouper, self.gmvae = get_gmvae(
@@ -795,7 +795,7 @@ class GMVAE(tf.keras.models.Model):
         if "SIWAE" in self.latent_loss:
             self.siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
             self.val_siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             self.kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
             self.val_kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
         if "MMD" in self.latent_loss:
@@ -831,7 +831,7 @@ class GMVAE(tf.keras.models.Model):
         if "SIWAE" in self.latent_loss:
             metrics += [self.siwae_loss_tracker]
             metrics += [self.val_siwae_loss_tracker]
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             metrics += [self.kl_loss_weight_tracker]
             metrics += [self.val_kl_loss_weight_tracker]
         if "MMD" in self.latent_loss:
@@ -950,7 +950,7 @@ class GMVAE(tf.keras.models.Model):
             self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "SIWAE" in self.latent_loss:
             self.siwae_loss_tracker.update_state(siwae_loss)
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             # noinspection PyProtectedMember
             self.kl_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
@@ -977,7 +977,7 @@ class GMVAE(tf.keras.models.Model):
             log_dict["reconstruction_loss"] = self.reconstruction_loss_tracker.result()
         if "SIWAE" in self.latent_loss:
             log_dict["siwae_loss"] = self.siwae_loss_tracker.result()
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
         if "MMD" in self.latent_loss:
             log_dict["mmd_weight"] = self.mmd_loss_weight_tracker.result()
@@ -1052,7 +1052,7 @@ class GMVAE(tf.keras.models.Model):
             self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "SIWAE" in self.latent_loss:
             self.val_siwae_loss_tracker.update_state(siwae_loss)
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             self.val_kl_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
             )

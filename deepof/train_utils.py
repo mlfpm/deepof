@@ -305,7 +305,7 @@ def log_hyperparameters(phenotype_class: float, rec: str):
         ),
         hp.HParam(
             "loss",
-            hp.Discrete(["SIWAE", "ELBO", "MMD", "SIWAE+MMD", "ELBO+MMD"]),
+            hp.Discrete(["SIWAE", "SELBO", "MMD", "SIWAE+MMD", "SELBO+MMD"]),
             display_name="loss function",
             description="loss function",
         ),

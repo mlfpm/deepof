@@ -36,7 +36,7 @@ def test_VQVAE_build(
 
 @settings(deadline=None, max_examples=25)
 @given(
-    loss=st.one_of(st.just("ELBO"), st.just("MMD"), st.just("ELBO+MMD")),
+    loss=st.one_of(st.just("SELBO"), st.just("MMD"), st.just("SELBO+MMD")),
     kl_warmup_epochs=st.integers(min_value=0, max_value=1),
     mmd_warmup_epochs=st.integers(min_value=0, max_value=1),
     montecarlo_kl=st.integers(min_value=1, max_value=2),

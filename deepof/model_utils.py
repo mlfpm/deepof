@@ -309,10 +309,10 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         n_components: int,
         latent_dim: int,
         batch_size: int,
-        latent_loss: str = "ELBO",
+        latent_loss: str = "SELBO",
         kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 1000,
+        mc_kl: int = 100,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         n_cluster_loss: float = 0.0,
@@ -330,7 +330,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             n_components (int): number of components in the Gaussian mixture.
             latent_dim (int): dimensionality of the latent space.
             batch_size (int): batch size for training.
-            latent_loss (str): Loss function to use. Must be one of "SIWAE", "ELBO", "MMD", "SIWAE+MMD", and "ELBO+MMD".
+            latent_loss (str): Loss function to use. Must be one of "SIWAE", "SELBO", "MMD", "SIWAE+MMD", and "SELBO+MMD".
             kl_warmup (int): number of epochs to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
@@ -424,14 +424,17 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         )
 
         # Initialize metric layers
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
             self.kl_warm_up_iters = tf.cast(
-                self.kl_warmup * (self.seq_shape[0] // self.batch_size),
+                self.kl_warmup * (self.seq_shape // self.batch_size),
                 tf.int64,
             )
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
-                test_points_fn=lambda q: q.sample(self.mc_kl),
+                test_points_fn=lambda q: tf.reshape(
+                    q.components_distribution.sample(self.mc_kl),
+                    [self.mc_kl * self.n_components, -1, self.latent_dim],
+                ),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
@@ -439,7 +442,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             )
         if "MMD" in self.latent_loss:
             self.mmd_warm_up_iters = tf.cast(
-                self.mmd_warmup * (self.seq_shape[0] // self.batch_size),
+                self.mmd_warmup * (self.seq_shape // self.batch_size),
                 tf.int64,
             )
             self.mmd_layer = MMDiscrepancyLayer(
@@ -475,7 +478,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.add_metric(gram_loss, name="gram_loss")
 
         # Define and control custom loss functions
-        if "ELBO" in self.latent_loss:
+        if "SELBO" in self.latent_loss:
 
             # Update KL weight based on the current iteration
             self.kl_layer._iters = self.optimizer.iterations
@@ -563,7 +566,7 @@ class VectorQuantizer(tf.keras.models.Model):
         # Add a disentangling penalty to the codebook
         if self.reg_gram:
             gram_loss = compute_gram_loss(
-                x, weight=self.reg_gram, batch_size=input_shape[0]
+                x, weight=self.reg_gram, batch_size=input_shape
             )
             self.add_loss(gram_loss)
             self.add_metric(gram_loss, name="gram_loss")
@@ -855,7 +858,15 @@ class MMDiscrepancyLayer(Layer):
 
         """
 
-        true_samples = self.prior.sample(self.batch_size)
+        true_samples = self.prior.components_distribution.sample(self.batch_size)
+        true_samples = tf.reshape(
+            true_samples,
+            [
+                true_samples.shape[0] * true_samples.shape[2],
+                true_samples.shape[1],
+                true_samples.shape[3],
+            ],
+        )
 
         # Define and update MMD weight for warmup
         if self._warm_up_iters > 0:
