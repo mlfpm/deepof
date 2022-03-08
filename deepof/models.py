@@ -699,7 +699,7 @@ class GMVAE(tf.keras.models.Model):
             latent_dim (int): Dimensionality of the latent space.
             kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
             kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
-            latent_loss (str): Loss function to use. Can be one of 'ELBO', 'MMD', and 'ELBO+MMD'.
+            latent_loss (str): Loss function to use. Can be one of 'SIWAE', 'ELBO', 'MMD', 'SIWAE+MMD', and 'ELBO+MMD'.
             mmd_annealing_mode (str): Annealing mode for MMD annealing. Can be one of 'linear' and 'sigmoid'.
             mmd_warmup_epochs (int): Number of epochs to warmup MMD annealing.
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
@@ -744,8 +744,10 @@ class GMVAE(tf.keras.models.Model):
         self.architecture_hparams = architecture_hparams
 
         assert (
-            "ELBO" in self.latent_loss or "MMD" in self.latent_loss
-        ), "loss must be one of ELBO (default), MMD or ELBO+MMD"
+            "SIWAE" in self.latent_loss
+            or "ELBO" in self.latent_loss
+            or "MMD" in self.latent_loss
+        ), "loss must be one of SIWAE (default), ELBO (default), MMD, SIWAE+MMD, or ELBO+MMD"
 
         # Define GMVAE model
         self.encoder, self.decoder, self.grouper, self.gmvae = get_gmvae(
@@ -788,6 +790,9 @@ class GMVAE(tf.keras.models.Model):
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
+        if "SIWAE" in self.latent_loss:
+            self.siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
+            self.val_siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
         if "ELBO" in self.latent_loss:
             self.kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
             self.val_kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
@@ -820,6 +825,9 @@ class GMVAE(tf.keras.models.Model):
             self.val_total_loss_tracker,
             self.val_reconstruction_loss_tracker,
         ]
+        if "SIWAE" in self.latent_loss:
+            metrics += [self.siwae_loss_tracker]
+            metrics += [self.val_siwae_loss_tracker]
         if "ELBO" in self.latent_loss:
             metrics += [self.kl_loss_weight_tracker]
             metrics += [self.val_kl_loss_weight_tracker]
@@ -864,16 +872,6 @@ class GMVAE(tf.keras.models.Model):
 
         return self.gmvae.get_layer("gaussian_mixture_latent").prior
 
-    @property
-    def posterior(self):
-        """
-
-        Property to retrieve the current's model posterior
-
-        """
-
-        # TODO: compute posterior on the full dataset and store here
-
     @tf.function
     def call(self, inputs, **kwargs):
         return self.gmvae(inputs, **kwargs)
@@ -901,8 +899,20 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs
 
             # Compute losses
-            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
+            seq_inputs = next(y)
+            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
             total_loss = reconstruction_loss + sum(self.gmvae.losses)
+
+            if "SIWAE" in self.latent_loss:
+                siwae_loss = deepof.model_utils.compute_siwae(
+                    self.prior,
+                    self.decoder,
+                    self.encoder,
+                    seq_inputs,
+                    self.batch_size,
+                )
+                total_loss += siwae_loss
+
             if self.next_sequence_prediction:
                 next_seq_predictions = [
                     out for out in outputs if "predictor" in out.name
@@ -929,6 +939,8 @@ class GMVAE(tf.keras.models.Model):
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+        if "SIWAE" in self.latent_loss:
+            self.siwae_loss_tracker.update_state(siwae_loss)
         if "ELBO" in self.latent_loss:
             # noinspection PyProtectedMember
             self.kl_loss_weight_tracker.update_state(
@@ -953,6 +965,8 @@ class GMVAE(tf.keras.models.Model):
         }
 
         # Add optional metrics to final log dict
+        if "SIWAE" in self.latent_loss:
+            log_dict["siwae_loss"] = self.siwae_loss_tracker.result()
         if "ELBO" in self.latent_loss:
             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
         if "MMD" in self.latent_loss:
@@ -990,8 +1004,20 @@ class GMVAE(tf.keras.models.Model):
             reconstructions = outputs
 
         # Compute losses
-        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
+        seq_inputs = next(y)
+        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
         total_loss = reconstruction_loss + sum(self.gmvae.losses)
+
+        if "SIWAE" in self.latent_loss:
+            siwae_loss = deepof.model_utils.compute_siwae(
+                self.prior,
+                self.decoder,
+                self.encoder,
+                seq_inputs,
+                self.batch_size,
+            )
+            total_loss += siwae_loss
+
         if self.next_sequence_prediction:
             next_seq_predictions = [out for out in outputs if "predictor" in out.name][
                 0
@@ -1010,6 +1036,8 @@ class GMVAE(tf.keras.models.Model):
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
         self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
+        if "SIWAE" in self.latent_loss:
+            self.val_siwae_loss_tracker.update_state(siwae_loss)
         if "ELBO" in self.latent_loss:
             self.val_kl_loss_weight_tracker.update_state(
                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight

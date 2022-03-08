@@ -305,7 +305,7 @@ def log_hyperparameters(phenotype_class: float, rec: str):
         ),
         hp.HParam(
             "loss",
-            hp.Discrete(["ELBO", "MMD", "ELBO+MMD"]),
+            hp.Discrete(["SIWAE", "ELBO", "MMD", "SIWAE+MMD", "ELBO+MMD"]),
             display_name="loss function",
             description="loss function",
         ),
@@ -383,8 +383,8 @@ def autoencoder_fitting(
         kl_warmup (int): Number of epochs to warmup KL annealing. Only used if embedding_model is "GMVAE".
         log_history (bool): Whether to log the history of the autoencoder.
         log_hparams (bool): Whether to log the hyperparameters used for training.
-        latent_loss (str): Loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD". Only used if
-        embedding_model is "GMVAE".
+        latent_loss (str): Loss function to use for training. Must be one of "SIWAE", "ELBO", "MMD", "SIWAE+MMD",
+        or "ELBO+MMD". Only used if embedding_model is "GMVAE".
         mmd_annealing_mode (str): Annealing mode to use for MMD annealing. Must be one of "linear" or "sigmoid". Only used
         if embedding_model is "GMVAE".
         mmd_warmup (int): Number of epochs to warmup MMD annealing. Only used if embedding_model is "GMVAE".

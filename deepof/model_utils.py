@@ -237,7 +237,7 @@ def compute_mmd(tensors: Tuple[Any]) -> tf.Tensor:  # pragma: no cover
     return mmd
 
 
-def compute_siwae(prior, likelihood, posterior, x, T):
+def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
     """
 
     Computes the SIWAE loss between the prior, likelihood and posterior. Bsed on the paper:
@@ -245,31 +245,60 @@ def compute_siwae(prior, likelihood, posterior, x, T):
 
     Args:
         prior: prior distribution
-        likelihood:
-        posterior: posterior distribution
+        likelihood: likelihood distribution (decoder output)
+        posterior: posterior distribution (encoder output)
         x: input tensor
         T: number of samples to draw from the posterior distribution
 
     Returns:
+        siwae (tf.Tensor): returns the SIWAE loss for each training instance
 
     """
 
     q = posterior(x)
-    z = q.components_dist.sample(T)
-    z = tf.transpose(z, perm=[2, 0, 1, 3])
+    z = q.components_distribution.sample(T)
+    z = tf.transpose(z, perm=[1, 0, 2, 3])
     loss_n = (
         tf.math.reduce_logsumexp(
             (
-                -tf.math.log(T)
-                + tf.math.log_softmax(mixture_dist.logits)[:, None, :]
-                + prior.log_prior(z)
-                + likelihood(z).log_prob(x)
-                - q.log_prob(z)
+                -tf.math.log(tf.cast(T, tf.float32))
+                + tf.math.log_softmax(q.mixture_distribution.logits)[:, None, :]
+                + prior.log_prob(z)
+                + tf.reshape(
+                    tf.reduce_mean(
+                        likelihood(
+                            [
+                                tf.reshape(z, [-1, tf.shape(z)[-1]]),
+                                tf.repeat(
+                                    x, tf.math.reduce_prod(tf.shape(z)[1:3]), axis=0
+                                ),
+                            ]
+                        ).log_prob(
+                            tf.cast(
+                                tf.repeat(
+                                    x, tf.math.reduce_prod(tf.shape(z)[1:3]), axis=0
+                                ),
+                                tf.float32,
+                            )
+                        ),
+                        axis=-1,
+                    ),
+                    z.shape[:3],
+                )
+                - tf.reshape(
+                    q.log_prob(
+                        tf.reshape(
+                            z,
+                            [tf.math.reduce_prod(z.shape[1:3]), z.shape[0], z.shape[3]],
+                        )
+                    ),
+                    z.shape[:3],
+                )
             ),
-            axis=[0, 1],
+            axis=[1, 2],
         ),
     )
-    return tf.math.reduce_mean(loss_n, axis=0)
+    return tf.math.reduce_sum(loss_n, axis=0)
 
 
 class GaussianMixtureLatent(tf.keras.models.Model):
@@ -308,7 +337,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             n_components (int): number of components in the Gaussian mixture.
             latent_dim (int): dimensionality of the latent space.
             batch_size (int): batch size for training.
-            latent_loss (str): loss function to use for training. Must be one of "ELBO", "MMD", or "ELBO+MMD".
+            latent_loss (str): Loss function to use. Must be one of "SIWAE", "ELBO", "MMD", "SIWAE+MMD", and "ELBO+MMD".
             kl_warmup (int): number of epochs to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
@@ -366,20 +395,14 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             kernel_initializer=random_normal(stddev=0.01),
         )
         self.latent_distribution = tfpl.DistributionLambda(
-            make_distribution_fn=lambda gauss: tfd.mixture.Mixture(
-                cat=tfd.categorical.Categorical(
-                    probs=gauss[0],
+            make_distribution_fn=lambda gauss: tfd.MixtureSameFamily(
+                mixture_distribution=tfd.categorical.Categorical(
+                    logits=gauss[0],
                 ),
-                components=[
-                    tfd.Independent(
-                        tfd.Normal(
-                            loc=gauss[1][..., : self.latent_dim, k],
-                            scale=1e-3 + gauss[1][..., self.latent_dim :, k],
-                        ),
-                        reinterpreted_batch_ndims=1,
-                    )
-                    for k in range(self.n_components)
-                ],
+                components_distribution=tfd.MultivariateNormalDiag(
+                    loc=gauss[1][..., : self.latent_dim],
+                    scale_diag=1e-3 + gauss[1][..., self.latent_dim :],
+                ),
             ),
             convert_to_tensor_fn="sample",
             name="encoding_distribution",
@@ -391,20 +414,12 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 probs=tf.ones(self.n_components) / self.n_components
             ),
             components_distribution=tfd.MultivariateNormalDiag(
-                loc=tf.Variable(
-                    far_uniform_initializer(
-                        [self.n_components, self.latent_dim],
-                        samples=10000,
-                    ),
-                    name="prior_means",
-                    trainable=False,
+                loc=far_uniform_initializer(
+                    [self.n_components, self.latent_dim],
+                    samples=10000,
                 ),
-                scale_diag=tf.Variable(
-                    tf.ones([self.n_components, self.latent_dim])
-                    / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
-                    name="prior_scales",
-                    trainable=False,
-                ),
+                scale_diag=tf.ones([self.n_components, self.latent_dim])
+                / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
             ),
         )
         self.cluster_control_layer = ClusterControl(
@@ -455,7 +470,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z_gauss_var = tf.keras.layers.ActivityRegularization(l2=0.01)(z_gauss_var)
 
         z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
-        z_gauss = Reshape([2 * self.latent_dim, self.n_components])(z_gauss)
+        z_gauss = Reshape([self.n_components, 2 * self.latent_dim])(z_gauss)
 
         z = self.latent_distribution([z_cat, z_gauss])
 

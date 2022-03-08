@@ -168,8 +168,8 @@ parser.add_argument(
     "--loss",
     "-l",
     help="Sets the loss function for the variational model. "
-    "It has to be one of ELBO+MMD, ELBO or MMD. Defaults to ELBO+MMD",
-    default="ELBO",
+    "It has to be one of SIWAE+MMD, ELBO+MMD, SIWAE, ELBO or MMD. Defaults to SIWAE",
+    default="SIWAE",
     type=str,
 )
 parser.add_argument(
@@ -567,8 +567,6 @@ if not tune:
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
     run_ID, tensorboard_callback, onecycle = deepof.train_utils.get_callbacks(
-        X_train=X_train,
-        batch_size=batch_size,
         embedding_model=embedding_model,
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
@@ -584,7 +582,6 @@ else:
         n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         run=run,
-        tuning=True,
     )
 
     best_hyperparameters, best_model = deepof.train_utils.tune_search(

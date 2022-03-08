@@ -48,26 +48,6 @@ def test_find_learning_rate():
     deepof.train_utils.find_learning_rate(test_model, X, y)
 
 
-def test_mode_collapse_control():
-    mode_collapse = deepof.train_utils.ModeCollapseControl(monitor="loss")
-
-    X = np.random.uniform(0, 10, [1500, 5])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(1))
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(
-        X, y, callbacks=[mode_collapse], epochs=10, batch_size=100, verbose=0
-    )
-    assert isinstance(fit, tf.keras.callbacks.History)
-
-
 @given(
     embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     loss=st.one_of(st.just("test_A"), st.just("test_B")),

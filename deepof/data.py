@@ -1146,7 +1146,7 @@ class Coordinates:
             kl_warmup (int): Number of epochs to warm up the KL divergence.
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
-            latent_loss (str): Loss function to use. Must be one of "VQ", "ELBO", "MMD", and "ELBO+MMD".
+            latent_loss (str): Loss function to use. Must be one of "SIWAE", "ELBO", "MMD", "SIWAE+MMD", and "ELBO+MMD".
             mmd_annealing_mode (str): Mode for annealing the MMD loss. Must be one of "linear" and "sigmoid".
             mmd_warmup (int): Number of epochs to warm up the MMD loss.
             montecarlo_kl (int): Number of Monte Carlo samples to take for the Monte-Carlo KL divergence.
