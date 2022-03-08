@@ -264,26 +264,19 @@ def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
                 -tf.math.log(tf.cast(T, tf.float32))
                 + tf.math.log_softmax(q.mixture_distribution.logits)[:, None, :]
                 + prior.log_prob(z)
-                + tf.reshape(
-                    tf.reduce_mean(
-                        likelihood(
-                            [
-                                tf.reshape(z, [-1, tf.shape(z)[-1]]),
-                                tf.repeat(
-                                    x, tf.math.reduce_prod(tf.shape(z)[1:3]), axis=0
-                                ),
-                            ]
-                        ).log_prob(
-                            tf.cast(
-                                tf.repeat(
-                                    x, tf.math.reduce_prod(tf.shape(z)[1:3]), axis=0
-                                ),
-                                tf.float32,
-                            )
+                + tf.repeat(
+                    tf.expand_dims(
+                        tf.expand_dims(
+                            tf.reduce_sum(
+                                likelihood(x).log_prob(x),
+                                axis=-1,
+                            ),
+                            axis=-1,
                         ),
                         axis=-1,
                     ),
-                    z.shape[:3],
+                    z.shape[2],
+                    axis=-1,
                 )
                 - tf.reshape(
                     q.log_prob(

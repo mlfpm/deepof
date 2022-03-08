@@ -783,13 +783,15 @@ class GMVAE(tf.keras.models.Model):
 
         # Track all loss function components
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
-        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
-        )
         self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
-        self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
-        )
+
+        if "SIWAE" not in self.latent_loss:
+            self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
+                name="reconstruction_loss"
+            )
+            self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
+                name="reconstruction_loss"
+            )
         if "SIWAE" in self.latent_loss:
             self.siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
             self.val_siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
@@ -821,10 +823,11 @@ class GMVAE(tf.keras.models.Model):
     def metrics(self):  # pragma: no cover
         metrics = [
             self.total_loss_tracker,
-            self.reconstruction_loss_tracker,
             self.val_total_loss_tracker,
-            self.val_reconstruction_loss_tracker,
         ]
+        if "SIWAE" not in self.latent_loss:
+            metrics += [self.reconstruction_loss_tracker]
+            metrics += [self.val_reconstruction_loss_tracker]
         if "SIWAE" in self.latent_loss:
             metrics += [self.siwae_loss_tracker]
             metrics += [self.val_siwae_loss_tracker]
@@ -900,13 +903,18 @@ class GMVAE(tf.keras.models.Model):
 
             # Compute losses
             seq_inputs = next(y)
-            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
-            total_loss = reconstruction_loss + sum(self.gmvae.losses)
+            total_loss = sum(self.gmvae.losses)
+
+            if "SIWAE" not in self.latent_loss:
+                reconstruction_loss = -tf.reduce_sum(
+                    reconstructions.log_prob(seq_inputs)
+                )
+                total_loss += reconstruction_loss
 
             if "SIWAE" in self.latent_loss:
                 siwae_loss = deepof.model_utils.compute_siwae(
                     self.prior,
-                    self.decoder,
+                    self.gmvae,
                     self.encoder,
                     seq_inputs,
                     self.n_components,
@@ -938,7 +946,8 @@ class GMVAE(tf.keras.models.Model):
 
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
-        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+        if "SIWAE" not in self.latent_loss:
+            self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "SIWAE" in self.latent_loss:
             self.siwae_loss_tracker.update_state(siwae_loss)
         if "ELBO" in self.latent_loss:
@@ -961,10 +970,11 @@ class GMVAE(tf.keras.models.Model):
         # Log results (coupled with TensorBoard)
         log_dict = {
             "total_loss": self.total_loss_tracker.result(),
-            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
         }
 
         # Add optional metrics to final log dict
+        if "SIWAE" not in self.latent_loss:
+            log_dict["reconstruction_loss"] = self.reconstruction_loss_tracker.result()
         if "SIWAE" in self.latent_loss:
             log_dict["siwae_loss"] = self.siwae_loss_tracker.result()
         if "ELBO" in self.latent_loss:
@@ -1005,13 +1015,16 @@ class GMVAE(tf.keras.models.Model):
 
         # Compute losses
         seq_inputs = next(y)
-        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
-        total_loss = reconstruction_loss + sum(self.gmvae.losses)
+        total_loss = sum(self.gmvae.losses)
+
+        if "SIWAE" not in self.latent_loss:
+            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
+            total_loss += reconstruction_loss
 
         if "SIWAE" in self.latent_loss:
             siwae_loss = deepof.model_utils.compute_siwae(
                 self.prior,
-                self.decoder,
+                self.gmvae,
                 self.encoder,
                 seq_inputs,
                 self.n_components,
@@ -1035,7 +1048,8 @@ class GMVAE(tf.keras.models.Model):
 
         # Track losses
         self.val_total_loss_tracker.update_state(total_loss)
-        self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
+        if "SIWAE" not in self.latent_loss:
+            self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         if "SIWAE" in self.latent_loss:
             self.val_siwae_loss_tracker.update_state(siwae_loss)
         if "ELBO" in self.latent_loss:
@@ -1061,10 +1075,13 @@ class GMVAE(tf.keras.models.Model):
         # Log results (coupled with TensorBoard)
         log_dict = {
             "total_loss": self.val_total_loss_tracker.result(),
-            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
         }
 
         # Add optional metrics to final log dict
+        if "SIWAE" not in self.latent_loss:
+            log_dict[
+                "reconstruction_loss"
+            ] = self.val_reconstruction_loss_tracker.result()
         if self.next_sequence_prediction:
             log_dict[
                 "next_sequence_loss"
