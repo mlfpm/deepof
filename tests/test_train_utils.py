@@ -86,7 +86,7 @@ def test_get_callbacks(
 @settings(max_examples=32, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
-    loss=st.one_of(st.just("SELBO"), st.just("MMD")),
+    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
     next_sequence_prediction=st.one_of(st.just(0.0), st.just(0.5)),
     phenotype_prediction=st.one_of(st.just(0.0), st.just(0.5)),
     supervised_prediction=st.one_of(st.just(0.0), st.just(0.5)),
@@ -148,7 +148,7 @@ def test_autoencoder_fitting(
 @given(
     embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    loss=st.one_of(st.just("SELBO"), st.just("MMD")),
+    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
 )
 def test_tune_search(
     embedding_model,
