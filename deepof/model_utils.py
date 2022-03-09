@@ -258,6 +258,10 @@ def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
     q = posterior(x)
     z = q.components_distribution.sample(T)
     z = tf.transpose(z, perm=[1, 0, 2, 3])
+    lk = likelihood(x)
+    if isinstance(lk, list):
+        lk = lk[0]
+
     loss_n = (
         tf.math.reduce_logsumexp(
             (
@@ -268,7 +272,7 @@ def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
                     tf.expand_dims(
                         tf.expand_dims(
                             tf.reduce_sum(
-                                likelihood(x).log_prob(x),
+                                lk.log_prob(x),
                                 axis=-1,
                             ),
                             axis=-1,
