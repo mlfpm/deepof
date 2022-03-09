@@ -169,7 +169,7 @@ def get_callbacks(
     supervised_prediction: float = 0.0,
     n_cluster_loss: float = 0.0,
     gram_loss: float = 1.0,
-    latent_loss: str = "ELBO",
+    latent_loss: str = "SELBO",
     loss_warmup: int = 0,
     warmup_mode: str = "none",
     input_type: str = False,
@@ -217,8 +217,10 @@ def get_callbacks(
     elif reg_cat_clusters and reg_cluster_variance:
         latreg = "categorical+variance"
 
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
-        "deepof_unsupervised_{}".format(embedding_model),
+    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
+        "deepof_unsupervised_{}_encodings".format(
+            (latent_loss if embedding_model == "GMVAE" else "VQVAE")
+        ),
         ("_input_type={}".format(input_type) if input_type else "coords"),
         (
             ("_NSPred={}".format(next_sequence_prediction))
@@ -235,7 +237,6 @@ def get_callbacks(
             if embedding_model == "GMVAE"
             else ""
         ),
-        (("_loss={}".format(latent_loss)) if embedding_model == "GMVAE" else ""),
         (
             ("_n_cluster_loss={}".format(n_cluster_loss))
             if embedding_model == "GMVAE"
@@ -386,8 +387,8 @@ def autoencoder_fitting(
         kl_warmup (int): Number of epochs to warmup KL annealing. Only used if embedding_model is "GMVAE".
         log_history (bool): Whether to log the history of the autoencoder.
         log_hparams (bool): Whether to log the hyperparameters used for training.
-        latent_loss (str): Loss function to use for training. Must be one of "SIWAE", "ELBO", "MMD", "SIWAE+MMD",
-        or "ELBO+MMD". Only used if embedding_model is "GMVAE".
+        latent_loss (str): Loss function to use for training. Must be one of "SIWAE", "SELBO", "MMD", "SIWAE+MMD",
+        or "SELBO+MMD". Only used if embedding_model is "GMVAE".
         mmd_annealing_mode (str): Annealing mode to use for MMD annealing. Must be one of "linear" or "sigmoid". Only used
         if embedding_model is "GMVAE".
         mmd_warmup (int): Number of epochs to warmup MMD annealing. Only used if embedding_model is "GMVAE".

@@ -67,13 +67,6 @@ parser.add_argument(
     default=5,
 )
 parser.add_argument(
-    "--embedding-model",
-    "-em",
-    help="deep autoencoder model to use for unsupervised behavioral exploration. Must be one of VQVAE (default) or GMVAE",
-    type=str,
-    default="VQVAE",
-)
-parser.add_argument(
     "--encoding-size",
     "-es",
     help="set the number of dimensions of the latent space. 16 by default",
@@ -165,7 +158,7 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
-    "--loss",
+    "--latent-loss",
     "-l",
     help="Sets the loss function for the variational model. "
     "It has to be one of SIWAE+MMD, SELBO+MMD, SIWAE, SELBO or MMD. Defaults to SIWAE",
@@ -286,7 +279,6 @@ try:
         automatic_changepoints = False
     batch_size = args.batch_size
     hypertun_trials = args.hpt_trials
-    embedding_model = args.embedding_model
     encoding_size = args.encoding_size
     exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
     gaussian_filter = args.gaussian_filter
@@ -298,7 +290,7 @@ try:
     entropy_knn = args.entropy_knn
     entropy_samples = args.entropy_samples
     latent_reg = args.latent_reg
-    loss = args.loss
+    latent_loss = args.latent_loss
     mmd_annealing_mode = args.mmd_annealing_mode
     mmd_wu = args.mmd_warmup
     mc_kl = args.montecarlo_kl
@@ -315,6 +307,10 @@ try:
     window_size = args.window_size
     window_step = args.window_step
     run = args.run
+
+    # Infer embedding model from defined loss
+    embedding_model = "VQVAE" if latent_loss == "VQVAE" else "GMVAE"
+
 except TypeError:
     raise ValueError(
         "One or more mandatory arguments are missing. Use --help for details on how to run the CLI"
@@ -340,7 +336,7 @@ treatment_dict = deepof.train_utils.load_treatments(train_path)
 logparam = {
     "encoding": encoding_size,
     "k": n_components,
-    "loss": loss,
+    "loss": latent_loss,
 }
 if next_sequence_prediction:
     logparam["next_sequence_prediction_weight"] = next_sequence_prediction
@@ -447,7 +443,7 @@ if not tune:
         kl_warmup=kl_wu,
         log_history=True,
         log_hparams=True,
-        latent_loss=loss,
+        latent_loss=latent_loss,
         mmd_annealing_mode=mmd_annealing_mode,
         mmd_warmup=mmd_wu,
         montecarlo_kl=mc_kl,
@@ -509,7 +505,7 @@ if not tune:
             ae_models = deepof.models.GMVAE(
                 input_shape=curr_prep.shape,
                 batch_size=batch_size,
-                latent_loss=loss,
+                latent_loss=latent_loss,
                 latent_dim=encoding_size,
                 n_components=n_components,
                 next_sequence_prediction=next_sequence_prediction,
@@ -541,8 +537,8 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_{}_csds_unsupervised_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_n_cluster_loss={}_run={}.pkl".format(
-                embedding_model,
+            "deepof_unsupervised_{}_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_n_cluster_loss={}_run={}.pkl".format(
+                latent_loss,
                 input_type,
                 n_components,
                 encoding_size,
@@ -571,7 +567,7 @@ else:
         phenotype_prediction=phenotype_prediction,
         next_sequence_prediction=next_sequence_prediction,
         supervised_prediction=supervised_prediction,
-        latent_loss=loss,
+        latent_loss=latent_loss,
         loss_warmup=kl_wu,
         warmup_mode=kl_annealing_mode,
         input_type=input_type,
@@ -593,7 +589,7 @@ else:
         hpt_type=tune,
         k=n_components,
         kl_warmup_epochs=kl_wu,
-        loss=loss,
+        loss=latent_loss,
         mmd_warmup_epochs=mmd_wu,
         n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
