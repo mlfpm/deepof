@@ -41,7 +41,7 @@ def test_VQVAE_build(
     ),
     kl_warmup_epochs=st.integers(min_value=0, max_value=1),
     mmd_warmup_epochs=st.integers(min_value=0, max_value=1),
-    montecarlo_kl=st.integers(min_value=1, max_value=2),
+    montecarlo_kl=st.integers(min_value=10, max_value=20),
     n_components=st.integers(min_value=2, max_value=4).filter(lambda x: x % 2 == 0),
     annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")),
 )

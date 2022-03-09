@@ -862,9 +862,8 @@ class MMDiscrepancyLayer(Layer):
         true_samples = tf.reshape(
             true_samples,
             [
-                true_samples.shape[0] * true_samples.shape[2],
-                true_samples.shape[1],
-                true_samples.shape[3],
+                true_samples.shape[0] * true_samples.shape[1],
+                true_samples.shape[2],
             ],
         )
 
