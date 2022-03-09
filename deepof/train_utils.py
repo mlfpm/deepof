@@ -126,7 +126,7 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         """
 
         self.rates.append(K.get_value(self.model.optimizer.lr))
-        self.losses.append(logs["loss"])
+        self.losses.append(logs["total_loss"])
         K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
 
 

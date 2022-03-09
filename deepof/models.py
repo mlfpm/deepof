@@ -436,7 +436,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Log results (coupled with TensorBoard)
         log_dict = {
-            "loss": self.total_loss_tracker.result(),
+            "total_loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
             "number_of_populated_clusters": self.cluster_population.result(),
@@ -479,7 +479,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Log results (coupled with TensorBoard)
         log_dict = {
-            "loss": self.val_total_loss_tracker.result(),
+            "total_loss": self.val_total_loss_tracker.result(),
             "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
             "vq_loss": self.val_vq_loss_tracker.result(),
             "number_of_populated_clusters": self.val_cluster_population.result(),
