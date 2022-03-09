@@ -563,7 +563,7 @@ class VectorQuantizer(tf.keras.models.Model):
         x = self.embedding(x)
         input_shape = tf.shape(x)
 
-        # Add a disentangling penalty to the codebook
+        # Add a disentangling penalty to the embeddings
         if self.reg_gram:
             gram_loss = compute_gram_loss(
                 x, weight=self.reg_gram, batch_size=input_shape

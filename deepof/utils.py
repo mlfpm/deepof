@@ -9,7 +9,6 @@ Functions and general utilities for the deepof package.
 """
 
 import argparse
-import gc
 import multiprocessing
 import os
 from copy import deepcopy
@@ -1157,7 +1156,3 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
-
-
-# TODO:
-#    - Add center / time in zone to supervised_tagging

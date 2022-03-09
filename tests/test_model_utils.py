@@ -8,19 +8,20 @@ Testing module for deepof.model_utils
 
 """
 
-from hypothesis import given
+import numpy as np
+import tensorflow as tf
+import tensorflow_probability as tfp
 from hypothesis import HealthCheck
+from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from scipy.stats import entropy
 from sklearn.neighbors import NearestNeighbors
-import deepof.models
-import deepof.model_utils
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
 from tensorflow.python.framework.ops import EagerTensor
+
+import deepof.model_utils
+import deepof.models
 
 # For coverage.py to work with @tf.function decorated functions and methods,
 # graph execution is disabled when running this script with pytest
@@ -208,15 +209,18 @@ def test_MMDiscrepancyLayer(annealing_mode):
     X = tf.random.uniform([1500, 10], 0, 10)
     y = np.random.randint(0, 2, [1500, 1])
 
-    prior = tfd.Independent(
-        tfd.Normal(
-            loc=tf.zeros(10),
-            scale=1,
+    prior = tfd.MixtureSameFamily(
+        mixture_distribution=tfd.categorical.Categorical(probs=tf.ones(15) / 15),
+        components_distribution=tfd.MultivariateNormalDiag(
+            loc=tf.keras.initializers.he_normal()(
+                [15, 6],
+            ),
+            scale_diag=tf.ones([15, 6])
+            / tf.math.sqrt(tf.cast(15, dtype=tf.float32) / 2.0),
         ),
-        reinterpreted_batch_ndims=1,
     )
 
-    dense_1 = tf.keras.layers.Dense(10)
+    dense_1 = tf.keras.layers.Dense(6)
 
     i = tf.keras.layers.Input(shape=(10,))
     d = dense_1(i)

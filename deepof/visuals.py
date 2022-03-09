@@ -81,7 +81,6 @@ def plot_projection(projection: tuple) -> plt.figure:
      Returns:
          - projection_scatter (plt.figure): figure with the specified characteristics"""
 
-    # TODO: to be implemented
     return None
 
 

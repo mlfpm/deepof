@@ -1875,4 +1875,3 @@ if __name__ == "__main__":
 # TODO: Fix issues and add supervised parameters (time in zone, etc).
 # TODO: Label more data for supervised model training
 # TODO: Finish visualization pipeline (Projections and time-wise analyses)
-# TODO: Add options to compare cohorts in the unsupervised pipeline (cluster population - cluster dinamycs)
