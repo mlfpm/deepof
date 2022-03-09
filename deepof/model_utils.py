@@ -400,6 +400,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                     loc=gauss[1][..., : self.latent_dim],
                     scale_diag=1e-3 + gauss[1][..., self.latent_dim :],
                 ),
+                validate_args=True,
+                allow_nan_stats=False,
             ),
             convert_to_tensor_fn="sample",
             name="encoding_distribution",
@@ -418,6 +420,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 scale_diag=tf.ones([self.n_components, self.latent_dim])
                 / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
             ),
+            validate_args=True,
+            allow_nan_stats=False,
         )
         self.cluster_control_layer = ClusterControl(
             batch_size=self.batch_size,
@@ -570,7 +574,7 @@ class VectorQuantizer(tf.keras.models.Model):
         # Add a disentangling penalty to the embeddings
         if self.reg_gram:
             gram_loss = compute_gram_loss(
-                x, weight=self.reg_gram, batch_size=input_shape
+                x, weight=self.reg_gram, batch_size=input_shape[0]
             )
             self.add_loss(gram_loss)
             self.add_metric(gram_loss, name="gram_loss")

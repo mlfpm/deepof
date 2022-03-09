@@ -131,7 +131,7 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
 
 
 def find_learning_rate(
-    model, X, y, epochs=1, batch_size=32, min_rate=10 ** -5, max_rate=10
+    model, data, epochs=1, batch_size=32, min_rate=10 ** -8, max_rate=10 ** -1
 ):
     """
 
@@ -139,8 +139,7 @@ def find_learning_rate(
 
     Args:
         model (tf.keras.Model): model to train
-        X (tf.Tensor): tensor containing the input data
-        y (tf.Tensor): tensor containing the target data
+        data (tuple): training data
         epochs (int): number of epochs to train the model for
         batch_size (int): batch size to use for training
         min_rate (float): minimum learning rate to consider
@@ -152,12 +151,12 @@ def find_learning_rate(
     """
 
     init_weights = model.get_weights()
-    iterations = len(X) // batch_size * epochs
+    iterations = len(data)
     factor = K.exp(K.log(max_rate / min_rate) / iterations)
     init_lr = K.get_value(model.optimizer.lr)
     K.set_value(model.optimizer.lr, min_rate)
     exp_lr = ExponentialLearningRate(factor)
-    model.fit(X, y, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
+    model.fit(data, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
     K.set_value(model.optimizer.lr, init_lr)
     model.set_weights(init_weights)
     return exp_lr.rates, exp_lr.losses
