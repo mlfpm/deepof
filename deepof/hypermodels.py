@@ -31,7 +31,7 @@ class VQVAE(HyperModel):
         latent_dim: int,
         learn_rate: float = 1e-3,
         n_components: int = 10,
-        reg_gram: float = 1.0,
+        reg_gram: float = 0.0,
     ):
         """
 
@@ -126,7 +126,7 @@ class GMVAE(HyperModel):
         batch_size: int,
         kl_warmup_epochs: int = 0,
         learn_rate: float = 1e-3,
-        loss: str = "ELBO+MMD",
+        latent_loss: str = "SELBO+MMD",
         mmd_warmup_epochs: int = 0,
         n_components: int = 10,
         n_cluster_loss: float = False,
@@ -146,7 +146,7 @@ class GMVAE(HyperModel):
             batch_size (int): batch size for training.
             kl_warmup_epochs (int): number of epochs to warmup KL loss.
             learn_rate (float): learning rate for the optimizer.
-            loss (str): loss function to use.
+            latent_loss (str): loss function to use.
             mmd_warmup_epochs (int): number of epochs to warmup MMD loss.
             n_components (int): number of components in the quantization space.
             n_cluster_loss (float): weight of the n_cluster_loss.
@@ -164,7 +164,7 @@ class GMVAE(HyperModel):
         self.batch_size = batch_size
         self.kl_warmup_epochs = kl_warmup_epochs
         self.learn_rate = learn_rate
-        self.loss = loss
+        self.latent_loss = latent_loss
         self.mmd_warmup_epochs = mmd_warmup_epochs
         self.n_components = n_components
         self.n_cluster_loss = n_cluster_loss
@@ -233,7 +233,7 @@ class GMVAE(HyperModel):
             latent_dim=self.latent_dim,
             batch_size=self.batch_size,
             kl_warmup_epochs=self.kl_warmup_epochs,
-            latent_loss=self.loss,
+            latent_loss=self.latent_loss,
             mmd_warmup_epochs=self.mmd_warmup_epochs,
             n_components=k,
             n_cluster_loss=self.n_cluster_loss,

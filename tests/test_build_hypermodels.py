@@ -58,7 +58,7 @@ def test_GMVAE_hypermodel_build(
             15,
             10,
         ),
-        loss=loss,
+        latent_loss=loss,
         n_components=n_components,
         next_sequence_prediction=True,
     ).build(hp=HyperParameters())

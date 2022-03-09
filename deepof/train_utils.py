@@ -703,7 +703,7 @@ def tune_search(
             batch_size=batch_size,
             latent_dim=encoding_size,
             kl_warmup_epochs=kl_warmup_epochs,
-            loss=loss,
+            latent_loss=loss,
             mmd_warmup_epochs=mmd_warmup_epochs,
             n_components=k,
             n_cluster_loss=n_cluster_loss,
