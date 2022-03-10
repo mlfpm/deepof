@@ -14,7 +14,7 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 warmup_epochs = [15]
-warmup_mode = ["sigmoid"]
+warmup_mode = ["linear"]
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
 losses = ["VQVAE", "SELBO", "SIWAE"]
