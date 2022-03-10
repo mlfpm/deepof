@@ -400,7 +400,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                     loc=gauss[1][..., : self.latent_dim],
                     scale_diag=1e-3 + gauss[1][..., self.latent_dim :],
                 ),
-                validate_args=True,
+                validate_args=False,
                 allow_nan_stats=False,
             ),
             convert_to_tensor_fn="sample",
@@ -420,7 +420,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                 scale_diag=tf.ones([self.n_components, self.latent_dim])
                 / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
             ),
-            validate_args=True,
+            validate_args=False,
             allow_nan_stats=False,
         )
         self.cluster_control_layer = ClusterControl(
@@ -439,10 +439,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             )
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
-                test_points_fn=lambda q: tf.reshape(
-                    q.components_distribution.sample(self.mc_kl),
-                    [self.mc_kl * self.n_components, -1, self.latent_dim],
-                ),
+                test_points_fn=lambda q: q.sample(self.mc_kl * self.n_components),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
