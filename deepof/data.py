@@ -1103,7 +1103,7 @@ class Coordinates:
         embedding_model: str = "GMVAE",
         batch_size: int = 64,
         latent_dim: int = 4,
-        epochs: int = 50,
+        epochs: int = 150,
         hparams: dict = None,
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
