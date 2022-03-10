@@ -544,12 +544,12 @@ class VectorQuantizer(tf.keras.models.Model):
             kernel_initializer="he_uniform",
         )
 
-        # Initialize embeddings
-        w_init = tf.random_uniform_initializer()
-        self.embeddings = tf.Variable(
-            initial_value=w_init(
-                shape=(self.embedding_dim, self.n_components), dtype="float32"
-            ),
+        # Initialize the VQ codebook
+        w_init = far_uniform_initializer(
+            shape=[self.embedding_dim, self.n_components], samples=10000
+        )
+        self.codebook = tf.Variable(
+            initial_value=w_init,
             trainable=True,
             name="vqvae_codebook",
         )
@@ -589,7 +589,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         encodings = tf.one_hot(encoding_indices, self.n_components)
 
-        quantized = tf.matmul(encodings, self.embeddings, transpose_b=True)
+        quantized = tf.matmul(encodings, self.codebook, transpose_b=True)
         quantized = tf.reshape(quantized, input_shape)
 
         # Compute vector quantization loss, and add it to the layer
@@ -622,10 +622,10 @@ class VectorQuantizer(tf.keras.models.Model):
 
         """
         # Compute L2-norm distance between inputs and codes at a given time
-        similarity = tf.matmul(flattened_inputs, self.embeddings)
+        similarity = tf.matmul(flattened_inputs, self.codebook)
         distances = (
             tf.reduce_sum(flattened_inputs ** 2, axis=1, keepdims=True)
-            + tf.reduce_sum(self.embeddings ** 2, axis=0)
+            + tf.reduce_sum(self.codebook ** 2, axis=0)
             - 2 * similarity
         )
 
