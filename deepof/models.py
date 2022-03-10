@@ -28,7 +28,6 @@ tfpl = tfp.layers
 # noinspection PyCallingNonCallable
 def get_deepof_encoder(
     input_shape,
-    latent_dim,
     conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
@@ -42,7 +41,6 @@ def get_deepof_encoder(
 
     Args:
         input_shape (tuple): shape of the input data
-        latent_dim (int): dimensionality of the latent space
         conv_filters (int): number of filters in the first convolutional layer
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer. Defaults to 128.
@@ -249,7 +247,6 @@ def get_vqvae(
     )
     encoder = get_deepof_encoder(
         input_shape=input_shape,
-        latent_dim=latent_dim,
         conv_filters=conv_filters,
         dense_activation=dense_activation,
         gru_units_1=gru_units_1,
@@ -560,7 +557,6 @@ def get_gmvae(
 
     encoder = get_deepof_encoder(
         input_shape=input_shape[1:],
-        latent_dim=latent_dim,
         conv_filters=conv_filters,
         dense_activation=dense_activation,
         gru_units_1=gru_units_1,
