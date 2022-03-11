@@ -174,7 +174,7 @@ def get_deepof_decoder(
                 tfd.Normal(
                     loc=decoded[0],
                     scale=tf.ones_like(decoded[0]),
-                    validate_args=True,
+                    validate_args=False,
                     allow_nan_stats=False,
                 ),
                 reinterpreted_batch_ndims=1,

@@ -557,7 +557,7 @@ def autoencoder_fitting(
 
     callbacks_ = cbacks + [
         CustomStopper(
-            monitor="val_kl_divergence",
+            monitor=("val_kl_divergence" if embedding_model == "GMVAE" else "val_loss"),
             mode="min",
             patience=15,
             restore_best_weights=True,

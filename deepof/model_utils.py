@@ -439,7 +439,10 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             )
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
-                test_points_fn=lambda q: q.sample(self.mc_kl * self.n_components),
+                test_points_fn=lambda q: tf.reshape(
+                    q.components_distribution.sample(self.mc_kl),
+                    [self.mc_kl * self.n_components, -1, self.latent_dim],
+                ),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
