@@ -17,7 +17,7 @@ warmup_epochs = [15]
 warmup_mode = ["linear"]
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-losses = ["VQVAE", "SELBO", "SIWAE"]
+losses = ["SELBO", "SIWAE"]
 n_cluster_loss = [1.0]
 gram_loss = [1.0]
 encodings = [6]
@@ -72,9 +72,9 @@ rule train_models:
         "--latent-loss {wildcards.latent_loss} "
         "--n-cluster-loss {wildcards.n_cluster} "
         "--gram-loss {wildcards.gram_loss} "
-        "--kl-annealing-mode sigmoid "
+        "--kl-annealing-mode linear "
         "--kl-warmup 15 "
-        "--mmd-annealing-mode sigmoid "
+        "--mmd-annealing-mode linear "
         "--mmd-warmup 15 "
         "--montecarlo-kl 10 "
         "--encoding-size {wildcards.latdim} "
