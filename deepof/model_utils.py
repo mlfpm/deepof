@@ -21,7 +21,6 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.initializers import he_uniform, random_normal
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Layer
-from tensorflow.keras.layers import Reshape
 from tensorflow.keras.optimizers import Nadam
 
 tfb = tfp.bijectors
@@ -257,7 +256,7 @@ def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
 
     q = posterior(x)
     z = q.components_distribution.sample(T)
-    z = tf.transpose(z, perm=[1, 0, 2, 3])
+    z = tf.transpose(z, perm=[2, 0, 1, 3])
     lk = likelihood(x)
     if isinstance(lk, list):
         lk = lk[0]
@@ -391,18 +390,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             activity_regularizer=MeanVarianceRegularizer(0.1),
             kernel_initializer=random_normal(stddev=0.01),
         )
-        self.latent_distribution = tfpl.DistributionLambda(
-            make_distribution_fn=lambda gauss: tfd.MixtureSameFamily(
-                mixture_distribution=tfd.categorical.Categorical(
-                    logits=gauss[0],
-                ),
-                components_distribution=tfd.MultivariateNormalDiag(
-                    loc=gauss[1][..., : self.latent_dim],
-                    scale_diag=1e-3 + gauss[1][..., self.latent_dim :],
-                ),
-                validate_args=False,
-                allow_nan_stats=False,
-            ),
+        self.latent_distribution = tfpl.MixtureNormal(
+            self.n_components,
+            self.latent_dim,
             convert_to_tensor_fn="sample",
             name="encoding_distribution",
         )
@@ -439,9 +429,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             )
             self.kl_layer = KLDivergenceLayer(
                 distribution_b=self.prior,
-                test_points_fn=lambda q: tf.reshape(
+                test_points_fn=lambda q: tf.transpose(
                     q.components_distribution.sample(self.mc_kl),
-                    [self.mc_kl * self.n_components, -1, self.latent_dim],
+                    perm=[2, 0, 1, 3],
                 ),
                 test_points_reduce_axis=0,
                 iters=self.optimizer.iterations,
@@ -473,10 +463,13 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z_gauss_var = self.z_gauss_var(inputs)
         z_gauss_var = tf.keras.layers.ActivityRegularization(l2=0.01)(z_gauss_var)
 
-        z_gauss = tf.keras.layers.concatenate([z_gauss_mean, z_gauss_var], axis=1)
-        z_gauss = Reshape([self.n_components, 2 * self.latent_dim])(z_gauss)
+        # Prepare layer to be handled by the mixture normal layer
+        z_gauss = tf.keras.layers.concatenate(
+            [z_cat, z_gauss_mean, z_gauss_var], axis=-1
+        )
+        z_gauss = tf.keras.layers.Flatten()(z_gauss)
 
-        z = self.latent_distribution([z_cat, z_gauss])
+        z = self.latent_distribution(z_gauss)
 
         if self.reg_gram:
             gram_loss = compute_gram_loss(
@@ -657,65 +650,6 @@ class MCDropout(tf.keras.layers.Dropout):
         """
 
         return super().call(inputs, training=True)
-
-
-class DenseTranspose(Layer):
-    """
-
-    Mirrors a tf.keras.layers.Dense instance with transposed weights.
-    Useful for decoder layers in autoencoders, to force structure and
-    decrease the effective number of parameters to train
-
-    """
-
-    def __init__(self, dense, output_dim, activation=None, **kwargs):
-        self.dense = dense
-        self.output_dim = output_dim
-        self.activation = tf.keras.activations.get(activation)
-        super().__init__(**kwargs)
-
-    def get_config(self):  # pragma: no cover
-        """
-
-        Updates Constraint metadata
-
-        """
-
-        config = super().get_config().copy()
-        config.update(
-            {
-                "dense": self.dense,
-                "output_dim": self.output_dim,
-                "activation": self.activation,
-            }
-        )
-        return config
-
-    # noinspection PyAttributeOutsideInit
-    def build(self, batch_input_shape):
-        """
-
-        Updates Layer's build method
-
-        """
-
-        self.biases = self.add_weight(
-            name="bias",
-            shape=self.dense.get_input_at(-1).get_shape().as_list()[1:],
-            initializer="zeros",
-        )
-        super().build(batch_input_shape)
-
-    def call(self, inputs, **kwargs):  # pragma: no cover
-        """Updates Layer's call method"""
-
-        z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
-        return self.activation(z + self.biases)
-
-    def compute_output_shape(self, input_shape):  # pragma: no cover
-        """Outputs the transposed shape"""
-
-        return input_shape[0], self.output_dim
 
 
 class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
