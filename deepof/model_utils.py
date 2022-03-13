@@ -291,7 +291,7 @@ def compute_siwae(prior, likelihood, posterior, x, T):  # pragma: no cover
                     z.shape[:3],
                 )
             ),
-            axis=[1, 2],
+            axis=[0, 1],
         ),
     )
     return tf.math.reduce_sum(loss_n, axis=0)
@@ -932,15 +932,6 @@ class ClusterControl(Layer):
             tf.dtypes.float32,
         )
 
-        # Calculate the number of elements in each cluster, by counting the number of elements in hard_groups
-        # that are equal to the corresponding cluster number
-        cluster_size_entropy = compute_shannon_entropy(hard_groups)
-
-        self.add_metric(
-            cluster_size_entropy,
-            name="cluster_size_entropy",
-        )
-
         self.add_metric(
             n_components,
             name="number_of_populated_clusters",
@@ -960,7 +951,6 @@ class ClusterControl(Layer):
 
         if self.loss_weight:
             self.add_loss(self.loss_weight * tf.reduce_sum(-n_components))
-            self.add_loss(self.loss_weight * tf.reduce_sum(-cluster_size_entropy))
 
         return encodings
 

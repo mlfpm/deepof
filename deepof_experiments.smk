@@ -76,7 +76,7 @@ rule train_models:
         "--kl-warmup 15 "
         "--mmd-annealing-mode linear "
         "--mmd-warmup 15 "
-        "--montecarlo-kl 10 "
+        "--montecarlo-kl 100 "
         "--encoding-size {wildcards.latdim} "
         "--entropy-knn 10 "
         "--batch-size 64 "

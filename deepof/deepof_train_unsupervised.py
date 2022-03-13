@@ -183,7 +183,7 @@ parser.add_argument(
     "--montecarlo-kl",
     "-mckl",
     help="Number of samples to compute when adding KLDivergence to the loss function",
-    default=10,
+    default=1000,
     type=int,
 )
 parser.add_argument(
