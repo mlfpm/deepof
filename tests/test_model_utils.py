@@ -126,27 +126,6 @@ def test_MCDropout():
     assert isinstance(fit, tf.keras.callbacks.History)
 
 
-# noinspection PyUnresolvedReferences
-def test_dense_transpose():
-    X = np.random.uniform(0, 10, [1500, 10])
-    y = np.random.randint(0, 2, [1500, 1])
-
-    dense_1 = tf.keras.layers.Dense(10)
-
-    dense_input = tf.keras.layers.Input(shape=(10,))
-    dense_test = dense_1(dense_input)
-    dense_tran = deepof.model_utils.DenseTranspose(dense_1, output_dim=10)(dense_test)
-    test_model = tf.keras.Model(dense_input, dense_tran)
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
-    assert isinstance(fit, tf.keras.callbacks.History)
-
-
 # noinspection PyCallingNonCallable,PyUnresolvedReferences
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")))
