@@ -65,82 +65,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-deepof.visuals">
-<span id="deepof-visuals-module"></span><h1>deepof.visuals module<a class="headerlink" href="#module-deepof.visuals" title="Permalink to this headline"></a></h1>
-<p>General plotting functions for the deepof package</p>
-<dl class="py function">
-<dt class="sig sig-object py" id="deepof.visuals.plot_heatmap">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_heatmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.core.frame.DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_heatmap" title="Permalink to this definition"></a></dt>
-<dd><p>Returns a heatmap of the movement of a specific bodypart in the arena.
-If more than one bodypart is passed, it returns one subplot for each</p>
-<blockquote>
-<div><dl class="simple">
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>dframe (pandas.DataFrame): table_dict value with info to plot</p></li>
-<li><p>bodyparts (List): bodyparts to represent (at least 1)</p></li>
-<li><p>xlim (float): limits of the x-axis</p></li>
-<li><p>ylim (float): limits of the y-axis</p></li>
-<li><p>save (str): name of the file to which the figure should be saved</p></li>
-<li><p>dpi (int): dots per inch of the returned image</p></li>
-</ul>
-</dd>
-<dt>Returns:</dt><dd><ul class="simple">
-<li><p>heatmaps (plt.figure): figure with the specified characteristics</p></li>
-</ul>
-</dd>
-</dl>
-</div></blockquote>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="deepof.visuals.plot_projection">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_projection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">projection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_projection" title="Permalink to this definition"></a></dt>
-<dd><p>Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
-If labels are propagated, it automatically colours all data points with their respective condition.</p>
-<blockquote>
-<div><dl class="simple">
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>projection (tuple): tuple containing the projection and the associated conditions when available</p></li>
-</ul>
-</dd>
-<dt>Returns:</dt><dd><ul class="simple">
-<li><p>projection_scatter (plt.figure): figure with the specified characteristics</p></li>
-</ul>
-</dd>
-</dl>
-</div></blockquote>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="deepof.visuals.model_comparison_plot">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">model_comparison_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_bic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">range</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cov_plot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cv_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('spherical',</span> <span class="pre">'tied',</span> <span class="pre">'diag',</span> <span class="pre">'full')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.model_comparison_plot" title="Permalink to this definition"></a></dt>
-<dd><p>Plots model comparison statistics for Gaussian Mixture Model analysis.
-Similar to <a class="reference external" href="https://scikit-learn.org/stable/modules/mixture.html">https://scikit-learn.org/stable/modules/mixture.html</a>, it shows
-an upper panel with BIC per number of components and covariance matrix type
-in a bar plot, and a lower panel with box plots showing bootstrap runs of the
-models corresponding to one of the covariance types.</p>
-<blockquote>
-<div><dl>
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>bic (list): list with BIC for all used models</p></li>
-<li><p>m_bic (list): list with minimum bic across cov matrices</p></li>
-</ul>
-<p>for all used models
-- n_components_range (range): range of components to evaluate
-- cov_plot (str): covariance matrix to use in the lower panel
-- save (str): name of the file to which the figure should be saved
-- cv_types (tuple): tuple indicating which covariance matrix types
-to use. All (spherical, tied, diag and full) used by default.
-- dpi (int): dots per inch of the returned image</p>
-</dd>
-<dt>Returns:</dt><dd><ul class="simple">
-<li><p>modelcomp (plt.figure): figure with all specified characteristics</p></li>
-</ul>
-</dd>
-</dl>
-</div></blockquote>
-</dd></dl>
-
+  <section id="deepof-visuals-module">
+<h1>deepof.visuals module<a class="headerlink" href="#deepof-visuals-module" title="Permalink to this headline"></a></h1>
 </section>
 
 
