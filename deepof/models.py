@@ -16,8 +16,6 @@ from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 
-import deepof.model_utils
-
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
@@ -239,7 +237,7 @@ def get_vqvae(
         vqvae (tf.keras.Model): complete VQ VAE model.
 
     """
-    vq_layer = deepof.model_utils.VectorQuantizer(
+    vq_layer = VectorQuantizer(
         n_components,
         latent_dim,
         beta=beta,

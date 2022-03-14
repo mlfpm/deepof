@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.train_utils
+Testing module for deepof.model_utils
 
 """
 
@@ -19,13 +19,12 @@ from hypothesis import strategies as st
 
 import deepof.data
 import deepof.model_utils
-import deepof.model_utils
 
 
 def test_load_treatments():
-    assert deepof.train_utils.load_treatments("tests") is None
+    assert deepof.model_utils.load_treatments("tests") is None
     assert isinstance(
-        deepof.train_utils.load_treatments(
+        deepof.model_utils.load_treatments(
             os.path.join("tests", "test_examples", "test_single_topview", "Others")
         ),
         dict,
@@ -45,37 +44,21 @@ def test_find_learning_rate():
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    deepof.train_utils.find_learning_rate(test_model, data=dataset)
+    deepof.model_utils.find_learning_rate(test_model, data=dataset)
 
 
 @given(
-    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
-    loss=st.one_of(st.just("test_A"), st.just("test_B")),
-    next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
-    phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
-    supervised_prediction=st.floats(min_value=0.0, max_value=1.0),
-    n_cluster_loss=st.floats(min_value=0.0, max_value=1.0),
+    encoding=st.integers(min_value=1, max_value=10),
+    k=st.integers(min_value=1, max_value=10),
 )
 def test_get_callbacks(
-    embedding_model,
-    next_sequence_prediction,
-    phenotype_prediction,
-    supervised_prediction,
-    n_cluster_loss,
-    loss,
+    encoding,
+    k,
 ):
-    callbacks = deepof.train_utils.get_callbacks(
-        embedding_model=embedding_model,
-        phenotype_prediction=phenotype_prediction,
-        next_sequence_prediction=next_sequence_prediction,
-        supervised_prediction=supervised_prediction,
-        n_cluster_loss=n_cluster_loss,
-        latent_loss=loss,
+    callbacks = deepof.model_utils.get_callbacks(
         input_type=False,
         cp=True,
-        reg_cat_clusters=False,
-        reg_cluster_variance=False,
-        logparam={"encoding": 2, "k": 15},
+        logparam={"encoding": encoding, "k": k},
     )
     assert np.any([isinstance(i, str) for i in callbacks])
     assert np.any(
@@ -146,14 +129,10 @@ def test_autoencoder_fitting(
     stateful_step_count=1,
 )
 @given(
-    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
 )
 def test_tune_search(
-    embedding_model,
     hpt_type,
-    loss,
 ):
 
     n_cluster_loss = 0.1
@@ -165,40 +144,23 @@ def test_tune_search(
     y_train = np.ones([100, 1]).astype(float)
 
     callbacks = list(
-        deepof.train_utils.get_callbacks(
-            embedding_model=embedding_model,
-            phenotype_prediction=phenotype_prediction,
-            next_sequence_prediction=next_sequence_prediction,
-            supervised_prediction=supervised_prediction,
-            latent_loss=loss,
+        deepof.model_utils.get_callbacks(
             input_type=False,
             cp=False,
-            reg_cat_clusters=True,
-            reg_cluster_variance=True,
-            n_cluster_loss=n_cluster_loss,
             gram_loss=0.1,
-            entropy_knn=5,
             outpath="unsupervised_tuner_search",
             logparam={"encoding": 16, "k": 5},
         )
     )[1:]
 
-    deepof.train_utils.tune_search(
+    deepof.model_utils.tune_search(
         data=[X_train, y_train, X_train, y_train],
         batch_size=25,
-        embedding_model=embedding_model,
         encoding_size=16,
         hpt_type=hpt_type,
         hypertun_trials=1,
         k=5,
-        kl_warmup_epochs=0,
-        loss=loss,
-        mmd_warmup_epochs=0,
-        n_cluster_loss=n_cluster_loss,
         gram_loss=0.1,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        supervised_prediction=supervised_prediction,
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=1,
