@@ -167,7 +167,12 @@ def get_deepof_decoder(
     x_decoded_mean = TimeDistributed(
         Dense(tfpl.IndependentNormal.params_size(input_shape[1:]) // 2)
     )(generator)
+
+    # Add a skip connection, adding information directly from the latent space to propagate through the decoder
+    # early in training.
+    x_decoded_mean = tf.keras.layers.Add()([x_decoded_mean, Dense(input_shape[-1])(g)])
     x_decoded_mean = LayerNormalization()(x_decoded_mean)
+
     x_decoded = tfpl.DistributionLambda(
         make_distribution_fn=lambda decoded: tfd.Masked(
             tfd.Independent(

@@ -368,7 +368,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.z_cat = Dense(
             self.n_components,
             name="cluster_assignment",
-            activation="softmax",
+            kernel_initializer="random_normal",
+            activation="linear",
             activity_regularizer=None,
         )
         self.z_gauss_mean = Dense(
@@ -383,7 +384,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             tfpl.IndependentNormal.params_size(self.latent_dim * self.n_components)
             // 2,
             name="cluster_variances",
-            activation="softplus",
+            activation="linear",
             kernel_regularizer=(
                 tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
             ),
@@ -402,17 +403,20 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mixture_distribution=tfd.categorical.Categorical(
                 probs=tf.ones(self.n_components) / self.n_components
             ),
-            components_distribution=tfd.MultivariateNormalDiag(
-                loc=far_uniform_initializer(
-                    [self.n_components, self.latent_dim],
-                    samples=10000,
+            components_distribution=tfd.Independent(
+                tfd.Normal(
+                    loc=far_uniform_initializer(
+                        [self.n_components, self.latent_dim],
+                        samples=10000,
+                    ),
+                    scale=tf.ones([self.n_components, self.latent_dim])
+                    / (tf.math.sqrt(tf.cast(self.n_components, tf.float32)) / 2),
+                    name="prior_scales",
                 ),
-                scale_diag=tf.ones([self.n_components, self.latent_dim])
-                / tf.math.sqrt(tf.cast(self.n_components, dtype=tf.float32) / 2.0),
+                reinterpreted_batch_ndims=1,
             ),
-            validate_args=False,
-            allow_nan_stats=False,
         )
+
         self.cluster_control_layer = ClusterControl(
             batch_size=self.batch_size,
             n_components=self.n_components,
@@ -433,7 +437,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
                     q.components_distribution.sample(self.mc_kl),
                     perm=[2, 0, 1, 3],
                 ),
-                test_points_reduce_axis=0,
+                test_points_reduce_axis=[0, 1],
                 iters=self.optimizer.iterations,
                 warm_up_iters=self.kl_warm_up_iters,
                 annealing_mode=self.kl_annealing_mode,
@@ -950,7 +954,7 @@ class ClusterControl(Layer):
         )
 
         if self.loss_weight:
-            self.add_loss(self.loss_weight * tf.reduce_sum(-n_components))
+            self.add_loss(-self.loss_weight * tf.reduce_sum(n_components))
 
         return encodings
 
