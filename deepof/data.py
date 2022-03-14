@@ -37,9 +37,9 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
 from tqdm import tqdm
 
+import deepof.model_utils
 import deepof.models
 import deepof.pose_utils
-import deepof.train_utils
 import deepof.utils
 import deepof.visuals
 
@@ -1149,7 +1149,7 @@ class Coordinates:
 
         """
 
-        trained_models = deepof.train_utils.autoencoder_fitting(
+        trained_models = deepof.model_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
             batch_size=batch_size,
             latent_dim=latent_dim,

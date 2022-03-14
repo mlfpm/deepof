@@ -16,7 +16,7 @@ import pickle
 import numpy as np
 
 import deepof.data
-import deepof.train_utils
+import deepof.model_utils
 import deepof.utils
 
 parser = argparse.ArgumentParser(
@@ -225,7 +225,7 @@ assert input_type.replace("+speed", "") in [
 ], "Invalid input type. Type python model_training.py -h for help."
 
 # Loads model hyperparameters and treatment conditions, if available
-treatment_dict = deepof.train_utils.load_treatments(train_path)
+treatment_dict = deepof.model_utils.load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
 logparam = {
@@ -409,7 +409,7 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-    run_ID, tensorboard_callback, reduce_lr_callback = deepof.train_utils.get_callbacks(
+    run_ID, tensorboard_callback, reduce_lr_callback = deepof.model_utils.get_callbacks(
         input_type=input_type,
         cp=False,
         logparam=logparam,
@@ -418,7 +418,7 @@ else:
         run=run,
     )
 
-    best_hyperparameters, best_model = deepof.train_utils.tune_search(
+    best_hyperparameters, best_model = deepof.model_utils.tune_search(
         data=[X_train, y_train, X_val, y_val],
         batch_size=batch_size,
         encoding_size=encoding_size,
@@ -430,7 +430,7 @@ else:
         callbacks=[
             tensorboard_callback,
             reduce_lr_callback,
-            deepof.train_utils.CustomStopper(
+            deepof.model_utils.CustomStopper(
                 monitor="val_loss",
                 patience=5,
                 restore_best_weights=True,

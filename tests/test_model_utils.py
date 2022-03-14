@@ -4,262 +4,202 @@
 
 """
 
-Testing module for deepof.model_utils
+Testing module for deepof.train_utils
 
 """
 
+import os
+
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-from hypothesis.extra.numpy import arrays
-from scipy.stats import entropy
-from sklearn.neighbors import NearestNeighbors
-from tensorflow.python.framework.ops import EagerTensor
 
+import deepof.data
 import deepof.model_utils
-import deepof.models
-
-# For coverage.py to work with @tf.function decorated functions and methods,
-# graph execution is disabled when running this script with pytest
-
-tfpl = tfp.layers
-tfd = tfp.distributions
+import deepof.model_utils
 
 
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    tensor=arrays(
-        shape=[10],
-        dtype=int,
-        unique=False,
-        elements=st.integers(min_value=0, max_value=10),
-    )
-)
-def test_compute_shannon_entropy(tensor):
-    deepof_tensor_entropy = deepof.model_utils.compute_shannon_entropy(tensor).numpy()
-    assert np.allclose(
-        np.round(deepof_tensor_entropy, 4), entropy(np.bincount(tensor)), rtol=1e-3
+def test_load_treatments():
+    assert deepof.train_utils.load_treatments("tests") is None
+    assert isinstance(
+        deepof.train_utils.load_treatments(
+            os.path.join("tests", "test_examples", "test_single_topview", "Others")
+        ),
+        dict,
     )
 
 
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    tensor=arrays(
-        shape=[100, 10],
-        dtype=float,
-        unique=True,
-        elements=st.floats(min_value=0.0, max_value=10.0),
-    ),
-    k=st.integers(min_value=5, max_value=20),
-)
-def test_k_nearest_neighbors(tensor, k):
-
-    deepof_knn = deepof.model_utils.get_k_nearest_neighbors(tensor, k, 0)
-    sklearn_knn = NearestNeighbors(n_neighbors=k).fit(tensor)
-    sklearn_knn = sklearn_knn.kneighbors(tensor[0].reshape(1, -1))[1].flatten()
-    assert np.allclose(deepof_knn.numpy(), sorted(sklearn_knn))
-
-
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    tensor=arrays(
-        shape=[100, 10],
-        dtype=float,
-        unique=True,
-        elements=st.floats(min_value=0.0, max_value=10.0),
-    ),
-    clusters=arrays(
-        shape=[100],
-        dtype=int,
-        unique=False,
-        elements=st.integers(min_value=0, max_value=10),
-    ),
-    k=st.integers(min_value=5, max_value=20),
-)
-def test_get_neighbourhood_entropy(tensor, clusters, k):
-
-    neighborhood_entropy = deepof.model_utils.get_neighbourhood_entropy(
-        0, tensor, clusters, k
-    ).numpy()
-    assert isinstance(neighborhood_entropy, np.float32)
-
-
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    tensor=arrays(
-        shape=(10, 10),
-        dtype=float,
-        unique=True,
-        elements=st.floats(min_value=-300, max_value=300),
-    ),
-)
-def test_compute_mmd(tensor):
-    tensor1 = tf.cast(tf.convert_to_tensor(tensor), dtype=tf.float32)
-    tensor2 = tf.random.uniform(tensor1.shape, -300, 300, dtype=tf.float32)
-
-    mmd_kernel = deepof.model_utils.compute_mmd(tuple([tensor1, tensor2]))
-    null_kernel = deepof.model_utils.compute_mmd(tuple([tensor1, tensor1]))
-
-    assert isinstance(mmd_kernel, EagerTensor)
-    assert null_kernel == 0
-
-
-# noinspection PyUnresolvedReferences
-def test_MCDropout():
+def test_find_learning_rate():
     X = np.random.uniform(0, 10, [1500, 5])
     y = np.random.randint(0, 2, [1500, 1])
+    dataset = tf.data.Dataset.from_tensors((X, y))
 
     test_model = tf.keras.Sequential()
-    test_model.add(tf.keras.layers.Dense(10))
-    test_model.add(deepof.model_utils.MCDropout(0.5))
+    test_model.add(tf.keras.layers.Dense(1, input_shape=X.shape[1:]))
 
     test_model.compile(
         loss=tf.keras.losses.binary_crossentropy,
         optimizer=tf.keras.optimizers.SGD(),
     )
 
-    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
-    assert isinstance(fit, tf.keras.callbacks.History)
+    deepof.train_utils.find_learning_rate(test_model, data=dataset)
 
 
-# noinspection PyCallingNonCallable,PyUnresolvedReferences
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")))
-def test_KLDivergenceLayer(annealing_mode):
-
-    tf.config.run_functions_eagerly(True)
-
-    X = tf.random.uniform([10, 2], 0, 10)
-    y = np.random.randint(0, 1, [10, 1])
-
-    prior = tfd.Independent(
-        tfd.Normal(
-            loc=tf.zeros(2),
-            scale=1,
-        ),
-        reinterpreted_batch_ndims=1,
+@given(
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
+    loss=st.one_of(st.just("test_A"), st.just("test_B")),
+    next_sequence_prediction=st.floats(min_value=0.0, max_value=1.0),
+    phenotype_prediction=st.floats(min_value=0.0, max_value=1.0),
+    supervised_prediction=st.floats(min_value=0.0, max_value=1.0),
+    n_cluster_loss=st.floats(min_value=0.0, max_value=1.0),
+)
+def test_get_callbacks(
+    embedding_model,
+    next_sequence_prediction,
+    phenotype_prediction,
+    supervised_prediction,
+    n_cluster_loss,
+    loss,
+):
+    callbacks = deepof.train_utils.get_callbacks(
+        embedding_model=embedding_model,
+        phenotype_prediction=phenotype_prediction,
+        next_sequence_prediction=next_sequence_prediction,
+        supervised_prediction=supervised_prediction,
+        n_cluster_loss=n_cluster_loss,
+        latent_loss=loss,
+        input_type=False,
+        cp=True,
+        reg_cat_clusters=False,
+        reg_cluster_variance=False,
+        logparam={"encoding": 2, "k": 15},
+    )
+    assert np.any([isinstance(i, str) for i in callbacks])
+    assert np.any(
+        [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
     )
 
-    dense_1 = tf.keras.layers.Dense(2)
 
-    i = tf.keras.layers.Input(shape=(2,))
-    d = dense_1(i)
-    x = tfpl.DistributionLambda(
-        lambda dense: tfd.Independent(
-            tfd.Normal(
-                loc=dense,
-                scale=1,
-            ),
-            reinterpreted_batch_ndims=1,
+@settings(max_examples=32, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
+    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
+    next_sequence_prediction=st.one_of(st.just(0.0), st.just(0.5)),
+    phenotype_prediction=st.one_of(st.just(0.0), st.just(0.5)),
+    supervised_prediction=st.one_of(st.just(0.0), st.just(0.5)),
+)
+def test_autoencoder_fitting(
+    embedding_model,
+    loss,
+    next_sequence_prediction,
+    supervised_prediction,
+    phenotype_prediction,
+):
+
+    X_train = np.ones([20, 5, 6]).astype(float)
+    y_train = np.ones([20, 1]).astype(float)
+
+    if supervised_prediction:
+        y_train = np.concatenate([y_train, np.ones([20, 6]).astype(float)], axis=1)
+
+    if next_sequence_prediction:
+        y_train = y_train[1:]
+
+    preprocessed_data = (X_train, y_train, X_train, y_train)
+
+    prun = deepof.data.Project(
+        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        arena="circular",
+        arena_dims=380,
+        video_format=".mp4",
+    ).run()
+
+    prun.deep_unsupervised_embedding(
+        preprocessed_data,
+        embedding_model=embedding_model,
+        batch_size=1,
+        latent_dim=2,
+        epochs=1,
+        kl_warmup=1,
+        log_history=True,
+        log_hparams=True,
+        mmd_warmup=1,
+        n_components=5,
+        latent_loss=loss,
+        n_cluster_loss=0.1,
+        gram_loss=0.1,
+        next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        supervised_prediction=supervised_prediction,
+        entropy_knn=5,
+    )
+
+
+@settings(
+    max_examples=8,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    derandomize=True,
+    stateful_step_count=1,
+)
+@given(
+    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
+    hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
+    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
+)
+def test_tune_search(
+    embedding_model,
+    hpt_type,
+    loss,
+):
+
+    n_cluster_loss = 0.1
+    next_sequence_prediction = 0.1
+    phenotype_prediction = 0.1
+    supervised_prediction = 0.1
+
+    X_train = np.ones([100, 5, 6]).astype(float)
+    y_train = np.ones([100, 1]).astype(float)
+
+    callbacks = list(
+        deepof.train_utils.get_callbacks(
+            embedding_model=embedding_model,
+            phenotype_prediction=phenotype_prediction,
+            next_sequence_prediction=next_sequence_prediction,
+            supervised_prediction=supervised_prediction,
+            latent_loss=loss,
+            input_type=False,
+            cp=False,
+            reg_cat_clusters=True,
+            reg_cluster_variance=True,
+            n_cluster_loss=n_cluster_loss,
+            gram_loss=0.1,
+            entropy_knn=5,
+            outpath="unsupervised_tuner_search",
+            logparam={"encoding": 16, "k": 5},
         )
-    )(d)
-    kl_canon = tfpl.KLDivergenceAddLoss(
-        prior,
-        weight=1.0,
-    )(x)
-    kl_deepof = deepof.model_utils.KLDivergenceLayer(
-        distribution_b=prior,
-        iters=1,
-        warm_up_iters=0,
-        annealing_mode=annealing_mode,
-    )(x)
-    test_model = tf.keras.Model(i, [kl_canon, kl_deepof])
+    )[1:]
 
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(X, [y, y], epochs=1, batch_size=100, verbose=0)
-    assert isinstance(fit, tf.keras.callbacks.History)
-    assert test_model.losses[0] == test_model.losses[1]
-
-    tf.config.run_functions_eagerly(False)
-
-
-# noinspection PyUnresolvedReferences
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")))
-def test_MMDiscrepancyLayer(annealing_mode):
-    X = tf.random.uniform([1500, 10], 0, 10)
-    y = np.random.randint(0, 2, [1500, 1])
-
-    prior = tfd.MixtureSameFamily(
-        mixture_distribution=tfd.categorical.Categorical(probs=tf.ones(15) / 15),
-        components_distribution=tfd.MultivariateNormalDiag(
-            loc=tf.keras.initializers.he_normal()(
-                [15, 6],
-            ),
-            scale_diag=tf.ones([15, 6])
-            / tf.math.sqrt(tf.cast(15, dtype=tf.float32) / 2.0),
-        ),
-    )
-
-    dense_1 = tf.keras.layers.Dense(6)
-
-    i = tf.keras.layers.Input(shape=(10,))
-    d = dense_1(i)
-    x = tfpl.DistributionLambda(
-        lambda dense: tfd.Independent(
-            tfd.Normal(
-                loc=dense,
-                scale=1,
-            ),
-            reinterpreted_batch_ndims=1,
-        )
-    )(d)
-
-    x = deepof.model_utils.MMDiscrepancyLayer(
-        batch_size=100,
-        prior=prior,
-        iters=1,
-        warm_up_iters=0,
-        annealing_mode=annealing_mode,
-    )(x)
-    test_model = tf.keras.Model(i, x)
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-
-    fit = test_model.fit(X, y, epochs=10, batch_size=100, verbose=0)
-    assert isinstance(fit, tf.keras.callbacks.History)
-
-
-def test_mean_variance_regularizer():
-    X = np.random.uniform(0, 10, [75, 5])
-
-    test_model = tf.keras.Sequential()
-    test_model.add(
-        tf.keras.layers.Dense(
-            1, activity_regularizer=deepof.model_utils.MeanVarianceRegularizer(0.1)
-        )
-    )
-
-    test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
-    )
-    test_model.build(X.shape)
-
-    assert deepof.model_utils.MeanVarianceRegularizer(0.1)(X) > 0.0
-    assert np.allclose(
-        deepof.model_utils.MeanVarianceRegularizer(0.1)(np.zeros([75, 5])), 0.0
-    )
-    assert np.allclose(
-        deepof.model_utils.MeanVarianceRegularizer(0.1)(
-            np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5).T
-        ),
-        0.0,
-    )
-    assert (
-        deepof.model_utils.MeanVarianceRegularizer(0.1)(
-            np.tile(np.random.uniform(size=[1, 5]), 75).reshape(75, 5)
-        )
-        > 0.0
+    deepof.train_utils.tune_search(
+        data=[X_train, y_train, X_train, y_train],
+        batch_size=25,
+        embedding_model=embedding_model,
+        encoding_size=16,
+        hpt_type=hpt_type,
+        hypertun_trials=1,
+        k=5,
+        kl_warmup_epochs=0,
+        loss=loss,
+        mmd_warmup_epochs=0,
+        n_cluster_loss=n_cluster_loss,
+        gram_loss=0.1,
+        next_sequence_prediction=next_sequence_prediction,
+        phenotype_prediction=phenotype_prediction,
+        supervised_prediction=supervised_prediction,
+        project_name="test_run",
+        callbacks=callbacks,
+        n_epochs=1,
     )
