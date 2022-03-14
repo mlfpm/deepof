@@ -62,7 +62,7 @@ parser.add_argument(
 parser.add_argument(
     "--n-components",
     "-k",
-    help="set the number of components for the GMVAE(P) model. Defaults to 1",
+    help="set the number of components for the unsupervised model. Defaults to 5",
     type=int,
     default=5,
 )
@@ -121,72 +121,6 @@ parser.add_argument(
     default="coords",
 )
 parser.add_argument(
-    "--kl-annealing-mode",
-    "-klam",
-    help="Weight annealing to use for SELBO loss. Can be one of 'linear' and 'sigmoid'",
-    default="linear",
-    type=str,
-)
-parser.add_argument(
-    "--kl-warmup",
-    "-klw",
-    help="Number of epochs during which the KL weight increases linearly from zero to 1. Defaults to 10",
-    default=10,
-    type=int,
-)
-parser.add_argument(
-    "--entropy-knn",
-    "-entminn",
-    help="number of nearest neighbors to take into account when computing latent space entropy",
-    default=100,
-    type=int,
-)
-parser.add_argument(
-    "--entropy-samples",
-    "-ents",
-    help="Samples to use to compute cluster purity",
-    default=10000,
-    type=int,
-)
-parser.add_argument(
-    "--latent-reg",
-    "-lreg",
-    help="Sets the strategy to regularize the latent mixture of Gaussians. "
-    "It has to be one of none, categorical (an elastic net penalty is applied to the categorical distribution),"
-    "variance (l2 penalty to the variance of the clusters) or categorical+variance. Defaults to none.",
-    default="none",
-    type=str,
-)
-parser.add_argument(
-    "--latent-loss",
-    "-l",
-    help="Sets the loss function for the variational model. "
-    "It has to be one of SIWAE+MMD, SELBO+MMD, SIWAE, SELBO or MMD. Defaults to SIWAE",
-    default="SELBO",
-    type=str,
-)
-parser.add_argument(
-    "--mmd-annealing-mode",
-    "-mmdam",
-    help="Weight annealing to use for MMD loss. Can be one of 'linear' and 'sigmoid'",
-    default="linear",
-    type=str,
-)
-parser.add_argument(
-    "--mmd-warmup",
-    "-mmdw",
-    help="Number of epochs during which the MMD weight increases linearly from zero to 1. Defaults to 10",
-    default=10,
-    type=int,
-)
-parser.add_argument(
-    "--montecarlo-kl",
-    "-mckl",
-    help="Number of samples to compute when adding KLDivergence to the loss function",
-    default=1000,
-    type=int,
-)
-parser.add_argument(
     "--output-path",
     "-o",
     help="Sets the base directory where to output results. Default is the current directory",
@@ -206,29 +140,6 @@ parser.add_argument(
     help="If > 0, adds a regularization term controlling for correlation between dimensions in the latent space",
     type=float,
     default=1.0,
-)
-parser.add_argument(
-    "--next-sequence-prediction",
-    "-nspred",
-    help="Activates the next sequence prediction branch of the variational Seq 2 Seq model with the specified weight. "
-    "Defaults to 0.0 (inactive)",
-    default=0.0,
-    type=float,
-)
-parser.add_argument(
-    "--phenotype-prediction",
-    "-ppred",
-    help="Activates the phenotype classification branch with the specified weight. Defaults to 0.0 (inactive)",
-    default=0.0,
-    type=float,
-)
-parser.add_argument(
-    "--supervised-prediction",
-    "-rbpred",
-    help="Activates the supervised trait prediction branch of the variational Seq 2 Seq model "
-    "with the specified weight Defaults to 0.0 (inactive)",
-    default=0.0,
-    type=float,
 )
 parser.add_argument(
     "--smooth-alpha",
@@ -285,21 +196,8 @@ try:
     hparams = args.hyperparameters if args.hyperparameters is not None else {}
     input_type = args.input_type
     n_components = args.n_components
-    kl_annealing_mode = args.kl_annealing_mode
-    kl_wu = args.kl_warmup
-    entropy_knn = args.entropy_knn
-    entropy_samples = args.entropy_samples
-    latent_reg = args.latent_reg
-    latent_loss = args.latent_loss
-    mmd_annealing_mode = args.mmd_annealing_mode
-    mmd_wu = args.mmd_warmup
-    mc_kl = args.montecarlo_kl
     output_path = os.path.join(args.output_path)
-    n_cluster_loss = float(args.n_cluster_loss)
     gram_loss = float(args.gram_loss)
-    next_sequence_prediction = float(args.next_sequence_prediction)
-    phenotype_prediction = float(args.phenotype_prediction)
-    supervised_prediction = float(args.supervised_prediction)
     smooth_alpha = args.smooth_alpha
     train_path = os.path.abspath(args.train_path)
     tune = args.hyperparameter_tuning
@@ -307,9 +205,6 @@ try:
     window_size = args.window_size
     window_step = args.window_step
     run = args.run
-
-    # Infer embedding model from defined loss
-    embedding_model = "VQVAE" if latent_loss == "VQVAE" else "GMVAE"
 
 except TypeError:
     raise ValueError(
@@ -336,14 +231,7 @@ treatment_dict = deepof.train_utils.load_treatments(train_path)
 logparam = {
     "encoding": encoding_size,
     "k": n_components,
-    "loss": latent_loss,
 }
-if next_sequence_prediction:
-    logparam["next_sequence_prediction_weight"] = next_sequence_prediction
-if phenotype_prediction:
-    logparam["phenotype_prediction_weight"] = phenotype_prediction
-if supervised_prediction:
-    logparam["supervised_prediction_weight"] = supervised_prediction
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
@@ -436,29 +324,13 @@ if not tune:
     trained_models = project_coords.deep_unsupervised_embedding(
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
-        embedding_model=embedding_model,
         latent_dim=encoding_size,
         hparams={},
-        kl_annealing_mode=kl_annealing_mode,
-        kl_warmup=kl_wu,
-        log_history=True,
-        log_hparams=True,
-        latent_loss=latent_loss,
-        mmd_annealing_mode=mmd_annealing_mode,
-        mmd_warmup=mmd_wu,
-        montecarlo_kl=mc_kl,
         n_components=n_components,
         output_path=output_path,
-        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        supervised_prediction=supervised_prediction,
         save_checkpoints=False,
         save_weights=True,
-        reg_cat_clusters=("categorical" in latent_reg),
-        reg_cluster_variance=("variance" in latent_reg),
-        entropy_knn=entropy_knn,
         input_type=input_type,
         run=run,
     )
@@ -489,34 +361,16 @@ if not tune:
         curr_weights = trained_models[3].get_weights()
 
         # Load weights into a newly created model, buit with the current input shape
-        if embedding_model == "VQVAE":
-            ae_models = deepof.models.VQVAE(
-                input_shape=curr_prep.shape,
-                latent_dim=encoding_size,
-                n_components=n_components,
-            )
-            curr_deep_encoder, curr_deep_grouper, curr_ae = (
-                ae_models.encoder,
-                ae_models.soft_quantizer,
-                ae_models.vqvae,
-            )
-
-        elif embedding_model == "GMVAE":
-            ae_models = deepof.models.GMVAE(
-                input_shape=curr_prep.shape,
-                batch_size=batch_size,
-                latent_loss=latent_loss,
-                latent_dim=encoding_size,
-                n_components=n_components,
-                next_sequence_prediction=next_sequence_prediction,
-                phenotype_prediction=phenotype_prediction,
-                supervised_prediction=supervised_prediction,
-            )
-            curr_deep_encoder, curr_deep_grouper, curr_ae = (
-                ae_models.encoder,
-                ae_models.grouper,
-                ae_models.gmvae,
-            )
+        ae_models = deepof.models.VQVAE(
+            input_shape=curr_prep.shape,
+            latent_dim=encoding_size,
+            n_components=n_components,
+        )
+        curr_deep_encoder, curr_deep_grouper, curr_ae = (
+            ae_models.encoder,
+            ae_models.soft_quantizer,
+            ae_models.vqvae,
+        )
 
         # noinspection PyUnboundLocalVariable
         curr_ae.set_weights(curr_weights)
@@ -524,10 +378,6 @@ if not tune:
         # Embed current video in the autoencoder and add to the dictionary
         # noinspection PyUnboundLocalVariable
         mean_encodings = curr_deep_encoder(curr_prep)
-        if embedding_model == "GMVAE":
-            # The default convert_to_tensor method for the GMVAE encoder is to sample
-            # when using it for prediction, it is better to store the mean.
-            mean_encodings = mean_encodings.mean()
         deep_encodings_per_video[key] = mean_encodings
 
         # Obtain groupings for current video and add to the dictionary
@@ -537,14 +387,11 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_unsupervised_{}_encodings_input={}_k={}_latdim={}_latreg={}_gram_loss={}_n_cluster_loss={}_run={}.pkl".format(
-                latent_loss,
+            "deepof_unsupervised_VQVAE_encodings_input={}_k={}_latdim={}_gram_loss={}_run={}.pkl".format(
                 input_type,
                 n_components,
                 encoding_size,
-                latent_reg,
                 gram_loss,
-                n_cluster_loss,
                 run,
             ),
         ),
@@ -562,20 +409,11 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-    run_ID, tensorboard_callback, onecycle = deepof.train_utils.get_callbacks(
-        embedding_model=embedding_model,
-        phenotype_prediction=phenotype_prediction,
-        next_sequence_prediction=next_sequence_prediction,
-        supervised_prediction=supervised_prediction,
-        latent_loss=latent_loss,
-        loss_warmup=kl_wu,
-        warmup_mode=kl_annealing_mode,
+    run_ID, tensorboard_callback, reduce_lr_callback = deepof.train_utils.get_callbacks(
         input_type=input_type,
         cp=False,
-        entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
-        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
         run=run,
     )
@@ -583,23 +421,15 @@ else:
     best_hyperparameters, best_model = deepof.train_utils.tune_search(
         data=[X_train, y_train, X_val, y_val],
         batch_size=batch_size,
-        embedding_model=embedding_model,
         encoding_size=encoding_size,
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
         k=n_components,
-        kl_warmup_epochs=kl_wu,
-        loss=latent_loss,
-        mmd_warmup_epochs=mmd_wu,
-        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        supervised_prediction=supervised_prediction,
-        project_name="{}-based_GMVAE_{}".format(input_type, tune.capitalize()),
+        project_name="{}-based_VQVAE_{}".format(input_type, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
-            onecycle,
+            reduce_lr_callback,
             deepof.train_utils.CustomStopper(
                 monitor="val_loss",
                 patience=5,
@@ -616,7 +446,7 @@ else:
     with open(
         os.path.join(
             output_path,
-            "{}-based_GMVAE_{}_params.pickle".format(input_type, tune.capitalize()),
+            "{}-based_VQVAE_{}_params.pickle".format(input_type, tune.capitalize()),
         ),
         "wb",
     ) as handle:

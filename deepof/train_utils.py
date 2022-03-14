@@ -26,6 +26,88 @@ tf.get_logger().setLevel("ERROR")
 tf.autograph.set_verbosity(0)
 
 
+def compute_gram_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
+    """
+
+    Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
+    space.
+    Based on Variational Animal Motion Embedding (VAME) https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
+
+    Args:
+        latent_means: tensor containing the means of the latent distribution
+        weight: weight of the Gram loss in the total loss function
+        batch_size: batch size of the data to compute the Gram loss for.
+
+    Returns:
+        tf.Tensor: Gram loss
+
+    """
+    gram_matrix = (tf.transpose(latent_means) @ latent_means) / tf.cast(
+        batch_size, tf.float32
+    )
+    s = tf.linalg.svd(gram_matrix, compute_uv=False)
+    s = tf.sqrt(tf.maximum(s, 1e-9))
+    return weight * tf.reduce_sum(s)
+
+
+def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
+    """
+    Initializes the prior latent means in a spread-out fashion,
+    obtained by iteratively picking samples from a uniform distribution
+    while maximizing the minimum euclidean distance between means.
+
+    Args:
+        shape: shape of the latent space.
+        samples: number of initial candidates draw from the uniform distribution.
+
+    Returns:
+        tf.Tensor: the initialized latent means.
+
+    """
+
+    init_shape = (samples, shape[1])
+
+    # Initialize latent mean candidates with a uniform distribution
+    init_means = tf.keras.initializers.variance_scaling(
+        scale=init_shape[0], distribution="uniform"
+    )(init_shape)
+
+    # Select the first random candidate as the first cluster mean
+    final_samples, init_means = init_means[0][np.newaxis, :], init_means[1:]
+
+    # Iteratively complete the mean set by adding new candidates, which maximize the minimum euclidean distance
+    # with all existing means.
+    for i in range(shape[0] - 1):
+        max_dist = cdist(final_samples, init_means, metric="euclidean")
+        max_dist = np.argmax(np.min(max_dist, axis=0))
+
+        final_samples = np.concatenate(
+            [final_samples, init_means[max_dist][np.newaxis, :]]
+        )
+        init_means = np.delete(init_means, max_dist, 0)
+
+    return final_samples
+
+
+def plot_lr_vs_loss(rates, losses):  # pragma: no cover
+    """
+
+    Plots learing rate versus the loss function of the model
+
+    Args:
+        rates (np.ndarray): array containing the learning rates to plot in the x-axis
+        losses (np.ndarray): array containing the losses to plot in the y-axis
+
+    """
+
+    plt.plot(rates, losses)
+    plt.gca().set_xscale("log")
+    plt.hlines(min(losses), min(rates), max(rates))
+    plt.axis([min(rates), max(rates), min(losses), (losses[0] + min(losses)) / 2])
+    plt.xlabel("Learning rate")
+    plt.ylabel("Loss")
+
+
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
     """
 
@@ -114,13 +196,12 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         self.losses = []
 
     # noinspection PyMethodOverriding
-    def on_batch_end(self, batch: int, logs: dict):
+    def on_batch_end(self, logs: dict):
         """
 
         This callback acts after processing each batch
 
         Args:
-            batch (int): current batch number
             logs (dict): dictionary containing the loss for the current batch
 
         """
@@ -166,20 +247,9 @@ def find_learning_rate(
 
 
 def get_callbacks(
-    embedding_model: str,
-    phenotype_prediction: float = 0.0,
-    next_sequence_prediction: float = 0.0,
-    supervised_prediction: float = 0.0,
-    n_cluster_loss: float = 0.0,
     gram_loss: float = 1.0,
-    latent_loss: str = "SELBO",
-    loss_warmup: int = 0,
-    warmup_mode: str = "none",
     input_type: str = False,
     cp: bool = False,
-    reg_cat_clusters: bool = False,
-    reg_cluster_variance: bool = False,
-    entropy_knn: int = 100,
     logparam: dict = None,
     outpath: str = ".",
     run: int = False,
@@ -189,20 +259,9 @@ def get_callbacks(
     Generates callbacks used for model training.
 
     Args:
-        embedding_model (str): Embedding model used for training. Must be "VQVAE" or "GMVAE".
-        phenotype_prediction (float): Weight of the phenotype prediction loss.
-        next_sequence_prediction (float): Weight of the next sequence prediction loss.
-        supervised_prediction (float): Weight of the supervised prediction loss
-        n_cluster_loss (float): Weight of the n_cluster_loss
         gram_loss (float): Weight of the gram loss
-        latent_loss (str): Loss function to use for training
-        loss_warmup (int): Number of epochs to warmup the loss function
-        warmup_mode (str): Warmup mode to use for training
         input_type (str): Input type to use for training
         cp (bool): Whether to use checkpointing or not
-        reg_cat_clusters (bool): Whether to use regularization on categorical clusters
-        reg_cluster_variance (bool): Whether to use regularization on cluster variance
-        entropy_knn (int): Number of nearest neighbors to use for entropy regularization
         logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
         outpath (str): Path to the output directory
         run (int): Run number to use for checkpointing
@@ -212,46 +271,12 @@ def get_callbacks(
 
     """
 
-    latreg = "none"
-    if reg_cat_clusters and not reg_cluster_variance:
-        latreg = "categorical"
-    elif reg_cluster_variance and not reg_cat_clusters:
-        latreg = "variance"
-    elif reg_cat_clusters and reg_cluster_variance:
-        latreg = "categorical+variance"
-
-    run_ID = "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format(
-        "deepof_unsupervised_{}_encodings".format(
-            (latent_loss if embedding_model == "GMVAE" else "VQVAE")
-        ),
+    run_ID = "{}{}{}{}{}{}{}".format(
+        "deepof_unsupervised_VQVAE_encodings",
         ("_input_type={}".format(input_type) if input_type else "coords"),
-        (
-            ("_NSPred={}".format(next_sequence_prediction))
-            if embedding_model == "GMVAE"
-            else ""
-        ),
-        (
-            ("_PPred={}".format(phenotype_prediction))
-            if embedding_model == "GMVAE"
-            else ""
-        ),
-        (
-            ("_SupPred={}".format(supervised_prediction))
-            if embedding_model == "GMVAE"
-            else ""
-        ),
-        (
-            ("_n_cluster_loss={}".format(n_cluster_loss))
-            if embedding_model == "GMVAE"
-            else ""
-        ),
         ("_gram_loss={}".format(gram_loss)),
-        (("_loss_warmup={}".format(loss_warmup)) if embedding_model == "GMVAE" else ""),
-        (("_warmup_mode={}".format(warmup_mode)) if embedding_model == "GMVAE" else ""),
         ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
         ("_k={}".format(logparam["k"]) if logparam is not None else ""),
-        (("_latreg={}".format(latreg)) if embedding_model == "GMVAE" else ""),
-        (("_entknn={}".format(entropy_knn)) if embedding_model == "GMVAE" else ""),
         ("_run={}".format(run) if run else ""),
         ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
     )
@@ -282,14 +307,13 @@ def get_callbacks(
     return callbacks
 
 
-def log_hyperparameters(phenotype_class: float, rec: str):
+def log_hyperparameters(phenotype_class: float):
     """
 
     Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning
 
     Args:
         phenotype_class (float): Phenotype class to use for training
-        rec (str): Record to use for training
 
     Returns:
         logparams (list): List containing the hyperparameters to log in tensorboard.
@@ -344,32 +368,18 @@ def log_hyperparameters(phenotype_class: float, rec: str):
 
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    embedding_model: str,
     batch_size: int,
     latent_dim: int,
     epochs: int,
     hparams: dict,
-    kl_annealing_mode: str,
-    kl_warmup: int,
     log_history: bool,
     log_hparams: bool,
-    latent_loss: str,
-    mmd_annealing_mode: str,
-    mmd_warmup: int,
-    montecarlo_kl: int,
     n_components: int,
     output_path: str,
-    n_cluster_loss: float,
     gram_loss: float,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    supervised_prediction: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
-    reg_cat_clusters: bool,
-    reg_cluster_variance: bool,
-    entropy_knn: int,
     input_type: str,
     run: int = 0,
     strategy: tf.distribute.Strategy = "one_device",
@@ -380,43 +390,19 @@ def autoencoder_fitting(
 
     Args:
         preprocessed_object (tuple): Tuple containing the preprocessed data.
-        embedding_model (str): Name of the embedding model to use. Must be one of "VQVAE" or "GMVAE".
         batch_size (int): Batch size to use for training.
         latent_dim (int): Encoding size to use for training.
         epochs (int): Number of epochs to train the autoencoder for.
         hparams (dict): Dictionary containing the hyperparameters to use for training.
-        kl_annealing_mode (str): Annealing mode to use for KL annealing. Must be one of "linear" or "sigmoid". Only used
-        if embedding_model is "GMVAE".
-        kl_warmup (int): Number of epochs to warmup KL annealing. Only used if embedding_model is "GMVAE".
         log_history (bool): Whether to log the history of the autoencoder.
         log_hparams (bool): Whether to log the hyperparameters used for training.
-        latent_loss (str): Loss function to use for training. Must be one of "SIWAE", "SELBO", "MMD", "SIWAE+MMD",
-        or "SELBO+MMD". Only used if embedding_model is "GMVAE".
-        mmd_annealing_mode (str): Annealing mode to use for MMD annealing. Must be one of "linear" or "sigmoid". Only used
-        if embedding_model is "GMVAE".
-        mmd_warmup (int): Number of epochs to warmup MMD annealing. Only used if embedding_model is "GMVAE".
-        montecarlo_kl (int): Number of Monte Carlo samples to use for KL annealing. Only used if embedding_model is
-        "GMVAE".
-        n_components (int): Number of components to use for the GMVAE.
+        n_components (int): Number of components to use for the VQVAE.
         output_path (str): Path to the output directory.
-        n_cluster_loss (float): Weight to use for the n_cluster_loss. Only used if embedding_model is "GMVAE".
-        gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
+        gram_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
         penalizes the correlation between the dimensions in the latent space.
-        next_sequence_prediction (float): Weight to use for the next sequence prediction loss. Only used if embedding_model
-        is "GMVAE".
-        phenotype_prediction (float): Weight to use for the phenotype prediction loss. Only used if embedding_model is
-        "GMVAE".
-        supervised_prediction (float): Weight to use for the supervised prediction loss. Only used if embedding_model is
-        "GMVAE".
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
-        reg_cat_clusters (bool): Whether to use the categorical cluster regularization loss. Only used if embedding_model
-        is "GMVAE".
-        reg_cluster_variance (bool): Whether to use the cluster variance regularization loss. Only used if embedding_model
-        is "GMVAE".
-        entropy_knn (int): Number of nearest neighbors to use for the entropy regularization loss. Only used if embedding_model
-        is "GMVAE".
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
         run (int): Run number to use for logging.
         strategy (tf.distribute.Strategy): Distribution strategy to use for training.
@@ -457,20 +443,9 @@ def autoencoder_fitting(
 
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
-        embedding_model=embedding_model,
-        phenotype_prediction=phenotype_prediction,
-        next_sequence_prediction=next_sequence_prediction,
-        supervised_prediction=supervised_prediction,
-        latent_loss=latent_loss,
-        loss_warmup=kl_warmup,
-        n_cluster_loss=n_cluster_loss,
         gram_loss=gram_loss,
-        warmup_mode=kl_annealing_mode,
         input_type=input_type,
         cp=save_checkpoints,
-        reg_cat_clusters=reg_cat_clusters,
-        reg_cluster_variance=reg_cluster_variance,
-        entropy_knn=entropy_knn,
         logparam=logparam,
         outpath=output_path,
         run=run,
@@ -479,9 +454,8 @@ def autoencoder_fitting(
         cbacks = cbacks[1:]
 
     # Logs hyperparameters to tensorboard
-    rec = "reconstruction_" if phenotype_prediction else ""
     if log_hparams:
-        logparams, metrics = log_hyperparameters(phenotype_prediction, rec)
+        logparams, metrics = log_hyperparameters(phenotype_prediction)
 
         with tf.summary.create_file_writer(
             os.path.join(output_path, "hparams", run_ID)
@@ -491,64 +465,25 @@ def autoencoder_fitting(
                 metrics=metrics,
             )
 
-    # Gets the number of supervised features
-    try:
-        supervised_features = (
-            y_train.shape[1] if not phenotype_prediction else y_train.shape[1] - 1
-        )
-    except IndexError:
-        supervised_features = 0
-
     # Build model
     with strategy.scope():
-        if embedding_model == "VQVAE":
-            ae_full_model = deepof.models.VQVAE(
-                architecture_hparams=hparams,
-                input_shape=X_train.shape,
-                latent_dim=latent_dim,
-                n_components=n_components,
-                reg_gram=gram_loss,
-            )
-            ae_full_model.optimizer = tf.keras.optimizers.Nadam(
-                learning_rate=1e-4, clipvalue=0.75
-            )
-            encoder, decoder, quantizer, ae = (
-                ae_full_model.encoder,
-                ae_full_model.decoder,
-                ae_full_model.quantizer,
-                ae_full_model.vqvae,
-            )
-            return_list = (encoder, decoder, quantizer, ae)
-
-        elif embedding_model == "GMVAE":
-            ae_full_model = deepof.models.GMVAE(
-                architecture_hparams=hparams,
-                input_shape=X_train.shape,
-                batch_size=batch_size,
-                latent_dim=latent_dim,
-                kl_annealing_mode=kl_annealing_mode,
-                kl_warmup_epochs=kl_warmup,
-                latent_loss=latent_loss,
-                mmd_annealing_mode=mmd_annealing_mode,
-                mmd_warmup_epochs=mmd_warmup,
-                montecarlo_kl=montecarlo_kl,
-                n_components=n_components,
-                n_cluster_loss=n_cluster_loss,
-                reg_gram=gram_loss,
-                next_sequence_prediction=next_sequence_prediction,
-                phenotype_prediction=phenotype_prediction,
-                supervised_prediction=supervised_prediction,
-                supervised_features=supervised_features,
-                reg_cat_clusters=reg_cat_clusters,
-                reg_cluster_variance=reg_cluster_variance,
-            )
-            encoder, decoder, grouper, ae = (
-                ae_full_model.encoder,
-                ae_full_model.decoder,
-                ae_full_model.grouper,
-                ae_full_model.gmvae,
-            )
-            return_list = (encoder, decoder, grouper, ae)
+        ae_full_model = deepof.models.VQVAE(
+            architecture_hparams=hparams,
+            input_shape=X_train.shape,
+            latent_dim=latent_dim,
+            n_components=n_components,
+            reg_gram=gram_loss,
+        )
+        ae_full_model.optimizer = tf.keras.optimizers.Nadam(
+            learning_rate=1e-4, clipvalue=0.75
+        )
+        encoder, decoder, quantizer, ae = (
+            ae_full_model.encoder,
+            ae_full_model.decoder,
+            ae_full_model.quantizer,
+            ae_full_model.vqvae,
+        )
+        return_list = (encoder, decoder, quantizer, ae)
 
     if pretrained:
         # If pretrained models are specified, load weights and return
@@ -630,18 +565,10 @@ def autoencoder_fitting(
 def tune_search(
     data: tf.data.Dataset,
     encoding_size: int,
-    embedding_model: str,
     hypertun_trials: int,
     hpt_type: str,
     k: int,
-    kl_warmup_epochs: int,
-    loss: str,
-    mmd_warmup_epochs: int,
-    n_cluster_loss: float,
     gram_loss: float,
-    next_sequence_prediction: float,
-    phenotype_prediction: float,
-    supervised_prediction: float,
     project_name: str,
     callbacks: List,
     batch_size: int = 64,
@@ -656,19 +583,11 @@ def tune_search(
     Args:
         data (tf.data.Dataset): Dataset object for training and validation.
         encoding_size (int): Size of the encoding layer.
-        embedding_model (str): Embedding model to use. Must be one of "VQVAE" or "GMVAE".
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
-        kl_warmup_epochs (int): Number of epochs to warmup KL loss. Only used if embedding_model is "GMVAE".
-        loss (str): Loss function to use. Must be one of "mmd", "kl", or "n_cluster". Only used if embedding_model is "GMVAE".
-        mmd_warmup_epochs (int): Number of epochs to warmup MMD loss. Only used if embedding_model is "GMVAE"
-        n_cluster_loss (float): Weight of the n_cluster_loss loss. Only used if embedding_model is "GMVAE".
         gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
         between dimensions in the latent space.
-        next_sequence_prediction (float): Weight of the next sequence prediction loss. Only used if embedding_model is "GMVAE".
-        phenotype_prediction (float): Weight of the phenotype prediction loss. Only used if embedding_model is "GMVAE".
-        supervised_prediction (float): Weight of the supervised prediction loss. Only used if embedding_model is "GMVAE".
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
         batch_size (int): Batch size to use.

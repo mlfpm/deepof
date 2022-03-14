@@ -1100,32 +1100,18 @@ class Coordinates:
     @staticmethod
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-        embedding_model: str = "GMVAE",
         batch_size: int = 64,
         latent_dim: int = 4,
         epochs: int = 150,
         hparams: dict = None,
-        kl_annealing_mode: str = "linear",
-        kl_warmup: int = 15,
         log_history: bool = True,
         log_hparams: bool = False,
-        latent_loss: str = "SELBO",
-        mmd_annealing_mode: str = "linear",
-        mmd_warmup: int = 15,
-        montecarlo_kl: int = 10,
         n_components: int = 10,
-        n_cluster_loss: float = 0.0,
         gram_loss: float = 1.0,
         output_path: str = "unsupervised_trained_models",
-        next_sequence_prediction: float = 0,
-        phenotype_prediction: float = 0,
-        supervised_prediction: float = 0,
         pretrained: str = False,
         save_checkpoints: bool = False,
         save_weights: bool = True,
-        reg_cat_clusters: bool = False,
-        reg_cluster_variance: bool = False,
-        entropy_knn: int = 100,
         input_type: str = False,
         run: int = 0,
         strategy: tf.distribute.Strategy = "one_device",
@@ -1136,40 +1122,21 @@ class Coordinates:
 
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
-            embedding_model (str): Model to use for unsupervised embedding. Must be one of "VQVAE" and "GMVAE".
             batch_size (int): Batch size for training.
             latent_dim (int): Dimention size of the latent space.
             epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
             will stop training when validation loss stops decreasing.
             hparams (dict): Hyperparameters for the model. See deepof.models for more details.
-            kl_annealing_mode (str): Mode for annealing the KL divergence. Must be one of "linear" and "sigmoid".
-            kl_warmup (int): Number of epochs to warm up the KL divergence.
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
-            latent_loss (str): Loss function to use. Must be one of "SIWAE", "SELBO", "MMD", "SIWAE+MMD", and "SELBO+MMD".
-            mmd_annealing_mode (str): Mode for annealing the MMD loss. Must be one of "linear" and "sigmoid".
-            mmd_warmup (int): Number of epochs to warm up the MMD loss.
-            montecarlo_kl (int): Number of Monte Carlo samples to take for the Monte-Carlo KL divergence.
             n_components (int): Number of latent clusters for the embedding model to use.
-            n_cluster_loss (float): Weight of the n_cluster_loss, which adds a regularization term to GMVAE models which
-            maximizes the number of populated clusters in the latent space.
             gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
             output_path (str): Path to save the trained model and all log files.
-            next_sequence_prediction (float): Weight of the next sequence prediction loss, used as a regularizer.
-            phenotype_prediction (float): Weight of the phenotype prediction loss, used to guide training towards using
-            traits that are differentially expressed across phenotypes.
-            supervised_prediction (float): Weight of the supervised prediction loss, used to guide training towards
-            clusters that correlate with the supervised annotations.
             pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
             must be the path to a saved model.
             save_checkpoints (bool): Whether to save checkpoints of the model during training. Defaults to False.
             save_weights (bool): Whether to save the weights of the model during training. Defaults to True.
-            reg_cat_clusters (bool): Whether to regularize the latent space of GMVAE models based on the number of
-            categories in the categorical features.
-            reg_cluster_variance (bool): Whether to penalize the latent space of GMVAE models based on variance
-            differences across clusters.
-            entropy_knn (int): Number of nearest neighbors to use for the entropy computation in n_cluster_loss.
             input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict
             for more details.
             run (int): Run number for the model. Used to save the model and log files. Optional.
@@ -1184,32 +1151,18 @@ class Coordinates:
 
         trained_models = deepof.train_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
-            embedding_model=embedding_model,
             batch_size=batch_size,
             latent_dim=latent_dim,
             epochs=epochs,
             hparams=hparams,
-            kl_annealing_mode=kl_annealing_mode,
-            kl_warmup=kl_warmup,
             log_history=log_history,
             log_hparams=log_hparams,
-            latent_loss=latent_loss,
-            mmd_annealing_mode=mmd_annealing_mode,
-            mmd_warmup=mmd_warmup,
-            montecarlo_kl=montecarlo_kl,
             n_components=n_components,
-            n_cluster_loss=n_cluster_loss,
             gram_loss=gram_loss,
             output_path=output_path,
-            next_sequence_prediction=next_sequence_prediction,
-            phenotype_prediction=phenotype_prediction,
-            supervised_prediction=supervised_prediction,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
             save_weights=save_weights,
-            reg_cat_clusters=reg_cat_clusters,
-            reg_cluster_variance=reg_cluster_variance,
-            entropy_knn=entropy_knn,
             input_type=input_type,
             run=run,
             strategy=strategy,
