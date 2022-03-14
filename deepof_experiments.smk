@@ -14,19 +14,11 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 warmup_epochs = [15]
-warmup_mode = ["linear"]
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-losses = ["SELBO", "SIWAE"]
-n_cluster_loss = [1.0]
 gram_loss = [1.0]
 encodings = [6]
 cluster_numbers = [6, 8, 10, 12, 14, 16]
-latent_reg = ["categorical+variance"]
-entropy_knn = [10]
-next_sequence_pred_weights = [0.0]
-phenotype_pred_weights = [0.0]
-supervised_pred_weights = [0.0]
 input_types = ["coords"]
 run = [1]
 
@@ -36,12 +28,10 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "deepof_unsupervised_{latent_loss}_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_n_cluster_loss={n_cluster}_run={run}.pkl",
-            latent_loss=losses,
+            + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
-            latreg=latent_reg,
             n_cluster=n_cluster_loss,
             gram_loss=gram_loss,
             run=run,
@@ -55,7 +45,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "deepof_unsupervised_{latent_loss}_encodings_input={input_type}_k={k}_latdim={latdim}_latreg={latreg}_gram_loss={gram_loss}_n_cluster_loss={n_cluster}_run={run}.pkl",
+        + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}__run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
@@ -65,20 +55,8 @@ rule train_models:
         "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
         "--n-components {wildcards.k} "
         "--input-type {wildcards.input_type} "
-        "--next-sequence-prediction 0.0 "
-        "--phenotype-prediction 0.0 "
-        "--supervised-prediction 0.0 "
-        "--latent-reg {wildcards.latreg} "
-        "--latent-loss {wildcards.latent_loss} "
-        "--n-cluster-loss {wildcards.n_cluster} "
         "--gram-loss {wildcards.gram_loss} "
-        "--kl-annealing-mode linear "
-        "--kl-warmup 15 "
-        "--mmd-annealing-mode linear "
-        "--mmd-warmup 15 "
-        "--montecarlo-kl 100 "
         "--encoding-size {wildcards.latdim} "
-        "--entropy-knn 10 "
         "--batch-size 64 "
         "--window-size 5 "
         "--window-step 1 "
