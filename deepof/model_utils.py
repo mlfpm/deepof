@@ -479,7 +479,7 @@ def autoencoder_fitting(
 
     callbacks_ = cbacks + [
         CustomStopper(
-            monitor="val_loss",
+            monitor="val_total_loss",
             mode="min",
             patience=15,
             restore_best_weights=True,
