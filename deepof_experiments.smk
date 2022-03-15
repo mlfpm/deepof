@@ -31,7 +31,6 @@ rule deepof_experiments:
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
-            n_cluster=n_cluster_loss,
             gram_loss=gram_loss,
             run=run,
         ),
