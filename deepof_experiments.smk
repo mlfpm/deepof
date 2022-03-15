@@ -43,7 +43,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}__run={run}.pkl",
+        + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
