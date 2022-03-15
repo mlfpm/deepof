@@ -254,10 +254,8 @@ coords = project_coords.get_coords(
     center="Center",
     align="Spine_1",
     align_inplace=True,
-    propagate_labels=(phenotype_prediction > 0),
-    propagate_annotations=(
-        False if not supervised_prediction else project_coords.supervised_annotation()
-    ),
+    propagate_labels=False,
+    propagate_annotations=False,
     selected_id=animal_to_preprocess,
 )
 speeds = project_coords.get_coords(
@@ -311,10 +309,6 @@ X_train, y_train, X_val, y_val = batch_preprocess(to_preprocess)
 
 print("Training set shape:", X_train.shape)
 print("Validation set shape:", X_val.shape)
-if any([phenotype_prediction, supervised_prediction]):
-    print("Training set label shape:", y_train.shape)
-    print("Validation set label shape:", y_val.shape)
-
 print("Done!")
 
 # Proceed with training mode. Fit autoencoder with the same parameters,

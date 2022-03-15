@@ -58,7 +58,7 @@ def test_get_callbacks(
     callbacks = deepof.model_utils.get_callbacks(
         input_type=False,
         cp=True,
-        logparam={"encoding": encoding, "k": k},
+        logparam={"latent_dim": encoding, "n_components": k},
     )
     assert np.any([isinstance(i, str) for i in callbacks])
     assert np.any(
@@ -123,7 +123,7 @@ def test_tune_search(
             cp=False,
             gram_loss=0.1,
             outpath="unsupervised_tuner_search",
-            logparam={"encoding": 16, "k": 5},
+            logparam={"latent_dim": 16, "n_components": 5},
         )
     )[1:]
 
