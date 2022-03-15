@@ -17,6 +17,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from keras_tuner import BayesianOptimization, Hyperband, Objective
+from scipy.spatial.distance import cdist
 from tensorboard.plugins.hparams import api as hp
 
 import deepof.hypermodels
@@ -196,12 +197,13 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         self.losses = []
 
     # noinspection PyMethodOverriding
-    def on_batch_end(self, logs: dict):
+    def on_batch_end(self, batch: int, logs: dict):
         """
 
         This callback acts after processing each batch
 
         Args:
+            batch: batch number
             logs (dict): dictionary containing the loss for the current batch
 
         """
@@ -273,10 +275,10 @@ def get_callbacks(
 
     run_ID = "{}{}{}{}{}{}{}".format(
         "deepof_unsupervised_VQVAE_encodings",
-        ("_input_type={}".format(input_type) if input_type else "coords"),
+        ("_input_type={}".format(input_type if input_type else "coords")),
         ("_gram_loss={}".format(gram_loss)),
-        ("_encoding={}".format(logparam["encoding"]) if logparam is not None else ""),
-        ("_k={}".format(logparam["k"]) if logparam is not None else ""),
+        ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
+        ("_k={}".format(logparam["n_components"]) if logparam is not None else ""),
         ("_run={}".format(run) if run else ""),
         ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
     )
@@ -307,13 +309,10 @@ def get_callbacks(
     return callbacks
 
 
-def log_hyperparameters(phenotype_class: float):
+def log_hyperparameters():
     """
 
     Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning
-
-    Args:
-        phenotype_class (float): Phenotype class to use for training
 
     Returns:
         logparams (list): List containing the hyperparameters to log in tensorboard.
@@ -323,45 +322,47 @@ def log_hyperparameters(phenotype_class: float):
 
     logparams = [
         hp.HParam(
-            "encoding",
+            "latent_dim",
             hp.Discrete([2, 4, 6, 8, 12, 16]),
-            display_name="encoding",
+            display_name="latent_dim",
             description="encoding size dimensionality",
         ),
         hp.HParam(
-            "k",
+            "n_components",
             hp.IntInterval(min_value=1, max_value=25),
-            display_name="k",
-            description="cluster_number",
+            display_name="n_components",
+            description="latent component number",
         ),
         hp.HParam(
-            "loss",
-            hp.Discrete(["SIWAE", "SELBO", "MMD", "SIWAE+MMD", "SELBO+MMD"]),
-            display_name="loss function",
-            description="loss function",
+            "gram_weight",
+            hp.RealInterval(min_value=0.0, max_value=1.0),
+            display_name="gram_weight",
+            description="weight of the gram loss",
         ),
     ]
-    metrics = []
 
-    if phenotype_class:
-        logparams.append(
-            hp.HParam(
-                "pheno_weight",
-                hp.RealInterval(min_value=0.0, max_value=1000.0),
-                display_name="pheno weight",
-                description="weight applied to phenotypic classifier from the latent space",
-            )
-        )
-        metrics += [
-            hp.Metric(
-                "phenotype_prediction_accuracy",
-                display_name="phenotype_prediction_accuracy",
-            ),
-            hp.Metric(
-                "phenotype_prediction_auc",
-                display_name="phenotype_prediction_auc",
-            ),
-        ]
+    metrics = [
+        hp.Metric(
+            "val_number_of_populated_clusters",
+            display_name="number of populated clusters",
+        ),
+        hp.Metric(
+            "val_reconstruction_loss",
+            display_name="reconstruction loss",
+        ),
+        hp.Metric(
+            "val_gram_loss",
+            display_name="gram loss",
+        ),
+        hp.Metric(
+            "val_vq_loss",
+            display_name="vq loss",
+        ),
+        hp.Metric(
+            "val_total_loss",
+            display_name="total loss",
+        ),
+    ]
 
     return logparams, metrics
 
@@ -434,12 +435,10 @@ def autoencoder_fitting(
 
     # Defines hyperparameters to log on tensorboard (useful for keeping track of different models)
     logparam = {
-        "encoding": latent_dim,
-        "k": n_components,
-        "loss": latent_loss,
+        "latent_dim": latent_dim,
+        "n_components": n_components,
+        "gram_weight": gram_loss,
     }
-    if phenotype_prediction:
-        logparam["pheno_weight"] = phenotype_prediction
 
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
@@ -452,18 +451,6 @@ def autoencoder_fitting(
     )
     if not log_history:
         cbacks = cbacks[1:]
-
-    # Logs hyperparameters to tensorboard
-    if log_hparams:
-        logparams, metrics = log_hyperparameters(phenotype_prediction)
-
-        with tf.summary.create_file_writer(
-            os.path.join(output_path, "hparams", run_ID)
-        ).as_default():
-            hp.hparams_config(
-                hparams=logparams,
-                metrics=metrics,
-            )
 
     # Build model
     with strategy.scope():
@@ -496,28 +483,12 @@ def autoencoder_fitting(
             mode="min",
             patience=15,
             restore_best_weights=True,
-            start_epoch=max(kl_warmup, mmd_warmup),
+            start_epoch=15,
         ),
     ]
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
-
-    if next_sequence_prediction > 0.0:
-        Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
-        Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
-
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
-        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
-
-        # Remove the used column (phenotype) from both y arrays
-        y_train = y_train[:, 1:]
-        y_val = y_val[:, 1:]
-
-    if supervised_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :]]
-        yvals += [y_val[-Xvals.shape[0] :]]
 
     # Cast to float32
     ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
@@ -558,6 +529,49 @@ def autoencoder_fitting(
                 "{}_final_weights.h5".format(run_ID),
             )
         )
+
+        # Logs hyperparameters to tensorboard
+        if log_hparams:
+            logparams, metrics = log_hyperparameters()
+
+            tb_writer = tf.summary.create_file_writer(
+                os.path.abspath(os.path.join(output_path, "hparams", run_ID))
+            )
+            with tb_writer.as_default():
+                # Configure hyperparameter logging in tensorboard
+                hp.hparams_config(
+                    hparams=logparams,
+                    metrics=metrics,
+                )
+                hp.hparams(logparam)  # Log hyperparameters
+                # Log metrics
+                tf.summary.scalar(
+                    "val_number_of_populated_clusters",
+                    ae_full_model.history.history["val_number_of_populated_clusters"][
+                        -1
+                    ],
+                    step=0,
+                )
+                tf.summary.scalar(
+                    "val_reconstruction_loss",
+                    ae_full_model.history.history["val_reconstruction_loss"][-1],
+                    step=0,
+                )
+                tf.summary.scalar(
+                    "val_gram_loss",
+                    ae_full_model.history.history["val_gram_loss"][-1],
+                    step=0,
+                )
+                tf.summary.scalar(
+                    "val_vq_loss",
+                    ae_full_model.history.history["val_vq_loss"][-1],
+                    step=0,
+                )
+                tf.summary.scalar(
+                    "val_total_loss",
+                    ae_full_model.history.history["val_total_loss"][-1],
+                    step=0,
+                )
 
     return return_list
 
@@ -628,7 +642,7 @@ def tune_search(
     if hpt_type == "hyperband":
         tuner = Hyperband(
             directory=os.path.join(
-                outpath, "HyperBandx_{}_{}".format(loss, str(date.today()))
+                outpath, "HyperBandx_VQVAE_{}".format(str(date.today()))
             ),
             max_epochs=n_epochs,
             hyperband_iterations=hypertun_trials,
@@ -638,7 +652,7 @@ def tune_search(
     else:
         tuner = BayesianOptimization(
             directory=os.path.join(
-                outpath, "BayOpt_{}_{}".format(loss, str(date.today()))
+                outpath, "BayOpt_VQVAE_{}".format(str(date.today()))
             ),
             max_trials=hypertun_trials,
             **hpt_params
@@ -648,22 +662,6 @@ def tune_search(
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
-
-    if next_sequence_prediction > 0.0:
-        Xs, ys = X_train[:-1], [X_train[:-1], X_train[1:]]
-        Xvals, yvals = X_val[:-1], [X_val[:-1], X_val[1:]]
-
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
-
-        # Remove the used column (phenotype) from both y arrays
-        y_train = y_train[:, 1:]
-        y_val = y_val[:, 1:]
-
-    if supervised_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :]]
-        yvals += [y_val[-Xvals.shape[0] :]]
 
     # Convert data to tf.data.Dataset objects
     train_dataset = (

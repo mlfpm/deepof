@@ -66,30 +66,18 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=32, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
-    embedding_model=st.one_of(st.just("VQVAE"), st.just("GMVAE")),
-    loss=st.one_of(st.just("SELBO"), st.just("SIWAE"), st.just("MMD")),
-    next_sequence_prediction=st.one_of(st.just(0.0), st.just(0.5)),
-    phenotype_prediction=st.one_of(st.just(0.0), st.just(0.5)),
-    supervised_prediction=st.one_of(st.just(0.0), st.just(0.5)),
+    embedding=st.integers(min_value=2, max_value=8).filter(lambda x: x % 2 == 0),
+    k=st.integers(min_value=1, max_value=10),
 )
 def test_autoencoder_fitting(
-    embedding_model,
-    loss,
-    next_sequence_prediction,
-    supervised_prediction,
-    phenotype_prediction,
+    embedding,
+    k,
 ):
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.ones([20, 1]).astype(float)
-
-    if supervised_prediction:
-        y_train = np.concatenate([y_train, np.ones([20, 6]).astype(float)], axis=1)
-
-    if next_sequence_prediction:
-        y_train = y_train[1:]
 
     preprocessed_data = (X_train, y_train, X_train, y_train)
 
@@ -102,22 +90,13 @@ def test_autoencoder_fitting(
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,
-        embedding_model=embedding_model,
         batch_size=1,
-        latent_dim=2,
+        latent_dim=embedding,
         epochs=1,
-        kl_warmup=1,
         log_history=True,
         log_hparams=True,
-        mmd_warmup=1,
-        n_components=5,
-        latent_loss=loss,
-        n_cluster_loss=0.1,
+        n_components=k,
         gram_loss=0.1,
-        next_sequence_prediction=next_sequence_prediction,
-        phenotype_prediction=phenotype_prediction,
-        supervised_prediction=supervised_prediction,
-        entropy_knn=5,
     )
 
 
@@ -134,11 +113,6 @@ def test_autoencoder_fitting(
 def test_tune_search(
     hpt_type,
 ):
-
-    n_cluster_loss = 0.1
-    next_sequence_prediction = 0.1
-    phenotype_prediction = 0.1
-    supervised_prediction = 0.1
 
     X_train = np.ones([100, 5, 6]).astype(float)
     y_train = np.ones([100, 1]).astype(float)

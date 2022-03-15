@@ -13,11 +13,10 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
-warmup_epochs = [15]
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-gram_loss = [1.0]
-encodings = [6]
+gram_loss = [0.0, 1.0]
+encodings = [2, 4, 6, 8, 12, 16]
 cluster_numbers = [6, 8, 10, 12, 14, 16]
 input_types = ["coords"]
 run = [1]

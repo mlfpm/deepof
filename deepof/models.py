@@ -16,6 +16,8 @@ from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 
+from deepof import model_utils
+
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
@@ -320,7 +322,7 @@ class VectorQuantizer(tf.keras.models.Model):
         )
 
         # Initialize the VQ codebook
-        w_init = far_uniform_initializer(
+        w_init = model_utils.far_uniform_initializer(
             shape=[self.embedding_dim, self.n_components], samples=10000
         )
         self.codebook = tf.Variable(
@@ -348,7 +350,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         # Add a disentangling penalty to the embeddings
         if self.reg_gram:
-            gram_loss = compute_gram_loss(
+            gram_loss = model_utils.compute_gram_loss(
                 x, weight=self.reg_gram, batch_size=input_shape[0]
             )
             self.add_loss(gram_loss)
