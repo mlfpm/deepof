@@ -27,7 +27,7 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
+            + "train_models/deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
@@ -43,7 +43,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
+        + "train_models/deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
