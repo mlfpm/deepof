@@ -208,6 +208,7 @@ def get_vqvae(
     n_components: int,
     beta: float = 1.0,
     reg_gram: float = 0.0,
+    phenotype_prediction_loss: float = 0.0,
     conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
@@ -224,6 +225,7 @@ def get_vqvae(
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
         reg_gram (float): regularization parameter for the Gram matrix.
+        phenotype_prediction_loss (float): weight of the phenotype prediction loss. Defaults to 0.0.
         conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
         dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
@@ -269,6 +271,7 @@ def get_vqvae(
     encoder_outputs = encoder(inputs)
     quantized_latents, soft_counts = vq_layer(encoder_outputs)
 
+    # Connect full models
     encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
     quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
     soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
@@ -276,13 +279,25 @@ def get_vqvae(
         quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
     )
 
-    return (
-        encoder,
-        decoder,
-        quantizer,
-        soft_quantizer,
-        vqvae,
-    )
+    models = [encoder, decoder, quantizer, soft_quantizer, vqvae]
+
+    # If phenotype prediction loss is not zero, add a phenotype prediction classifier
+    if phenotype_prediction_loss > 0.0:
+        phenotype_predictor = tf.keras.layers.Dense(
+            units=tfpl.IndependentBernoulli.params_size(1),
+            activation=dense_activation,
+            kernel_regularizer=tf.keras.regularizers.l2(0.01),
+            name="phenotype_predictor_dense_1",
+        )(quantized_latents)
+        phenotype_predictor = tfpl.IndependentBernoulli(1, name="phenotype_predictor")(
+            phenotype_predictor
+        )
+        phenotype_predictor = tf.keras.Model(
+            quantizer.inputs, phenotype_predictor, name="phenotype_predictor"
+        )
+        models.append(phenotype_predictor)
+
+    return models
 
 
 class VectorQuantizer(tf.keras.models.Model):
@@ -431,6 +446,7 @@ class VQVAE(tf.keras.models.Model):
         n_components: int = 15,
         beta: float = 1.0,
         reg_gram: float = 0.0,
+        phenotype_prediction_loss: float = 0.0,
         architecture_hparams: dict = None,
         **kwargs,
     ):
@@ -444,6 +460,7 @@ class VQVAE(tf.keras.models.Model):
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
             reg_gram (float): Regularization parameter for the Gram matrix.
+            phenotype_prediction_loss (float): Weight of the phenotype prediction loss.
             architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
             **kwargs: Additional keyword arguments.
 
@@ -455,27 +472,34 @@ class VQVAE(tf.keras.models.Model):
         self.n_components = n_components
         self.beta = beta
         self.reg_gram = reg_gram
+        self.phenotype_prediction_loss = phenotype_prediction_loss
         self.architecture_hparams = architecture_hparams
 
         # Define VQ_VAE model
-        (
-            self.encoder,
-            self.decoder,
-            self.quantizer,
-            self.soft_quantizer,
-            self.vqvae,
-        ) = get_vqvae(
+        models = get_vqvae(
             self.seq_shape,
             self.latent_dim,
             self.n_components,
             self.beta,
             self.reg_gram,
+            self.phenotype_prediction_loss,
             conv_filters=self.hparams["conv_filters"],
             dense_activation=self.hparams["dense_activation"],
             gru_units_1=self.hparams["gru_units_1"],
             gru_unroll=self.hparams["gru_unroll"],
             bidirectional_merge=self.hparams["bidirectional_merge"],
         )
+        if phenotype_prediction_loss > 0.0:
+            self.phenotype_predictor = models[-1]
+            models = models[:-1]
+
+        (
+            self.encoder,
+            self.decoder,
+            self.quantizer,
+            self.soft_quantizer,
+            self.vqvae,
+        ) = models
 
         # Define metrics to track
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
@@ -494,6 +518,10 @@ class VQVAE(tf.keras.models.Model):
         self.val_cluster_population = tf.keras.metrics.Mean(
             name="number_of_populated_clusters"
         )
+        if self.phenotype_prediction_loss > 0.0:
+            self.phenotype_prediction_loss_tracker = tf.keras.metrics.Mean(
+                name="phenotype_prediction_loss"
+            )
 
     @tf.function
     def call(self, inputs, **kwargs):
@@ -548,6 +576,13 @@ class VQVAE(tf.keras.models.Model):
             reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
+        # Add phenotype prediction loss if it is defined
+        if self.phenotype_prediction_loss > 0.0:
+            phenotype_prediction_loss = self.phenotype_predictor(
+                x, training=True
+            ).log_prob(next(y))
+            total_loss += phenotype_prediction_loss
+
         # Backpropagation
         grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.vqvae.trainable_variables))
@@ -594,6 +629,13 @@ class VQVAE(tf.keras.models.Model):
         # Compute losses
         reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
         total_loss = reconstruction_loss + sum(self.vqvae.losses)
+
+        # Add phenotype prediction loss if it is defined
+        if self.phenotype_prediction_loss > 0.0:
+            phenotype_prediction_loss = self.phenotype_predictor(
+                x, training=False
+            ).log_prob(next(y))
+            total_loss += phenotype_prediction_loss
 
         # Compute populated clusters
         unique_indices = tf.unique(

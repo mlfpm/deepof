@@ -291,6 +291,7 @@ def rotate(
     return rotated
 
 
+# noinspection PyArgumentList
 def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     """
 
@@ -411,8 +412,8 @@ def rolling_window(
     if automatic_changepoints:
         # Define change point detection model using ruptures
         # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
-        rpt_model = rpt.KernelCPD(
-            kernel=automatic_changepoints, min_size=window_size, jump=window_step
+        rpt_model = rpt.Pelt(
+            model=automatic_changepoints, min_size=window_size, jump=window_step
         ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
         # Extract change points from current experiment
@@ -470,7 +471,11 @@ def rupture_per_experiment(
         if i in rupture_indices:
             current_size = tab.shape[0]
             current_train, current_breaks = rolling_window(
-                to_rupture[cumulative_shape : cumulative_shape + current_size],
+                (
+                    to_rupture[cumulative_shape : cumulative_shape + current_size]
+                    if automatic_changepoints
+                    else to_rupture
+                ),
                 window_size,
                 window_step,
                 automatic_changepoints,
@@ -505,7 +510,8 @@ def rupture_per_experiment(
                     )
 
                 # Once that's taken care of, concatenate ruptures alongside axis 0
-                ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
+                if automatic_changepoints:
+                    ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
                 if current_breaks is not None:
                     break_indices = np.concatenate([break_indices, current_breaks])
             except (ValueError, AttributeError):
@@ -746,6 +752,8 @@ def filter_columns(columns: list, selected_id: str) -> list:
             columns_to_keep.append(column)
         # Raw distance and angle columns
         elif len(column) in [2, 3] and all([i.startswith(selected_id) for i in column]):
+            columns_to_keep.append(column)
+        elif column[0].lower().startswith("pheno"):
             columns_to_keep.append(column)
 
     return columns_to_keep

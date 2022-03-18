@@ -1235,7 +1235,10 @@ class TableDict(dict):
         assert np.all([k in table.keys() for k in keys]), "Invalid keys selected"
 
         return TableDict(
-            {k: value for k, value in table.items() if k in keys}, self._type
+            {k: value for k, value in table.items() if k in keys},
+            self._type,
+            propagate_labels=self._propagate_labels,
+            propagate_annotations=self._propagate_annotations,
         )
 
     # noinspection PyTypeChecker
@@ -1414,7 +1417,8 @@ class TableDict(dict):
     def filter_id(self, selected_id: str = None) -> table_dict:
         """
 
-        Filters a TableDict object to keep only those columns related to the selected id.
+        Filters a TableDict object to keep only those columns related to the selected id. Leaves labels
+        untouched if present.
 
         Args:
             selected_id (str): select a single animal on multi animal settings. Defaults to None
@@ -1433,7 +1437,12 @@ class TableDict(dict):
                 [bpa for bpa in val.columns if bpa in columns_to_keep],
             ]
 
-        return TableDict(tabs, typ=self._type)
+        return TableDict(
+            tabs,
+            typ=self._type,
+            propagate_labels=self._propagate_labels,
+            propagate_annotations=self._propagate_annotations,
+        )
 
     def merge(self, *args, ignore_index=False):
         """
@@ -1579,9 +1588,6 @@ class TableDict(dict):
         scale: str = "standard",
         test_videos: int = 0,
         verbose: int = 0,
-        conv_filter: bool = None,
-        sigma: float = 1.0,
-        shift: float = 0.0,
         shuffle: bool = False,
     ) -> np.ndarray:
         """
@@ -1601,9 +1607,6 @@ class TableDict(dict):
             scale (str): Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
-            conv_filter (bool): Whether to apply a convolutional filter to the data.
-            sigma (float): Sigma parameter for the Gaussian kernel used in the convolutional filter.
-            shift (float): Shift parameter for the Gaussian kernel used in the convolutional filter.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
 
         Returns:
@@ -1700,6 +1703,7 @@ class TableDict(dict):
             print("maximum rupture length: {}".format(rpt_lengths.max()))
 
         if self._propagate_labels or self._propagate_annotations:
+
             if train_breaks is None:
                 y_train, _ = deepof.utils.rupture_per_experiment(
                     table_dict=table_temp,
@@ -1711,23 +1715,11 @@ class TableDict(dict):
                     window_size=window_size,
                     window_step=window_step,
                 )
+
             else:
                 y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
-            y_train = y_train.mean(axis=1)
 
-        if conv_filter == "gaussian" and not automatic_changepoints:
-            r = range(-int(window_size / 2), int(window_size / 2) + 1)
-            r = [i - shift for i in r]
-            g = np.array(
-                [
-                    1
-                    / (sigma * np.sqrt(2 * np.pi))
-                    * np.exp(-float(x) ** 2 / (2 * sigma ** 2))
-                    for x in r
-                ]
-            )
-            g /= np.max(g)
-            X_train = X_train * g.reshape([1, window_size, 1])
+            y_train = y_train.mean(axis=1)
 
         if test_videos and len(test_index) > 0:
 
@@ -1747,7 +1739,7 @@ class TableDict(dict):
                         table_dict=table_temp,
                         to_rupture=y_test,
                         rupture_indices=[
-                            i for i in range(len(table_temp)) if i not in test_index
+                            i for i in range(len(table_temp)) if i in test_index
                         ],
                         automatic_changepoints=False,
                         window_size=window_size,
@@ -1756,10 +1748,6 @@ class TableDict(dict):
                 else:
                     y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
                     y_test = y_test.mean(axis=1)
-
-            if conv_filter == "gaussian" and not automatic_changepoints:
-                # noinspection PyUnboundLocalVariable
-                X_test = X_test * g.reshape([1, window_size, 1])
 
             if shuffle:
                 shuffle_test = np.random.choice(
