@@ -209,6 +209,7 @@ def get_vqvae(
     beta: float = 1.0,
     reg_gram: float = 0.0,
     phenotype_prediction_loss: float = 0.0,
+    phenotype_num_labels: int = None,
     conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
@@ -226,6 +227,7 @@ def get_vqvae(
         beta (float): beta parameter of the VQ loss.
         reg_gram (float): regularization parameter for the Gram matrix.
         phenotype_prediction_loss (float): weight of the phenotype prediction loss. Defaults to 0.0.
+        phenotype_num_labels (int): number of labels for the phenotype prediction loss. Defaults to None.
         conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
         dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
@@ -284,7 +286,7 @@ def get_vqvae(
     # If phenotype prediction loss is not zero, add a phenotype prediction classifier
     if phenotype_prediction_loss > 0.0:
         phenotype_predictor = tf.keras.layers.Dense(
-            units=tfpl.IndependentBernoulli.params_size(1),
+            units=tfpl.IndependentBernoulli.params_size(phenotype_num_labels),
             activation=dense_activation,
             kernel_regularizer=tf.keras.regularizers.l2(0.01),
             name="phenotype_predictor_dense_1",
@@ -447,6 +449,7 @@ class VQVAE(tf.keras.models.Model):
         beta: float = 1.0,
         reg_gram: float = 0.0,
         phenotype_prediction_loss: float = 0.0,
+        phenotype_num_labels: int = None,
         architecture_hparams: dict = None,
         **kwargs,
     ):
@@ -461,6 +464,7 @@ class VQVAE(tf.keras.models.Model):
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
             reg_gram (float): Regularization parameter for the Gram matrix.
             phenotype_prediction_loss (float): Weight of the phenotype prediction loss.
+            phenotype_num_labels (int): Number of labels for the phenotype prediction task.
             architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
             **kwargs: Additional keyword arguments.
 
@@ -473,6 +477,7 @@ class VQVAE(tf.keras.models.Model):
         self.beta = beta
         self.reg_gram = reg_gram
         self.phenotype_prediction_loss = phenotype_prediction_loss
+        self.phenotype_num_labels = phenotype_num_labels
         self.architecture_hparams = architecture_hparams
 
         # Define VQ_VAE model
@@ -483,6 +488,7 @@ class VQVAE(tf.keras.models.Model):
             self.beta,
             self.reg_gram,
             self.phenotype_prediction_loss,
+            self.phenotype_num_labels,
             conv_filters=self.hparams["conv_filters"],
             dense_activation=self.hparams["dense_activation"],
             gru_units_1=self.hparams["gru_units_1"],
