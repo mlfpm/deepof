@@ -528,6 +528,9 @@ class VQVAE(tf.keras.models.Model):
             self.phenotype_prediction_loss_tracker = tf.keras.metrics.Mean(
                 name="phenotype_prediction_loss"
             )
+            self.val_phenotype_prediction_loss_tracker = tf.keras.metrics.Mean(
+                name="phenotype_prediction_loss"
+            )
 
     @tf.function
     def call(self, inputs, **kwargs):
@@ -535,7 +538,7 @@ class VQVAE(tf.keras.models.Model):
 
     @property
     def metrics(self):  # pragma: no cover
-        return [
+        metrics = [
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,
             self.vq_loss_tracker,
@@ -545,6 +548,10 @@ class VQVAE(tf.keras.models.Model):
             self.val_vq_loss_tracker,
             self.val_cluster_population,
         ]
+        if self.phenotype_prediction_loss > 0.0:
+            metrics.append(self.phenotype_prediction_loss_tracker)
+
+        return metrics
 
     @property
     def hparams(self):
@@ -582,12 +589,12 @@ class VQVAE(tf.keras.models.Model):
             reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(next(y)))
             total_loss = reconstruction_loss + sum(self.vqvae.losses)
 
-        # Add phenotype prediction loss if it is defined
-        if self.phenotype_prediction_loss > 0.0:
-            phenotype_prediction_loss = self.phenotype_predictor(
-                x, training=True
-            ).log_prob(next(y))
-            total_loss += phenotype_prediction_loss
+            # Add phenotype prediction loss if it is defined
+            if self.phenotype_prediction_loss > 0.0:
+                phenotype_prediction_loss = self.phenotype_predictor(
+                    x, training=True
+                ).log_prob(next(y))
+                total_loss += phenotype_prediction_loss
 
         # Backpropagation
         grads = tape.gradient(total_loss, self.vqvae.trainable_variables)
@@ -612,6 +619,15 @@ class VQVAE(tf.keras.models.Model):
             "vq_loss": self.vq_loss_tracker.result(),
             "number_of_populated_clusters": self.cluster_population.result(),
         }
+
+        if self.phenotype_prediction_loss > 0.0:
+            # noinspection PyUnboundLocalVariable
+            self.phenotype_prediction_loss_tracker.update_state(
+                phenotype_prediction_loss
+            )
+            log_dict[
+                "phenotype_prediction_loss"
+            ] = self.phenotype_prediction_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
 
@@ -662,5 +678,14 @@ class VQVAE(tf.keras.models.Model):
             "vq_loss": self.val_vq_loss_tracker.result(),
             "number_of_populated_clusters": self.val_cluster_population.result(),
         }
+
+        if self.phenotype_prediction_loss > 0.0:
+            # noinspection PyUnboundLocalVariable
+            self.val_phenotype_prediction_loss_tracker.update_state(
+                phenotype_prediction_loss
+            )
+            log_dict[
+                "phenotype_prediction_loss"
+            ] = self.val_phenotype_prediction_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
