@@ -66,10 +66,10 @@ def test_get_callbacks(
     )
 
 
-@settings(max_examples=5, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding=st.integers(min_value=2, max_value=8).filter(lambda x: x % 2 == 0),
-    k=st.integers(min_value=1, max_value=10),
+    k=st.just(10),
     pheno_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_autoencoder_fitting(
