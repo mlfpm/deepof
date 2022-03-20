@@ -412,8 +412,8 @@ def rolling_window(
     if automatic_changepoints:
         # Define change point detection model using ruptures
         # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
-        rpt_model = rpt.Pelt(
-            model=automatic_changepoints, min_size=window_size, jump=window_step
+        rpt_model = rpt.KernelCPD(
+            kernel=automatic_changepoints, min_size=window_size, jump=window_step
         ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
         # Extract change points from current experiment

@@ -81,13 +81,6 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
-    "--gaussian-filter",
-    "-gf",
-    help="Convolves each training instance with a Gaussian filter before feeding it to the autoencoder model",
-    type=deepof.utils.str2bool,
-    default=False,
-)
-parser.add_argument(
     "--hpt-trials",
     "-n",
     help="sets the number of hyperparameter tuning iterations to run. Default is 25",
@@ -192,7 +185,6 @@ try:
     hypertun_trials = args.hpt_trials
     encoding_size = args.encoding_size
     exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
-    gaussian_filter = args.gaussian_filter
     hparams = args.hyperparameters if args.hyperparameters is not None else {}
     input_type = args.input_type
     n_components = args.n_components
@@ -282,8 +274,6 @@ def batch_preprocess(tab_dict):
         window_step=window_step,
         automatic_changepoints=automatic_changepoints,
         scale="standard",
-        conv_filter=gaussian_filter,
-        sigma=1,
         test_videos=val_num,
         shuffle=True,
     )
@@ -342,8 +332,6 @@ if not tune:
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,
             scale="standard",
-            conv_filter=gaussian_filter,
-            sigma=1,
             test_videos=0,
             shuffle=False,
         )[0]

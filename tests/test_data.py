@@ -8,16 +8,17 @@ Testing module for deepof.preprocess
 
 """
 
+import os
+from collections import defaultdict
+
+import numpy as np
+import pytest
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
-from collections import defaultdict
-import deepof.utils
+
 import deepof.data
-import matplotlib.figure
-import numpy as np
-import os
-import pytest
+import deepof.utils
 
 
 @settings(deadline=None)
@@ -272,15 +273,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     prep = table.preprocess(
         window_size=11,
         window_step=1,
-        automatic_changepoints=(
-            False if not propagate and not propagate_annots else "linear"
-        ),
+        automatic_changepoints=False,
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=1,
         verbose=2,
-        conv_filter=sampler.draw(st.one_of(st.just(None), st.just("gaussian"))),
-        sigma=sampler.draw(st.floats(min_value=0.5, max_value=5.0)),
-        shift=sampler.draw(st.floats(min_value=-1.0, max_value=1.0)),
         shuffle=sampler.draw(st.booleans()),
     )
 
