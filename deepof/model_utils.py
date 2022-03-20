@@ -454,6 +454,36 @@ def autoencoder_fitting(
     if not log_history:
         cbacks = cbacks[1:]
 
+    Xs, ys = X_train, [X_train]
+    Xvals, yvals = X_val, [X_val]
+
+    pheno_num_classes = None
+    if phenotype_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
+        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
+        pheno_num_classes = len(set(y_train[-Xs.shape[0] :, 0]))
+        if pheno_num_classes == 2:
+            pheno_num_classes = 1
+
+    # Cast to float32
+    ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
+    yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
+
+    # Convert data to tf.data.Dataset objects
+    train_dataset = (
+        tf.data.Dataset.from_tensor_slices((tf.cast(Xs, tf.float32), tuple(ys)))
+        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+        .shuffle(buffer_size=X_train.shape[0])
+        .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_dataset = (
+        tf.data.Dataset.from_tensor_slices((tf.cast(Xvals, tf.float32), tuple(yvals)))
+        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+        .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+
     # Build model
     with strategy.scope():
         ae_full_model = deepof.models.VQVAE(
@@ -463,6 +493,7 @@ def autoencoder_fitting(
             n_components=n_components,
             reg_gram=gram_loss,
             phenotype_prediction_loss=phenotype_prediction,
+            phenotype_num_labels=pheno_num_classes,
         )
         ae_full_model.optimizer = tf.keras.optimizers.Nadam(
             learning_rate=1e-4, clipvalue=0.75
@@ -489,32 +520,6 @@ def autoencoder_fitting(
             start_epoch=15,
         ),
     ]
-
-    Xs, ys = X_train, [X_train]
-    Xvals, yvals = X_val, [X_val]
-
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
-        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
-
-    # Cast to float32
-    ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
-    yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
-
-    # Convert data to tf.data.Dataset objects
-    train_dataset = (
-        tf.data.Dataset.from_tensor_slices((tf.cast(Xs, tf.float32), tuple(ys)))
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .shuffle(buffer_size=X_train.shape[0])
-        .with_options(options)
-        .prefetch(tf.data.AUTOTUNE)
-    )
-    val_dataset = (
-        tf.data.Dataset.from_tensor_slices((tf.cast(Xvals, tf.float32), tuple(yvals)))
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .with_options(options)
-        .prefetch(tf.data.AUTOTUNE)
-    )
 
     ae_full_model.compile(optimizer=ae_full_model.optimizer)
     ae_full_model.fit(
@@ -630,12 +635,34 @@ def tune_search(
         "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
 
+    Xs, ys = X_train, [X_train]
+    Xvals, yvals = X_val, [X_val]
+
+    pheno_num_classes = None
+    if phenotype_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :, 0]]
+        yvals += [y_val[-Xvals.shape[0] :, 0]]
+        pheno_num_classes = len(set(y_train[:, 0]))
+        if pheno_num_classes == 2:
+            pheno_num_classes = 1
+
+    # Convert data to tf.data.Dataset objects
+    train_dataset = (
+        tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
+        .batch(batch_size, drop_remainder=True)
+        .shuffle(buffer_size=X_train.shape[0])
+    )
+    val_dataset = tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals))).batch(
+        batch_size, drop_remainder=True
+    )
+
     hypermodel = deepof.hypermodels.VQVAE(
         input_shape=X_train.shape,
         latent_dim=encoding_size,
         n_components=k,
         reg_gram=gram_loss,
         phenotype_prediction=phenotype_prediction,
+        pheno_num_classes=pheno_num_classes,
     )
 
     tuner_objective = "val_loss"
@@ -669,23 +696,6 @@ def tune_search(
         )
 
     print(tuner.search_space_summary())
-
-    Xs, ys = X_train, [X_train]
-    Xvals, yvals = X_val, [X_val]
-
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
-
-    # Convert data to tf.data.Dataset objects
-    train_dataset = (
-        tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
-        .batch(batch_size, drop_remainder=True)
-        .shuffle(buffer_size=X_train.shape[0])
-    )
-    val_dataset = tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals))).batch(
-        batch_size, drop_remainder=True
-    )
 
     # Convert data to tf.data.Dataset objects
     tuner.search(

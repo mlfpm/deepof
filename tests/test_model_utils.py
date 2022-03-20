@@ -70,10 +70,12 @@ def test_get_callbacks(
 @given(
     embedding=st.integers(min_value=2, max_value=8).filter(lambda x: x % 2 == 0),
     k=st.integers(min_value=1, max_value=10),
+    pheno_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_autoencoder_fitting(
     embedding,
     k,
+    pheno_prediction,
 ):
 
     X_train = np.ones([20, 5, 6]).astype(float)
@@ -97,6 +99,7 @@ def test_autoencoder_fitting(
         log_hparams=True,
         n_components=k,
         gram_loss=0.1,
+        phenotype_prediction=pheno_prediction,
     )
 
 
@@ -109,9 +112,11 @@ def test_autoencoder_fitting(
 )
 @given(
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
+    pheno_loss=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_tune_search(
     hpt_type,
+    pheno_loss,
 ):
 
     X_train = np.ones([100, 5, 6]).astype(float)
@@ -135,6 +140,7 @@ def test_tune_search(
         hypertun_trials=1,
         k=5,
         gram_loss=0.1,
+        phenotype_prediction=pheno_loss,
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=1,

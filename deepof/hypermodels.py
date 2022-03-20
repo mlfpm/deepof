@@ -33,6 +33,7 @@ class VQVAE(HyperModel):
         n_components: int = 10,
         reg_gram: float = 0.0,
         phenotype_prediction: float = 0.0,
+        pheno_num_classes: int = None,
     ):
         """
 
@@ -45,6 +46,7 @@ class VQVAE(HyperModel):
             n_components (int): number of components in the quantization space.
             reg_gram (float): regularization parameter for the Gram matrix of the latent embeddings.
             phenotype_prediction (float): weight of the phenotype prediction loss.
+            pheno_num_classes (int): number of classes in the phenotype space.
 
         """
 
@@ -55,6 +57,7 @@ class VQVAE(HyperModel):
         self.n_components = n_components
         self.reg_gram = reg_gram
         self.phenotype_prediction = phenotype_prediction
+        self.pheno_num_classes = pheno_num_classes
 
     def get_hparams(self, hp):
         """
@@ -109,7 +112,8 @@ class VQVAE(HyperModel):
             latent_dim=self.latent_dim,
             n_components=k,
             reg_gram=self.reg_gram,
-            phenotype_prediction=self.phenotype_prediction,
+            phenotype_prediction_loss=self.phenotype_prediction,
+            phenotype_num_labels=self.pheno_num_classes,
         ).vqvae
         vqvae.compile()
 
