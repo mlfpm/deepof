@@ -273,7 +273,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     prep = table.preprocess(
         window_size=11,
         window_step=1,
-        automatic_changepoints=False,
+        automatic_changepoints=(False if not any([propagate_annots, propagate]) else "linear"),
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=1,
         verbose=2,
