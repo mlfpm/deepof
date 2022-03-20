@@ -1253,7 +1253,7 @@ class TableDict(dict):
         save: bool = False,
         i: int = 0,
         dpi: int = 100,
-    ) -> plt.figure: #pragma: no cover
+    ) -> plt.figure:  # pragma: no cover
         """
 
         Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).

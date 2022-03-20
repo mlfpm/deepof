@@ -167,7 +167,9 @@ def get_deepof_decoder(
 
     # Add a skip connection, adding information directly from the latent space to propagate through the decoder
     # early in training.
-    x_decoded_mean = tf.keras.layers.Add()([x_decoded_mean, Dense(input_shape[-1])(g)])
+    x_decoded_mean = tf.keras.layers.Add()(
+        [x_decoded_mean, Dense(input_shape[-1], activation=dense_activation)(g)]
+    )
 
     x_decoded = tfpl.DistributionLambda(
         make_distribution_fn=lambda decoded: tfd.Masked(
