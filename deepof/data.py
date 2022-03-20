@@ -1108,6 +1108,7 @@ class Coordinates:
         log_hparams: bool = False,
         n_components: int = 10,
         gram_loss: float = 1.0,
+        phenotype_prediction: float = 0.0,
         output_path: str = "unsupervised_trained_models",
         pretrained: str = False,
         save_checkpoints: bool = False,
@@ -1132,6 +1133,7 @@ class Coordinates:
             n_components (int): Number of latent clusters for the embedding model to use.
             gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
+            phenotype_prediction (float): Weight of the phenotype prediction loss.
             output_path (str): Path to save the trained model and all log files.
             pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
             must be the path to a saved model.
@@ -1159,6 +1161,7 @@ class Coordinates:
             log_hparams=log_hparams,
             n_components=n_components,
             gram_loss=gram_loss,
+            phenotype_prediction=phenotype_prediction,
             output_path=output_path,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,

@@ -378,6 +378,7 @@ def autoencoder_fitting(
     n_components: int,
     output_path: str,
     gram_loss: float,
+    phenotype_prediction: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
@@ -401,6 +402,7 @@ def autoencoder_fitting(
         output_path (str): Path to the output directory.
         gram_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
         penalizes the correlation between the dimensions in the latent space.
+        phenotype_prediction (float): Weight of the phenotype prediction loss.
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
@@ -460,6 +462,7 @@ def autoencoder_fitting(
             latent_dim=latent_dim,
             n_components=n_components,
             reg_gram=gram_loss,
+            phenotype_prediction_loss=phenotype_prediction,
         )
         ae_full_model.optimizer = tf.keras.optimizers.Nadam(
             learning_rate=1e-4, clipvalue=0.75
@@ -489,6 +492,10 @@ def autoencoder_fitting(
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
+
+    if phenotype_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
+        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
 
     # Cast to float32
     ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
@@ -583,6 +590,7 @@ def tune_search(
     hpt_type: str,
     k: int,
     gram_loss: float,
+    phenotype_prediction: float,
     project_name: str,
     callbacks: List,
     batch_size: int = 64,
@@ -602,6 +610,7 @@ def tune_search(
         k (int): Number of clusters on the latent space.
         gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
         between dimensions in the latent space.
+        phenotype_prediction (float): Weight of the phenotype prediction loss.
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
         batch_size (int): Batch size to use.
@@ -626,6 +635,7 @@ def tune_search(
         latent_dim=encoding_size,
         n_components=k,
         reg_gram=gram_loss,
+        phenotype_prediction=phenotype_prediction,
     )
 
     tuner_objective = "val_loss"
@@ -662,6 +672,10 @@ def tune_search(
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
+
+    if phenotype_prediction > 0.0:
+        ys += [y_train[-Xs.shape[0] :, 0]]
+        yvals += [y_val[-Xvals.shape[0] :, 0]]
 
     # Convert data to tf.data.Dataset objects
     train_dataset = (
