@@ -516,7 +516,7 @@ def autoencoder_fitting(
             monitor="val_total_loss",
             mode="min",
             patience=15,
-            restore_best_weights=True,
+            restore_best_weights=False,
             start_epoch=15,
         ),
     ]
