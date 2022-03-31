@@ -8,21 +8,23 @@ Testing module for deepof.utils
 
 """
 
-from hypothesis import given, reproduce_failure
+import os
+from itertools import combinations
+
+import networkx as nx
+import numpy as np
+import pandas as pd
+import tensorflow as tf
 from hypothesis import HealthCheck
+from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
-from itertools import combinations
 from scipy.spatial import distance
+
 import deepof.data
 import deepof.utils
-import networkx as nx
-import numpy as np
-import os
-import pandas as pd
-import tensorflow as tf
 
 
 # AUXILIARY FUNCTIONS #
@@ -287,6 +289,7 @@ def test_align_trajectories(data, mode_idx):
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
 def test_smooth_boolean_array(a):
+    a[0] = True  # make sure we have at least one True
     smooth = deepof.utils.smooth_boolean_array(a)
 
     def trans(x):
