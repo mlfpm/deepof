@@ -806,8 +806,6 @@ class Coordinates:
 
                     if align_inplace and not polar:
 
-                        print(partial_aligned)
-
                         partial_aligned = pd.DataFrame(
                             deepof.utils.align_trajectories(
                                 np.array(partial_aligned), mode="all"
