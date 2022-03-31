@@ -417,12 +417,15 @@ class VectorQuantizer(tf.keras.models.Model):
             encoding_indices (tf.Tensor): code indices tensor with cluster assignments.
 
         """
-        # Compute L2-norm distance between inputs and codes at a given time
-        similarity = tf.matmul(flattened_inputs, self.codebook)
-        distances = (
-            tf.reduce_sum(flattened_inputs ** 2, axis=1, keepdims=True)
-            + tf.reduce_sum(self.codebook ** 2, axis=0)
-            - 2 * similarity
+        # Compute L1-norm distance between inputs and codes at a given time
+        distances = tf.reduce_sum(
+            tf.abs(
+                tf.expand_dims(
+                    tf.reduce_sum(flattened_inputs, axis=1, keepdims=True), axis=0
+                )
+                - tf.reduce_sum(self.codebook, axis=0)
+            ),
+            axis=0,
         )
 
         if return_soft_counts:

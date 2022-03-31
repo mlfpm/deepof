@@ -350,7 +350,9 @@ def smooth_boolean_array(a: np.array) -> np.array:
 
     """
 
-    for i in range(1, len(a) - 1):
+    for i in range(
+        1, len(a) - 1
+    ):  # Check burst detection here: https://package.wiki/pybursts
         if a[i - 1] == a[i + 1]:
             a[i] = a[i - 1]
     return a == 1
