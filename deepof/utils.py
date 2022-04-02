@@ -23,6 +23,7 @@ import pandas as pd
 import regex as re
 import ruptures as rpt
 import tensorflow as tf
+from dask_image.imread import imread
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
 from sklearn import mixture
@@ -487,6 +488,9 @@ def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
     """
 
     offsets = np.where(a)[0]
+    if len(offsets) == 0:
+        return a  # no detected activity
+
     bursts = kleinberg(offsets, gamma=0.5, s=2)
     a = np.zeros(np.size(a), dtype=bool)
     for i in bursts:
@@ -907,7 +911,7 @@ def recognize_arena(
     tables: dict = None,
     recoglimit: int = 500,
     high_fidelity: bool = False,
-    arena_type: str = "circular",
+    arena_type: str = "circular-autodetect",
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
@@ -924,7 +928,7 @@ def recognize_arena(
         recoglimit (int): Number of frames to use for position estimates.
         high_fidelity (bool): If True, runs arena recognition on the whole video. Slow, but
         potentially more accurate in poor lighting conditions.
-        arena_type (string): Arena type; must be one of ['circular'].
+        arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
         detection_mode (str): Algorithm to use to detect the arena. "cnn" uses a
         pretrained model based on ResNet50 to predict the ellipse parameters from
         the image. "rule-based" (default) uses a simpler (and faster) image segmentation approach.
@@ -932,7 +936,9 @@ def recognize_arena(
 
     Returns:
         arena (np.ndarray): 1D-array containing information about the arena.
-        "circular" (3-element-array) -> x-y position of the center and the radius.
+        "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
+        "circular-manual" (3-element-array) -> x-y position of the center and the radius.
+        "polygon-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
         h (int): Height of the video in pixels.
         w (int): Width of the video in pixels.
 
@@ -967,7 +973,7 @@ def recognize_arena(
             print("Can't receive frame (stream end?). Exiting ...")
             break
 
-        if arena_type == "circular":
+        if arena_type == "circular-autodetect":
 
             # Detect arena and extract positions
             temp_center, temp_axes, temp_angle = circular_arena_recognition(
@@ -1011,8 +1017,119 @@ def recognize_arena(
     return arena, h, w
 
 
+def retrieve_corners_from_image(
+    frame: np.ndarray,
+):
+    """
+
+    Opens a window and waits for the user to click on all corners of the polygonal arena.
+    The user should click on the corners in sequential order.
+
+    Args:
+        frame (np.ndarray): Frame to display.
+
+    Returns:
+
+        corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
+
+    """
+
+    corners = []
+
+    def click_on_corners(event, x, y, flags, param):
+        # Callback function to store the coordinates of the clicked points
+        nonlocal corners, frame
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            corners.append((x, y))
+
+    # Create a window and display the image
+    cv2.startWindowThread()
+
+    while True:
+        frame_copy = frame.copy()
+
+        cv2.imshow(
+            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            frame_copy,
+        )
+        cv2.setMouseCallback(
+            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            click_on_corners,
+        )
+
+        # Display already selected corners
+        if len(corners) > 0:
+            for c, corner in enumerate(corners):
+                cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
+                # Display lines between the corners
+                if len(corners) > 1 and c > 0:
+                    cv2.line(
+                        frame_copy,
+                        (corners[c - 1][0], corners[c - 1][1]),
+                        (corners[c][0], corners[c][1]),
+                        (40, 86, 236),
+                        2,
+                    )
+
+        # Close the polygon
+        if len(corners) > 2:
+            cv2.line(
+                frame_copy,
+                (corners[0][0], corners[0][1]),
+                (corners[-1][0], corners[-1][1]),
+                (40, 86, 236),
+                2,
+            )
+
+        cv2.imshow(
+            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            frame_copy,
+        )
+
+        # Remove last added coordinate if user presses 'd'
+        if cv2.waitKey(1) & 0xFF == ord("d"):
+            corners = corners[:-1]
+
+        # Exit is user presses q
+        elif cv2.waitKey(1) & 0xFF == ord("q"):
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)
+            break
+
+    cv2.destroyAllWindows()
+    cv2.waitKey(1)
+
+    # Return the corners
+    return corners
+
+
+def extract_polygonal_arena_coordinates(video_path: str):
+    """
+
+    Reads a random frame from the selected video, and opens an interactive GUI to let the user delineate
+    the arena manually.
+
+    Args:
+        video_path: Path to the video file.
+
+    Returns:
+        np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
+        int: Height of the video.
+        int: Width of the video.
+
+    """
+
+    current_video = imread(video_path)
+    current_frame = np.random.choice(current_video.shape[0])
+
+    # Get and return the corners of the arena
+    arena_corners = retrieve_corners_from_image(current_video[current_frame].compute())
+    return arena_corners, current_video.shape[2], current_video.shape[1]
+
+
 def circular_arena_recognition(
-    frame: np.array,
+    frame: np.ndarray,
     detection_mode: str = "rule-based",
     cnn_model: tf.keras.models.Model = None,
 ) -> np.array:

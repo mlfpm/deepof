@@ -29,7 +29,7 @@ import deepof.utils
 def test_project_init(table_type, arena_type):
 
     table_type = [".h5", ".csv"][table_type]
-    arena_type = ["circular", "foo"][arena_type]
+    arena_type = ["circular-autodetect", "foo"][arena_type]
 
     if arena_type == "foo":
         with pytest.raises(NotImplementedError):
@@ -59,7 +59,7 @@ def test_project_properties():
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
@@ -90,7 +90,7 @@ def test_get_distances(nodes, ego):
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
@@ -118,7 +118,7 @@ def test_get_angles(nodes, ego):
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
@@ -143,7 +143,7 @@ def test_run(nodes, ego):
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",
@@ -160,7 +160,7 @@ def test_get_supervised_annotation():
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=380,
         animal_ids=["B", "W"],
         video_format=".mp4",
@@ -190,7 +190,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=380,
         video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),

@@ -7,22 +7,21 @@
 Testing module for deepof.pose_utils
 
 """
+import os
 import pickle
+from itertools import combinations
 
-from hypothesis import given
+import numpy as np
+import pandas as pd
+import pytest
 from hypothesis import HealthCheck
+from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
-from itertools import combinations
+
 import deepof.data
 import deepof.pose_utils
-import matplotlib.figure
-import numpy as np
-import os
-import pandas as pd
-import pytest
-import string
 
 
 @settings(deadline=None)
@@ -108,7 +107,7 @@ def test_climb_wall(center, axes, angle, tol):
     prun = (
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-            arena="circular",
+            arena="circular-autodetect",
             arena_dims=tuple([arena[2]]),
             video_format=".mp4",
             table_format=".h5",
@@ -118,10 +117,10 @@ def test_climb_wall(center, axes, angle, tol):
     )
 
     climb1 = deepof.pose_utils.climb_wall(
-        "circular", arena, prun["test"], tol1, nose="Nose"
+        "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
     )
     climb2 = deepof.pose_utils.climb_wall(
-        "circular", arena, prun["test"], tol2, nose="Nose"
+        "circular-autodetect", arena, prun["test"], tol2, nose="Nose"
     )
 
     assert climb1.dtype == bool
@@ -138,7 +137,7 @@ def test_single_animal_traits(animal_id):
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         animal_ids=["B", "W"],
         arena_dims=380,
         video_format=".mp4",
@@ -304,7 +303,7 @@ def test_rule_based_tagging(multi_animal, video_output):
 
     prun = deepof.data.Project(
         path=path,
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=tuple([380]),
         video_format=".mp4",
         table_format=".h5",

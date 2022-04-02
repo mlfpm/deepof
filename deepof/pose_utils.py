@@ -158,7 +158,7 @@ def climb_wall(
     """Returns True if the specified mouse is climbing the wall
 
     Parameters:
-        - arena_type (str): arena type; must be one of ['circular']
+        - arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
         - arena (np.array): contains arena location and shape details
         - pos_dict (table_dict): position over time for all videos in a project
         - tol (float): minimum tolerance to report a hit
@@ -173,7 +173,7 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
-    if arena_type == "circular":
+    if arena_type == "circular-autodetect":
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
         angle = arena[2]
@@ -187,7 +187,9 @@ def climb_wall(
         )
 
     else:
-        raise NotImplementedError("Supported values for arena_type are ['circular']")
+        raise NotImplementedError(
+            "Supported values for arena_type are ['polygonal-manual', 'circular-autodetect']"
+        )
 
     return climbing
 
@@ -208,7 +210,7 @@ def sniff_object(
 
     Parameters:
         - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - arena_type (str): arena type; must be one of ['circular']
+        - arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
         - arena (np.array): contains arena location and shape details
         - pos_dict (table_dict): position over time for all videos in a project
         - tol (float): minimum tolerance to report a hit
@@ -229,7 +231,7 @@ def sniff_object(
         animal_id += "_"
 
     if s_object == "arena":
-        if arena_type == "circular":
+        if arena_type == "circular-autodetect":
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
             angle = arena[2]
@@ -807,7 +809,7 @@ def tag_annotated_frames(
             angle=arena[2],
             startAngle=0,
             endAngle=360,
-            color=(0, 255, 0),
+            color=(40, 86, 236),
             thickness=3,
         )
         # Print body parts for debuging

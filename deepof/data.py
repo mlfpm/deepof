@@ -64,7 +64,7 @@ class Project:
         self,
         arena_dims: int,
         animal_ids: List = tuple([""]),
-        arena: str = "circular",
+        arena: str = "polygonal-manual",
         arena_detection: str = "rule-based",
         enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
@@ -88,7 +88,7 @@ class Project:
         Args:
             arena_dims (int): diameter of the arena in mm (so far, only round arenas are supported).
             animal_ids (list): list of animal ids.
-            arena (str): arena type. So far, only 'circular' is supported.
+            arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
             arena_detection (str): method for detecting the arena (must be either 'rule-based' (default) or 'cnn').
             enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended,
             but slow.
@@ -146,7 +146,7 @@ class Project:
         self.arena_detection = arena_detection
         self.arena_dims = arena_dims
         self.ellipse_detection = None
-        if arena == "circular" and arena_detection == "cnn":
+        if self.arena == "circular-autodetect" and arena_detection == "cnn":
             self.ellipse_detection = tf.keras.models.load_model(
                 [
                     os.path.join(self.trained_path, i)
@@ -232,16 +232,36 @@ class Project:
         """
         return self._angles
 
-    def get_arena(self, tables) -> np.array:
+    def get_arena(self, tables, verbose=False) -> np.array:
         """
         Returns the arena as recognised from the videos
+
+        Args:
+            tables (list): list of coordinate tables
+            verbose (bool): if True, logs to console
+
+        Returns:
+            arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
+
         """
+
+        if verbose:
+            print("Detecting arena...")
 
         scales = []
         arena_params = []
         video_resolution = []
 
-        if self.arena in ["circular"]:
+        if self.arena == "polygonal-manual":
+            for video_path in self.videos:
+                arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
+                    os.path.join(self.path, "Videos", video_path)
+                )
+                scales.append([*np.mean(arena_corners, axis=0).astype(int), h, w])
+                arena_params.append(arena_corners)
+                video_resolution.append((h, w))
+
+        elif self.arena == "circular-autodetect":
 
             for vid_index, _ in enumerate(self.videos):
                 ellipse, h, w = deepof.utils.recognize_arena(
@@ -274,7 +294,9 @@ class Project:
                 video_resolution.append((h, w))
 
         else:
-            raise NotImplementedError("arenas must be set to one of: 'circular'")
+            raise NotImplementedError(
+                "arenas must be set to one of: 'polygonal_manual', 'circular-autodetect'"
+            )
 
         return np.array(scales), arena_params, video_resolution
 
@@ -533,8 +555,10 @@ class Project:
         distances = None
         angles = None
 
+        # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables=tables
+            tables,
+            verbose,
         )
 
         if self.distances:
@@ -707,7 +731,7 @@ class Coordinates:
                 tabs[key] = deepof.utils.tab2polar(tab)
 
         if center == "arena":
-            if self._arena == "circular":
+            if self._arena == "circular-autodetect":
 
                 for i, (key, value) in enumerate(tabs.items()):
 
@@ -1200,7 +1224,7 @@ class TableDict(dict):
         Args:
             tabs (Dict): Dictionary of pandas.DataFrames with individual experiments as keys.
             typ (str): Type of the dataset. Examples are "coords", "dists", and "angles". For logging purposes only.
-            arena (str): Type of the arena. Currently, only "circular" is supported. Handled internally.
+            arena (str): Type of the arena. Must be one of "circular-autodetect", "circular-manual", or "polygon-manual". Handled internally.
             arena_dims (np.array): Dimensions of the arena in mm.
             center (str): Type of the center. Handled internally.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
@@ -1280,7 +1304,7 @@ class TableDict(dict):
         if not self._center:  # pragma: no cover
             warnings.warn("Heatmaps look better if you center the data")
 
-        if self._arena == "circular":
+        if self._arena == "circular-autodetect":
             heatmaps = deepof.visuals.plot_heatmap(
                 list(self.values())[i],
                 bodyparts,
