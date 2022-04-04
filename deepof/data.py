@@ -252,19 +252,44 @@ class Project:
         arena_params = []
         video_resolution = []
 
-        if self.arena == "polygonal-manual":
+        if self.arena in ["polygonal-manual", "circular-manual"]:
             for video_path in self.videos:
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
                     os.path.join(self.path, "Videos", video_path)
                 )
-                scales.append([*np.mean(arena_corners, axis=0).astype(int), h, w])
-                arena_params.append(arena_corners)
+                cur_scales = [*np.mean(arena_corners, axis=0).astype(int), h, w]
+                cur_arena_params = arena_corners
+
+                if self.arena == "circular-manual":
+                    cur_arena_params = deepof.utils.fit_ellipse_to_polygon(
+                        cur_arena_params
+                    )
+
+                    scales.append(
+                        list(
+                            np.array(
+                                [
+                                    cur_arena_params[0][0],
+                                    cur_arena_params[0][1],
+                                    np.mean(
+                                        [cur_arena_params[1][0], cur_arena_params[1][1]]
+                                    )
+                                    * 2,
+                                ]
+                            )
+                        )
+                        + [self.arena_dims]
+                    )
+                else:
+                    scales.append(cur_scales)
+
+                arena_params.append(cur_arena_params)
                 video_resolution.append((h, w))
 
-        elif self.arena == "circular-autodetect":
+        elif self.arena in ["circular-autodetect"]:
 
             for vid_index, _ in enumerate(self.videos):
-                ellipse, h, w = deepof.utils.recognize_arena(
+                ellipse, h, w = deepof.utils.automatically_recognize_arena(
                     videos=self.videos,
                     tables=tables,
                     vid_index=vid_index,

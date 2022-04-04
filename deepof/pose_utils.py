@@ -173,7 +173,7 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
-    if arena_type == "circular-autodetect":
+    if arena_type in ["circular-autodetect", "circular-manual"]:
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
         angle = arena[2]
@@ -231,7 +231,7 @@ def sniff_object(
         animal_id += "_"
 
     if s_object == "arena":
-        if arena_type == "circular-autodetect":
+        if arena_type in ["circular-autodetect", "circular-manual"]:
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
             angle = arena[2]

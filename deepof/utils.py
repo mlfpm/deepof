@@ -9,7 +9,6 @@ Functions and general utilities for the deepof package.
 """
 
 import argparse
-import math
 import multiprocessing
 import os
 from copy import deepcopy
@@ -17,6 +16,7 @@ from itertools import combinations, product
 from typing import Tuple, Any, List, Union, NewType
 
 import cv2
+import math
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -904,7 +904,7 @@ def filter_columns(columns: list, selected_id: str) -> list:
 
 
 # noinspection PyUnboundLocalVariable
-def recognize_arena(
+def automatically_recognize_arena(
     videos: list,
     vid_index: int,
     path: str = ".",
@@ -1128,6 +1128,32 @@ def extract_polygonal_arena_coordinates(video_path: str):
     return arena_corners, current_video.shape[2], current_video.shape[1]
 
 
+def fit_ellipse_to_polygon(polygon: list):
+    """
+
+    Fits an ellipse to the provided polygon.
+
+    Args:
+        polygon: List of (x,y) coordinates of the corners of the polygon.
+
+    Returns:
+        tuple: (x,y) coordinates of the center of the ellipse.
+        tuple: (a,b) semi-major and semi-minor axes of the ellipse.
+        float: Angle of the ellipse.
+
+    """
+
+    # Detect the main ellipse containing the arena
+    ellipse_params = cv2.fitEllipse(np.array(polygon))
+
+    # Parameters to return
+    center_coordinates = tuple([int(i) for i in ellipse_params[0]])
+    axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
+    ellipse_angle = ellipse_params[2]
+
+    return center_coordinates, axes_length, ellipse_angle
+
+
 def circular_arena_recognition(
     frame: np.ndarray,
     detection_mode: str = "rule-based",
@@ -1166,13 +1192,9 @@ def circular_arena_recognition(
         )
         main_cnt = np.argmax([len(c) for c in cnts])
 
-        # Detect the main ellipse containing the arena
-        ellipse_params = cv2.fitEllipse(cnts[main_cnt])
-
-        # Parameters to return
-        center_coordinates = tuple([int(i) for i in ellipse_params[0]])
-        axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
-        ellipse_angle = ellipse_params[2]
+        center_coordinates, axes_length, ellipse_angle = fit_ellipse_to_polygon(
+            cnts[main_cnt]
+        )
 
     elif detection_mode == "cnn":
 

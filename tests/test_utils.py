@@ -420,7 +420,7 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
 
-    arena = deepof.utils.recognize_arena(
+    arena = deepof.utils.automatically_recognize_arena(
         videos=videos,
         tables=None,
         vid_index=vid_index,
