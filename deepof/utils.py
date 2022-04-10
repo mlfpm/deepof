@@ -1020,7 +1020,7 @@ def automatically_recognize_arena(
 def retrieve_corners_from_image(
     frame: np.ndarray,
     arena_type: str,
-):
+):  # pragma: no cover
     """
 
     Opens a window and waits for the user to click on all corners of the polygonal arena.
@@ -1117,7 +1117,9 @@ def retrieve_corners_from_image(
     return corners
 
 
-def extract_polygonal_arena_coordinates(video_path: str, arena_type: str):
+def extract_polygonal_arena_coordinates(
+    video_path: str, arena_type: str
+):  # pragma: no cover
     """
 
     Reads a random frame from the selected video, and opens an interactive GUI to let the user delineate
@@ -1144,7 +1146,7 @@ def extract_polygonal_arena_coordinates(video_path: str, arena_type: str):
     return arena_corners, current_video.shape[2], current_video.shape[1]
 
 
-def fit_ellipse_to_polygon(polygon: list):
+def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
     """
 
     Fits an ellipse to the provided polygon.
