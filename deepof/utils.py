@@ -1019,6 +1019,7 @@ def automatically_recognize_arena(
 
 def retrieve_corners_from_image(
     frame: np.ndarray,
+    arena_type: str,
 ):
     """
 
@@ -1027,6 +1028,7 @@ def retrieve_corners_from_image(
 
     Args:
         frame (np.ndarray): Frame to display.
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
 
     Returns:
 
@@ -1064,22 +1066,33 @@ def retrieve_corners_from_image(
                 cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
                 # Display lines between the corners
                 if len(corners) > 1 and c > 0:
-                    cv2.line(
-                        frame_copy,
-                        (corners[c - 1][0], corners[c - 1][1]),
-                        (corners[c][0], corners[c][1]),
-                        (40, 86, 236),
-                        2,
-                    )
+                    if arena_type == "polygon-manual" or len(corners) < 5:
+                        cv2.line(
+                            frame_copy,
+                            (corners[c - 1][0], corners[c - 1][1]),
+                            (corners[c][0], corners[c][1]),
+                            (40, 86, 236),
+                            2,
+                        )
 
         # Close the polygon
         if len(corners) > 2:
-            cv2.line(
+            if arena_type == "polygon-manual" or len(corners) < 5:
+                cv2.line(
+                    frame_copy,
+                    (corners[0][0], corners[0][1]),
+                    (corners[-1][0], corners[-1][1]),
+                    (40, 86, 236),
+                    2,
+                )
+        if len(corners) >= 5 and arena_type == "circular-manual":
+            cv2.ellipse(
                 frame_copy,
-                (corners[0][0], corners[0][1]),
-                (corners[-1][0], corners[-1][1]),
-                (40, 86, 236),
-                2,
+                *fit_ellipse_to_polygon(corners),
+                startAngle=0,
+                endAngle=360,
+                color=(40, 86, 236),
+                thickness=3,
             )
 
         cv2.imshow(
@@ -1104,7 +1117,7 @@ def retrieve_corners_from_image(
     return corners
 
 
-def extract_polygonal_arena_coordinates(video_path: str):
+def extract_polygonal_arena_coordinates(video_path: str, arena_type: str):
     """
 
     Reads a random frame from the selected video, and opens an interactive GUI to let the user delineate
@@ -1112,6 +1125,7 @@ def extract_polygonal_arena_coordinates(video_path: str):
 
     Args:
         video_path: Path to the video file.
+        arena_type: Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
 
     Returns:
         np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
@@ -1124,7 +1138,9 @@ def extract_polygonal_arena_coordinates(video_path: str):
     current_frame = np.random.choice(current_video.shape[0])
 
     # Get and return the corners of the arena
-    arena_corners = retrieve_corners_from_image(current_video[current_frame].compute())
+    arena_corners = retrieve_corners_from_image(
+        current_video[current_frame].compute(), arena_type
+    )
     return arena_corners, current_video.shape[2], current_video.shape[1]
 
 

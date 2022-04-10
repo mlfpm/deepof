@@ -255,7 +255,7 @@ class Project:
         if self.arena in ["polygonal-manual", "circular-manual"]:
             for video_path in self.videos:
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
-                    os.path.join(self.path, "Videos", video_path)
+                    os.path.join(self.path, "Videos", video_path), self.arena
                 )
                 cur_scales = [*np.mean(arena_corners, axis=0).astype(int), h, w]
                 cur_arena_params = arena_corners
