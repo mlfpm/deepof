@@ -7,6 +7,6 @@ RUN apt-get --allow-releaseinfo-change update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir pipenv \
- && pipenv install --python=3.8.12 --dev --system --ignore-pipfile \
+ && pipenv install --python=3.9.12 --dev --system --ignore-pipfile \
  && pip install --no-cache-dir deepof
 CMD [ "/bin/bash" ]
