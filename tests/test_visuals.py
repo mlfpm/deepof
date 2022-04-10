@@ -8,14 +8,16 @@ Testing module for deepof.visuals
 
 """
 
+import os
+
+import matplotlib.figure
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+
 import deepof.data
 import deepof.utils
 import deepof.visuals
-import matplotlib.figure
-import os
 
 
 @settings(deadline=None)
@@ -24,7 +26,7 @@ def test_plot_heatmap(bparts):
     prun = (
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-            arena="circular",
+            arena="circular-autodetect",
             arena_dims=tuple([380]),
             video_format=".mp4",
             table_format=".h5",
@@ -49,7 +51,7 @@ def test_model_comparison_plot():
     prun = (
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-            arena="circular",
+            arena="circular-autodetect",
             arena_dims=tuple([380]),
             video_format=".mp4",
             table_format=".h5",

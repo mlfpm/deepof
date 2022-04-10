@@ -320,7 +320,7 @@ class Project:
 
         else:
             raise NotImplementedError(
-                "arenas must be set to one of: 'polygonal_manual', 'circular-autodetect'"
+                "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
             )
 
         return np.array(scales), arena_params, video_resolution

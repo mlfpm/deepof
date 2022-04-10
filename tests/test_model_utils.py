@@ -85,7 +85,7 @@ def test_autoencoder_fitting(
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=380,
         video_format=".mp4",
     ).run()

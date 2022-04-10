@@ -367,7 +367,7 @@ def test_interpolate_outliers(mode):
 
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        arena="circular",
+        arena="circular-autodetect",
         arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
@@ -426,7 +426,7 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
         vid_index=vid_index,
         path=path,
         recoglimit=recoglimit,
-        arena_type="circular",
+        arena_type="circular-autodetect",
         detection_mode=detection_type,
         cnn_model=cnn_model,
     )
