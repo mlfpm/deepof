@@ -15,11 +15,11 @@ outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-gram_loss = [0.0, 1.0]
-encodings = [2, 4, 6, 8, 12, 16]
-cluster_numbers = [6, 8, 10, 12, 14, 16]
+gram_loss = [1.0]
+encodings = [2]
+cluster_numbers = list(range(5, 26, 1))
 input_types = ["coords"]
-run = [1]
+run = list(range(10))
 
 
 rule deepof_experiments:

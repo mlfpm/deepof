@@ -228,7 +228,7 @@ logparam = {
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
     animal_ids=animal_ids.split(","),
-    arena="circular",
+    arena="circular-autodetect",
     arena_dims=arena_dims,
     enable_iterative_imputation=True,
     exclude_bodyparts=exclude_bodyparts,
