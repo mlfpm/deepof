@@ -378,6 +378,7 @@ def get_vqvae(
     )
     encoder = get_deepof_encoder(
         input_shape=input_shape,
+        latent_dim=latent_dim,
         conv_filters=conv_filters,
         dense_activation=dense_activation,
         gru_units_1=gru_units_1,
