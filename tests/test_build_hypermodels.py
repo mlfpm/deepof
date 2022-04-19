@@ -23,15 +23,8 @@ import deepof.hypermodels
     n_components=st.integers(min_value=2, max_value=16).filter(lambda x: x % 2 == 0),
 )
 def test_VQVAE_hypermodel_build(
-    latent_dim,
-    n_components,
+    latent_dim, n_components,
 ):
     deepof.hypermodels.VQVAE(
-        latent_dim=latent_dim,
-        input_shape=(
-            100,
-            15,
-            10,
-        ),
-        n_components=n_components,
+        latent_dim=latent_dim, input_shape=(100, 15, 10,), n_components=n_components,
     ).build(hp=HyperParameters())

@@ -392,8 +392,7 @@ def following_path(
 
     # noinspection PyArgumentList
     follow = np.all(
-        np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]),
-        axis=0,
+        np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]), axis=0,
     )
 
     return follow
@@ -649,16 +648,10 @@ def supervised_tagging(
             bparts=["_Tail_base", "_Nose"]
         )
         tag_dict[animal_ids[0] + "_nose2body"] = onebyone_contact(
-            bparts=[
-                "_Nose",
-                main_body,
-            ]
+            bparts=["_Nose", main_body,]
         )
         tag_dict[animal_ids[1] + "_nose2body"] = onebyone_contact(
-            bparts=[
-                main_body,
-                "_Nose",
-            ]
+            bparts=[main_body, "_Nose",]
         )
 
         for _id in animal_ids:
@@ -854,8 +847,7 @@ def tag_annotated_frames(
 
         if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
             write_on_frame(
-                "Side-side",
-                conditional_pos(),
+                "Side-side", conditional_pos(),
             )
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 left_flag = False
@@ -864,8 +856,7 @@ def tag_annotated_frames(
 
         if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
             write_on_frame(
-                "Side-Rside",
-                conditional_pos(),
+                "Side-Rside", conditional_pos(),
             )
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 left_flag = False

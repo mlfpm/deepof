@@ -329,8 +329,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 
     for frame in range(data.shape[0]):
         aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2], order="C"),
-            angles[frame],
+            data[frame].reshape([-1, 2], order="C"), angles[frame],
         ).reshape(data.shape[1:], order="C")
 
     if mode == "all" or mode == "none":
@@ -521,9 +520,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
     split_a = [
         np.pad(
-            i,
-            ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)),
-            constant_values=0.0,
+            i, ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)), constant_values=0.0,
         )
         for i in split_a
     ]
@@ -1018,8 +1015,7 @@ def automatically_recognize_arena(
 
 
 def retrieve_corners_from_image(
-    frame: np.ndarray,
-    arena_type: str,
+    frame: np.ndarray, arena_type: str,
 ):  # pragma: no cover
     """
 

@@ -13,6 +13,7 @@ import os
 from datetime import date, datetime
 from typing import Tuple, Union, Any, List
 
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -20,6 +21,7 @@ from keras_tuner import BayesianOptimization, Hyperband, Objective
 from scipy.spatial.distance import cdist
 from tensorboard.plugins.hparams import api as hp
 
+import deepof.models
 import deepof.hypermodels
 
 # Ignore warning with no downstream effect
@@ -285,9 +287,7 @@ def get_callbacks(
 
     log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=log_dir,
-        histogram_freq=1,
-        profile_batch=2,
+        log_dir=log_dir, histogram_freq=1, profile_batch=2,
     )
 
     reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
@@ -346,22 +346,10 @@ def log_hyperparameters():
             "val_number_of_populated_clusters",
             display_name="number of populated clusters",
         ),
-        hp.Metric(
-            "val_reconstruction_loss",
-            display_name="reconstruction loss",
-        ),
-        hp.Metric(
-            "val_gram_loss",
-            display_name="gram loss",
-        ),
-        hp.Metric(
-            "val_vq_loss",
-            display_name="vq loss",
-        ),
-        hp.Metric(
-            "val_total_loss",
-            display_name="total loss",
-        ),
+        hp.Metric("val_reconstruction_loss", display_name="reconstruction loss",),
+        hp.Metric("val_gram_loss", display_name="gram loss",),
+        hp.Metric("val_vq_loss", display_name="vq loss",),
+        hp.Metric("val_total_loss", display_name="total loss",),
     ]
 
     return logparams, metrics
@@ -552,8 +540,7 @@ def autoencoder_fitting(
             with tb_writer.as_default():
                 # Configure hyperparameter logging in tensorboard
                 hp.hparams_config(
-                    hparams=logparams,
-                    metrics=metrics,
+                    hparams=logparams, metrics=metrics,
                 )
                 hp.hparams(logparam)  # Log hyperparameters
                 # Log metrics

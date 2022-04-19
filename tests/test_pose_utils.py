@@ -41,8 +41,7 @@ import deepof.pose_utils
 def test_close_single_contact(pos_dframe, tol):
 
     idx = pd.MultiIndex.from_product(
-        [["bpart1", "bpart2"], ["X", "y"]],
-        names=["bodyparts", "coords"],
+        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
     close_contact = deepof.pose_utils.close_single_contact(
@@ -161,15 +160,9 @@ def test_single_animal_traits(animal_id):
         dig_clf = pickle.load(handle)
 
     huddling = deepof.pose_utils.huddle(
-        pos_dframe,
-        speed_dframe,
-        huddle_estimator=huddle_clf,
+        pos_dframe, speed_dframe, huddle_estimator=huddle_clf,
     )
-    digging = deepof.pose_utils.dig(
-        pos_dframe,
-        speed_dframe,
-        dig_estimator=dig_clf,
-    )
+    digging = deepof.pose_utils.dig(pos_dframe, speed_dframe, dig_estimator=dig_clf,)
 
     assert huddling.dtype == int
     assert digging.dtype == int
@@ -210,8 +203,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     ]
 
     pos_idx = pd.MultiIndex.from_product(
-        [bparts, ["X", "y"]],
-        names=["bodyparts", "coords"],
+        [bparts, ["X", "y"]], names=["bodyparts", "coords"],
     )
 
     position_dframe.columns = pos_idx
@@ -234,16 +226,13 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
 
 
 @settings(
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
+    deadline=None, suppress_health_check=[HealthCheck.too_slow],
 )
 @given(
     behaviour_dframe=data_frames(
         index=range_indexes(min_size=100, max_size=1000),
         columns=columns(
-            ["d1", "d2", "d3", "d4", "speed1"],
-            dtype=bool,
-            elements=st.booleans(),
+            ["d1", "d2", "d3", "d4", "speed1"], dtype=bool, elements=st.booleans(),
         ),
     ),
     window_size=st.data(),
@@ -286,8 +275,7 @@ def test_frame_corners(w, h):
 
 @settings(deadline=None)
 @given(
-    multi_animal=st.booleans(),
-    video_output=st.booleans(),
+    multi_animal=st.booleans(), video_output=st.booleans(),
 )
 def test_rule_based_tagging(multi_animal, video_output):
 
@@ -311,9 +299,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     ).run(verbose=True)
 
     hardcoded_tags = prun.supervised_annotation(
-        video_output=video_output,
-        frame_limit=50,
-        debug=True,
+        video_output=video_output, frame_limit=50, debug=True,
     )
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)

@@ -25,6 +25,7 @@ tfpl = tfp.layers
 # noinspection PyCallingNonCallable
 def get_deepof_encoder(
     input_shape,
+    latent_dim,
     conv_filters=64,
     dense_activation="relu",
     gru_units_1=32,
@@ -38,6 +39,7 @@ def get_deepof_encoder(
 
     Args:
         input_shape (tuple): shape of the input data
+        latent_dim (int): dimension of the latent space
         conv_filters (int): number of filters in the first convolutional layer
         dense_activation (str): activation function for the dense layers. Defaults to "relu".
         gru_units_1 (int): number of units in the first GRU layer. Defaults to 128.
@@ -84,7 +86,10 @@ def get_deepof_encoder(
         ),
         merge_mode=bidirectional_merge,
     )(encoder)
-    encoder_output = LayerNormalization()(encoder)
+    encoder = LayerNormalization()(encoder)
+    encoder_output = tf.keras.layers.Dense(
+        latent_dim, kernel_initializer="he_uniform",
+    )(encoder)
 
     return Model(x, encoder_output, name="deepof_encoder")
 
@@ -203,107 +208,6 @@ def get_deepof_decoder(
     return Model([g, x], x_decoded, name="deepof_decoder")
 
 
-# noinspection PyCallingNonCallable
-def get_vqvae(
-    input_shape: tuple,
-    latent_dim: int,
-    n_components: int,
-    beta: float = 1.0,
-    reg_gram: float = 0.0,
-    phenotype_prediction_loss: float = 0.0,
-    phenotype_num_labels: int = None,
-    conv_filters=64,
-    dense_activation="relu",
-    gru_units_1=32,
-    gru_unroll=False,
-    bidirectional_merge="concat",
-):
-    """
-
-    Builds a Vector-Quantization variational autoencoder (VQ-VAE) model, adapted to the DeepOF setting.
-
-    Args:
-        input_shape (tuple): shape of the input to the encoder.
-        latent_dim (int): dimension of the latent space.
-        n_components (int): number of embeddings in the embedding layer.
-        beta (float): beta parameter of the VQ loss.
-        reg_gram (float): regularization parameter for the Gram matrix.
-        phenotype_prediction_loss (float): weight of the phenotype prediction loss. Defaults to 0.0.
-        phenotype_num_labels (int): number of labels for the phenotype prediction loss. Defaults to None.
-        conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
-        dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
-        gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
-        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
-        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
-
-    Returns:
-        encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
-        Outputs a vector of shape (latent_dim,).
-        decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-        quantizer (tf.keras.Model): connected embedder layer of the VQ-VAE model.
-        Outputs cluster indices of shape (batch_size,).
-        vqvae (tf.keras.Model): complete VQ VAE model.
-
-    """
-    vq_layer = VectorQuantizer(
-        n_components,
-        latent_dim,
-        beta=beta,
-        reg_gram=reg_gram,
-        name="vector_quantizer",
-    )
-    encoder = get_deepof_encoder(
-        input_shape=input_shape,
-        conv_filters=conv_filters,
-        dense_activation=dense_activation,
-        gru_units_1=gru_units_1,
-        gru_unroll=gru_unroll,
-        bidirectional_merge=bidirectional_merge,
-    )
-    decoder = get_deepof_decoder(
-        input_shape=input_shape,
-        latent_dim=latent_dim,
-        conv_filters=conv_filters,
-        dense_activation=dense_activation,
-        gru_units_1=gru_units_1,
-        gru_unroll=gru_unroll,
-        bidirectional_merge=bidirectional_merge,
-    )
-
-    # Connect encoder and quantizer
-    inputs = tf.keras.layers.Input(input_shape, name="encoder_input")
-    encoder_outputs = encoder(inputs)
-    quantized_latents, soft_counts = vq_layer(encoder_outputs)
-
-    # Connect full models
-    encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
-    quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
-    soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
-    vqvae = tf.keras.Model(
-        quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
-    )
-
-    models = [encoder, decoder, quantizer, soft_quantizer, vqvae]
-
-    # If phenotype prediction loss is not zero, add a phenotype prediction classifier
-    if phenotype_prediction_loss > 0.0:
-        phenotype_predictor = tf.keras.layers.Dense(
-            units=tfpl.IndependentBernoulli.params_size(phenotype_num_labels),
-            activation=dense_activation,
-            kernel_regularizer=tf.keras.regularizers.l2(0.01),
-            name="phenotype_predictor_dense_1",
-        )(quantized_latents)
-        phenotype_predictor = tfpl.IndependentBernoulli(1, name="phenotype_predictor")(
-            phenotype_predictor
-        )
-        phenotype_predictor = tf.keras.Model(
-            quantizer.inputs, phenotype_predictor, name="phenotype_predictor"
-        )
-        models.append(phenotype_predictor)
-
-    return models
-
-
 class VectorQuantizer(tf.keras.models.Model):
     """
 
@@ -334,20 +238,12 @@ class VectorQuantizer(tf.keras.models.Model):
         self.beta = beta
         self.reg_gram = reg_gram
 
-        # Initialize embedding layer
-        self.embedding = tf.keras.layers.Dense(
-            self.embedding_dim,
-            kernel_initializer="he_uniform",
-        )
-
         # Initialize the VQ codebook
         w_init = model_utils.far_uniform_initializer(
-            shape=[self.embedding_dim, self.n_components], samples=10000
+            shape=(self.embedding_dim, self.n_components), samples=10000
         )
         self.codebook = tf.Variable(
-            initial_value=w_init,
-            trainable=True,
-            name="vqvae_codebook",
+            initial_value=w_init, trainable=True, name="vqvae_codebook",
         )
 
     def call(self, x):  # pragma: no cover
@@ -364,7 +260,6 @@ class VectorQuantizer(tf.keras.models.Model):
         """
 
         # Compute input shape and flatten, keeping the embedding dimension intact
-        x = self.embedding(x)
         input_shape = tf.shape(x)
 
         # Add a disentangling penalty to the embeddings
@@ -434,6 +329,103 @@ class VectorQuantizer(tf.keras.models.Model):
         # Return index of the closest code
         encoding_indices = tf.argmin(distances, axis=1)
         return encoding_indices
+
+
+# noinspection PyCallingNonCallable
+def get_vqvae(
+    input_shape: tuple,
+    latent_dim: int,
+    n_components: int,
+    beta: float = 1.0,
+    reg_gram: float = 0.0,
+    phenotype_prediction_loss: float = 0.0,
+    phenotype_num_labels: int = None,
+    conv_filters=64,
+    dense_activation="relu",
+    gru_units_1=32,
+    gru_unroll=False,
+    bidirectional_merge="concat",
+):
+    """
+
+    Builds a Vector-Quantization variational autoencoder (VQ-VAE) model, adapted to the DeepOF setting.
+
+    Args:
+        input_shape (tuple): shape of the input to the encoder.
+        latent_dim (int): dimension of the latent space.
+        n_components (int): number of embeddings in the embedding layer.
+        beta (float): beta parameter of the VQ loss.
+        reg_gram (float): regularization parameter for the Gram matrix.
+        phenotype_prediction_loss (float): weight of the phenotype prediction loss. Defaults to 0.0.
+        phenotype_num_labels (int): number of labels for the phenotype prediction loss. Defaults to None.
+        conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
+        dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
+        gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
+        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+
+    Returns:
+        encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
+        Outputs a vector of shape (latent_dim,).
+        decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+        quantizer (tf.keras.Model): connected embedder layer of the VQ-VAE model.
+        Outputs cluster indices of shape (batch_size,).
+        vqvae (tf.keras.Model): complete VQ VAE model.
+
+    """
+    vq_layer = VectorQuantizer(
+        n_components, latent_dim, beta=beta, reg_gram=reg_gram, name="vector_quantizer",
+    )
+    encoder = get_deepof_encoder(
+        input_shape=input_shape,
+        conv_filters=conv_filters,
+        dense_activation=dense_activation,
+        gru_units_1=gru_units_1,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+    )
+    decoder = get_deepof_decoder(
+        input_shape=input_shape,
+        latent_dim=latent_dim,
+        conv_filters=conv_filters,
+        dense_activation=dense_activation,
+        gru_units_1=gru_units_1,
+        gru_unroll=gru_unroll,
+        bidirectional_merge=bidirectional_merge,
+    )
+
+    # Connect encoder and quantizer
+    inputs = tf.keras.layers.Input(input_shape, name="encoder_input")
+    encoder_outputs = encoder(inputs)
+    quantized_latents, soft_counts = vq_layer(encoder_outputs)
+
+    # Connect full models
+    encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
+    quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
+    soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
+    vqvae = tf.keras.Model(
+        quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
+    )
+
+    models = [encoder, decoder, quantizer, soft_quantizer, vqvae]
+
+    # If phenotype prediction loss is not zero, add a phenotype prediction classifier
+    if phenotype_prediction_loss > 0.0:
+        phenotype_predictor = tf.keras.layers.Dense(
+            units=tfpl.IndependentBernoulli.params_size(phenotype_num_labels),
+            activation=dense_activation,
+            kernel_regularizer=tf.keras.regularizers.l2(0.01),
+            name="phenotype_predictor_dense_1",
+        )(quantized_latents)
+        phenotype_predictor = tfpl.IndependentBernoulli(1, name="phenotype_predictor")(
+            phenotype_predictor
+        )
+        phenotype_predictor = tf.keras.Model(
+            quantizer.inputs, phenotype_predictor, name="phenotype_predictor"
+        )
+        models.append(phenotype_predictor)
+
+    return models
 
 
 class VQVAE(tf.keras.models.Model):

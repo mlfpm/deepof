@@ -40,8 +40,7 @@ def test_find_learning_rate():
     test_model.add(tf.keras.layers.Dense(1, input_shape=X.shape[1:]))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy,
-        optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
     )
 
     deepof.model_utils.find_learning_rate(test_model, data=dataset)
@@ -52,13 +51,10 @@ def test_find_learning_rate():
     k=st.integers(min_value=1, max_value=10),
 )
 def test_get_callbacks(
-    encoding,
-    k,
+    encoding, k,
 ):
     callbacks = deepof.model_utils.get_callbacks(
-        input_type=False,
-        cp=True,
-        logparam={"latent_dim": encoding, "n_components": k},
+        input_type=False, cp=True, logparam={"latent_dim": encoding, "n_components": k},
     )
     assert np.any([isinstance(i, str) for i in callbacks])
     assert np.any(
@@ -73,9 +69,7 @@ def test_get_callbacks(
     pheno_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_autoencoder_fitting(
-    embedding,
-    k,
-    pheno_prediction,
+    embedding, k, pheno_prediction,
 ):
 
     X_train = np.ones([20, 5, 6]).astype(float)
@@ -115,8 +109,7 @@ def test_autoencoder_fitting(
     pheno_loss=st.one_of(st.just(0.0), st.just(1.0)),
 )
 def test_tune_search(
-    hpt_type,
-    pheno_loss,
+    hpt_type, pheno_loss,
 ):
 
     X_train = np.ones([100, 5, 6]).astype(float)
