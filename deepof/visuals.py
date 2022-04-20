@@ -66,90 +66,36 @@ def plot_heatmap(
     return heatmaps
 
 
-def plot_projection(projection: tuple) -> plt.figure:
-    """Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+def plot_projection(projection: tuple, save=False, dpi=200) -> plt.figure:
+    """
+    Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+    If labels are propagated, it automatically colours all data points with their respective condition.
+
+     Args:
+         - projection (tuple): tuple containing the projection and the associated conditions when available
+         - save (str): name of the file to which the figure should be saved
+         - dpi (int): dots per inch of the returned image
+
+     Returns:
+         - projection_scatter (plt.figure): figure with the specified characteristics
+    """
+
+    pass
+
+
+def plot_unsupervised_embeddings(embeddings, exp_labels=None, cluster_labels=None, aggregation_method=None, save=False, dpi=200) -> plt.figure:
+    """
+    Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
     If labels are propagated, it automatically colours all data points with their respective condition.
 
      Parameters:
-         - projection (tuple): tuple containing the projection and the associated conditions when available
+         - embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
+         - exp_labels (tuple): labels of the experiments. If None, aggregation method must be None as well.
+         - cluster_labels (tuple): labels of the clusters. If None, aggregation method should be provided.
+         - aggregation_method (str): method to aggregate the data. If None, exp_labels must be None as well.
+         Must be one of [None, "mean", "cluster_population"].
 
      Returns:
          - projection_scatter (plt.figure): figure with the specified characteristics"""
 
-    return None
-
-
-def model_comparison_plot(
-    bic: list,
-    m_bic: list,
-    n_components_range: range,
-    cov_plot: str,
-    save: str = False,
-    cv_types: tuple = ("spherical", "tied", "diag", "full"),
-    dpi: int = 200,
-) -> plt.figure:
-    """
-
-    Plots model comparison statistics for Gaussian Mixture Model analysis.
-    Similar to https://scikit-learn.org/stable/modules/mixture.html, it shows
-    an upper panel with BIC per number of components and covariance matrix type
-    in a bar plot, and a lower panel with box plots showing bootstrap runs of the
-    models corresponding to one of the covariance types.
-
-        Parameters:
-            - bic (list): list with BIC for all used models
-            - m_bic (list): list with minimum bic across cov matrices
-            for all used models
-            - n_components_range (range): range of components to evaluate
-            - cov_plot (str): covariance matrix to use in the lower panel
-            - save (str): name of the file to which the figure should be saved
-            - cv_types (tuple): tuple indicating which covariance matrix types
-            to use. All (spherical, tied, diag and full) used by default.
-            - dpi (int): dots per inch of the returned image
-
-        Returns:
-            - modelcomp (plt.figure): figure with all specified characteristics
-
-    """
-
-    m_bic = np.array(m_bic)
-    color_iter = cycle(["navy", "turquoise", "cornflowerblue", "darkorange"])
-    bars = []
-
-    # Plot the BIC scores
-    modelcomp = plt.figure(dpi=dpi)
-    spl = plt.subplot(2, 1, 1)
-    covplot = np.repeat(cv_types, len(m_bic) / 4)
-
-    for i, (cv_type, color) in enumerate(zip(cv_types, color_iter)):
-        xpos = np.array(n_components_range) + 0.2 * (i - 2)
-        bars.append(
-            spl.bar(
-                xpos,
-                m_bic[i * len(n_components_range) : (i + 1) * len(n_components_range)],
-                color=color,
-                width=0.2,
-            )
-        )
-
-    spl.set_xticks(n_components_range)
-    plt.title("BIC score per model")
-    xpos = (
-        np.mod(m_bic.argmin(), len(n_components_range))
-        + 0.5
-        + 0.2 * np.floor(m_bic.argmin() / len(n_components_range))
-    )
-    # noinspection PyArgumentList
-    spl.text(xpos, m_bic.min() * 0.97 + 0.1 * m_bic.max(), "*", fontsize=14)
-    spl.legend([b[0] for b in bars], cv_types)
-    spl.set_ylabel("BIC value")
-
-    spl2 = plt.subplot(2, 1, 2, sharex=spl)
-    spl2.boxplot(list(np.array(bic)[covplot == cov_plot]), positions=n_components_range)
-    spl2.set_xlabel("Number of components")
-    spl2.set_ylabel("BIC value")
-
-    if save:  # pragma: no cover
-        plt.savefig(save)
-
-    return modelcomp
+    pass

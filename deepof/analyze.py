@@ -16,30 +16,44 @@ import seaborn as sns
 import os
 
 
-def get_embedding(model, data, batch_size=32, verbose=False):
+def get_embedding(model, data, verbose=False):
     """
     Get the embedding of the data.
 
     Args:
-        model: The model to use.
+        model: The trained model to use.
         data: The data to use.
-        batch_size: The batch size to use.
         verbose: Whether to print the progress.
 
     """
-    embedding = []
-    for i in range(0, len(data), batch_size):
-        if verbose:
-            print("Embedding batch {}/{}".format(i, len(data)))
-        embedding.append(model.predict(data[i : i + batch_size]))
-    return np.concatenate(embedding)
+
+    embeddings = model.encoder.predict(data, verbose=verbose)
+    cluster_labels = model.soft_quantizer.predict(data, verbose=verbose)
+
+    return embeddings, np.argmax(cluster_labels, axis=1)
+
+
+def split_results_in_time_bins(embeddings, bin_size, cluster_labels=None, ruptures=None):
+    """
+    Splits all inputs into bins of equal size.
+
+    Args:
+        embeddings: The data to split. Can be a set of supervised annotations or unsupervised embeddings.
+        bin_size: The bin size to use.
+        cluster_labels: The cluster labels to use. If included, the function will return a list of lists, where each
+        list contains the cluster labels for the corresponding bin.
+        ruptures: The ruptures to use. If included, the function will return a list of lists, where each list contains
+        the ruptures for the corresponding bin.
+
+    """
+
+    pass
 
 
 def get_aggregated_embedding(
-    ruptured_embedding,
+    embeddings,
     exp_labels,
     cluster_labels=None,
-    batch_size=32,
     verbose=False,
     aggregation_mode="cluster_population",
 ):
@@ -47,10 +61,9 @@ def get_aggregated_embedding(
     Get the embedding of the data.
 
     Args:
-        ruptured_embedding: Non-grouped embedding, with one entry per changepoint detection rupture.
+        embeddings: Non-grouped embedding, with one entry per changepoint detection rupture.
         exp_labels: The labels to use.
         cluster_labels: The cluster labels to use.
-        batch_size: The batch size to use.
         verbose: Whether to print the progress.
         aggregation_mode: Controls how the embedding is aggregated to generate per-video mappings to the latent space.
         If "mean", embeddings for all ruptures are averaged. If "cluster_population", the embedding for each rupture is
@@ -68,7 +81,6 @@ def get_growing_distance_between_conditions(
     data,
     min_time_scale,
     max_time_scale,
-    batch_size=32,
     verbose=False,
 ):
     """
@@ -80,7 +92,6 @@ def get_growing_distance_between_conditions(
         data: The data to use.
         min_time_scale: The minimum time scale to use.
         max_time_scale: The maximum time scale to use.
-        batch_size: The batch size to use.
         verbose: Whether to print the progress.
 
     """
@@ -88,7 +99,7 @@ def get_growing_distance_between_conditions(
     pass
 
 
-def compare_cluster_enrichment(model, exp_labels, data, batch_size=32, verbose=False):
+def compare_cluster_enrichment(model, exp_labels, data, verbose=False):
     """
     Compare the cluster enrichment of the data.
 
@@ -96,7 +107,6 @@ def compare_cluster_enrichment(model, exp_labels, data, batch_size=32, verbose=F
         model: The model to use.
         exp_labels: The labels to use.
         data: The data to use.
-        batch_size: The batch size to use.
         verbose: Whether to print the progress.
 
     """
@@ -104,8 +114,20 @@ def compare_cluster_enrichment(model, exp_labels, data, batch_size=32, verbose=F
     pass
 
 
+def compute_markov_stationary_distribution(cluster_labels, n_clusters):
+    """
+    Compute the markov stationary distribution from the model's transition matrix.
+
+    Args:
+        cluster_labels: The cluster labels to use.
+        n_clusters: The number of clusters to use.
+    """
+
+    pass
+
+
 def compare_cluster_markov_dynamics(
-    model, exp_labels, data, batch_size=32, verbose=False
+    model, exp_labels, data, verbose=False
 ):
     """
     Compare the cluster dynamics of the data.
@@ -114,7 +136,6 @@ def compare_cluster_markov_dynamics(
         model: The model to use.
         exp_labels: The labels to use.
         data: The data to use.
-        batch_size: The batch size to use.
         verbose: Whether to print the progress.
 
     """
