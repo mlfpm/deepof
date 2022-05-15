@@ -797,18 +797,6 @@ class Coordinates:
                     :, [tab for tab in value.columns if center not in tab[0]],
                 ]
 
-        if speed:
-            for key, tab in tabs.items():
-                vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
-                tabs[key] = vel
-
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            for key, val in tabs.items():
-                tabs[key] = val.loc[
-                    :, deepof.utils.filter_columns(val.columns, selected_id)
-                ]
-
         if align:
 
             assert any(
@@ -859,6 +847,18 @@ class Coordinates:
                 aligned_coordinates.index = all_index
                 aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
                 tabs[key] = aligned_coordinates
+                
+        if speed:
+            for key, tab in tabs.items():
+                vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
+                tabs[key] = vel
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            for key, val in tabs.items():
+                tabs[key] = val.loc[
+                    :, deepof.utils.filter_columns(val.columns, selected_id)
+                ]
 
         if propagate_annotations:
             annotations = list(propagate_annotations.values())[0].columns
@@ -1629,6 +1629,7 @@ class TableDict(dict):
         test_videos: int = 0,
         verbose: int = 0,
         shuffle: bool = False,
+        precomputed_breaks: dict = None,
     ) -> np.ndarray:
         """
 
@@ -1648,6 +1649,7 @@ class TableDict(dict):
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
+            precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
 
         Returns:
             X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
@@ -1726,6 +1728,7 @@ class TableDict(dict):
             automatic_changepoints=automatic_changepoints,
             window_size=window_size,
             window_step=window_step,
+            precomputed_breaks=precomputed_breaks,
         )
 
         # Print rupture information to screen
@@ -1751,6 +1754,7 @@ class TableDict(dict):
                     automatic_changepoints=False,
                     window_size=window_size,
                     window_step=window_step,
+                    precomputed_breaks=precomputed_breaks,
                 )
 
             else:
@@ -1768,6 +1772,7 @@ class TableDict(dict):
                 automatic_changepoints=automatic_changepoints,
                 window_size=window_size,
                 window_step=window_step,
+                precomputed_breaks=precomputed_breaks,
             )
 
             if self._propagate_labels or self._propagate_annotations:
@@ -1781,6 +1786,7 @@ class TableDict(dict):
                         automatic_changepoints=False,
                         window_size=window_size,
                         window_step=window_step,
+                        precomputed_breaks=precomputed_breaks,
                     )
                 else:
                     y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)

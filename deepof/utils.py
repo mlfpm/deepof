@@ -530,7 +530,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
 
 def rolling_window(
-    a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False
+    a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False, precomputed_breaks: np.ndarray = None,
 ) -> np.ndarray:
     """
 
@@ -542,6 +542,8 @@ def rolling_window(
         window_step (int): Step of the window to apply
         automatic_changepoints (str): Changepoint detection algorithm to apply.
         If False, applies a fixed sliding window.
+        precomputed_breaks (np.ndarray): Precomputed breaks to use, bypassing the changepoint detection algorithm.
+        None by default (break points are computed).
 
     Returns:
         rolled_a (np.ndarray): N (sliding window instances) * l (sliding window size) * m (features)
@@ -553,12 +555,17 @@ def rolling_window(
     if automatic_changepoints:
         # Define change point detection model using ruptures
         # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
-        rpt_model = rpt.KernelCPD(
-            kernel=automatic_changepoints, min_size=window_size, jump=window_step
-        ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
+        if precomputed_breaks is None:
+            rpt_model = rpt.KernelCPD(
+                kernel=automatic_changepoints, min_size=window_size, jump=window_step
+            ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
 
-        # Extract change points from current experiment
-        breakpoints = rpt_model.predict(pen=4.0)
+            # Extract change points from current experiment
+            breakpoints = rpt_model.predict(pen=4.0)
+            
+        else:
+            breakpoints = np.cumsum(precomputed_breaks)
+        
         rolled_a = split_with_breakpoints(a, breakpoints)
 
     else:
@@ -578,6 +585,7 @@ def rupture_per_experiment(
     automatic_changepoints: str,
     window_size: int,
     window_step: int,
+    precomputed_breaks: dict = None,
 ) -> np.ndarray:
     """
 
@@ -597,6 +605,7 @@ def rupture_per_experiment(
         If not, it determines the minimum size of the obtained time series breaks.
         window_step (int): If automatic_changepoints is False, specifies the stride of the sliding window.
         If not, it determines the minimum step size of the obtained time series breaks.
+        precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
 
     Returns:
         ruptured_dataset (np.ndarray): Dataset with all ruptures concatenated across the first axis.
@@ -608,7 +617,7 @@ def rupture_per_experiment(
     ruptured_dataset, break_indices = None, None
     cumulative_shape = 0
     # Iterate over all experiments and populate them
-    for i, tab in enumerate(table_dict.values()):
+    for i, (key, tab) in enumerate(table_dict.items()):
         if i in rupture_indices:
             current_size = tab.shape[0]
             current_train, current_breaks = rolling_window(
@@ -620,6 +629,7 @@ def rupture_per_experiment(
                 window_size,
                 window_step,
                 automatic_changepoints,
+                (None if not precomputed_breaks else precomputed_breaks[key]),
             )
             # Add shape of the current tab as the last breakpoint,
             # to avoid skipping breakpoints between experiments
@@ -1268,7 +1278,7 @@ def rolling_speed(
 
     original_shape = dframe.shape
     if center:
-        body_parts = [bp for bp in dframe.columns.levels[0] if bp != center]
+        body_parts = [bp for bp in dframe.columns.levels[0] if center not in bp]
     else:
         try:
             body_parts = dframe.columns.levels[0]
