@@ -183,6 +183,7 @@ QtPy = "==2.0.0"
 Send2Trash = "==1.8.0"
 Werkzeug = "==2.0.2"
 keras-tuner = "*"
+tsfresh = "*"
 
 [dev-packages]
 coverage = "*"

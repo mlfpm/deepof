@@ -1629,6 +1629,8 @@ class TableDict(dict):
         test_videos: int = 0,
         verbose: int = 0,
         shuffle: bool = False,
+        filter_low_variance: float = 0.01,
+        interpolate_normalized: int = 5,
         precomputed_breaks: dict = None,
     ) -> np.ndarray:
         """
@@ -1649,6 +1651,10 @@ class TableDict(dict):
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
+            filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to
+            get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
+            interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be
+            interpolated after normalization. Only used if scale is set to "standard".
             precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
 
         Returns:
@@ -1668,12 +1674,18 @@ class TableDict(dict):
         # Create a temporary copy of the current TableDict object,
         # to avoid modifying it in place
         table_temp = copy.deepcopy(self)
+        
+        if filter_low_variance:
+            table_temp = {
+                key: tab.iloc[:, np.where(tab.var(axis=0) > 0.01)[0]]
+                for key, tab in table_temp.items()
+            }
 
         if scale:
             if verbose:
                 print("Scaling data...")
 
-            # Scale each experiment independently
+            # Scale each experiment independently, to control for animal size
             for key, tab in table_temp.items():
                 if scale == "standard":
                     current_scaler = StandardScaler()
@@ -1711,6 +1723,19 @@ class TableDict(dict):
                 table_temp[key] = pd.DataFrame(
                     current_tab, columns=tab.columns, index=tab.index,
                 )
+                
+        if scale == "standard" and interpolate_normalized:
+            
+            to_interpolate = copy.deepcopy(table_temp)
+            for key, tab in to_interpolate.items():
+                cur_tab = tab.values
+                cur_tab[cur_tab > interpolate_normalized] = np.nan
+                cur_tab[cur_tab < -interpolate_normalized] = np.nan
+                cur_tab = pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns).interpolate()
+                
+                to_interpolate[key] = cur_tab
+            
+            table_temp = to_interpolate
 
         # Split videos and generate training and test sets
         X_train, y_train, X_test, y_test, test_index = self.get_training_set(
