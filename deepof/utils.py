@@ -563,6 +563,8 @@ def rolling_window(
             # Extract change points from current experiment
             breakpoints = rpt_model.predict(pen=4.0)
             
+            print(len(breakpoints))
+            
         else:
             breakpoints = np.cumsum(precomputed_breaks)
         

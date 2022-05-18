@@ -444,7 +444,7 @@ class Project:
             for k, value in tab_dict.items():
                 imputed = IterativeImputer(
                     skip_complete=True,
-                    max_iter=10,
+                    max_iter=1000,
                     n_nearest_features=value.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
                 ).fit_transform(value)
