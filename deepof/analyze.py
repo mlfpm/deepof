@@ -8,7 +8,6 @@ Data structures and functions for analyzing supervised and unsupervised model re
 
 """
 
-import tensorflow as tf
 import numpy as np
 import ot
 import pandas as pd
@@ -21,12 +20,13 @@ from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import LabelEncoder
 
 import deepof.data
 
 
-def extract_time_on_cluster(
+def get_time_on_cluster(
     soft_counts: deepof.data.table_dict,
     breaks: deepof.data.table_dict,
     normalize=True,
@@ -61,7 +61,7 @@ def extract_time_on_cluster(
     return counter_df
 
 
-def compute_aggregated_embedding(embedding, reduce_dim=False, agg="mean"):
+def get_aggregated_embedding(embedding, reduce_dim=False, agg="mean"):
 
     # aggregate the provided embeddings and cast to a data frame
     if agg == "mean":
@@ -101,7 +101,7 @@ def select_time_bin(embedding, soft_counts, breaks, bin_size, bin_index):
     return embedding, soft_counts, breaks
 
 
-def condition_distance_bin(
+def condition_distance_binning(
     embedding,
     soft_counts,
     breaks,
@@ -167,11 +167,11 @@ def separation_between_conditions(
 ):
     # Aggregate embeddings and add experimental conditions
     if agg == "time on cluster":
-        aggregated_embeddings = extract_time_on_cluster(
+        aggregated_embeddings = get_time_on_cluster(
             cur_soft_counts, cur_breaks, reduce_dim=True,
         )
     elif agg in ["mean", "median"]:
-        aggregated_embeddings = compute_aggregated_embedding(
+        aggregated_embeddings = get_aggregated_embedding(
             cur_embedding, agg=agg, reduce_dim=True
         )
 
@@ -228,7 +228,7 @@ def cluster_enrichment_across_conditions(
         )
 
     # Extract time on cluster for all videos and add experimental information
-    counter_df = extract_time_on_cluster(
+    counter_df = get_time_on_cluster(
         soft_counts, breaks, normalize=normalize, reduce_dim=False
     )
     counter_df["exp condition"] = counter_df.index.map(exp_conditions)
@@ -507,7 +507,7 @@ def annotate_time_chunks(
     return pd.concat(comprehensive_features, axis=1), hard_counts
 
 
-def one_video_cross_validation_indices(breaks):
+def chunk_cv_splitter(chunk_stats, breaks, n_folds=10):
     # Extract number of experiments/folds
     n_experiments = len(breaks)
 
@@ -516,127 +516,6 @@ def one_video_cross_validation_indices(breaks):
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
+    cv_splitter = GroupKFold(n_splits=n_folds).split(chunk_stats, groups=cv_indices)
 
-    return cv_indices
-
-
-def get_embedding(model, data, verbose=False):
-    """
-    Get the embedding of the data.
-
-    Args:
-        model: The trained model to use.
-        data: The data to use.
-        verbose: Whether to print the progress.
-
-    """
-
-    embeddings = model.encoder.predict(data, verbose=verbose)
-    cluster_labels = model.soft_quantizer.predict(data, verbose=verbose)
-
-    return embeddings, np.argmax(cluster_labels, axis=1)
-
-
-def split_results_in_time_bins(
-    embeddings, bin_size, cluster_labels=None, ruptures=None
-):
-    """
-    Splits all inputs into bins of equal size.
-
-    Args:
-        embeddings: The data to split. Can be a set of supervised annotations or unsupervised embeddings.
-        bin_size: The bin size to use.
-        cluster_labels: The cluster labels to use. If included, the function will return a list of lists, where each
-        list contains the cluster labels for the corresponding bin.
-        ruptures: The ruptures to use. If included, the function will return a list of lists, where each list contains
-        the ruptures for the corresponding bin.
-
-    """
-
-    pass
-
-
-def get_aggregated_embedding(
-    embeddings,
-    exp_labels,
-    cluster_labels=None,
-    verbose=False,
-    aggregation_mode="cluster_population",
-):
-    """
-    Get the embedding of the data.
-
-    Args:
-        embeddings: Non-grouped embedding, with one entry per changepoint detection rupture.
-        exp_labels: The labels to use.
-        cluster_labels: The cluster labels to use.
-        verbose: Whether to print the progress.
-        aggregation_mode: Controls how the embedding is aggregated to generate per-video mappings to the latent space.
-        If "mean", embeddings for all ruptures are averaged. If "cluster_population", the embedding for each rupture is
-        summed for each cluster independently, generating a vector of length equal to the number of clusters, where each
-        entry is the proportion of time spent on the corresponding cluster.
-
-    """
-
-    pass
-
-
-def get_growing_distance_between_conditions(
-    model, exp_labels, data, min_time_scale, max_time_scale, verbose=False,
-):
-    """
-    Get the growing distance between conditions.
-
-    Args:
-        model: The model to use.
-        exp_labels: The labels to use.
-        data: The data to use.
-        min_time_scale: The minimum time scale to use.
-        max_time_scale: The maximum time scale to use.
-        verbose: Whether to print the progress.
-
-    """
-
-    pass
-
-
-def compare_cluster_enrichment(model, exp_labels, data, verbose=False):
-    """
-    Compare the cluster enrichment of the data.
-
-    Args:
-        model: The model to use.
-        exp_labels: The labels to use.
-        data: The data to use.
-        verbose: Whether to print the progress.
-
-    """
-
-    pass
-
-
-def compute_markov_stationary_distribution(cluster_labels, n_clusters):
-    """
-    Compute the markov stationary distribution from the model's transition matrix.
-
-    Args:
-        cluster_labels: The cluster labels to use.
-        n_clusters: The number of clusters to use.
-    """
-
-    pass
-
-
-def compare_cluster_markov_dynamics(model, exp_labels, data, verbose=False):
-    """
-    Compare the cluster dynamics of the data.
-
-    Args:
-        model: The model to use.
-        exp_labels: The labels to use.
-        data: The data to use.
-        verbose: Whether to print the progress.
-
-    """
-
-    pass
+    return list(cv_splitter)
