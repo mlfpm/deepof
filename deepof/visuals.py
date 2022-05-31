@@ -83,7 +83,14 @@ def plot_projection(projection: tuple, save=False, dpi=200) -> plt.figure:
     pass
 
 
-def plot_unsupervised_embeddings(embeddings, exp_labels=None, cluster_labels=None, aggregation_method=None, save=False, dpi=200) -> plt.figure:
+def plot_unsupervised_embeddings(
+    embeddings,
+    exp_labels=None,
+    cluster_labels=None,
+    aggregation_method=None,
+    save=False,
+    dpi=200,
+) -> plt.figure:
     """
     Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
     If labels are propagated, it automatically colours all data points with their respective condition.

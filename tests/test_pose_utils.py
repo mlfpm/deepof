@@ -275,7 +275,7 @@ def test_frame_corners(w, h):
 
 @settings(deadline=None)
 @given(
-    multi_animal=st.booleans(), video_output=st.booleans(),
+    multi_animal=st.just(False), video_output=st.booleans(),
 )
 def test_rule_based_tagging(multi_animal, video_output):
 
@@ -292,7 +292,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     prun = deepof.data.Project(
         path=path,
         arena="circular-autodetect",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),

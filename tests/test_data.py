@@ -218,7 +218,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
-        selected_id = sampler.draw(st.one_of(st.just(None), st.just("B")))
+        selected_id = "B"
 
     coords = prun.get_coords(
         center=center,
@@ -279,6 +279,8 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         scale=sampler.draw(st.one_of(st.just("standard"), st.just("minmax"))),
         test_videos=1,
         verbose=2,
+        filter_low_variance=1e-3 * (not any([propagate_annots, propagate])),
+        interpolate_normalized=5 * (not any([propagate_annots, propagate])),
         shuffle=sampler.draw(st.booleans()),
     )
 

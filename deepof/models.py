@@ -323,7 +323,9 @@ class VectorQuantizer(tf.keras.models.Model):
         if return_soft_counts:
             # Compute soft counts based on the distance to the codes
             similarity = (1 / distances) ** 2
-            soft_counts = similarity / tf.expand_dims(tf.reduce_sum(similarity, axis=1), axis=1)
+            soft_counts = similarity / tf.expand_dims(
+                tf.reduce_sum(similarity, axis=1), axis=1
+            )
             return soft_counts
 
         # Return index of the closest code

@@ -530,7 +530,11 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
 
 def rolling_window(
-    a: np.array, window_size: int, window_step: int, automatic_changepoints: str = False, precomputed_breaks: np.ndarray = None,
+    a: np.array,
+    window_size: int,
+    window_step: int,
+    automatic_changepoints: str = False,
+    precomputed_breaks: np.ndarray = None,
 ) -> np.ndarray:
     """
 
@@ -562,12 +566,12 @@ def rolling_window(
 
             # Extract change points from current experiment
             breakpoints = rpt_model.predict(pen=4.0)
-            
+
             print(len(breakpoints))
-            
+
         else:
             breakpoints = np.cumsum(precomputed_breaks)
-        
+
         rolled_a = split_with_breakpoints(a, breakpoints)
 
     else:

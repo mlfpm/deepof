@@ -847,7 +847,7 @@ class Coordinates:
                 aligned_coordinates.index = all_index
                 aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
                 tabs[key] = aligned_coordinates
-                
+
         if speed:
             for key, tab in tabs.items():
                 vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
@@ -1629,7 +1629,7 @@ class TableDict(dict):
         test_videos: int = 0,
         verbose: int = 0,
         shuffle: bool = False,
-        filter_low_variance: float = 0.01,
+        filter_low_variance: float = 1e-3,
         interpolate_normalized: int = 5,
         precomputed_breaks: dict = None,
     ) -> np.ndarray:
@@ -1674,10 +1674,12 @@ class TableDict(dict):
         # Create a temporary copy of the current TableDict object,
         # to avoid modifying it in place
         table_temp = copy.deepcopy(self)
-        
+
         if filter_low_variance:
+
+            # Remove body parts with extremely low variance (usually the result of vertical alignment).
             table_temp = {
-                key: tab.iloc[:, np.where(tab.var(axis=0) > 0.01)[0]]
+                key: tab.iloc[:, np.where(tab.var(axis=0) > filter_low_variance)[0]]
                 for key, tab in table_temp.items()
             }
 
@@ -1697,6 +1699,7 @@ class TableDict(dict):
                     )  # pragma: no cover
 
                 exp_temp = tab.to_numpy()
+
                 if self._propagate_labels:
                     exp_temp = exp_temp[:, :-1]
 
@@ -1723,18 +1726,22 @@ class TableDict(dict):
                 table_temp[key] = pd.DataFrame(
                     current_tab, columns=tab.columns, index=tab.index,
                 )
-                
+
         if scale == "standard" and interpolate_normalized:
-            
+
+            # Interpolate outliers after preprocessing
             to_interpolate = copy.deepcopy(table_temp)
             for key, tab in to_interpolate.items():
-                cur_tab = tab.values
+                cur_tab = copy.deepcopy(tab.values)
+
                 cur_tab[cur_tab > interpolate_normalized] = np.nan
                 cur_tab[cur_tab < -interpolate_normalized] = np.nan
-                cur_tab = pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns).interpolate()
-                
+                cur_tab = pd.DataFrame(
+                    cur_tab, index=tab.index, columns=tab.columns
+                ).interpolate()
+
                 to_interpolate[key] = cur_tab
-            
+
             table_temp = to_interpolate
 
         # Split videos and generate training and test sets
