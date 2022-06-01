@@ -12,6 +12,7 @@ import os
 import pickle
 import warnings
 from typing import Any, List, NewType
+from shapely.geometry import Point, Polygon
 
 import cv2
 import numpy as np
@@ -173,7 +174,7 @@ def climb_wall(
 
     nose = pos_dict[nose]
 
-    if arena_type in ["circular-autodetect", "circular-manual"]:
+    if arena_type.startswith("circular"):
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
         angle = arena[2]
@@ -186,9 +187,15 @@ def climb_wall(
             threshold=tol,
         )
 
+    elif arena_type.startswith("polygon"):
+
+        climbing = np.array(
+            [not Polygon(arena).buffer(tol).contains(Point(n)) for n in nose.values]
+        )
+
     else:
         raise NotImplementedError(
-            "Supported values for arena_type are ['polygonal-manual', 'circular-autodetect']"
+            "Supported values for arena_type are ['polygonal-manual', 'circular-manual', 'circular-autodetect']"
         )
 
     return climbing
@@ -231,7 +238,7 @@ def sniff_object(
         animal_id += "_"
 
     if s_object == "arena":
-        if arena_type in ["circular-autodetect", "circular-manual"]:
+        if arena_type.startswith("circular"):
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
             angle = arena[2]
@@ -252,7 +259,21 @@ def sniff_object(
                 e_angle=-angle,
                 threshold=tol,
             )
-            nosing = nosing_min & (~nosing_max)
+
+        elif arena_type.startswith("polygon"):
+
+            nosing_min = np.array(
+                [
+                    not Polygon(arena).buffer(-tol).contains(Point(n))
+                    for n in nose.values
+                ]
+            )
+            nosing_max = np.array(
+                [not Polygon(arena).buffer(tol).contains(Point(n)) for n in nose.values]
+            )
+
+        # noinspection PyUnboundLocalVariable
+        nosing = nosing_min & (~nosing_max)
 
     else:
         raise NotImplementedError
@@ -756,6 +777,7 @@ def tag_annotated_frames(
     undercond,
     hparams,
     arena,
+    arena_type,
     debug,
     coords,
 ):
@@ -794,17 +816,31 @@ def tag_annotated_frames(
     left_flag, right_flag = True, True
 
     if debug:
-        # Print arena for debugging
-        cv2.ellipse(
-            img=frame,
-            center=arena[0],
-            axes=arena[1],
-            angle=arena[2],
-            startAngle=0,
-            endAngle=360,
-            color=(40, 86, 236),
-            thickness=3,
-        )
+
+        if arena_type.startswith("circular"):
+            # Print arena for debugging
+            cv2.ellipse(
+                img=frame,
+                center=arena[0],
+                axes=arena[1],
+                angle=arena[2],
+                startAngle=0,
+                endAngle=360,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        elif arena_type.startswith("polygonal"):
+
+            # Draw polygon
+            cv2.polylines(
+                img=frame,
+                pts=[np.array(arena, dtype=np.int32)],
+                isClosed=True,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
         # Print body parts for debuging
         for bpart in coords.columns.levels[0]:
             if not np.isnan(coords[bpart]["x"][fnum]):
@@ -1001,6 +1037,7 @@ def annotate_video(
             undercond,
             params,
             (arena_params, h, w),
+            coordinates._arena,
             debug,
             coordinates.get_coords(center=False)[vid_name],
         )

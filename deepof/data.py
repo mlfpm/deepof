@@ -76,7 +76,7 @@ class Project:
         likelihood_tol: float = 0.85,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
-        smooth_alpha: float = 2,
+        smooth_alpha: float = 1,
         table_format: str = "autodetect",
         frame_rate: int = None,
         video_format: str = ".mp4",

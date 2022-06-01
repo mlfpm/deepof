@@ -107,7 +107,7 @@ def test_climb_wall(center, axes, angle, tol):
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular-autodetect",
-            arena_dims=tuple([arena[2]]),
+            arena_dims=int(arena[2]),
             video_format=".mp4",
             table_format=".h5",
         )
@@ -121,9 +121,17 @@ def test_climb_wall(center, axes, angle, tol):
     climb2 = deepof.pose_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol2, nose="Nose"
     )
+    climb3 = deepof.pose_utils.climb_wall(
+        "polygonal-manual",
+        [[-1, -1], [-1, 1], [1, 1], [1, -1]],
+        prun["test"],
+        tol1,
+        nose="Nose",
+    )
 
     assert climb1.dtype == bool
     assert climb2.dtype == bool
+    assert climb3.dtype == bool
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):

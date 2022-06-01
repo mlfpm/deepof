@@ -338,7 +338,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     return aligned_trajs
 
 
-def kleinberg(offsets, s=2, gamma=1, n=None, T=None, k=None):
+def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
     """Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure
     in Streams'). The algorithm models activity bursts in a time series as an
     infinite hidden Markov model.
@@ -490,7 +490,7 @@ def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
     if len(offsets) == 0:
         return a  # no detected activity
 
-    bursts = kleinberg(offsets, gamma=0.5, s=2)
+    bursts = kleinberg(offsets, gamma=0.01)
     a = np.zeros(np.size(a), dtype=bool)
     for i in bursts:
         if i[0] == scale:
@@ -815,7 +815,6 @@ def full_outlier_mask(
 
     for bpart in body_parts:
         if bpart != exclude:
-
             mask = mask_outliers(
                 experiment[bpart],
                 likelihood[bpart],
@@ -1078,7 +1077,7 @@ def retrieve_corners_from_image(
                 cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
                 # Display lines between the corners
                 if len(corners) > 1 and c > 0:
-                    if arena_type == "polygon-manual" or len(corners) < 5:
+                    if arena_type == "polygonal-manual" or len(corners) < 5:
                         cv2.line(
                             frame_copy,
                             (corners[c - 1][0], corners[c - 1][1]),
@@ -1089,7 +1088,7 @@ def retrieve_corners_from_image(
 
         # Close the polygon
         if len(corners) > 2:
-            if arena_type == "polygon-manual" or len(corners) < 5:
+            if arena_type == "polygonal-manual" or len(corners) < 5:
                 cv2.line(
                     frame_copy,
                     (corners[0][0], corners[0][1]),
