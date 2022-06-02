@@ -90,7 +90,7 @@ def test_select_time_bin(bin_size, bin_index):
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
-    scan_mode=st.sampled_from(["growing-window"]),
+    scan_mode=st.sampled_from(["growing-window", "per-bin"]),
     agg=st.sampled_from(["time_on_cluster", "mean", "median"]),
     metric=st.sampled_from(["auc-linear", "wasserstein"]),
 )
@@ -119,7 +119,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         exp_conditions=exp_conditions,
         start_bin=11,
         end_bin=100,
-        step_bin=1,
+        step_bin=11,
         scan_mode=scan_mode,
         agg=agg,
         metric=metric,

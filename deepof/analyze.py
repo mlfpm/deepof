@@ -198,50 +198,36 @@ def condition_distance_binning(
 
     """
 
-    if scan_mode == "per-bin":
+    # Divide the embeddings in as many corresponding bins, and compute distances
+    def embedding_distance(bin_index):
 
-        # Divide the embeddings in as many corresponding bins, and compute distances
-        def per_bin_embedding_distance(bin_index):
+        if scan_mode == "per-bin":
             cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
                 embedding, soft_counts, breaks, step_bin, bin_index
             )
 
-            return separation_between_conditions(
-                cur_embedding,
-                cur_soft_counts,
-                cur_breaks,
-                exp_conditions,
-                agg,
-                metric=metric,
-            )
-
-        exp_condition_distance_array = Parallel(n_jobs=n_jobs,)(
-            delayed(per_bin_embedding_distance)(bin_index)
-            for bin_index in range((end_bin // step_bin) + 1)
-        )
-
-    else:
-
-        # Iterate over a growing binning of the available data
-        def embedding_distance(bin_index):
-
+        else:
             cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
                 embedding, soft_counts, breaks, bin_index, 0
             )
 
-            return separation_between_conditions(
-                cur_embedding,
-                cur_soft_counts,
-                cur_breaks,
-                exp_conditions,
-                agg,
-                metric=metric,
-            )
-
-        exp_condition_distance_array = Parallel(n_jobs=n_jobs,)(
-            delayed(embedding_distance)(bin_index)
-            for bin_index in tqdm.tqdm(range(start_bin, end_bin, step_bin))
+        return separation_between_conditions(
+            cur_embedding,
+            cur_soft_counts,
+            cur_breaks,
+            exp_conditions,
+            agg,
+            metric=metric,
         )
+
+    if scan_mode == "per-bin":
+        bin_range = range((end_bin // step_bin) + 1)
+    else:
+        bin_range = range(start_bin, end_bin, step_bin)
+
+    exp_condition_distance_array = Parallel(n_jobs=n_jobs,)(
+        delayed(embedding_distance)(bin_index) for bin_index in tqdm.tqdm(bin_range)
+    )
 
     return np.array(exp_condition_distance_array)
 
