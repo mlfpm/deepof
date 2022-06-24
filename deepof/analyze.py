@@ -344,6 +344,8 @@ def cluster_enrichment_across_conditions(
             embedding, soft_counts, breaks, bin_size, bin_index
         )
 
+    assert list(embedding.values())[0].shape[0] > 0
+
     # Extract time on cluster for all videos and add experimental information
     counter_df = get_time_on_cluster(
         soft_counts, breaks, normalize=normalize, reduce_dim=False
@@ -448,7 +450,7 @@ def compute_transition_matrix_per_condition(
 def compute_steady_state(transition_matrices, return_entropy=False, n_iters=100000):
     """
 
-    Computes the steadt state of a each transition matrix provided in a dictionary.
+    Computes the steady state of each transition matrix provided in a dictionary.
 
     Args:
         transition_matrices: A dictionary of transition matrices, where the keys are
