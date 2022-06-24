@@ -301,20 +301,14 @@ def test_smooth_boolean_array(a):
 
 @settings(deadline=None)
 @given(
-    a=arrays(
-        dtype=float,
-        shape=(100, 5),
-        elements=st.floats(
-            min_value=1, max_value=10, allow_nan=False, allow_infinity=False,
-        ),
-        unique=True,
-    ),
     window=st.data(),
     automatic_changepoints=st.one_of(st.just(False), st.just("linear"),),
 )
-def test_rolling_window(a, window, automatic_changepoints):
+def test_rolling_window(window, automatic_changepoints):
     window_step = window.draw(st.integers(min_value=1, max_value=5))
     window_size = 5 * window_step
+
+    a = np.random.uniform(-10, 10, size=(100, 4))
 
     rolled_a, breakpoints = deepof.utils.rolling_window(
         a, window_size, window_step, automatic_changepoints
