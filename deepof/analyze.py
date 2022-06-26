@@ -487,9 +487,18 @@ def compute_steady_state(transition_matrices, return_entropy=False, n_iters=1000
     return steady_states
 
 
-def annotate_kinematics(chunked_dataset, hard_counts, body_part_names):
+def extract_kinematic_features(chunked_dataset, hard_counts, body_part_names):
     """
 
+    Extracts kinematic features from a chunked dataset using tsfresh.
+
+    Args:
+        chunked_dataset: Preprocessed training set, where each entry corresponds to a time chunk of data.
+        hard_counts: Array containing a cluster lable for each time chunk in chunked_dataset.
+        body_part_names: A list of the names of the body parts.
+
+    Returns:
+        A dataframe of kinematic features, of shape chunks by features.
 
 
     """
