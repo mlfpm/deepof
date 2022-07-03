@@ -13,7 +13,7 @@ test:
   script:
     - pip uninstall deepof
     - coverage run --source deepof -m pytest
-    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/preprocess.py,deepof/unsupervised_utils.py,deepof/supervised_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py,deepof/train_utils.py
+    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/unsupervised_utils.py,deepof/supervised_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py
     - coverage xml -o deepof_cov.xml
 
   artifacts:

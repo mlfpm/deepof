@@ -380,7 +380,11 @@ if not tune:
 
 else:
     # Runs hyperparameter tuning with the specified parameters and saves the results
-    run_ID, tensorboard_callback, reduce_lr_callback = deepof.unsupervised_utils.get_callbacks(
+    (
+        run_ID,
+        tensorboard_callback,
+        reduce_lr_callback,
+    ) = deepof.unsupervised_utils.get_callbacks(
         input_type=input_type,
         cp=False,
         logparam=logparam,

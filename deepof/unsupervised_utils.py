@@ -576,7 +576,7 @@ def autoencoder_fitting(
 
 
 def tune_search(
-    data: tf.data.Dataset,
+    data: tuple,
     encoding_size: int,
     hypertun_trials: int,
     hpt_type: str,

@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.pose_utils
+Testing module for deepof.supervised_utils
 
 """
 import os
@@ -44,7 +44,7 @@ def test_close_single_contact(pos_dframe, tol):
         [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = deepof.pose_utils.close_single_contact(
+    close_contact = deepof.supervised_utils.close_single_contact(
         pos_dframe, "bpart1", "bpart2", tol, 1, 1
     )
     assert close_contact.dtype == bool
@@ -115,13 +115,13 @@ def test_climb_wall(center, axes, angle, tol):
         .get_coords()
     )
 
-    climb1 = deepof.pose_utils.climb_wall(
+    climb1 = deepof.supervised_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
     )
-    climb2 = deepof.pose_utils.climb_wall(
+    climb2 = deepof.supervised_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol2, nose="Nose"
     )
-    climb3 = deepof.pose_utils.climb_wall(
+    climb3 = deepof.supervised_utils.climb_wall(
         "polygonal-manual",
         [[-1, -1], [-1, 1], [1, 1], [1, -1]],
         prun["test"],
@@ -135,7 +135,7 @@ def test_climb_wall(center, axes, angle, tol):
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.pose_utils.climb_wall("", arena, prun["test"], tol1, nose="Nose")
+        deepof.supervised_utils.climb_wall("", arena, prun["test"], tol1, nose="Nose")
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -170,7 +170,9 @@ def test_single_animal_traits(animal_id):
     huddling = deepof.supervised_utils.huddle(
         pos_dframe, speed_dframe, huddle_estimator=huddle_clf,
     )
-    digging = deepof.pose_utils.dig(pos_dframe, speed_dframe, dig_estimator=dig_clf,)
+    digging = deepof.supervised_utils.dig(
+        pos_dframe, speed_dframe, dig_estimator=dig_clf,
+    )
 
     assert huddling.dtype == int
     assert digging.dtype == int
@@ -217,7 +219,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     position_dframe.columns = pos_idx
     distance_dframe.columns = [c for c in combinations(bparts, 2) if c[0][0] != c[1][0]]
 
-    follow = deepof.pose_utils.following_path(
+    follow = deepof.supervised_utils.following_path(
         distance_dframe,
         position_dframe,
         follower="A",
@@ -250,8 +252,8 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
     wsize1 = window_size.draw(st.integers(min_value=5, max_value=50))
     wsize2 = window_size.draw(st.integers(min_value=wsize1, max_value=50))
 
-    maxbe1 = deepof.pose_utils.max_behaviour(behaviour_dframe, wsize1, stepped)
-    maxbe2 = deepof.pose_utils.max_behaviour(behaviour_dframe, wsize2, stepped)
+    maxbe1 = deepof.supervised_utils.max_behaviour(behaviour_dframe, wsize1, stepped)
+    maxbe2 = deepof.supervised_utils.max_behaviour(behaviour_dframe, wsize2, stepped)
 
     assert isinstance(maxbe1, np.ndarray)
     assert isinstance(maxbe2, np.ndarray)
@@ -264,8 +266,11 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 
 def test_get_hparameters():
-    assert isinstance(deepof.pose_utils.get_hparameters(), dict)
-    assert deepof.pose_utils.get_hparameters({"speed_pause": 20})["speed_pause"] == 20
+    assert isinstance(deepof.supervised_utils.get_hparameters(), dict)
+    assert (
+        deepof.supervised_utils.get_hparameters({"speed_pause": 20})["speed_pause"]
+        == 20
+    )
 
 
 @settings(deadline=None)
@@ -274,9 +279,9 @@ def test_get_hparameters():
     h=st.integers(min_value=300, max_value=500),
 )
 def test_frame_corners(w, h):
-    assert len(deepof.pose_utils.frame_corners(w, h)) == 4
+    assert len(deepof.supervised_utils.frame_corners(w, h)) == 4
     assert (
-        deepof.pose_utils.frame_corners(w, h, {"downright": "test"})["downright"]
+        deepof.supervised_utils.frame_corners(w, h, {"downright": "test"})["downright"]
         == "test"
     )
 

@@ -239,7 +239,7 @@ class VectorQuantizer(tf.keras.models.Model):
         self.reg_gram = reg_gram
 
         # Initialize the VQ codebook
-        w_init = model_utils.far_uniform_initializer(
+        w_init = unsupervised_utils.far_uniform_initializer(
             shape=(self.embedding_dim, self.n_components), samples=10000
         )
         self.codebook = tf.Variable(
@@ -264,7 +264,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         # Add a disentangling penalty to the embeddings
         if self.reg_gram:
-            gram_loss = model_utils.compute_gram_loss(
+            gram_loss = unsupervised_utils.compute_gram_loss(
                 x, weight=self.reg_gram, batch_size=input_shape[0]
             )
             self.add_loss(gram_loss)
@@ -686,3 +686,552 @@ class VQVAE(tf.keras.models.Model):
             ] = self.val_phenotype_prediction_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
+
+
+# noinspection PyCallingNonCallable
+# def get_vae(
+#     input_shape: tuple,
+#     latent_dim: int,
+#     batch_size: int,
+#     loss: str = "ELBO",
+#     kl_warmup: int = 15,
+#     kl_annealing_mode: str = "sigmoid",
+#     mc_kl: int = 100,
+#     reg_gram: float = 1.0,
+#     phenotype_prediction_loss: float = 0.0,
+#     phenotype_num_labels: int = None,
+#     conv_filters=64,
+#     dense_activation="relu",
+#     gru_units_1=32,
+#     gru_unroll=False,
+#     bidirectional_merge="concat",
+# ):
+#     """
+#
+#     Builds a Gaussian mixture variational autoencoder (GMVAE) model, adapted to the DeepOF setting.
+#
+#     Args:
+#             input_shape (tuple): shape of the input data
+#             latent_dim (int): dimensionality of the latent space.
+#             batch_size (int): batch size for training.
+#             loss (str): loss function to use for training. Must be one of "SELBO", "MMD", or "SELBO+MMD".
+#             kl_warmup (int): number of epochs to warm up the KL divergence.
+#             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
+#             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
+#             reg_gram (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_gram_matrix.
+#             model by enabling forecasting of the next sequence.
+#             phenotype_prediction_loss (bool): weight of the phenotype prediction loss. Defaults to 0.0.
+#             phenotype_num_labels (int): number of features in the supervised prediction label matrix.
+#             Ignored if supervised prediction is null.
+#             conv_filters (int): number of filters in the first convolutional layers ib both encoder and decoder.
+#             dense_activation (str): activation function for the dense layers in both encoder and decoder. Defaults to "relu".
+#             gru_units_1 (int): number of units in the first GRU layer in both encoder and decoder. Defaults to 128.
+#             gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
+#             bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+#
+#     Returns:
+#         encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
+#         Outputs a vector of shape (latent_dim,).
+#         decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+#         vae (tf.keras.Model): complete VAE model
+#
+#     """
+#
+#     encoder = get_deepof_encoder(
+#         input_shape=input_shape[1:],
+#         conv_filters=conv_filters,
+#         dense_activation=dense_activation,
+#         gru_units_1=gru_units_1,
+#         gru_unroll=gru_unroll,
+#         bidirectional_merge=bidirectional_merge,
+#     )
+#     latent_space = deepof.unsupervised_utils.GaussianMixtureLatent(
+#         input_shape=input_shape[0],
+#         n_components=n_components,
+#         latent_dim=latent_dim,
+#         batch_size=batch_size,
+#         latent_loss=loss,
+#         kl_warmup=kl_warmup,
+#         kl_annealing_mode=kl_annealing_mode,
+#         mc_kl=mc_kl,
+#         mmd_warmup=mmd_warmup,
+#         mmd_annealing_mode=mmd_annealing_mode,
+#         n_cluster_loss=n_cluster_loss,
+#         reg_gram=reg_gram,
+#         reg_cat_clusters=reg_cat_clusters,
+#         reg_cluster_variance=reg_cluster_variance,
+#         name="gaussian_mixture_latent",
+#     )
+#     decoder = get_deepof_decoder(
+#         input_shape=input_shape[1:],
+#         latent_dim=latent_dim,
+#         conv_filters=conv_filters,
+#         dense_activation=dense_activation,
+#         gru_units_1=gru_units_1,
+#         gru_unroll=gru_unroll,
+#         bidirectional_merge=bidirectional_merge,
+#     )
+#
+#     # Connect encoder and latent space
+#     inputs = Input(input_shape[1:])
+#     encoder_outputs = encoder(inputs)
+#     latent, categorical = latent_space(encoder_outputs)
+#     embedding = tf.keras.Model(inputs, latent, name="encoder")
+#     grouper = tf.keras.Model(inputs, categorical, name="grouper")
+#
+#     # Connect decoder
+#     gmvae_outputs = [decoder([embedding.outputs, inputs])]
+#
+#     # Add additional (optional) branches departing from the latent space
+#     if next_sequence_prediction:
+#         predictor = get_deepof_decoder(
+#             input_shape[1:],
+#             latent_dim,
+#             conv_filters=conv_filters,
+#             dense_activation=dense_activation,
+#             gru_units_1=gru_units_1,
+#             gru_unroll=gru_unroll,
+#             bidirectional_merge=bidirectional_merge,
+#         )
+#         predictor._name = "deepof_predictor"
+#         gmvae_outputs.append(predictor([embedding.outputs, inputs]))
+#
+#     if (
+#         phenotype_prediction_loss
+#     ):  # Predict from cluster assignments instead of embedding itself!
+#         pheno_pred = Dense(
+#             latent_dim, activation="relu", kernel_initializer=he_uniform()
+#         )(categorical)
+#         pheno_pred = Dense(tfpl.IndependentBernoulli.params_size(1))(pheno_pred)
+#         pheno_pred = tfpl.IndependentBernoulli(
+#             event_shape=1,
+#             convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+#             name="phenotype_prediction",
+#         )(pheno_pred)
+#
+#         gmvae_outputs.append(pheno_pred)
+#
+#     if supervised_prediction:
+#         supervised_trait_pred = Dense(
+#             n_components,
+#             activation="relu",
+#             kernel_initializer=he_uniform(),
+#         )(latent)
+#         supervised_trait_pred = Dense(
+#             tfpl.IndependentBernoulli.params_size(phenotype_num_labels)
+#         )(supervised_trait_pred)
+#         supervised_trait_pred = tfpl.IndependentBernoulli(
+#             event_shape=phenotype_num_labels,
+#             convert_to_tensor_fn=tfp.distributions.Distribution.mean,
+#             name="supervised_prediction",
+#         )(supervised_trait_pred)
+#         gmvae_outputs.append(supervised_trait_pred)
+#
+#     # Instantiate fully connected model
+#     gmvae = tf.keras.Model(embedding.inputs, gmvae_outputs, name="GMVAE")
+#
+#     return (
+#         embedding,
+#         decoder,
+#         grouper,
+#         gmvae,
+#     )
+#
+#
+# # noinspection PyDefaultArgument,PyCallingNonCallable
+# class VAE(tf.keras.models.Model):
+#     """
+#
+#     Recurrent variational Autoencoder for pose motif elucidation.
+#
+#     """
+#
+#     def __init__(
+#         self,
+#         input_shape: tuple,
+#         batch_size: int = 64,
+#         latent_dim: int = 4,
+#         kl_annealing_mode: str = "sigmoid",
+#         kl_warmup_epochs: int = 15,
+#         montecarlo_kl: int = 1000,
+#         reg_gram: float = 1.0,
+#         phenotype_prediction_loss: float = 0.0,
+#         phenotype_num_labels: int = 6,
+#         architecture_hparams: dict = None,
+#         **kwargs,
+#     ):
+#         """
+#
+#         Initalizes a GMVAE model.
+#
+#         Args:
+#             input_shape (tuple): Shape of the input to the full model.
+#             batch_size (int): Batch size for training.
+#             latent_dim (int): Dimensionality of the latent space.
+#             kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
+#             kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
+#             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
+#             reg_gram (float): weight of the gram matrix regularization loss.
+#             next_sequence_prediction (bool): whether to add a next sequence prediction loss, which regularizes the
+#             model by enabling forecasting of the next sequence.
+#             phenotype_prediction_loss (bool): weight of the phenotype prediction loss. Defaults to 0.0.
+#             phenotype_num_labels (int): number of features in the supervised prediction label matrix.
+#             Ignored if supervised prediction is null.
+#             architecture_hparams (dict): dictionary of hyperparameters for the architecture. Defaults to None.
+#             **kwargs:
+#
+#         """
+#         super(VAE, self).__init__(**kwargs)
+#         self.seq_shape = input_shape
+#         self.batch_size = batch_size
+#         self.latent_dim = latent_dim
+#         self.kl_annealing_mode = kl_annealing_mode
+#         self.kl_warmup = kl_warmup_epochs
+#         self.mc_kl = montecarlo_kl
+#         self.optimizer = Nadam(learning_rate=1e-4, clipvalue=0.75)
+#         self.reg_gram = reg_gram
+#         self.phenotype_prediction = phenotype_prediction_loss
+#         self.supervised_features = phenotype_num_labels
+#         self.architecture_hparams = architecture_hparams
+#
+#         assert (
+#             "SIWAE" in self.latent_loss
+#             or "SELBO" in self.latent_loss
+#             or "MMD" in self.latent_loss
+#         ), "loss must be one of SIWAE, SELBO (default), MMD, SIWAE+MMD, or SELBO+MMD"
+#
+#         # Define GMVAE model
+#         self.encoder, self.decoder, self.vae = get_vae(
+#             input_shape=self.seq_shape,
+#             latent_dim=self.latent_dim,
+#             batch_size=self.batch_size,
+#             loss=self.latent_loss,
+#             kl_warmup=self.kl_warmup,
+#             kl_annealing_mode=self.kl_annealing_mode,
+#             mc_kl=self.mc_kl,
+#             reg_gram=self.reg_gram,
+#             phenotype_prediction_loss=self.phenotype_prediction,
+#             phenotype_num_labels=self.supervised_features,
+#             conv_filters=self.hparams["conv_filters"],
+#             dense_activation=self.hparams["dense_activation"],
+#             gru_units_1=self.hparams["gru_units_1"],
+#             gru_unroll=self.hparams["gru_unroll"],
+#             bidirectional_merge=self.hparams["bidirectional_merge"],
+#         )
+#         # Propagate the optimizer to all relevant sub-models, to enable metric annealing
+#         self.vae.optimizer = self.optimizer
+#         self.vae.get_layer("gaussian_mixture_latent").optimizer = self.optimizer
+#
+#         # Define metrics to track
+#
+#         # Track all loss function components
+#         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+#         self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+#
+#         if "SIWAE" not in self.latent_loss:
+#             self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
+#                 name="reconstruction_loss"
+#             )
+#             self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
+#                 name="reconstruction_loss"
+#             )
+#         if "SIWAE" in self.latent_loss:
+#             self.siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
+#             self.val_siwae_loss_tracker = tf.keras.metrics.Mean(name="siwae_loss")
+#         if "SELBO" in self.latent_loss:
+#             self.kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
+#             self.val_kl_loss_weight_tracker = tf.keras.metrics.Mean(name="kl_weight")
+#         if "MMD" in self.latent_loss:
+#             self.mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
+#             self.val_mmd_loss_weight_tracker = tf.keras.metrics.Mean(name="mmd_weight")
+#         if self.next_sequence_prediction:
+#             self.next_sequence_loss_tracker = tf.keras.metrics.Mean(
+#                 name="next_sequence_loss"
+#             )
+#             self.val_next_sequence_loss_tracker = tf.keras.metrics.Mean(
+#                 name="next_sequence_loss"
+#             )
+#         if self.phenotype_prediction:
+#             self.phenotype_loss_tracker = tf.keras.metrics.Mean(name="phenotype_loss")
+#             self.val_phenotype_loss_tracker = tf.keras.metrics.Mean(
+#                 name="phenotype_loss"
+#             )
+#         if self.supervised_prediction:
+#             self.supervised_loss_tracker = tf.keras.metrics.Mean(name="supervised_loss")
+#             self.val_supervised_loss_tracker = tf.keras.metrics.Mean(
+#                 name="supervised_loss"
+#             )
+#
+#     @property
+#     def metrics(self):  # pragma: no cover
+#         metrics = [
+#             self.total_loss_tracker,
+#             self.val_total_loss_tracker,
+#         ]
+#         if "SIWAE" not in self.latent_loss:
+#             metrics += [self.reconstruction_loss_tracker]
+#             metrics += [self.val_reconstruction_loss_tracker]
+#         if "SIWAE" in self.latent_loss:
+#             metrics += [self.siwae_loss_tracker]
+#             metrics += [self.val_siwae_loss_tracker]
+#         if "SELBO" in self.latent_loss:
+#             metrics += [self.kl_loss_weight_tracker]
+#             metrics += [self.val_kl_loss_weight_tracker]
+#         if "MMD" in self.latent_loss:
+#             metrics += [self.mmd_loss_weight_tracker]
+#             metrics += [self.val_mmd_loss_weight_tracker]
+#         if self.next_sequence_prediction:
+#             metrics += [
+#                 self.next_sequence_loss_tracker,
+#                 self.val_next_sequence_loss_tracker,
+#             ]
+#         if self.phenotype_prediction:
+#             metrics += [self.phenotype_loss_tracker, self.val_phenotype_loss_tracker]
+#         if self.supervised_prediction:
+#             metrics += [self.supervised_loss_tracker, self.val_supervised_loss_tracker]
+#
+#         metrics += self.gmvae.metrics
+#
+#         return metrics
+#
+#     @property
+#     def hparams(self):
+#         hparams = {
+#             "conv_filters": 64,
+#             "dense_activation": "relu",
+#             "gru_units_1": 32,
+#             "gru_unroll": True,
+#             "bidirectional_merge": "concat",
+#         }
+#         if self.architecture_hparams is not None:
+#             hparams.update(self.architecture_hparams)
+#
+#         return hparams
+#
+#     @property
+#     def prior(self):
+#         """
+#
+#         Property to retrieve the current's model prior
+#
+#         """
+#
+#         return self.gmvae.get_layer("gaussian_mixture_latent").prior
+#
+#     @tf.function
+#     def call(self, inputs, **kwargs):
+#         return self.gmvae(inputs, **kwargs)
+#
+#     @tf.function
+#     def train_step(self, data):  # pragma: no cover
+#         """
+#
+#         Performs a training step.
+#
+#         """
+#
+#         # Unpack data, repacking labels into a generator
+#         x, y = data
+#         if not isinstance(y, tuple):
+#             y = [y]
+#         y = (labels for labels in y)
+#
+#         with tf.GradientTape() as tape:
+#             # Get outputs from the full model
+#             outputs = self.gmvae(x, training=True)
+#             if isinstance(outputs, list):
+#                 reconstructions = outputs[0]
+#             else:
+#                 reconstructions = outputs
+#
+#             # Compute losses
+#             seq_inputs = next(y)
+#             total_loss = sum(self.gmvae.losses)
+#
+#             if "SIWAE" not in self.latent_loss:
+#                 reconstruction_loss = -tf.reduce_sum(
+#                     reconstructions.log_prob(seq_inputs)
+#                 )
+#                 total_loss += reconstruction_loss
+#
+#             if "SIWAE" in self.latent_loss:
+#                 siwae_loss = deepof.unsupervised_utils.compute_siwae(
+#                     self.prior,
+#                     self.gmvae,
+#                     self.encoder,
+#                     seq_inputs,
+#                     self.n_components,
+#                 )
+#                 total_loss += siwae_loss
+#
+#             if self.next_sequence_prediction:
+#                 next_seq_predictions = [
+#                     out for out in outputs if "predictor" in out.name
+#                 ][0]
+#                 next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
+#                 total_loss += self.next_sequence_prediction * next_seq_loss
+#             if self.phenotype_prediction:
+#                 pheno_predictions = [out for out in outputs if "phenotype" in out.name][
+#                     0
+#                 ]
+#                 phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
+#                 total_loss += self.phenotype_prediction * phenotype_loss
+#             if self.supervised_prediction:
+#                 sup_predictions = [out for out in outputs if "supervised" in out.name][
+#                     0
+#                 ]
+#                 supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
+#                 total_loss += self.supervised_prediction * supervised_loss
+#
+#         # Backpropagation
+#         grads = tape.gradient(total_loss, self.gmvae.trainable_variables)
+#         self.optimizer.apply_gradients(zip(grads, self.gmvae.trainable_variables))
+#
+#         # Track losses
+#         self.total_loss_tracker.update_state(total_loss)
+#         if "SIWAE" not in self.latent_loss:
+#             self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+#         if "SIWAE" in self.latent_loss:
+#             self.siwae_loss_tracker.update_state(siwae_loss)
+#         if "SELBO" in self.latent_loss:
+#             # noinspection PyProtectedMember
+#             self.kl_loss_weight_tracker.update_state(
+#                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
+#             )
+#         if "MMD" in self.latent_loss:
+#             # noinspection PyProtectedMember
+#             self.mmd_loss_weight_tracker.update_state(
+#                 self.gmvae.get_layer("gaussian_mixture_latent").mmd_layer._mmd_weight
+#             )
+#         if self.next_sequence_prediction:
+#             self.next_sequence_loss_tracker.update_state(next_seq_loss)
+#         if self.phenotype_prediction:
+#             self.phenotype_loss_tracker.update_state(phenotype_loss)
+#         if self.supervised_prediction:
+#             self.supervised_loss_tracker.update_state(supervised_loss)
+#
+#         # Log results (coupled with TensorBoard)
+#         log_dict = {
+#             "total_loss": self.total_loss_tracker.result(),
+#         }
+#
+#         # Add optional metrics to final log dict
+#         if "SIWAE" not in self.latent_loss:
+#             log_dict["reconstruction_loss"] = self.reconstruction_loss_tracker.result()
+#         if "SIWAE" in self.latent_loss:
+#             log_dict["siwae_loss"] = self.siwae_loss_tracker.result()
+#         if "SELBO" in self.latent_loss:
+#             log_dict["kl_weight"] = self.kl_loss_weight_tracker.result()
+#         if "MMD" in self.latent_loss:
+#             log_dict["mmd_weight"] = self.mmd_loss_weight_tracker.result()
+#         if self.next_sequence_prediction:
+#             log_dict["next_sequence_loss"] = self.next_sequence_loss_tracker.result()
+#         if self.phenotype_prediction:
+#             log_dict["phenotype_loss"] = self.phenotype_loss_tracker.result()
+#         if self.supervised_prediction:
+#             log_dict["supervised_loss"] = self.supervised_loss_tracker.result()
+#
+#         # Log to TensorBoard, both explitly and implicitly (within model) tracked metrics
+#         return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
+#
+#     # noinspection PyUnboundLocalVariable
+#     @tf.function
+#     def test_step(self, data):  # pragma: no cover
+#         """
+#
+#         Performs a test step.
+#
+#         """
+#
+#         # Unpack data, repacking labels into a generator
+#         x, y = data
+#         if not isinstance(y, tuple):
+#             y = [y]
+#         y = (labels for labels in y)
+#
+#         # Get outputs from the full model
+#         outputs = self.gmvae(x, training=False)
+#         if isinstance(outputs, list):
+#             reconstructions = outputs[0]
+#         else:
+#             reconstructions = outputs
+#
+#         # Compute losses
+#         seq_inputs = next(y)
+#         total_loss = sum(self.gmvae.losses)
+#
+#         if "SIWAE" not in self.latent_loss:
+#             reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
+#             total_loss += reconstruction_loss
+#
+#         if "SIWAE" in self.latent_loss:
+#             siwae_loss = deepof.unsupervised_utils.compute_siwae(
+#                 self.prior,
+#                 self.gmvae,
+#                 self.encoder,
+#                 seq_inputs,
+#                 self.n_components,
+#             )
+#             total_loss += siwae_loss
+#
+#         if self.next_sequence_prediction:
+#             next_seq_predictions = [out for out in outputs if "predictor" in out.name][
+#                 0
+#             ]
+#             next_seq_loss = -tf.reduce_sum(next_seq_predictions.log_prob(next(y)))
+#             total_loss += self.next_sequence_prediction * next_seq_loss
+#         if self.phenotype_prediction:
+#             pheno_predictions = [out for out in outputs if "phenotype" in out.name][0]
+#             phenotype_loss = -tf.reduce_sum(pheno_predictions.log_prob(next(y)))
+#             total_loss += self.phenotype_prediction * phenotype_loss
+#         if self.supervised_prediction:
+#             sup_predictions = [out for out in outputs if "supervised" in out.name][0]
+#             supervised_loss = -tf.reduce_sum(sup_predictions.log_prob(next(y)))
+#             total_loss += self.supervised_prediction * supervised_loss
+#
+#         # Track losses
+#         self.val_total_loss_tracker.update_state(total_loss)
+#         if "SIWAE" not in self.latent_loss:
+#             self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
+#         if "SIWAE" in self.latent_loss:
+#             self.val_siwae_loss_tracker.update_state(siwae_loss)
+#         if "SELBO" in self.latent_loss:
+#             self.val_kl_loss_weight_tracker.update_state(
+#                 self.gmvae.get_layer("gaussian_mixture_latent").kl_layer._kl_weight
+#             )
+#         if "MMD" in self.latent_loss:
+#             self.val_mmd_loss_weight_tracker.update_state(
+#                 # noinspection PyProtectedMember
+#                 self.mmd_loss_weight_tracker.update_state(
+#                     self.gmvae.get_layer(
+#                         "gaussian_mixture_latent"
+#                     ).mmd_layer._mmd_weight
+#                 )
+#             )
+#         if self.next_sequence_prediction:
+#             self.val_next_sequence_loss_tracker.update_state(next_seq_loss)
+#         if self.phenotype_prediction:
+#             self.val_phenotype_loss_tracker.update_state(phenotype_loss)
+#         if self.supervised_prediction:
+#             self.val_supervised_loss_tracker.update_state(supervised_loss)
+#
+#         # Log results (coupled with TensorBoard)
+#         log_dict = {
+#             "total_loss": self.val_total_loss_tracker.result(),
+#         }
+#
+#         # Add optional metrics to final log dict
+#         if "SIWAE" not in self.latent_loss:
+#             log_dict[
+#                 "reconstruction_loss"
+#             ] = self.val_reconstruction_loss_tracker.result()
+#         if self.next_sequence_prediction:
+#             log_dict[
+#                 "next_sequence_loss"
+#             ] = self.val_next_sequence_loss_tracker.result()
+#         if self.phenotype_prediction:
+#             log_dict["phenotype_loss"] = self.val_phenotype_loss_tracker.result()
+#         if self.supervised_prediction:
+#             log_dict["supervised_loss"] = self.val_supervised_loss_tracker.result()
+#
+#         return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}

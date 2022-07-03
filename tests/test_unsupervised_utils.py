@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.model_utils
+Testing module for deepof.unsupervised_utils
 
 """
 
@@ -125,8 +125,8 @@ def test_tune_search(
         )
     )[1:]
 
-    deepof.model_utils.tune_search(
-        data=[X_train, y_train, X_train, y_train],
+    deepof.unsupervised_utils.tune_search(
+        data=tuple([X_train, y_train, X_train, y_train]),
         batch_size=25,
         encoding_size=16,
         hpt_type=hpt_type,

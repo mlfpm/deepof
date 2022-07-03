@@ -1591,7 +1591,8 @@ class TableDict(dict):
 
             # Convert speed to a boolean value. Is the animal moving?
             y_train[:, -1] = (
-                y_train[:, -1] > deepof.supervised_utils.get_hparameters()["huddle_speed"]
+                y_train[:, -1]
+                > deepof.supervised_utils.get_hparameters()["huddle_speed"]
             )
 
             try:
@@ -1605,7 +1606,8 @@ class TableDict(dict):
 
                 # Convert speed to a boolean value. Is the animal moving?
                 y_test[:, -1] = (
-                    y_test[:, -1] > deepof.supervised_utils.get_hparameters()["huddle_speed"]
+                    y_test[:, -1]
+                    > deepof.supervised_utils.get_hparameters()["huddle_speed"]
                 )
 
             except IndexError:
