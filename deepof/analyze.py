@@ -493,7 +493,8 @@ def extract_kinematic_features(chunked_dataset, hard_counts, body_part_names):
     Extracts kinematic features from a chunked dataset using tsfresh.
 
     Args:
-        chunked_dataset: Preprocessed training set, where each entry corresponds to a time chunk of data.
+        chunked_dataset: Preprocessed training set (of shape chunks x time x features), where each entry corresponds to
+        a time chunk of data.
         hard_counts: Array containing a cluster lable for each time chunk in chunked_dataset.
         body_part_names: A list of the names of the body parts.
 
@@ -524,27 +525,32 @@ def extract_kinematic_features(chunked_dataset, hard_counts, body_part_names):
     return extracted_features
 
 
-def align_deepof_kinematics_with_supervised_labels(
+def align_deepof_kinematics_with_unsupervised_labels(
     deepof_project,
     breaks,
     kin_derivative=1,
     include_distances=False,
     include_angles=False,
-    annotate=False,
     animal_id=None,
 ):
     """
 
+    In order to annotate time chunks with as many relevant features as possible, this function aligns the kinematics
+    of a deepof project (speed and acceleration of body parts, distances, and angles) with the hard cluster assignments
+    obtained from the unsupervised pipeline.
+
     Args:
-        deepof_project:
-        breaks:
-        kin_derivative:
-        include_distances:
-        include_angles:
-        annotate:
-        animal_id:
+        deepof_project: A deepof.Project object.
+        breaks: A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are
+        the breaks for each condition.
+        kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
+        include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
+        include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
+        animal_id: The animal ID to use, in case of multi-animal projects.
 
     Returns:
+        A dictionary of aligned kinematics, where the keys are the names of the experimental conditions, and the
+        values are the aligned kinematics for each condition.
 
     """
 
@@ -597,15 +603,17 @@ def align_deepof_kinematics_with_supervised_labels(
             if animal_id is not None:
                 cur_angles = cur_angles.filter_id(animal_id)
 
-            cur_angles = {
+            cur_kinematics = {
                 key: pd.concat([kin, angle], axis=1)
                 for (key, kin), angle in zip(
-                    cur_kinematics.items(), cur_distances.values()
+                    cur_kinematics.items(), cur_angles.values()
                 )
             }
 
         # Add corresponding suffixes to most common moments
-        if der == 1:
+        if der == 0:
+            suffix = "_value"
+        elif der == 1:
             suffix = "_speed"
         elif der == 2:
             suffix = "_acceleration"
@@ -683,7 +691,7 @@ def annotate_time_chunks(
 
     # Extract (annotated) kinematic features
     comprehensive_features.append(
-        align_deepof_kinematics_with_supervised_labels(
+        align_deepof_kinematics_with_unsupervised_labels(
             deepof_project,
             breaks,
             kin_derivative=kin_derivative,

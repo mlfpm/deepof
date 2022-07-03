@@ -228,20 +228,149 @@ def test_compute_transition_matrix_per_condition(
         print(steady_states)
 
 
-def test_annotate_kinematics():
-    pass
+def test_extract_kinematic_features():
+
+    # Set up testing names for our random features
+    body_part_names = ["test_name_{}".format(i) for i in range(4)]
+
+    # Define a matrix of soft counts
+    counts = np.random.normal(size=(100, 10))
+    soft_counts = counts / counts.sum(axis=1)[:, None]
+
+    # And extract hard counts from them
+    hard_counts = np.argmax(soft_counts, axis=1)
+
+    # Define a table with chunk data
+    chunked_dataset = np.random.uniform(size=(100, 25, 4))
+
+    kinematic_features = deepof.analyze.extract_kinematic_features(
+        chunked_dataset, pd.Series(hard_counts), body_part_names
+    )
+
+    assert isinstance(kinematic_features, pd.DataFrame)
 
 
-def test_align_deepof_kinematics_with_unsupervised_labels():
-    pass
+@settings(max_examples=25, deadline=None, derandomize=True)
+@given(
+    mode=st.one_of(st.just("single"), st.just("multi")),
+    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_1"])),
+    sampler=st.data(),
+)
+def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
+
+    prun = deepof.data.Project(
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        arena="circular-autodetect",
+        arena_dims=380,
+        video_format=".mp4",
+        animal_ids=(["B", "W"] if mode == "multi" else [""]),
+        table_format=".h5",
+        exclude_bodyparts=exclude,
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).run()
+
+    # get breaks
+    breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
+
+    # extract kinematic features
+    kinematics = deepof.analyze.align_deepof_kinematics_with_unsupervised_labels(
+        prun,
+        breaks,
+        kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
+        include_distances=sampler.draw(st.booleans()),
+        include_angles=sampler.draw(st.booleans()),
+        animal_id=(
+            sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
+        ),
+    )
+
+    # check that the output is a DataFrame
+    assert isinstance(kinematics, pd.DataFrame)
 
 
-def test_align_deepof_supervised_and_unsupervised_labels():
-    pass
+@settings(max_examples=25, deadline=None, derandomize=True)
+@given(
+    mode=st.one_of(st.just("single"), st.just("multi")), sampler=st.data(),
+)
+def test_align_deepof_supervised_and_unsupervised_labels(mode, sampler):
+
+    prun = deepof.data.Project(
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        arena="circular-autodetect",
+        arena_dims=380,
+        video_format=".mp4",
+        animal_ids=(["B", "W"] if mode == "multi" else [""]),
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).run()
+
+    # get breaks
+    breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
+
+    # get supervised annotations from project
+    supervised_annotations = prun.supervised_annotation()
+
+    # align supervised and unsupervised labels
+    aligned_labels = deepof.analyze.align_deepof_supervised_and_unsupervised_labels(
+        supervised_annotations,
+        breaks,
+        animal_id=(
+            sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
+        ),
+        aggregate=sampler.draw(st.one_of(st.just(np.mean), st.just(np.median))),
+    )
+
+    assert isinstance(aligned_labels, pd.DataFrame)
 
 
-def test_annotate_time_chunks():
-    pass
+@settings(max_examples=25, deadline=None, derandomize=True)
+@given(
+    mode=st.one_of(st.just("single"), st.just("multi")), sampler=st.data(),
+)
+def test_annotate_time_chunks(mode, sampler):
+    prun = deepof.data.Project(
+        path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        arena="circular-autodetect",
+        arena_dims=380,
+        video_format=".mp4",
+        animal_ids=(["B", "W"] if mode == "multi" else [""]),
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).run()
+
+    # get breaks and soft_counts
+    breaks = {}
+    soft_counts = {}
+    for i in ["test", "test2"]:
+        counts = np.random.normal(size=(10, 10))
+        breaks[i] = np.array([10] * 10)
+        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+
+    # get supervised annotations from project
+    supervised_annotations = prun.supervised_annotation()
+
+    # annotate time chunks
+    time_chunks, hard_counts = deepof.analyze.annotate_time_chunks(
+        prun,
+        soft_counts,
+        breaks,
+        supervised_annotations,
+        animal_id=(
+            sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
+        ),
+        kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
+        include_distances=sampler.draw(st.booleans()),
+        include_angles=sampler.draw(st.booleans()),
+    )
+
+    assert isinstance(time_chunks, pd.DataFrame)
+    assert isinstance(hard_counts, pd.Series)
 
 
 @given(folds=st.integers(min_value=2, max_value=10))
