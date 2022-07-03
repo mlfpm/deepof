@@ -356,7 +356,7 @@ def test_annotate_time_chunks(mode, sampler):
     supervised_annotations = prun.supervised_annotation()
 
     # annotate time chunks
-    time_chunks, hard_counts = deepof.analyze.annotate_time_chunks(
+    time_chunks, hard_counts = deepof.post_hoc.annotate_time_chunks(
         prun,
         soft_counts,
         breaks,
