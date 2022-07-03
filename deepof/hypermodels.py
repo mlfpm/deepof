@@ -11,7 +11,7 @@ keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof
 import tensorflow_probability as tfp
 from keras_tuner import HyperModel
 
-import deepof.model_utils
+import deepof.unsupervised_utils
 import deepof.models
 
 tfd = tfp.distributions

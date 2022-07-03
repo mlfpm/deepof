@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.analyze
+Testing module for deepof.post_hoc
 
 """
 import os
@@ -19,7 +19,7 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 
-import deepof.analyze
+import deepof.post_hoc
 import deepof.data
 
 
@@ -34,7 +34,7 @@ def test_get_time_on_cluster():
     # Define a test breaks dictionary
     breaks = {i: [10] * 100 for i in range(10)}
 
-    toc = deepof.analyze.get_time_on_cluster(soft_counts, breaks)
+    toc = deepof.post_hoc.get_time_on_cluster(soft_counts, breaks)
 
     # Assert that both the soft counts and breaks are correctly aggregated
     assert toc.shape[0] * 100 == np.concatenate(list(soft_counts.values())).shape[0]
@@ -49,7 +49,7 @@ def test_get_aggregated_embedding(reduce_dim, agg):
     # Define a test embedding dixtionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
 
-    aggregated_embeddings = deepof.analyze.get_aggregated_embedding(
+    aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
         embedding, reduce_dim, agg
     )
 
@@ -74,7 +74,7 @@ def test_select_time_bin(bin_size, bin_index):
     # Create a dictionary of breaks, whose sums add up to the number of chunks
     breaks = {i: np.array([10] * 100) for i in range(10)}
 
-    embedding, soft_counts, breaks = deepof.analyze.select_time_bin(
+    embedding, soft_counts, breaks = deepof.post_hoc.select_time_bin(
         embedding, soft_counts, breaks, bin_size, bin_index
     )
 
@@ -108,7 +108,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
-    distance_binning = deepof.analyze.condition_distance_binning(
+    distance_binning = deepof.post_hoc.condition_distance_binning(
         embedding=embedding,
         soft_counts=soft_counts,
         breaks=breaks,
@@ -147,7 +147,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize):
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
-    enrichment = deepof.analyze.cluster_enrichment_across_conditions(
+    enrichment = deepof.post_hoc.cluster_enrichment_across_conditions(
         embedding,
         soft_counts,
         breaks,
@@ -167,7 +167,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize):
 def test_get_transitions(n_states):
 
     sequence = np.random.choice(range(n_states), 1000, replace=True)
-    transitions = deepof.analyze.get_transitions(sequence, n_states=n_states)
+    transitions = deepof.post_hoc.get_transitions(sequence, n_states=n_states)
 
     assert transitions.shape[0] == n_states
     assert transitions.shape[1] == n_states
@@ -199,7 +199,7 @@ def test_compute_transition_matrix_per_condition(
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
-    transitions = deepof.analyze.compute_transition_matrix_per_condition(
+    transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
         embedding,
         soft_counts,
         breaks,
@@ -217,7 +217,7 @@ def test_compute_transition_matrix_per_condition(
         assert len(transitions) == len(exp_conditions)
 
     # Get steady states
-    steady_states = deepof.analyze.compute_steady_state(
+    steady_states = deepof.post_hoc.compute_steady_state(
         transitions, return_entropy=steady_state_entropy
     )
 
@@ -243,7 +243,7 @@ def test_extract_kinematic_features():
     # Define a table with chunk data
     chunked_dataset = np.random.uniform(size=(100, 25, 4))
 
-    kinematic_features = deepof.analyze.extract_kinematic_features(
+    kinematic_features = deepof.post_hoc.extract_kinematic_features(
         chunked_dataset, pd.Series(hard_counts), body_part_names
     )
 
@@ -275,7 +275,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
     breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
 
     # extract kinematic features
-    kinematics = deepof.analyze.align_deepof_kinematics_with_unsupervised_labels(
+    kinematics = deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
         prun,
         breaks,
         kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
@@ -315,7 +315,7 @@ def test_align_deepof_supervised_and_unsupervised_labels(mode, sampler):
     supervised_annotations = prun.supervised_annotation()
 
     # align supervised and unsupervised labels
-    aligned_labels = deepof.analyze.align_deepof_supervised_and_unsupervised_labels(
+    aligned_labels = deepof.post_hoc.align_deepof_supervised_and_unsupervised_labels(
         supervised_annotations,
         breaks,
         animal_id=(
@@ -393,5 +393,5 @@ def test_chunk_cv_splitter(folds):
     breaks = {i: np.array([10] * 100) for i in range(10)}
 
     # Compute folds
-    cv_splitter = deepof.analyze.chunk_cv_splitter(chunk_stats, breaks, folds)
+    cv_splitter = deepof.post_hoc.chunk_cv_splitter(chunk_stats, breaks, folds)
     assert len(cv_splitter) == folds

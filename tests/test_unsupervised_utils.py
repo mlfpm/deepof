@@ -18,13 +18,13 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import deepof.data
-import deepof.model_utils
+import deepof.unsupervised_utils
 
 
 def test_load_treatments():
-    assert deepof.model_utils.load_treatments("tests") is None
+    assert deepof.unsupervised_utils.load_treatments("tests") is None
     assert isinstance(
-        deepof.model_utils.load_treatments(
+        deepof.unsupervised_utils.load_treatments(
             os.path.join("tests", "test_examples", "test_single_topview", "Others")
         ),
         dict,
@@ -43,7 +43,7 @@ def test_find_learning_rate():
         loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
     )
 
-    deepof.model_utils.find_learning_rate(test_model, data=dataset)
+    deepof.unsupervised_utils.find_learning_rate(test_model, data=dataset)
 
 
 @given(
@@ -53,7 +53,7 @@ def test_find_learning_rate():
 def test_get_callbacks(
     encoding, k,
 ):
-    callbacks = deepof.model_utils.get_callbacks(
+    callbacks = deepof.unsupervised_utils.get_callbacks(
         input_type=False, cp=True, logparam={"latent_dim": encoding, "n_components": k},
     )
     assert np.any([isinstance(i, str) for i in callbacks])
@@ -116,7 +116,7 @@ def test_tune_search(
     y_train = np.ones([100, 1]).astype(float)
 
     callbacks = list(
-        deepof.model_utils.get_callbacks(
+        deepof.unsupervised_utils.get_callbacks(
             input_type=False,
             cp=False,
             gram_loss=0.1,

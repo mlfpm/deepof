@@ -21,7 +21,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 
 import deepof.data
-import deepof.pose_utils
+import deepof.supervised_utils
 
 
 @settings(deadline=None)
@@ -77,7 +77,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = deepof.pose_utils.close_double_contact(
+    close_contact = deepof.supervised_utils.close_double_contact(
         pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
     )
     assert close_contact.dtype == bool
@@ -167,7 +167,7 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         dig_clf = pickle.load(handle)
 
-    huddling = deepof.pose_utils.huddle(
+    huddling = deepof.supervised_utils.huddle(
         pos_dframe, speed_dframe, huddle_estimator=huddle_clf,
     )
     digging = deepof.pose_utils.dig(pos_dframe, speed_dframe, dig_estimator=dig_clf,)

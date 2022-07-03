@@ -16,7 +16,7 @@ from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 
-from deepof import model_utils
+from deepof import unsupervised_utils
 
 tfb = tfp.bijectors
 tfd = tfp.distributions

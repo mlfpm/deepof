@@ -37,9 +37,9 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
 from tqdm import tqdm
 
-import deepof.model_utils
+import deepof.unsupervised_utils
 import deepof.models
-import deepof.pose_utils
+import deepof.supervised_utils
 import deepof.utils
 import deepof.visuals
 
@@ -1079,7 +1079,7 @@ class Coordinates:
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
-            supervised_tags = deepof.pose_utils.supervised_tagging(
+            supervised_tags = deepof.supervised_utils.supervised_tagging(
                 self,
                 raw_coords=raw_coords,
                 coords=coords,
@@ -1104,7 +1104,7 @@ class Coordinates:
                 Outputs a single annotated video. Enclosed in a function to enable parallelization
                 """
 
-                deepof.pose_utils.annotate_video(
+                deepof.supervised_utils.annotate_video(
                     self,
                     tag_dict=tag_dict[idx],
                     vid_index=list(self._tables.keys()).index(idx),
@@ -1190,7 +1190,7 @@ class Coordinates:
 
         """
 
-        trained_models = deepof.model_utils.autoencoder_fitting(
+        trained_models = deepof.unsupervised_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
             batch_size=batch_size,
             latent_dim=latent_dim,
@@ -1591,7 +1591,7 @@ class TableDict(dict):
 
             # Convert speed to a boolean value. Is the animal moving?
             y_train[:, -1] = (
-                y_train[:, -1] > deepof.pose_utils.get_hparameters()["huddle_speed"]
+                y_train[:, -1] > deepof.supervised_utils.get_hparameters()["huddle_speed"]
             )
 
             try:
@@ -1605,7 +1605,7 @@ class TableDict(dict):
 
                 # Convert speed to a boolean value. Is the animal moving?
                 y_test[:, -1] = (
-                    y_test[:, -1] > deepof.pose_utils.get_hparameters()["huddle_speed"]
+                    y_test[:, -1] > deepof.supervised_utils.get_hparameters()["huddle_speed"]
                 )
 
             except IndexError:
