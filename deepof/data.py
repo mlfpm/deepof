@@ -473,15 +473,28 @@ class Project:
                 print("Iterative imputation of ocluded bodyparts...")
 
             for k, tab in tab_dict.items():
+
                 imputed = IterativeImputer(
                     skip_complete=True,
-                    max_iter=1000,
+                    max_iter=1,
                     n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
                 ).fit_transform(tab)
-                tab_dict[k] = pd.DataFrame(
-                    imputed, index=tab.index, columns=tab.columns
+                imputed = pd.DataFrame(
+                    imputed,
+                    index=tab.index,
+                    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
                 )
+
+                tab.update(imputed)
+                tab_dict[k] = tab
+
+                if tab.shape != imputed.shape:
+                    warnings.warn(
+                        "Some of the body parts have zero measurements. Iterative imputation skips these,"
+                        " which could bring problems downstream. A possible solution could be to refine "
+                        "DLC tracklets."
+                    )
 
         return tab_dict, lik_dict
 

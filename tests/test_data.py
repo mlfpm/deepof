@@ -175,10 +175,10 @@ def test_get_supervised_annotation():
 
 @settings(max_examples=36, deadline=None, derandomize=True)
 @given(
-    nodes=st.integers(min_value=0, max_value=1),
-    mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
-    ego=st.integers(min_value=0, max_value=2),
-    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_1"])),
+    nodes=st.integers(min_value=0, max_value=0),
+    mode=st.one_of(st.just("madlc"), st.just("madlc"), st.just("madlc")),
+    ego=st.integers(min_value=0, max_value=0),
+    exclude=st.one_of(st.just(tuple([""])), st.just([""])),
     sampler=st.data(),
 )
 def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
