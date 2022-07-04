@@ -173,7 +173,7 @@ def test_get_supervised_annotation():
     assert prun._type == "supervised"
 
 
-@settings(max_examples=25, deadline=None, derandomize=True)
+@settings(max_examples=36, deadline=None, derandomize=True)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
