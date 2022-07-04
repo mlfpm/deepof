@@ -158,6 +158,7 @@ class Project:
         # Set the rest of the init parameters
         self.angles = True
         self.animal_ids = animal_ids
+        self.connectivity = None
         self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
@@ -166,29 +167,12 @@ class Project:
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
+        self.model = model
         self.smooth_alpha = smooth_alpha
         self.frame_rate = frame_rate
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
-
-        model_dict = {
-            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(aid)
-            for aid in self.animal_ids
-        }
-        self.connectivity = {aid: model_dict[aid + model] for aid in self.animal_ids}
-
-        # Remove specified body parts from the mice graph
         self.exclude_bodyparts = exclude_bodyparts
-        if len(self.animal_ids) > 1 and self.exclude_bodyparts != tuple([""]):
-            self.exclude_bodyparts = [
-                aid + "_" + bp for aid in self.animal_ids for bp in exclude_bodyparts
-            ]
-
-        if self.exclude_bodyparts != tuple([""]):
-            for aid in self.animal_ids:
-                for bp in self.exclude_bodyparts:
-                    if bp.startswith(aid):
-                        self.connectivity[aid].remove_node(bp)
 
     def __str__(self):  # pragma: no cover
         if self.exp_conditions:
@@ -351,23 +335,74 @@ class Project:
 
         if self.table_format == ".h5":
 
-            tab_dict = {
-                deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_hdf(
+            tab_dict = {}
+            for tab in self.tables:
+
+                loaded_tab = pd.read_hdf(
                     deepof.utils.os.path.join(self.table_path, tab), dtype=float
                 )
-                for tab in self.tables
-            }
+
+                # Adapt index to be compatible with downstream processing
+                loaded_tab = loaded_tab.T.reset_index(drop=False).T
+                loaded_tab.columns = loaded_tab.loc["scorer", :]
+                loaded_tab = loaded_tab.iloc[1:]
+
+                tab_dict[deepof.utils.re.findall("(.*)DLC", tab)[0]] = loaded_tab
+
         elif self.table_format == ".csv":
 
             tab_dict = {
                 deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab),
-                    header=[0, 1, 2],
-                    index_col=0,
-                    dtype=float,
+                    deepof.utils.os.path.join(self.table_path, tab), index_col=0,
                 )
                 for tab in self.tables
             }
+
+        # Check in the files come from a multi-animal DLC project
+        if "individuals" in list(tab_dict.values())[0].index:
+            self.animal_ids = list(tab_dict.values())[0].loc["individuals", :].unique()
+
+            for key, tab in tab_dict.items():
+
+                # Adapt each table to work with the downstream pipeline
+                tab_dict[key].loc["bodyparts"] = (
+                    tab.loc["individuals"] + "_" + tab.loc["bodyparts"]
+                )
+                tab_dict[key].drop("individuals", axis=0, inplace=True)
+
+        # Convert the first rows of each dataframe to a multi-index
+        for key, tab in tab_dict.items():
+
+            tab_copy = tab.copy()
+
+            tab_copy.columns = pd.MultiIndex.from_arrays(
+                [tab.iloc[i] for i in range(2)]
+            )
+            tab_copy = tab_copy.iloc[2:].astype(float)
+            tab_dict[key] = tab_copy.reset_index(drop=True)
+
+        # Update body part connectivity graph, taking detected or specified body parts into account
+        model_dict = {
+            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(aid)
+            for aid in self.animal_ids
+        }
+        self.connectivity = {
+            aid: model_dict[aid + self.model] for aid in self.animal_ids
+        }
+
+        # Remove specified body parts from the mice graph
+        if len(self.animal_ids) > 1 and self.exclude_bodyparts != tuple([""]):
+            self.exclude_bodyparts = [
+                aid + "_" + bp
+                for aid in self.animal_ids
+                for bp in self.exclude_bodyparts
+            ]
+
+        if self.exclude_bodyparts != tuple([""]):
+            for aid in self.animal_ids:
+                for bp in self.exclude_bodyparts:
+                    if bp.startswith(aid):
+                        self.connectivity[aid].remove_node(bp)
 
         # Pass a time-based index, if specified in init
         if self.frame_rate is not None:
@@ -381,13 +416,13 @@ class Project:
 
         lik_dict = defaultdict()
 
-        for key, value in tab_dict.items():
-            x = value.xs("x", level="coords", axis=1, drop_level=False)
-            y = value.xs("y", level="coords", axis=1, drop_level=False)
-            lik = value.xs("likelihood", level="coords", axis=1, drop_level=True)
+        for key, tab in tab_dict.items():
+            x = tab.xs("x", level="coords", axis=1, drop_level=False)
+            y = tab.xs("y", level="coords", axis=1, drop_level=False)
+            lik = tab.xs("likelihood", level="coords", axis=1, drop_level=True)
 
             tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
-            lik_dict[key] = lik.droplevel("scorer", axis=1)
+            lik_dict[key] = lik.fillna(0.0)
 
         if self.smooth_alpha:
 
@@ -406,14 +441,10 @@ class Project:
                 smooth.index = cur_idx
                 tab_dict[key] = smooth
 
-        # Remove scorer header
-        for key, tab in tab_dict.items():
-            tab_dict[key] = tab.loc[:, tab.columns.levels[0][0]]
-
         if self.exclude_bodyparts != tuple([""]):
 
-            for k, value in tab_dict.items():
-                temp = value.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
+            for k, tab in tab_dict.items():
+                temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
                 temp.columns = pd.MultiIndex.from_product(
                     [sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
@@ -425,10 +456,10 @@ class Project:
             if verbose:
                 print("Interpolating outliers...")
 
-            for k, value in tab_dict.items():
+            for k, tab in tab_dict.items():
 
                 tab_dict[k] = deepof.utils.interpolate_outliers(
-                    value,
+                    tab,
                     lik_dict[k],
                     likelihood_tolerance=self.likelihood_tolerance,
                     mode="or",
@@ -441,15 +472,15 @@ class Project:
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
-            for k, value in tab_dict.items():
+            for k, tab in tab_dict.items():
                 imputed = IterativeImputer(
                     skip_complete=True,
                     max_iter=1000,
-                    n_nearest_features=value.shape[1] // len(self.animal_ids) - 1,
+                    n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
-                ).fit_transform(value)
+                ).fit_transform(tab)
                 tab_dict[k] = pd.DataFrame(
-                    imputed, index=value.index, columns=value.columns
+                    imputed, index=tab.index, columns=tab.columns
                 )
 
         return tab_dict, lik_dict
@@ -527,24 +558,30 @@ class Project:
         cliques = [i for i in cliques if len(i) == 3]
 
         angle_dict = {}
-        for key, tab in tab_dict.items():
+        try:
+            for key, tab in tab_dict.items():
 
-            dats = []
-            for clique in cliques:
-                dat = pd.DataFrame(
-                    deepof.utils.angle_trio(
-                        np.array(tab[clique]).reshape([3, tab.shape[0], 2])
-                    )
-                ).T
+                dats = []
+                for clique in cliques:
+                    dat = pd.DataFrame(
+                        deepof.utils.angle_trio(
+                            np.array(tab[clique]).reshape([3, tab.shape[0], 2])
+                        )
+                    ).T
 
-                orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
-                dat.columns = [tuple(clique[i] for i in order) for order in orders]
+                    orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
+                    dat.columns = [tuple(clique[i] for i in order) for order in orders]
 
-                dats.append(dat)
+                    dats.append(dat)
 
-            dats = pd.concat(dats, axis=1)
+                dats = pd.concat(dats, axis=1)
 
-            angle_dict[key] = dats
+                angle_dict[key] = dats
+        except KeyError:
+            raise KeyError(
+                "Are there multiple animals in your single-animal DLC video? Make sure to set the animal_ids parameter"
+                " in deepof.data.Project"
+            )
 
         # Restore original index
         for key in angle_dict.keys():

@@ -36,7 +36,7 @@ def test_project_init(table_type, arena_type):
             prun = deepof.data.Project(
                 path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
                 arena=arena_type,
-                arena_dims=tuple([380]),
+                arena_dims=380,
                 video_format=".mp4",
                 table_format=table_type,
             ).run()
@@ -44,7 +44,7 @@ def test_project_init(table_type, arena_type):
         prun = deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena=arena_type,
-            arena_dims=tuple([380]),
+            arena_dims=380,
             video_format=".mp4",
             table_format=table_type,
         )
@@ -60,7 +60,7 @@ def test_project_properties():
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -91,7 +91,7 @@ def test_get_distances(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -119,7 +119,7 @@ def test_get_angles(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -144,7 +144,7 @@ def test_run(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=tuple([380]),
+        arena_dims=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -176,7 +176,7 @@ def test_get_supervised_annotation():
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
-    mode=st.one_of(st.just("single"), st.just("multi")),
+    mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     ego=st.integers(min_value=0, max_value=2),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_1"])),
     sampler=st.data(),
