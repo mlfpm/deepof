@@ -1542,11 +1542,15 @@ class TableDict(dict):
             table_dict: Merged table_dict object.
 
         """
-        args = [self.copy()] + list(args)
+        args = [copy.deepcopy(self)] + list(args)
         merged_dict = defaultdict(list)
         for tabdict in args:
             for key, val in tabdict.items():
                 merged_dict[key].append(val)
+
+        propagate_labels = any(
+            [self._propagate_labels] + [tabdict._propagate_labels for tabdict in args]
+        )
 
         merged_tables = TableDict(
             {
@@ -1554,6 +1558,7 @@ class TableDict(dict):
                 for key, val in merged_dict.items()
             },
             typ="merged",
+            propagate_labels=propagate_labels,
         )
 
         # If there are labels passed, keep only one and append it as the last column
