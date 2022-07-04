@@ -513,7 +513,11 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
     """
     rpt_lengths = list(np.array(breakpoints)[1:] - np.array(breakpoints)[:-1])
-    max_rpt_length = np.max([breakpoints[0], np.max(rpt_lengths)])
+
+    try:
+        max_rpt_length = np.max([breakpoints[0], np.max(rpt_lengths)])
+    except ValueError:
+        max_rpt_length = breakpoints[0]
 
     # Reshape experiment data according to extracted ruptures
     split_a = np.split(np.expand_dims(a, axis=0), breakpoints[:-1], axis=1)
@@ -566,8 +570,6 @@ def rolling_window(
 
             # Extract change points from current experiment
             breakpoints = rpt_model.predict(pen=4.0)
-
-            print(len(breakpoints))
 
         else:
             breakpoints = np.cumsum(precomputed_breaks)

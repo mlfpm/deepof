@@ -337,7 +337,6 @@ class Project:
 
             tab_dict = {}
             for tab in self.tables:
-
                 loaded_tab = pd.read_hdf(
                     deepof.utils.os.path.join(self.table_path, tab), dtype=float
                 )
@@ -363,7 +362,6 @@ class Project:
             self.animal_ids = list(tab_dict.values())[0].loc["individuals", :].unique()
 
             for key, tab in tab_dict.items():
-
                 # Adapt each table to work with the downstream pipeline
                 tab_dict[key].loc["bodyparts"] = (
                     tab.loc["individuals"] + "_" + tab.loc["bodyparts"]
@@ -372,7 +370,6 @@ class Project:
 
         # Convert the first rows of each dataframe to a multi-index
         for key, tab in tab_dict.items():
-
             tab_copy = tab.copy()
 
             tab_copy.columns = pd.MultiIndex.from_arrays(
@@ -457,7 +454,6 @@ class Project:
                 print("Interpolating outliers...")
 
             for k, tab in tab_dict.items():
-
                 tab_dict[k] = deepof.utils.interpolate_outliers(
                     tab,
                     lik_dict[k],
@@ -802,7 +798,6 @@ class Coordinates:
             if self._arena == "circular-autodetect":
 
                 for i, (key, value) in enumerate(tabs.items()):
-
                     value.loc[:, (slice("coords"), [coord_1])] = (
                         value.loc[:, (slice("coords"), [coord_1])] - scales[i][0]
                     )
@@ -821,7 +816,6 @@ class Coordinates:
                     animal_ids = [selected_id]
 
                 for aid in animal_ids:
-
                     # center on x / rho
                     value.update(
                         value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
@@ -884,7 +878,6 @@ class Coordinates:
                     all_columns += columns
 
                     if align_inplace and not polar:
-
                         partial_aligned = pd.DataFrame(
                             deepof.utils.align_trajectories(
                                 np.array(partial_aligned), mode="all"
@@ -1563,6 +1556,20 @@ class TableDict(dict):
             typ="merged",
         )
 
+        # If there are labels passed, keep only one and append it as the last column
+        for key, tab in merged_tables.items():
+
+            pheno_cols = [col for col in tab.columns if "pheno" in str(col)]
+            if len(pheno_cols) > 0:
+
+                pheno_col = (
+                    pheno_cols[0] if len(pheno_cols[0]) == 1 else [pheno_cols[0]]
+                )
+                labels = tab.loc[:, pheno_col].iloc[:, 0]
+
+                merged_tables[key] = tab.drop(pheno_cols, axis=1)
+                merged_tables[key]["pheno"] = labels
+
         return merged_tables
 
     def get_training_set(
@@ -1585,11 +1592,13 @@ class TableDict(dict):
         raw_data = current_table_dict.values()
 
         # Padding of videos with slightly different lengths
-        # Making sure that the training and test sets end up balanced
+        # Making sure that the training and test sets end up balanced in terms of labels
         test_index = np.array([], dtype=int)
-        raw_data = np.array([np.array(v) for v in raw_data], dtype=object)
+
+        raw_data = np.array([v.values for v in raw_data], dtype=object)
         if self._propagate_labels:
             concat_raw = np.concatenate(raw_data, axis=0)
+
             for label in set(list(concat_raw[:, -1])):
                 label_index = np.random.choice(
                     [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
@@ -1730,10 +1739,12 @@ class TableDict(dict):
         if filter_low_variance:
 
             # Remove body parts with extremely low variance (usually the result of vertical alignment).
-            table_temp = {
-                key: tab.iloc[:, np.where(tab.var(axis=0) > filter_low_variance)[0]]
-                for key, tab in table_temp.items()
-            }
+            for key, tab in table_temp.items():
+                table_temp[key] = tab.iloc[
+                    :,
+                    list(np.where(tab.var(axis=0) > filter_low_variance)[0])
+                    + list(np.where(["pheno" in str(col) for col in tab.columns])[0]),
+                ]
 
         if scale:
             if verbose:
@@ -1786,11 +1797,33 @@ class TableDict(dict):
             for key, tab in to_interpolate.items():
                 cur_tab = copy.deepcopy(tab.values)
 
-                cur_tab[cur_tab > interpolate_normalized] = np.nan
-                cur_tab[cur_tab < -interpolate_normalized] = np.nan
-                cur_tab = pd.DataFrame(
-                    cur_tab, index=tab.index, columns=tab.columns
-                ).interpolate()
+                try:
+                    cur_tab[cur_tab > interpolate_normalized] = np.nan
+                    cur_tab[cur_tab < -interpolate_normalized] = np.nan
+
+                # Deal with the edge case of phenotype label propagation
+                except TypeError:
+
+                    cur_tab[
+                        np.append(
+                            (cur_tab[:, :-1].astype(float) > interpolate_normalized),
+                            np.array([[False] * len(cur_tab)]).T,
+                            axis=1,
+                        )
+                    ] = np.nan
+                    cur_tab[
+                        np.append(
+                            (cur_tab[:, :-1].astype(float) < -interpolate_normalized),
+                            np.array([[False] * len(cur_tab)]).T,
+                            axis=1,
+                        )
+                    ] = np.nan
+
+                cur_tab = (
+                    pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
+                    .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                    .interpolate()
+                )
 
                 to_interpolate[key] = cur_tab
 
@@ -1938,7 +1971,6 @@ class TableDict(dict):
 if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 
 # TODO: Fix issues and add supervised parameters (time in zone, etc).
 # TODO: Label more data for supervised model training

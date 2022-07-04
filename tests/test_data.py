@@ -176,9 +176,9 @@ def test_get_supervised_annotation():
 @settings(max_examples=36, deadline=None, derandomize=True)
 @given(
     nodes=st.integers(min_value=0, max_value=0),
-    mode=st.one_of(st.just("madlc"), st.just("madlc"), st.just("madlc")),
-    ego=st.integers(min_value=0, max_value=0),
-    exclude=st.one_of(st.just(tuple([""])), st.just([""])),
+    mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
+    ego=st.integers(min_value=0, max_value=1),
+    exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_base"])),
     sampler=st.data(),
 )
 def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
@@ -219,6 +219,8 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
         selected_id = "B"
+    elif mode == "madlc" and nodes == "all" and not ego:
+        selected_id = "mouse_black_tail"
 
     coords = prun.get_coords(
         center=center,
