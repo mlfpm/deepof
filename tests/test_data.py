@@ -175,7 +175,7 @@ def test_get_supervised_annotation():
 
 @settings(max_examples=36, deadline=None, derandomize=True)
 @given(
-    nodes=st.integers(min_value=0, max_value=0),
+    nodes=st.integers(min_value=0, max_value=1),
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     ego=st.integers(min_value=0, max_value=1),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_base"])),
@@ -233,20 +233,17 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     speeds = prun.get_coords(
         speed=(speed if not ego and nodes == "all" else 0),
         propagate_labels=propagate,
-        propagate_annotations=propagate_annots,
         selected_id=selected_id,
     )
     distances = prun.get_distances(
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
-        propagate_annotations=propagate_annots,
         selected_id=selected_id,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         propagate_labels=propagate,
-        propagate_annotations=propagate_annots,
         selected_id=selected_id,
     )
 
@@ -263,12 +260,19 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     # deepof.table_dict testing
 
-    table = sampler.draw(
-        st.one_of(
-            st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
-        ),
-        st.just(coords.merge(speeds, distances, angles)),
-    )
+    if not propagate_annots:
+        table = sampler.draw(
+            st.one_of(
+                st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
+            ),
+            st.just(coords.merge(speeds, distances, angles)),
+        )
+    else:
+        table = sampler.draw(
+            st.one_of(
+                st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
+            ),
+        )
 
     assert len(list(table.filter_videos(["test"]).keys())) == 1
 

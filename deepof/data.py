@@ -20,8 +20,8 @@ import copy
 import os
 import warnings
 from collections import defaultdict
-from typing import Dict
-from typing import Tuple, Any, List, NewType
+from typing import Dict, List, Tuple
+from typing import Any, NewType, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1272,7 +1272,7 @@ class TableDict(dict):
         center: str = None,
         polar: bool = None,
         propagate_labels: bool = False,
-        propagate_annotations: Dict = False,
+        propagate_annotations: Union[Dict, bool] = False,
     ):
         """
 
@@ -1532,6 +1532,7 @@ class TableDict(dict):
 
         Takes a number of table_dict objects and merges them to the current one.
         Returns a table_dict object of type 'merged'.
+        Only annotations of the first table_dict object are kept.
 
         Args:
             *args (table_dict): table_dict objects to be merged.
@@ -1559,6 +1560,7 @@ class TableDict(dict):
             },
             typ="merged",
             propagate_labels=propagate_labels,
+            propagate_annotations=self._propagate_annotations,
         )
 
         # If there are labels passed, keep only one and append it as the last column
@@ -1653,12 +1655,6 @@ class TableDict(dict):
             except ValueError:
                 X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
 
-            # Convert speed to a boolean value. Is the animal moving?
-            y_train[:, -1] = (
-                y_train[:, -1]
-                > deepof.supervised_utils.get_hparameters()["huddle_speed"]
-            )
-
             try:
                 try:
                     X_test, y_test = (
@@ -1667,12 +1663,6 @@ class TableDict(dict):
                     )
                 except ValueError:
                     X_test, y_test = X_test[:, :-n_annot], X_test[:, -n_annot:]
-
-                # Convert speed to a boolean value. Is the animal moving?
-                y_test[:, -1] = (
-                    y_test[:, -1]
-                    > deepof.supervised_utils.get_hparameters()["huddle_speed"]
-                )
 
             except IndexError:
                 pass
