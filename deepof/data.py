@@ -1538,7 +1538,6 @@ class TableDict(dict):
             *args (table_dict): table_dict objects to be merged.
             ignore_index (bool): ignore index when merging. Defaults to False.
 
-
         Returns:
             table_dict: Merged table_dict object.
 

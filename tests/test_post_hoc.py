@@ -228,28 +228,6 @@ def test_compute_transition_matrix_per_condition(
         print(steady_states)
 
 
-def test_extract_kinematic_features():
-
-    # Set up testing names for our random features
-    body_part_names = ["test_name_{}".format(i) for i in range(4)]
-
-    # Define a matrix of soft counts
-    counts = np.random.normal(size=(100, 10))
-    soft_counts = counts / counts.sum(axis=1)[:, None]
-
-    # And extract hard counts from them
-    hard_counts = np.argmax(soft_counts, axis=1)
-
-    # Define a table with chunk data
-    chunked_dataset = np.random.uniform(size=(100, 25, 4))
-
-    kinematic_features = deepof.post_hoc.extract_kinematic_features(
-        chunked_dataset, pd.Series(hard_counts), body_part_names
-    )
-
-    assert isinstance(kinematic_features, pd.DataFrame)
-
-
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(
     mode=st.one_of(st.just("single"), st.just("multi")),
@@ -277,7 +255,6 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
     # extract kinematic features
     kinematics = deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
         prun,
-        breaks,
         kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
         include_distances=sampler.draw(st.booleans()),
         include_angles=sampler.draw(st.booleans()),
@@ -287,49 +264,35 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
     )
 
     # check that the output is a DataFrame
-    assert isinstance(kinematics, pd.DataFrame)
+    assert isinstance(kinematics, dict)
 
 
-@settings(max_examples=25, deadline=None, derandomize=True)
-@given(
-    mode=st.one_of(st.just("single"), st.just("multi")), sampler=st.data(),
-)
-def test_align_deepof_supervised_and_unsupervised_labels(mode, sampler):
+def test_chunk_summary_statistics():
 
-    prun = deepof.data.Project(
-        path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        arena="circular-autodetect",
-        arena_dims=380,
-        video_format=".mp4",
-        animal_ids=(["B", "W"] if mode == "multi" else [""]),
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).run()
+    # Set up testing names for our random features
+    body_part_names = ["test_name_{}".format(i) for i in range(4)]
 
-    # get breaks
-    breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
+    # Define a matrix of soft counts
+    counts = np.random.normal(size=(100, 10))
+    soft_counts = counts / counts.sum(axis=1)[:, None]
 
-    # get supervised annotations from project
-    supervised_annotations = prun.supervised_annotation()
+    # And extract hard counts from them
+    hard_counts = np.argmax(soft_counts, axis=1)
 
-    # align supervised and unsupervised labels
-    aligned_labels = deepof.post_hoc.align_deepof_supervised_and_unsupervised_labels(
-        supervised_annotations,
-        breaks,
-        animal_id=(
-            sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
-        ),
-        aggregate=sampler.draw(st.one_of(st.just(np.mean), st.just(np.median))),
+    # Define a table with chunk data
+    chunked_dataset = np.random.uniform(size=(100, 25, 4))
+
+    kinematic_features = deepof.post_hoc.chunk_summary_statistics(
+        chunked_dataset, pd.Series(hard_counts), body_part_names
     )
 
-    assert isinstance(aligned_labels, pd.DataFrame)
+    assert isinstance(kinematic_features, pd.DataFrame)
 
 
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(
-    mode=st.one_of(st.just("single"), st.just("multi")), sampler=st.data(),
+    mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
+    sampler=st.data(),
 )
 def test_annotate_time_chunks(mode, sampler):
     prun = deepof.data.Project(
@@ -367,6 +330,7 @@ def test_annotate_time_chunks(mode, sampler):
         kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
         include_distances=sampler.draw(st.booleans()),
         include_angles=sampler.draw(st.booleans()),
+        aggregate=sampler.draw(st.one_of(st.just("mean"), st.just("tsfresh"))),
     )
 
     assert isinstance(time_chunks, pd.DataFrame)

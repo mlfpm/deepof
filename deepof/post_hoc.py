@@ -29,8 +29,8 @@ import deepof.data
 def get_time_on_cluster(
     soft_counts: deepof.data.table_dict,
     breaks: deepof.data.table_dict,
-    normalize=True,
-    reduce_dim=False,
+    normalize: bool = True,
+    reduce_dim: bool = False,
 ):
     """
 
@@ -38,13 +38,13 @@ def get_time_on_cluster(
     animal spent on each cluster.
 
     Args:
-        soft_counts: A dictionary of soft counts, where the keys are the names of the
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        normalize: Whether to normalize the time by the total number of frames in
+        normalize (bool): Whether to normalize the time by the total number of frames in
         each condition.
-        reduce_dim: Whether to reduce the dimensionality of the embeddings to 2D. If False,
+        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False,
         the embeddings are kept in their original dimensionality.
 
     Returns:
@@ -80,18 +80,20 @@ def get_time_on_cluster(
     return counter_df
 
 
-def get_aggregated_embedding(embedding, reduce_dim=False, agg="mean"):
+def get_aggregated_embedding(
+    embedding: deepof.data.table_dict, reduce_dim: bool = False, agg: str = "mean"
+):
     """
 
     Aggregates the embeddings of a set of videos, using the specified aggregation method.
     Instead of an embedding per chunk, the function returns an embedding per experiment.
 
     Args:
-        embedding: A dictionary of embeddings, where the keys are the names of the
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        reduce_dim: Whether to reduce the dimensionality of the embeddings to 2D. If False,
+        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False,
         the embeddings are kept in their original dimensionality.
-        agg: The aggregation method to use. Can be either "mean" or "median".
+        agg (str): The aggregation method to use. Can be either "mean" or "median".
 
     Returns:
         A dataframe with the aggregated embeddings for each experiment.
@@ -116,20 +118,26 @@ def get_aggregated_embedding(embedding, reduce_dim=False, agg="mean"):
     return embedding
 
 
-def select_time_bin(embedding, soft_counts, breaks, bin_size, bin_index):
+def select_time_bin(
+    embedding: deepof.data.table_dict,
+    soft_counts: deepof.data.table_dict,
+    breaks: deepof.data.table_dict,
+    bin_size: int,
+    bin_index: int,
+):
     """
 
     Selects a time bin and filters all relevant objects (embeddings, soft_counts and breaks).
 
     Args:
-        embedding: A dictionary of embeddings, where the keys are the names of the
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        soft_counts: A dictionary of soft counts, where the keys are the names of the
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        bin_size: The size of the time bin to select.
-        bin_index: The index of the time bin to select.
+        bin_size (int): The size of the time bin to select.
+        bin_index (int): The index of the time bin to select.
 
     Returns:
         A tuple of the filtered embeddings, soft counts, and breaks.
@@ -154,17 +162,17 @@ def select_time_bin(embedding, soft_counts, breaks, bin_size, bin_index):
 
 
 def condition_distance_binning(
-    embedding,
-    soft_counts,
-    breaks,
-    exp_conditions,
-    start_bin,
-    end_bin,
-    step_bin,
-    scan_mode="growing-window",
-    agg="mean",
-    metric="auc-linear",
-    n_jobs=cpu_count(),
+    embedding: deepof.data.table_dict,
+    soft_counts: deepof.data.table_dict,
+    breaks: deepof.data.table_dict,
+    exp_conditions: dict,
+    start_bin: int,
+    end_bin: int,
+    step_bin: int,
+    scan_mode: str = "growing-window",
+    agg: str = "mean",
+    metric: str = "auc-linear",
+    n_jobs: int = cpu_count(),
 ):
     """
 
@@ -172,26 +180,26 @@ def condition_distance_binning(
     aggregation method.
 
     Args:
-        embedding: A dictionary of embeddings, where the keys are the names of the
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        soft_counts: A dictionary of soft counts, where the keys are the names of the
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        exp_conditions: A dictionary of experimental conditions, where the keys are the
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
         experimental conditions.
-        start_bin: The index of the first bin to compute the distance for.
-        end_bin: The index of the last bin to compute the distance for.
-        step_bin: The step size of the bins to compute the distance for.
-        scan_mode: The mode to use for computing the distance. Can be either "growing-window"
+        start_bin (int): The index of the first bin to compute the distance for.
+        end_bin (int): The index of the last bin to compute the distance for.
+        step_bin (int): The step size of the bins to compute the distance for.
+        scan_mode (str): The mode to use for computing the distance. Can be either "growing-window"
         (used to select optimal binning) or "per-bin" (used to evaluate how discriminability
         evolves in subsequent bins of a specified size).
-        agg: The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
-        metric: The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
+        agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
+        metric (str): The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
         is based on performance of a linear classifier when separating aggregated embeddings), or
         "wasserstein" (which computes distances based on optimal transport).
-        n_jobs: The number of jobs to use for parallel processing.
+        n_jobs (int): The number of jobs to use for parallel processing.
 
     Returns:
         An array with distances between conditions across the resulting time bins
@@ -233,7 +241,12 @@ def condition_distance_binning(
 
 
 def separation_between_conditions(
-    cur_embedding, cur_soft_counts, cur_breaks, exp_conditions, agg, metric,
+    cur_embedding: deepof.data.table_dict,
+    cur_soft_counts: deepof.data.table_dict,
+    cur_breaks: deepof.data.table_dict,
+    exp_conditions: dict,
+    agg: str,
+    metric: str,
 ):
     """
 
@@ -241,17 +254,17 @@ def separation_between_conditions(
     aggregation method.
 
     Args:
-        cur_embedding: A dictionary of embeddings, where the keys are the names of the
+        cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        cur_soft_counts: A dictionary of soft counts, where the keys are the names of the
+        cur_soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        cur_breaks: A dictionary of breaks, where the keys are the names of the experimental
+        cur_breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        exp_conditions: A dictionary of experimental conditions, where the keys are the
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
         experimental conditions.
-        agg: The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
-        metric: The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
+        agg (str): The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
+        metric (str): The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
         is based on performance of a linear classifier when separating aggregated embeddings), or
         "wasserstein" (which computes distances based on optimal transport).
 
@@ -307,31 +320,31 @@ def separation_between_conditions(
 
 
 def cluster_enrichment_across_conditions(
-    embedding,
-    soft_counts,
-    breaks,
-    exp_conditions,
-    bin_size=None,
-    bin_index=None,
-    normalize=False,
+    embedding: deepof.data.table_dict,
+    soft_counts: deepof.data.table_dict,
+    breaks: deepof.data.table_dict,
+    exp_conditions: dict,
+    bin_size: int = None,
+    bin_index: int = None,
+    normalize: bool = False,
 ):
     """
 
     Computes the population of each cluster across conditions.
 
     Args:
-        embedding: A dictionary of embeddings, where the keys are the names of the
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        soft_counts: A dictionary of soft counts, where the keys are the names of the
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        exp_conditions: A dictionary of experimental conditions, where the keys are the
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
         experimental conditions.
-        bin_size: The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index: The index of the bin to use. If None, the embeddings are not binned.
-        normalize: Whether to normalize the population of each cluster across conditions.
+        bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
+        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
         A long format dataframe with the population of each cluster across conditions.
@@ -357,14 +370,14 @@ def cluster_enrichment_across_conditions(
     )
 
 
-def get_transitions(state_sequence, n_states):
+def get_transitions(state_sequence: list, n_states: int):
     """
 
     Computes the transitions between states in a state sequence.
 
     Args:
-        state_sequence: A list of states.
-        n_states: The number of states.
+        state_sequence (list): A list of states.
+        n_states (int): The number of states.
 
     Returns:
         The resulting transition matrix.
@@ -379,32 +392,32 @@ def get_transitions(state_sequence, n_states):
 
 
 def compute_transition_matrix_per_condition(
-    embedding,
-    soft_counts,
-    breaks,
-    exp_conditions,
-    bin_size=None,
-    bin_index=None,
-    aggregate=True,
-    normalize=True,
+    embedding: deepof.data.table_dict,
+    soft_counts: deepof.data.table_dict,
+    breaks: deepof.data.table_dict,
+    exp_conditions: dict,
+    bin_size: int = None,
+    bin_index: int = None,
+    aggregate: str = True,
+    normalize: str = True,
 ):
     """
 
     Computes the transition matrices specific to each condition.
 
     Args:
-        embedding: A dictionary of embeddings, where the keys are the names of the
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
-        soft_counts: A dictionary of soft counts, where the keys are the names of the
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
-        exp_conditions: A dictionary of experimental conditions, where the keys are the
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
-        bin_size: The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index: The index of the bin to use. If None, the embeddings are not binned.
-        aggregate: Whether to aggregate the embeddings across time.
-        normalize: Whether to normalize the population of each cluster across conditions.
+        bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
+        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        aggregate (str): Whether to aggregate the embeddings across time.
+        normalize (str): Whether to normalize the population of each cluster across conditions.
 
     Returns:
         A dictionary of transition matrices, where the keys are the names of the experimental
@@ -447,17 +460,19 @@ def compute_transition_matrix_per_condition(
     return transitions
 
 
-def compute_steady_state(transition_matrices, return_entropy=False, n_iters=100000):
+def compute_steady_state(
+    transition_matrices: dict, return_entropy: bool = False, n_iters: int = 100000
+):
     """
 
     Computes the steady state of each transition matrix provided in a dictionary.
 
     Args:
-        transition_matrices: A dictionary of transition matrices, where the keys are
+        transition_matrices (dict): A dictionary of transition matrices, where the keys are
         the names of the experimental conditions, and the values are the transition matrices for each condition.
-        return_entropy: Whether to return the entropy of the steady state. If False, the steady states themselves are
+        return_entropy (bool): Whether to return the entropy of the steady state. If False, the steady states themselves are
         returned.
-        n_iters: The number of iterations to use for the Markov chain.
+        n_iters (int): The number of iterations to use for the Markov chain.
 
     Returns:
         A dictionary of steady states, where the keys are the names of the experimental conditions, and the values are
@@ -487,51 +502,12 @@ def compute_steady_state(transition_matrices, return_entropy=False, n_iters=1000
     return steady_states
 
 
-def extract_kinematic_features(chunked_dataset, hard_counts, body_part_names):
-    """
-
-    Extracts kinematic features from a chunked dataset using tsfresh.
-
-    Args:
-        chunked_dataset: Preprocessed training set (of shape chunks x time x features), where each entry corresponds to
-        a time chunk of data.
-        hard_counts: Array containing a cluster lable for each time chunk in chunked_dataset.
-        body_part_names: A list of the names of the body parts.
-
-    Returns:
-        A dataframe of kinematic features, of shape chunks by features.
-
-
-    """
-
-    assert chunked_dataset.shape[0] == len(hard_counts)
-
-    # Add index and concatenate
-    chunked_processed = []
-    for i, chunk in enumerate(chunked_dataset):
-        cur_dataset = chunk[np.all(chunk != 0, axis=1)]
-        cur_dataset = np.c_[np.ones(cur_dataset.shape[0]) * i, cur_dataset]
-
-        chunked_processed.append(cur_dataset)
-
-    chunked_processed = pd.DataFrame(np.concatenate(chunked_processed, axis=0))
-    chunked_processed.columns = ["id"] + body_part_names
-
-    # Extract time series features with ts-learn and tsfresh
-    extracted_features = tsfresh.extract_relevant_features(
-        chunked_processed, y=hard_counts, column_id="id", n_jobs=cpu_count(),
-    )
-
-    return extracted_features
-
-
 def align_deepof_kinematics_with_unsupervised_labels(
-    deepof_project,
-    breaks,
-    kin_derivative=1,
-    include_distances=False,
-    include_angles=False,
-    animal_id=None,
+    deepof_project: deepof.data.project,
+    kin_derivative: int = 1,
+    include_distances: bool = False,
+    include_angles: bool = False,
+    animal_id: str = None,
 ):
     """
 
@@ -540,13 +516,11 @@ def align_deepof_kinematics_with_unsupervised_labels(
     obtained from the unsupervised pipeline.
 
     Args:
-        deepof_project: A deepof.Project object.
-        breaks: A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are
-        the breaks for each condition.
-        kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
-        include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
-        include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
-        animal_id: The animal ID to use, in case of multi-animal projects.
+        deepof_project (Project): A deepof.Project object.
+        kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
+        include_distances (bool): Whether to include distances in the alignment. kin_derivative is taken into account.
+        include_angles (bool): Whether to include angles in the alignment. kin_derivative is taken into account.
+        animal_id (str): The animal ID to use, in case of multi-animal projects.
 
     Returns:
         A dictionary of aligned kinematics, where the keys are the names of the experimental conditions, and the
@@ -626,89 +600,128 @@ def align_deepof_kinematics_with_unsupervised_labels(
             )
 
     # Align with breaks per video, by taking averages on the corresponding windows
-    for key, val in kinematic_features.items():
-        split_values = np.split(val.values, np.cumsum(breaks[key]))
-        split_values = np.stack(
-            [np.mean(split, axis=0) for split in split_values]
-        )  # CHANGE AGG HERE (ANNOTATE)
-
-        kinematic_features[key] = pd.DataFrame(split_values, columns=val.columns).iloc[
-            :-1, :
-        ]
-
-    # Concatenate all chunks and return a single dataframe
-    kinematic_features = pd.concat(
-        list(kinematic_features.values()), axis=0
-    ).reset_index(drop=True)
-
-    return kinematic_features
+    return deepof.data.TableDict(kinematic_features, typ="annotations")
 
 
-def align_deepof_supervised_and_unsupervised_labels(
-    supervised_annotations, breaks, animal_id=None, aggregate=np.median,
+def chunk_summary_statistics(
+    chunked_dataset: np.ndarray, hard_counts: np.ndarray, body_part_names: list
 ):
-    supervised_features = defaultdict(pd.DataFrame)
+    """
 
-    # Align with breaks per video, by taking averages on the corresponding windows
-    for key, val in supervised_annotations.items():
-        split_values = np.split(val.values, np.cumsum(breaks[key]))
-        split_values = np.stack([aggregate(split, axis=0) for split in split_values])
+    Extracts summary statistics from a chunked dataset using tsfresh.
 
-        supervised_features[key] = pd.DataFrame(split_values, columns=val.columns).iloc[
-            :-1, :
-        ]
+    Args:
+        chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features), where each entry corresponds to
+        a time chunk of data.
+        hard_counts (np.ndarray): Array containing a cluster lable for each time chunk in chunked_dataset.
+        body_part_names (list): A list of the names of the body parts.
 
-    # Concatenate all chunks and return a single dataframe
-    supervised_features = pd.concat(
-        list(supervised_features.values()), axis=0
-    ).reset_index(drop=True)
+    Returns:
+        A dataframe of kinematic features, of shape chunks by features.
 
-    if animal_id is not None:
-        supervised_features = supervised_features.filter(
-            regex="{}(.*)".format(animal_id), axis=1
-        )
 
-    return supervised_features
+    """
+
+    assert chunked_dataset.shape[0] == len(hard_counts)
+
+    # Add index and concatenate
+    chunked_processed = []
+    for i, chunk in enumerate(chunked_dataset):
+        cur_dataset = chunk[~np.all(chunk == 0, axis=1)]
+        cur_dataset = np.c_[np.ones(cur_dataset.shape[0]) * i, cur_dataset]
+
+        chunked_processed.append(cur_dataset)
+
+    chunked_processed = pd.DataFrame(np.concatenate(chunked_processed, axis=0))
+    chunked_processed.columns = ["id"] + body_part_names
+
+    # Extract time series features with ts-learn and tsfresh
+    extracted_features = tsfresh.extract_relevant_features(
+        chunked_processed, hard_counts, column_id="id", n_jobs=cpu_count(),
+    )
+
+    return extracted_features
 
 
 def annotate_time_chunks(
-    deepof_project,
-    soft_counts,
-    breaks,
-    supervised_annotations,
-    animal_id=None,
-    kin_derivative=1,
-    include_distances=False,
-    include_angles=False,
+    deepof_project: deepof.data.project,
+    soft_counts: deepof.data.table_dict,
+    breaks: deepof.data.table_dict,
+    supervised_annotations: deepof.data.table_dict = None,
+    animal_id: str = None,
+    kin_derivative: int = 1,
+    include_distances: bool = False,
+    include_angles: bool = False,
+    aggregate: str = "tsfresh",
 ):
+    """
+
+    Annotate time chunks produced after change-point detection using the unsupervised pipeline, using a set
+    of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
+
+    Args:
+        deepof_project: deepof.data.Project object.
+        soft_counts: matrix with soft cluster assignments produced by the unsupervised pipeline.
+        breaks: the breaks for each condition.
+        supervised_annotations: set of supervised annotations produced by the supervised pipeline withing deepof.
+        animal_id: The animal ID to use, in case of multi-animal projects.
+        kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
+        include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
+        include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
+        aggregate: aggregation mode. Can be either "mean" (computationally cheapest), just use the average per feature,
+        or "tsfresh" which runs a thorough feature extraction and selection pipeline on each time series.
+
+    Returns:
+
+    """
+
     # Convert soft_counts to hard labels
     hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
     hard_counts = pd.Series(
         np.concatenate([value for value in hard_counts.values()], axis=0)
     )
 
-    comprehensive_features = []
-
     # Extract (annotated) kinematic features
-    comprehensive_features.append(
-        align_deepof_kinematics_with_unsupervised_labels(
-            deepof_project,
-            breaks,
-            kin_derivative=kin_derivative,
-            include_distances=include_distances,
-            include_angles=include_angles,
-            animal_id=animal_id,
-        )
+    comprehensive_features = align_deepof_kinematics_with_unsupervised_labels(
+        deepof_project,
+        kin_derivative=kin_derivative,
+        include_distances=include_distances,
+        include_angles=include_angles,
+        animal_id=animal_id,
     )
 
-    # Extract supervised features
-    comprehensive_features.append(
-        align_deepof_supervised_and_unsupervised_labels(
-            supervised_annotations, breaks, animal_id=animal_id
-        )
-    )
+    # Merge supervised labels if provided
+    if supervised_annotations is not None:
+        comprehensive_features = comprehensive_features.merge(supervised_annotations)
 
-    return pd.concat(comprehensive_features, axis=1), hard_counts
+    feature_names = list(list(comprehensive_features.values())[0].columns)
+
+    # Align with breaks per video, by taking averages on the corresponding windows, and concatenate videos
+    comprehensive_features = comprehensive_features.preprocess(
+        scale=False,
+        test_videos=0,
+        shuffle=False,
+        filter_low_variance=False,
+        interpolate_normalized=False,
+        precomputed_breaks=breaks,
+    )[0]
+
+    # Aggregate summary statistics per chunk, by either taking the average or running ts-fresh
+    if aggregate == "mean":
+        comprehensive_features[comprehensive_features.sum(axis=2) == 0] = np.nan
+        comprehensive_features = np.nanmean(comprehensive_features, axis=1)
+        comprehensive_features = pd.DataFrame(
+            comprehensive_features, columns=feature_names
+        )
+
+    elif aggregate == "tsfresh":
+
+        # Extract all relevant features for each cluster
+        comprehensive_features = chunk_summary_statistics(
+            comprehensive_features, hard_counts, feature_names,
+        )
+
+    return comprehensive_features, hard_counts
 
 
 def chunk_cv_splitter(chunk_stats, breaks, n_folds=10):

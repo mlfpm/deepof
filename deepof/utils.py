@@ -509,7 +509,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
         breakpoints (list): list of breakpoints obtained with ruptures
 
     Returns:
-        split_a (np.ndarray): N (instances) * l (maximum break length) * m (features) shape
+        split_a (np.ndarray): padded array of shape N (instances) * l (maximum break length) * m (features)
 
     """
     rpt_lengths = list(np.array(breakpoints)[1:] - np.array(breakpoints)[:-1])
