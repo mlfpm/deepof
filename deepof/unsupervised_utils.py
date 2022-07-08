@@ -11,11 +11,13 @@ Utility functions for both training autoencoder models in deepof.models and tuni
 import json
 import os
 from datetime import date, datetime
+from functools import partial
 from typing import Tuple, Union, Any, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 import tensorflow.keras.backend as K
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from scipy.spatial.distance import cdist
@@ -23,6 +25,8 @@ from tensorboard.plugins.hparams import api as hp
 
 import deepof.models
 import deepof.hypermodels
+
+tfpl = tfp.layers
 
 # Ignore warning with no downstream effect
 tf.get_logger().setLevel("ERROR")
@@ -79,6 +83,72 @@ def compute_gram_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no co
     s = tf.linalg.svd(gram_matrix, compute_uv=False)
     s = tf.sqrt(tf.maximum(s, 1e-9))
     return weight * tf.reduce_sum(s)
+
+
+@tf.function
+def get_k_nearest_neighbors(tensor, k, index):  # pragma: no cover
+    """
+
+    Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index
+
+    Args:
+        tensor (tf.Tensor): tensor to compute the k nearest neighbors for
+        k (int): number of nearest neighbors to retrieve
+        index (int): index of the vector to compute the k nearest neighbors for
+
+    Returns:
+        tf.Tensor: indices of the k nearest neighbors
+
+    """
+    query = tf.gather(tensor, index, batch_dims=0)
+    distances = tf.norm(tensor - query, axis=1)
+    max_distance = tf.gather(tf.sort(distances), k)
+    neighbourhood_mask = distances < max_distance
+    return tf.squeeze(tf.where(neighbourhood_mask))
+
+
+@tf.function
+def compute_shannon_entropy(tensor):  # pragma: no cover
+    """
+
+    Computes Shannon entropy for a given tensor
+
+    Args:
+        tensor (tf.Tensor): tensor to compute the entropy for
+
+    Returns:
+        tf.Tensor: entropy of the tensor
+
+    """
+
+    tensor = tf.cast(tensor, tf.dtypes.int32)
+    bins = (
+        tf.math.bincount(tensor, dtype=tf.dtypes.float32)
+        / tf.cast(tf.shape(tensor), tf.dtypes.float32)[0]
+    )
+    return -tf.reduce_sum(bins * tf.math.log(bins + 1e-5))
+
+
+@tf.function
+def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
+    """
+
+    Computes the neighbourhood entropy for a given vector in a tensor.
+
+    Args:
+        index (int): index of the vector to compute the neighbourhood entropy for
+        tensor (tf.Tensor): tensor to compute the neighbourhood entropy for
+        clusters (tf.Tensor): tensor containing the cluster labels for each vector in the tensor
+        k (int): number of nearest neighbours to consider
+
+    Returns:
+        tf.Tensor: neighbourhood entropy of the vector with the specified index
+
+    """
+    neighborhood = get_k_nearest_neighbors(tensor, k, index)
+    cluster_z = tf.gather(clusters, neighborhood, batch_dims=0)
+    neigh_entropy = compute_shannon_entropy(cluster_z)
+    return neigh_entropy
 
 
 def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
@@ -216,6 +286,194 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         else:
             self.losses.append(logs["loss"])
         K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
+
+
+class ClusterControl(tf.keras.layers.Layer):
+    """
+
+    Identity layer that evaluates different clustering metrics between the components of the latent Gaussian Mixture
+    using the entropy of the nearest neighbourhood. If self.loss_weight > 0, it also adds a regularization
+    penalty to the loss function which attempts to maximize the number of populated clusters during training.
+
+    """
+
+    def __init__(
+        self,
+        batch_size: int,
+        n_components: int,
+        encoding_dim: int,
+        k: int = 15,
+        loss_weight: float = 1.0,
+        *args,
+        **kwargs,
+    ):
+        """
+
+        Initializes the ClusterControl layer
+
+        Args:
+            batch_size (int): batch size of the model
+            n_components (int): number of components in the latent Gaussian Mixture
+            encoding_dim (int): dimension of the latent Gaussian Mixture
+            k (int): number of nearest components of the latent Gaussian Mixture to consider
+            loss_weight (float): weight of the regularization penalty applied to the local entropy of each
+            training instance
+            *args: additional positional arguments
+            **kwargs: additional keyword arguments
+
+        """
+        super(ClusterControl, self).__init__(*args, **kwargs)
+        self.batch_size = batch_size
+        self.n_components = n_components
+        self.enc = encoding_dim
+        self.k = k
+        self.loss_weight = loss_weight
+
+    def get_config(self):  # pragma: no cover
+        """
+
+        Updates Constraint metadata
+
+        """
+
+        config = super().get_config().copy()
+        config.update({"batch_size": self.batch_size})
+        config.update({"n_components": self.n_components})
+        config.update({"enc": self.enc})
+        config.update({"k": self.k})
+        config.update({"loss_weight": self.loss_weight})
+        return config
+
+    def call(self, inputs, **kwargs):  # pragma: no cover
+        """
+
+        Updates Layer's call method
+
+        """
+
+        encodings, categorical = inputs[0], inputs[1]
+
+        hard_groups = tf.math.argmax(categorical, axis=1)
+        max_groups = tf.reduce_max(categorical, axis=1)
+
+        # Reduce k if it's too big when compared to the number of instances
+        if self.k >= self.batch_size // 4:
+            self.k = self.batch_size // 4
+
+        get_local_neighbourhood_entropy = partial(
+            get_neighbourhood_entropy, tensor=encodings, clusters=hard_groups, k=self.k,
+        )
+
+        neighbourhood_entropy = tf.map_fn(
+            get_local_neighbourhood_entropy,
+            tf.range(tf.shape(encodings)[0]),
+            dtype=tf.dtypes.float32,
+        )
+
+        n_components = tf.cast(
+            tf.shape(
+                tf.unique(tf.reshape(tf.cast(hard_groups, tf.dtypes.float32), [-1],),)[
+                    0
+                ],
+            )[0],
+            tf.dtypes.float32,
+        )
+
+        self.add_metric(
+            n_components, name="number_of_populated_clusters",
+        )
+
+        self.add_metric(
+            max_groups, aggregation="mean", name="confidence_in_selected_cluster",
+        )
+
+        self.add_metric(
+            neighbourhood_entropy, aggregation="mean", name="local_cluster_entropy",
+        )
+
+        if self.loss_weight:
+            self.add_loss(-self.loss_weight * tf.reduce_sum(n_components))
+
+        return encodings
+
+
+class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
+    """
+
+    Identity transform layer that adds KL Divergence
+    to the final model loss.
+
+    """
+
+    def __init__(self, iters, warm_up_iters, annealing_mode, *args, **kwargs):
+        """
+
+        Initializes the KL Divergence layer
+
+        Args:
+            iters (int): number of training iterations taken so far
+            warm_up_iters (int): maximum number of training iterations for warmup
+            annealing_mode (str): mode of annealing, either 'linear' or 'sigmoid'
+            *args: additional positional arguments
+            **kwargs: additional keyword arguments
+
+        """
+
+        super(KLDivergenceLayer, self).__init__(*args, **kwargs)
+        self._iters = iters
+        self._warm_up_iters = warm_up_iters
+        self._annealing_mode = annealing_mode
+        self._kl_weight = tf.Variable(
+            1.0, trainable=False, dtype=tf.float32, name="kl_weight"
+        )
+
+    def get_config(self):  # pragma: no cover
+        """
+
+        Updates Constraint metadata
+
+        """
+
+        config = super().get_config().copy()
+        config.update({"_iters": self._iters})
+        config.update({"_warm_up_iters": self._warm_up_iters})
+        config.update({"_annealing_mode": self._annealing_mode})
+        config.update({"_kl_weight": self._kl_weight})
+        return config
+
+    def call(self, distribution_a):  # pragma: no cover
+        """
+
+        Updates Layer's call method
+
+        """
+
+        # Define and update KL weight for warmup
+        if self._warm_up_iters > 0:
+            if self._annealing_mode in ["linear", "sigmoid"]:
+                self._kl_weight = tf.cast(
+                    K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
+                )
+                if self._annealing_mode == "sigmoid":
+                    self._kl_weight = tf.math.sigmoid(
+                        (2 * self._kl_weight - 1)
+                        / (self._kl_weight - self._kl_weight ** 2)
+                    )
+            else:
+                raise NotImplementedError(
+                    "annealing_mode must be one of 'linear' and 'sigmoid'"
+                )
+        else:
+            self._kl_weight = tf.cast(1.0, tf.float32)
+
+        kl_batch = self._kl_weight * self._regularizer(distribution_a)
+
+        self.add_loss(kl_batch, inputs=[distribution_a])
+        self.add_metric(
+            kl_batch, aggregation="mean", name="kl_divergence",
+        )
+
+        return distribution_a
 
 
 def find_learning_rate(
@@ -671,7 +929,7 @@ def tune_search(
             max_epochs=n_epochs,
             hyperband_iterations=hypertun_trials,
             factor=3,
-            **hpt_params
+            **hpt_params,
         )
     else:
         tuner = BayesianOptimization(
@@ -679,7 +937,7 @@ def tune_search(
                 outpath, "BayOpt_VQVAE_{}".format(str(date.today()))
             ),
             max_trials=hypertun_trials,
-            **hpt_params
+            **hpt_params,
         )
 
     print(tuner.search_space_summary())
