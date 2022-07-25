@@ -220,10 +220,7 @@ assert input_type.replace("+speed", "") in [
 treatment_dict = deepof.unsupervised_utils.load_treatments(train_path)
 
 # Logs hyperparameters  if specified on the --logparam CLI argument
-logparam = {
-    "encoding": encoding_size,
-    "k": n_components,
-}
+logparam = {"encoding": encoding_size, "k": n_components}
 
 # noinspection PyTypeChecker
 project_coords = deepof.data.Project(
@@ -250,9 +247,9 @@ coords = project_coords.get_coords(
     propagate_annotations=False,
     selected_id=animal_to_preprocess,
 )
-speeds = project_coords.get_coords(speed=1, selected_id=animal_to_preprocess,)
-distances = project_coords.get_distances(selected_id=animal_to_preprocess,)
-angles = project_coords.get_angles(selected_id=animal_to_preprocess,)
+speeds = project_coords.get_coords(speed=1, selected_id=animal_to_preprocess)
+distances = project_coords.get_distances(selected_id=animal_to_preprocess)
+angles = project_coords.get_angles(selected_id=animal_to_preprocess)
 coords_distances = coords.merge(distances)
 coords_angles = coords.merge(angles)
 dists_angles = distances.merge(angles)
@@ -363,7 +360,7 @@ if not tune:
         os.path.join(
             output_path,
             "deepof_unsupervised_VQVAE_encodings_input={}_k={}_latdim={}_gram_loss={}_run={}.pkl".format(
-                input_type, n_components, encoding_size, gram_loss, run,
+                input_type, n_components, encoding_size, gram_loss, run
             ),
         ),
         "wb",

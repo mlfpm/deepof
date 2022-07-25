@@ -160,7 +160,7 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
         result.append(bp2polar(cartesian_df[df]))
     result = pd.concat(result, axis=1)
     idx = pd.MultiIndex.from_product(
-        [list(cartesian_df.columns.levels[0]), ["rho", "phi"]],
+        [list(cartesian_df.columns.levels[0]), ["rho", "phi"]]
     )
     result.columns = idx
     result.index = cartesian_df.index
@@ -329,7 +329,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 
     for frame in range(data.shape[0]):
         aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2], order="C"), angles[frame],
+            data[frame].reshape([-1, 2], order="C"), angles[frame]
         ).reshape(data.shape[1:], order="C")
 
     if mode == "all" or mode == "none":
@@ -524,7 +524,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
     split_a = [
         np.pad(
-            i, ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)), constant_values=0.0,
+            i, ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)), constant_values=0.0
         )
         for i in split_a
     ]
@@ -901,12 +901,7 @@ def filter_columns(columns: list, selected_id: str) -> list:
         if type(column) == str and column.startswith(selected_id):
             columns_to_keep.append(column)
         # Raw coordinate columns
-        if column[0].startswith(selected_id) and column[1] in [
-            "x",
-            "y",
-            "rho",
-            "phi",
-        ]:
+        if column[0].startswith(selected_id) and column[1] in ["x", "y", "rho", "phi"]:
             columns_to_keep.append(column)
         # Raw distance and angle columns
         elif len(column) in [2, 3] and all([i.startswith(selected_id) for i in column]):
@@ -1031,9 +1026,7 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
-def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str,
-):  # pragma: no cover
+def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: no cover
     """
 
     Opens a window and waits for the user to click on all corners of the polygonal arena.

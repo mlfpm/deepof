@@ -41,9 +41,7 @@ def test_get_time_on_cluster():
     assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1]
 
 
-@given(
-    reduce_dim=st.booleans(), agg=st.sampled_from(["mean", "median"]),
-)
+@given(reduce_dim=st.booleans(), agg=st.sampled_from(["mean", "median"]))
 def test_get_aggregated_embedding(reduce_dim, agg):
 
     # Define a test embedding dixtionary
@@ -126,9 +124,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     assert np.argmax(distance_binning) >= 0
 
 
-@given(
-    bin_size=st.integers(min_value=11, max_value=100), normalize=st.booleans(),
-)
+@given(bin_size=st.integers(min_value=11, max_value=100), normalize=st.booleans())
 def test_cluster_enrichment_across_conditions(bin_size, normalize):
 
     # Define a test embedding dixtionary
@@ -163,7 +159,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize):
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(n_states=st.integers(min_value=2, max_value=25),)
+@given(n_states=st.integers(min_value=2, max_value=25))
 def test_get_transitions(n_states):
 
     sequence = np.random.choice(range(n_states), 1000, replace=True)

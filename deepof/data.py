@@ -352,7 +352,7 @@ class Project:
 
             tab_dict = {
                 deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab), index_col=0,
+                    deepof.utils.os.path.join(self.table_path, tab), index_col=0
                 )
                 for tab in self.tables
             }
@@ -431,7 +431,7 @@ class Project:
                 cur_cols = tab.columns
                 smooth = pd.DataFrame(
                     deepof.utils.smooth_mult_trajectory(
-                        np.array(tab), alpha=self.smooth_alpha, w_length=15,
+                        np.array(tab), alpha=self.smooth_alpha, w_length=15
                     )
                 ).reset_index(drop=True)
                 smooth.columns = cur_cols
@@ -522,7 +522,7 @@ class Project:
         scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0],)
+            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
             for i, (key, tab) in enumerate(tab_dict.items())
         }
 
@@ -622,7 +622,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables, verbose,
+            tables, verbose
         )
 
         if self.distances:
@@ -838,7 +838,7 @@ class Coordinates:
 
                 # noinspection PyUnboundLocalVariable
                 tabs[key] = value.loc[
-                    :, [tab for tab in value.columns if center not in tab[0]],
+                    :, [tab for tab in value.columns if center not in tab[0]]
                 ]
 
         if align:
@@ -959,7 +959,7 @@ class Coordinates:
             if selected_id is not None:
                 for key, val in tabs.items():
                     tabs[key] = val.loc[
-                        :, deepof.utils.filter_columns(val.columns, selected_id),
+                        :, deepof.utils.filter_columns(val.columns, selected_id)
                     ]
 
             if propagate_labels:
@@ -1022,7 +1022,7 @@ class Coordinates:
             if selected_id is not None:
                 for key, val in tabs.items():
                     tabs[key] = val.loc[
-                        :, deepof.utils.filter_columns(val.columns, selected_id),
+                        :, deepof.utils.filter_columns(val.columns, selected_id)
                     ]
 
             if propagate_labels:
@@ -1389,7 +1389,7 @@ class TableDict(dict):
 
         X = {k: np.mean(v, axis=0) for k, v in self.items()}
         X = np.concatenate(
-            [np.array(exp)[:, np.newaxis] for exp in X.values()], axis=1,
+            [np.array(exp)[:, np.newaxis] for exp in X.values()], axis=1
         ).T
 
         return X, labels
@@ -1517,7 +1517,7 @@ class TableDict(dict):
         for key, val in tabs.items():
             columns_to_keep = deepof.utils.filter_columns(val.columns, selected_id)
             tabs[key] = val.loc[
-                :, [bpa for bpa in val.columns if bpa in columns_to_keep],
+                :, [bpa for bpa in val.columns if bpa in columns_to_keep]
             ]
 
         return TableDict(
@@ -1579,7 +1579,7 @@ class TableDict(dict):
         return merged_tables
 
     def get_training_set(
-        self, current_table_dict: table_dict, test_videos: int = 0,
+        self, current_table_dict: table_dict, test_videos: int = 0
     ) -> tuple:
         """
 
@@ -1781,7 +1781,7 @@ class TableDict(dict):
                 )
 
                 table_temp[key] = pd.DataFrame(
-                    current_tab, columns=tab.columns, index=tab.index,
+                    current_tab, columns=tab.columns, index=tab.index
                 )
 
         if scale == "standard" and interpolate_normalized:
@@ -1825,7 +1825,7 @@ class TableDict(dict):
 
         # Split videos and generate training and test sets
         X_train, y_train, X_test, y_test, test_index = self.get_training_set(
-            table_temp, test_videos,
+            table_temp, test_videos
         )
 
         if verbose:

@@ -179,7 +179,7 @@ def test_compute_dist(pair_array, arena_abs, arena_rel):
         elements=st.floats(
             min_value=-1000, max_value=1000, allow_nan=False, allow_infinity=False
         ),
-    ),
+    )
 )
 def test_bpart_distance(cordarray):
     cord_df = pd.DataFrame(cordarray)
@@ -207,7 +207,7 @@ def test_bpart_distance(cordarray):
         elements=st.floats(
             min_value=1, max_value=10, allow_nan=False, allow_infinity=False
         ).map(lambda x: x + np.random.uniform(0, 10)),
-    ),
+    )
 )
 def test_angle(abc):
     a, b, c = abc
@@ -245,8 +245,7 @@ def test_angle_trio(array):
     p=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=2, max_value=5),
-            st.integers(min_value=2, max_value=2),
+            st.integers(min_value=2, max_value=5), st.integers(min_value=2, max_value=2)
         ),
         elements=st.floats(
             min_value=1, max_value=10, allow_nan=False, allow_infinity=False
@@ -302,7 +301,7 @@ def test_smooth_boolean_array(a):
 @settings(deadline=None)
 @given(
     window=st.data(),
-    automatic_changepoints=st.one_of(st.just(False), st.just("linear"),),
+    automatic_changepoints=st.one_of(st.just(False), st.just("linear")),
 )
 def test_rolling_window(window, automatic_changepoints):
     window_step = window.draw(st.integers(min_value=1, max_value=5))
@@ -327,7 +326,7 @@ def test_rolling_window(window, automatic_changepoints):
     alpha=st.data(),
     series=arrays(
         dtype=float,
-        shape=st.tuples(st.integers(min_value=300, max_value=1000),),
+        shape=st.tuples(st.integers(min_value=300, max_value=1000)),
         elements=st.floats(
             min_value=1.0, max_value=1.0, allow_nan=False, allow_infinity=False
         ),
@@ -418,13 +417,11 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
     )
     assert len(arena) == 3
     assert len(arena[0]) == 3
-    assert isinstance(arena[1], int,)
-    assert isinstance(arena[2], int,)
+    assert isinstance(arena[1], int)
+    assert isinstance(arena[2], int)
 
 
-@settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     dframe=data_frames(
         index=range_indexes(min_size=50),
@@ -446,7 +443,7 @@ def test_rolling_speed(dframe, sampler):
     order2 = sampler.draw(st.integers(min_value=order1, max_value=3))
 
     idx = pd.MultiIndex.from_product(
-        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"],
+        [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"]
     )
     dframe.columns = idx
 
@@ -458,9 +455,7 @@ def test_rolling_speed(dframe, sampler):
     assert np.all(np.std(speeds1) >= np.std(speeds2))
 
 
-@settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     x=arrays(
         dtype=float,
@@ -468,7 +463,7 @@ def test_rolling_speed(dframe, sampler):
             st.integers(min_value=10, max_value=1000),
             st.integers(min_value=10, max_value=1000),
         ),
-        elements=st.floats(min_value=1.0, max_value=1.0,),
+        elements=st.floats(min_value=1.0, max_value=1.0),
     ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
     n_components=st.integers(min_value=1, max_value=10),
     cv_type=st.integers(min_value=0, max_value=3),
@@ -478,9 +473,7 @@ def test_gmm_compute(x, n_components, cv_type):
     assert len(deepof.utils.gmm_compute(x, n_components, cv_type)) == 2
 
 
-@settings(
-    deadline=None, suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     x=arrays(
         dtype=float,
@@ -488,7 +481,7 @@ def test_gmm_compute(x, n_components, cv_type):
             st.integers(min_value=10, max_value=1000),
             st.integers(min_value=10, max_value=1000),
         ),
-        elements=st.floats(min_value=1.0, max_value=1.0,),
+        elements=st.floats(min_value=1.0, max_value=1.0),
     ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),
     sampler=st.data(),
 )

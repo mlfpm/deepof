@@ -26,6 +26,8 @@ from tensorboard.plugins.hparams import api as hp
 import deepof.models
 import deepof.hypermodels
 
+tfb = tfp.bijectors
+tfd = tfp.distributions
 tfpl = tfp.layers
 
 # Ignore warning with no downstream effect
@@ -209,6 +211,204 @@ def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     plt.ylabel("Loss")
 
 
+def get_angles(pos: int, i: int, d_model: int):
+    """
+
+    Auxiliary function for positional encoding computation.
+
+    Args:
+        pos (int): position in the sequence.
+        i (int): number of sequences.
+        d_model (int): dimensionality of the embeddings.
+
+    """
+
+    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
+    return pos * angle_rates
+
+
+def positional_encoding(position: int, d_model: int):
+    """
+
+    Computes positional encodings, as in
+    https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf.
+
+    Args:
+        position (int): position in the sequence.
+        d_model (int): dimensionality of the embeddings.
+
+    """
+
+    angle_rads = get_angles(
+        np.arange(position)[:, np.newaxis], np.arange(d_model)[np.newaxis, :], d_model
+    )
+
+    # apply sin to even indices in the array; 2i
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
+
+    # apply cos to odd indices in the array; 2i+1
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
+
+    pos_encoding = angle_rads[np.newaxis, ...]
+
+    return tf.cast(pos_encoding, dtype=tf.float32)
+
+
+def create_padding_mask(seq: tf.Tensor):
+    """
+
+    Creates a padding mask, with zeros where data is missing, and ones where data is available.
+
+    Args:
+        seq (tf.Tensor): Sequence to compute the mask on
+
+    """
+
+    seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+
+    # add extra dimensions to add the padding to the attention logits.
+    return tf.cast(1 - seq[:, tf.newaxis, tf.newaxis, :], tf.float32)
+
+
+def create_look_ahead_mask(size: int):
+    """
+
+    Creates a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.
+    Useful for transformer decoder, which allows it to go through the data in a sequential manner, without taking
+    the future into account.
+
+    Args:
+        size (int): number of time steps in the sequence
+
+    """
+
+    mask = tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+    return tf.cast(mask, tf.float32)
+
+
+def create_masks(inp: tf.Tensor):
+    """
+
+    Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.
+    This includes encoder and decoder padding masks, and a look-ahead mask
+
+    Args:
+        inp (tf.Tensor): input sequence to create the masks for.
+
+    """
+
+    # Reduces the dimensionality of the mask to remove the feature dimension
+    tar = inp[:, :, 0]
+    inp = inp[:, :, 0]
+
+    # Encoder padding mask
+    enc_padding_mask = create_padding_mask(inp)
+
+    # Used in the 2nd attention block in the decoder.
+    # This padding mask is used to mask the encoder outputs.
+    dec_padding_mask = create_padding_mask(inp)
+
+    # Used in the 1st attention block in the decoder.
+    # It is used to pad and mask future tokens in the input received by
+    # the decoder.
+    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
+    dec_target_padding_mask = create_padding_mask(tar)
+    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+    return enc_padding_mask, combined_mask, dec_padding_mask
+
+
+def find_learning_rate(
+    model, data, epochs=1, batch_size=32, min_rate=10 ** -8, max_rate=10 ** -1
+):
+    """
+
+    Trains the provided model for an epoch with an exponentially increasing learning rate
+
+    Args:
+        model (tf.keras.Model): model to train
+        data (tuple): training data
+        epochs (int): number of epochs to train the model for
+        batch_size (int): batch size to use for training
+        min_rate (float): minimum learning rate to consider
+        max_rate (float): maximum learning rate to consider
+
+    Returns:
+        float: learning rate that resulted in the lowest loss
+
+    """
+
+    init_weights = model.get_weights()
+    iterations = len(data)
+    factor = K.exp(K.log(max_rate / min_rate) / iterations)
+    init_lr = K.get_value(model.optimizer.lr)
+    K.set_value(model.optimizer.lr, min_rate)
+    exp_lr = ExponentialLearningRate(factor)
+    model.fit(data, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
+    K.set_value(model.optimizer.lr, init_lr)
+    model.set_weights(init_weights)
+    return exp_lr.rates, exp_lr.losses
+
+
+def get_callbacks(
+    gram_loss: float = 1.0,
+    input_type: str = False,
+    cp: bool = False,
+    logparam: dict = None,
+    outpath: str = ".",
+    run: int = False,
+) -> List[Union[Any]]:
+    """
+
+    Generates callbacks used for model training.
+
+    Args:
+        gram_loss (float): Weight of the gram loss
+        input_type (str): Input type to use for training
+        cp (bool): Whether to use checkpointing or not
+        logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
+        outpath (str): Path to the output directory
+        run (int): Run number to use for checkpointing
+
+    Returns:
+        List[Union[Any]]: List of callbacks to be used for training
+
+    """
+
+    run_ID = "{}{}{}{}{}{}{}".format(
+        "deepof_unsupervised_VQVAE_encodings",
+        ("_input_type={}".format(input_type if input_type else "coords")),
+        ("_gram_loss={}".format(gram_loss)),
+        ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
+        ("_k={}".format(logparam["n_components"]) if logparam is not None else ""),
+        ("_run={}".format(run) if run else ""),
+        ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
+    )
+
+    log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=log_dir, histogram_freq=1, profile_batch=2
+    )
+
+    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss", factor=0.5, patience=10, cooldown=5, min_lr=1e-8
+    )
+
+    callbacks = [run_ID, tensorboard_callback, reduce_lr_callback]
+
+    if cp:
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(
+            os.path.join(outpath, "checkpoints", run_ID + "/cp-{epoch:04d}.ckpt"),
+            verbose=1,
+            save_best_only=False,
+            save_weights_only=True,
+            save_freq="epoch",
+        )
+        callbacks.append(cp_callback)
+
+    return callbacks
+
+
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
     """
 
@@ -288,6 +488,69 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
 
 
+class ProbabilisticDecoder(tf.keras.layers.Layer):
+    """
+
+    Maps the reconstruction output of a given decoder to a multivariate normal distribution.
+
+    """
+
+    def __init__(self, input_shape, **kwargs):
+        super().__init__(**kwargs)
+        self.time_distributer = tf.keras.layers.Dense(
+            tfpl.IndependentNormal.params_size(input_shape[1:]) // 2
+        )
+        self.probabilistic_decoding = tfpl.DistributionLambda(
+            make_distribution_fn=lambda decoded: tfd.Masked(
+                tfd.Independent(
+                    tfd.Normal(
+                        loc=decoded[0],
+                        scale=tf.ones_like(decoded[0]),
+                        validate_args=False,
+                        allow_nan_stats=False,
+                    ),
+                    reinterpreted_batch_ndims=1,
+                ),
+                validity_mask=decoded[1],
+            ),
+            convert_to_tensor_fn="mean",
+        )
+        self.scaled_probabilistic_decoding = tfpl.DistributionLambda(
+            make_distribution_fn=lambda decoded: tfd.Masked(
+                tfd.TransformedDistribution(
+                    decoded[0],
+                    tfb.Scale(tf.cast(tf.expand_dims(decoded[1], axis=2), tf.float32)),
+                    name="vae_reconstruction",
+                ),
+                validity_mask=decoded[1],
+            ),
+            convert_to_tensor_fn="mean",
+        )
+
+    def call(self, inputs):
+        """
+
+        Maps the reconstruction output of a given decoder to a multivariate normal distribution.
+
+        Args:
+            inputs (tuple): tuple containing the reconstruction output and the validity mask
+
+        Returns:
+            tf.Tensor: multivariate normal distribution
+
+        """
+
+        hidden, validity_mask = inputs
+
+        hidden = tf.keras.layers.TimeDistributed(self.time_distributer)(hidden)
+        prob_decoded = self.probabilistic_decoding([hidden, validity_mask])
+        scaled_prob_decoded = self.scaled_probabilistic_decoding(
+            [prob_decoded, validity_mask]
+        )
+
+        return scaled_prob_decoded
+
+
 class ClusterControl(tf.keras.layers.Layer):
     """
 
@@ -361,7 +624,7 @@ class ClusterControl(tf.keras.layers.Layer):
             self.k = self.batch_size // 4
 
         get_local_neighbourhood_entropy = partial(
-            get_neighbourhood_entropy, tensor=encodings, clusters=hard_groups, k=self.k,
+            get_neighbourhood_entropy, tensor=encodings, clusters=hard_groups, k=self.k
         )
 
         neighbourhood_entropy = tf.map_fn(
@@ -372,23 +635,19 @@ class ClusterControl(tf.keras.layers.Layer):
 
         n_components = tf.cast(
             tf.shape(
-                tf.unique(tf.reshape(tf.cast(hard_groups, tf.dtypes.float32), [-1],),)[
-                    0
-                ],
+                tf.unique(tf.reshape(tf.cast(hard_groups, tf.dtypes.float32), [-1]))[0]
             )[0],
             tf.dtypes.float32,
         )
 
+        self.add_metric(n_components, name="number_of_populated_clusters")
+
         self.add_metric(
-            n_components, name="number_of_populated_clusters",
+            max_groups, aggregation="mean", name="confidence_in_selected_cluster"
         )
 
         self.add_metric(
-            max_groups, aggregation="mean", name="confidence_in_selected_cluster",
-        )
-
-        self.add_metric(
-            neighbourhood_entropy, aggregation="mean", name="local_cluster_entropy",
+            neighbourhood_entropy, aggregation="mean", name="local_cluster_entropy"
         )
 
         if self.loss_weight:
@@ -469,102 +728,267 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         kl_batch = self._kl_weight * self._regularizer(distribution_a)
 
         self.add_loss(kl_batch, inputs=[distribution_a])
-        self.add_metric(
-            kl_batch, aggregation="mean", name="kl_divergence",
-        )
+        self.add_metric(kl_batch, aggregation="mean", name="kl_divergence")
 
         return distribution_a
 
 
-def find_learning_rate(
-    model, data, epochs=1, batch_size=32, min_rate=10 ** -8, max_rate=10 ** -1
-):
+class TransformerEncoderLayer(tf.keras.layers.Layer):
     """
 
-    Trains the provided model for an epoch with an exponentially increasing learning rate
-
-    Args:
-        model (tf.keras.Model): model to train
-        data (tuple): training data
-        epochs (int): number of epochs to train the model for
-        batch_size (int): batch size to use for training
-        min_rate (float): minimum learning rate to consider
-        max_rate (float): maximum learning rate to consider
-
-    Returns:
-        float: learning rate that resulted in the lowest loss
+    Transformer encoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer
 
     """
 
-    init_weights = model.get_weights()
-    iterations = len(data)
-    factor = K.exp(K.log(max_rate / min_rate) / iterations)
-    init_lr = K.get_value(model.optimizer.lr)
-    K.set_value(model.optimizer.lr, min_rate)
-    exp_lr = ExponentialLearningRate(factor)
-    model.fit(data, epochs=epochs, batch_size=batch_size, callbacks=[exp_lr])
-    K.set_value(model.optimizer.lr, init_lr)
-    model.set_weights(init_weights)
-    return exp_lr.rates, exp_lr.losses
+    def __init__(self, key_dim, num_heads, dff, rate=0.1):
+        """
 
+        Constructor for the transformer encoder layer.
 
-def get_callbacks(
-    gram_loss: float = 1.0,
-    input_type: str = False,
-    cp: bool = False,
-    logparam: dict = None,
-    outpath: str = ".",
-    run: int = False,
-) -> List[Union[Any]]:
-    """
+        Args:
+            key_dim: dimensionality of the time series
+            num_heads: number of heads of the multi-head-attention layers
+            dff: dimensionality of the embeddings
+            rate: dropout rate
+        """
+        super(TransformerEncoderLayer, self).__init__()
 
-    Generates callbacks used for model training.
-
-    Args:
-        gram_loss (float): Weight of the gram loss
-        input_type (str): Input type to use for training
-        cp (bool): Whether to use checkpointing or not
-        logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
-        outpath (str): Path to the output directory
-        run (int): Run number to use for checkpointing
-
-    Returns:
-        List[Union[Any]]: List of callbacks to be used for training
-
-    """
-
-    run_ID = "{}{}{}{}{}{}{}".format(
-        "deepof_unsupervised_VQVAE_encodings",
-        ("_input_type={}".format(input_type if input_type else "coords")),
-        ("_gram_loss={}".format(gram_loss)),
-        ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
-        ("_k={}".format(logparam["n_components"]) if logparam is not None else ""),
-        ("_run={}".format(run) if run else ""),
-        ("_{}".format(datetime.now().strftime("%Y%m%d-%H%M%S")) if not run else ""),
-    )
-
-    log_dir = os.path.abspath(os.path.join(outpath, "fit", run_ID))
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=log_dir, histogram_freq=1, profile_batch=2,
-    )
-
-    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss", factor=0.5, patience=10, cooldown=5, min_lr=1e-8
-    )
-
-    callbacks = [run_ID, tensorboard_callback, reduce_lr_callback]
-
-    if cp:
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(
-            os.path.join(outpath, "checkpoints", run_ID + "/cp-{epoch:04d}.ckpt"),
-            verbose=1,
-            save_best_only=False,
-            save_weights_only=True,
-            save_freq="epoch",
+        self.mha = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=key_dim
         )
-        callbacks.append(cp_callback)
+        self.ffn = tf.keras.Sequential(
+            [
+                tf.keras.layers.Dense(
+                    dff, activation="relu"
+                ),  # (batch_size, seq_len, dff)
+                tf.keras.layers.Dense(key_dim),  # (batch_size, seq_len, d_model)
+            ]
+        )
 
-    return callbacks
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, training, mask, return_scores=False):
+        attn_output, attn_scores = self.mha(
+            key=x, query=x, value=x, attention_mask=mask, return_attention_scores=True
+        )  # (batch_size, input_seq_len, d_model)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(x + attn_output)
+
+        ffn_output = self.ffn(out1)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        out2 = self.layernorm2(out1 + ffn_output)
+
+        if return_scores:
+            return out2, attn_scores
+
+        return out2
+
+
+class TransformerDecoderLayer(tf.keras.layers.Layer):
+    """
+
+    Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer
+
+    """
+
+    def __init__(self, key_dim, num_heads, dff, rate=0.1):
+        """
+
+        Constructor for the transformer decoder layer.
+
+        Args:
+            key_dim: dimensionality of the time series
+            num_heads: number of heads of the multi-head-attention layers
+            dff: dimensionality of the embeddings
+            rate: dropout rate
+        """
+        super(TransformerDecoderLayer, self).__init__()
+
+        self.mha1 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=key_dim
+        )
+        self.mha2 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=key_dim
+        )
+
+        self.ffn = tf.keras.Sequential(
+            [
+                tf.keras.layers.Dense(dff, activation="relu"),
+                tf.keras.layers.Dense(key_dim),
+            ]
+        )
+
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.dropout3 = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+
+        attn1, attn_weights_block1 = self.mha1(
+            key=x,
+            query=x,
+            value=x,
+            attention_mask=look_ahead_mask,
+            return_attention_scores=True,
+        )  # (batch_size, target_seq_len, d_model)
+        attn1 = self.dropout1(attn1, training=training)
+        out1 = self.layernorm1(attn1 + x)
+
+        attn2, attn_weights_block2 = self.mha2(
+            key=enc_output,
+            query=out1,
+            value=enc_output,
+            attention_mask=padding_mask,
+            return_attention_scores=True,
+        )  # (batch_size, target_seq_len, d_model)
+        attn2 = self.dropout2(attn2, training=training)
+        out2 = self.layernorm2(attn2 + out1)
+
+        ffn_output = self.ffn(out2)
+        ffn_output = self.dropout3(ffn_output, training=training)
+        out3 = self.layernorm3(ffn_output + out2)
+
+        return out3, attn_weights_block1, attn_weights_block2
+
+
+# noinspection PyCallingNonCallable
+class TransformerEncoder(tf.keras.layers.Layer):
+    """
+
+    Transformer encoder. Based on https://www.tensorflow.org/text/tutorials/transformer.
+    Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
+    and https://arxiv.org/abs/1711.03905.
+
+    """
+
+    def __init__(
+        self,
+        num_layers,
+        seq_dim,
+        key_dim,
+        num_heads,
+        dff,
+        maximum_position_encoding,
+        rate=0.1,
+    ):
+        """
+
+        Constructor for the transformer encoder.
+
+        Args:
+            num_layers: number of transformer layers to include.
+            seq_dim: dimensionality of the sequence embeddings
+            key_dim: dimensionality of the time series
+            num_heads: number of heads of the multi-head-attention layers used on the transformer encoder
+            dff: dimensionality of the token embeddings
+            maximum_position_encoding: maximum time series length
+            rate: dropout rate
+        """
+        super(TransformerEncoder, self).__init__()
+
+        self.rate = rate
+        self.key_dim = key_dim
+        self.num_layers = num_layers
+        self.embedding = tf.keras.layers.Conv1D(
+            key_dim, kernel_size=1, activation="relu", input_shape=[seq_dim, key_dim]
+        )
+        self.pos_encoding = positional_encoding(maximum_position_encoding, self.key_dim)
+        self.enc_layers = [
+            TransformerEncoderLayer(key_dim, num_heads, dff, rate)
+            for _ in range(num_layers)
+        ]
+        self.dropout = tf.keras.layers.Dropout(self.rate)
+
+    def call(self, x, training):
+
+        # compute mask on the fly
+        mask, _, _ = create_masks(x)
+        seq_len = tf.shape(x)[1]
+
+        # adding embedding and position encoding.
+        x = self.embedding(x)
+        x *= tf.math.sqrt(tf.cast(self.key_dim, tf.float32))
+        x += self.pos_encoding[:, :seq_len, :]
+        x = self.dropout(x, training=training)
+
+        for i in range(self.num_layers):
+            x = self.enc_layers[i](x, training, mask)
+
+        return x
+
+
+# noinspection PyCallingNonCallable
+class TransformerDecoder(tf.keras.layers.Layer):
+    """
+
+    Transformer decoder. Based on https://www.tensorflow.org/text/tutorials/transformer.
+    Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
+    and https://arxiv.org/abs/1711.03905.
+
+    """
+
+    def __init__(
+        self,
+        num_layers,
+        seq_dim,
+        key_dim,
+        num_heads,
+        dff,
+        maximum_position_encoding,
+        rate=0.1,
+    ):
+        """
+
+        Constructor for the transformer decoder.
+
+        Args:
+            num_layers: number of transformer layers to include.
+            seq_dim: dimensionality of the sequence embeddings
+            key_dim: dimensionality of the time series
+            num_heads: number of heads of the multi-head-attention layers used on the transformer encoder
+            dff: dimensionality of the token embeddings
+            maximum_position_encoding: maximum time series length
+            rate: dropout rate
+        """
+        super(TransformerDecoder, self).__init__()
+
+        self.rate = rate
+        self.key_dim = key_dim
+        self.num_layers = num_layers
+        self.embedding = tf.keras.layers.Conv1D(
+            key_dim, kernel_size=1, activation="relu", input_shape=[seq_dim, key_dim]
+        )
+        self.pos_encoding = positional_encoding(maximum_position_encoding, key_dim)
+        self.dec_layers = [
+            TransformerDecoderLayer(key_dim, num_heads, dff, rate)
+            for _ in range(num_layers)
+        ]
+        self.dropout = tf.keras.layers.Dropout(self.rate)
+
+    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+        seq_len = tf.shape(x)[1]
+        attention_weights = {}
+        x = self.embedding(x)
+        x *= tf.math.sqrt(tf.cast(self.key_dim, tf.float32))
+        x += self.pos_encoding[:, :seq_len, :]
+        x = self.dropout(x, training=training)
+
+        for i in range(self.num_layers):
+            x, block1, block2 = self.dec_layers[i](
+                x, enc_output, training, look_ahead_mask, padding_mask
+            )
+            attention_weights["decoder_layer{}_block1".format(i + 1)] = block1
+            attention_weights["decoder_layer{}_block2".format(i + 1)] = block2
+
+        return x, attention_weights
 
 
 def log_hyperparameters():
@@ -604,10 +1028,10 @@ def log_hyperparameters():
             "val_number_of_populated_clusters",
             display_name="number of populated clusters",
         ),
-        hp.Metric("val_reconstruction_loss", display_name="reconstruction loss",),
-        hp.Metric("val_gram_loss", display_name="gram loss",),
-        hp.Metric("val_vq_loss", display_name="vq loss",),
-        hp.Metric("val_total_loss", display_name="total loss",),
+        hp.Metric("val_reconstruction_loss", display_name="reconstruction loss"),
+        hp.Metric("val_gram_loss", display_name="gram loss"),
+        hp.Metric("val_vq_loss", display_name="vq loss"),
+        hp.Metric("val_total_loss", display_name="total loss"),
     ]
 
     return logparams, metrics
@@ -764,7 +1188,7 @@ def autoencoder_fitting(
             patience=15,
             restore_best_weights=False,
             start_epoch=15,
-        ),
+        )
     ]
 
     ae_full_model.compile(optimizer=ae_full_model.optimizer)
@@ -797,9 +1221,7 @@ def autoencoder_fitting(
             )
             with tb_writer.as_default():
                 # Configure hyperparameter logging in tensorboard
-                hp.hparams_config(
-                    hparams=logparams, metrics=metrics,
-                )
+                hp.hparams_config(hparams=logparams, metrics=metrics)
                 hp.hparams(logparam)  # Log hyperparameters
                 # Log metrics
                 tf.summary.scalar(

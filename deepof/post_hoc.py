@@ -233,7 +233,7 @@ def condition_distance_binning(
     else:
         bin_range = range(start_bin, end_bin, step_bin)
 
-    exp_condition_distance_array = Parallel(n_jobs=n_jobs,)(
+    exp_condition_distance_array = Parallel(n_jobs=n_jobs)(
         delayed(embedding_distance)(bin_index) for bin_index in tqdm.tqdm(bin_range)
     )
 
@@ -276,7 +276,7 @@ def separation_between_conditions(
     # Aggregate embeddings and add experimental conditions
     if agg == "time_on_cluster":
         aggregated_embeddings = get_time_on_cluster(
-            cur_soft_counts, cur_breaks, reduce_dim=True,
+            cur_soft_counts, cur_breaks, reduce_dim=True
         )
     elif agg in ["mean", "median"]:
         aggregated_embeddings = get_aggregated_embedding(
@@ -545,7 +545,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
             cur_kinematics = {key: pd.DataFrame() for key in cur_kinematics.keys()}
 
         if include_distances:
-            cur_distances = deepof_project.get_distances(speed=der,)
+            cur_distances = deepof_project.get_distances(speed=der)
 
             # If specified, filter on specific animals
             if animal_id is not None:
@@ -571,7 +571,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
                 )
             }
         if include_angles:
-            cur_angles = deepof_project.get_angles(speed=der,)
+            cur_angles = deepof_project.get_angles(speed=der)
 
             # If specified, filter on specific animals
             if animal_id is not None:
@@ -596,7 +596,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
         for key, kins in cur_kinematics.items():
             kinematic_features[key] = pd.concat(
-                [kinematic_features[key], kins.add_suffix(suffix),], axis=1,
+                [kinematic_features[key], kins.add_suffix(suffix)], axis=1
             )
 
     # Align with breaks per video, by taking averages on the corresponding windows
@@ -637,7 +637,7 @@ def chunk_summary_statistics(
 
     # Extract time series features with ts-learn and tsfresh
     extracted_features = tsfresh.extract_relevant_features(
-        chunked_processed, hard_counts, column_id="id", n_jobs=cpu_count(),
+        chunked_processed, hard_counts, column_id="id", n_jobs=cpu_count()
     )
 
     return extracted_features
@@ -718,7 +718,7 @@ def annotate_time_chunks(
 
         # Extract all relevant features for each cluster
         comprehensive_features = chunk_summary_statistics(
-            comprehensive_features, hard_counts, feature_names,
+            comprehensive_features, hard_counts, feature_names
         )
 
     return comprehensive_features, hard_counts

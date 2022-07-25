@@ -61,7 +61,4 @@ html_static_path = ["_static"]
 html_favicon = "deepof.ico"
 
 # Autodoc default configuration
-autodoc_default_options = {
-    "member-order": "bysource",
-    "special-members": "__init__",
-}
+autodoc_default_options = {"member-order": "bysource", "special-members": "__init__"}

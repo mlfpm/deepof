@@ -271,7 +271,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         table = sampler.draw(
             st.one_of(
                 st.just(coords), st.just(speeds), st.just(distances), st.just(angles)
-            ),
+            )
         )
 
     assert len(list(table.filter_videos(["test"]).keys())) == 1

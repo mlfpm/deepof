@@ -23,9 +23,7 @@ import deepof.models
     n_components=st.integers(min_value=2, max_value=4).filter(lambda x: x % 2 == 0),
     annealing_mode=st.one_of(st.just("linear"), st.just("sigmoid")),
 )
-def test_GMVAE_build(
-    kl_warmup_epochs, montecarlo_kl, n_components, annealing_mode,
-):
+def test_GMVAE_build(kl_warmup_epochs, montecarlo_kl, n_components, annealing_mode):
     gmvae = deepof.models.GMVAE(
         input_shape=(1000, 15, 10),
         batch_size=64,
@@ -47,11 +45,9 @@ def test_GMVAE_build(
     latent_dim=st.integers(min_value=4, max_value=16).filter(lambda x: x % 2 == 0),
     n_components=st.integers(min_value=4, max_value=16).filter(lambda x: x % 2 == 0),
 )
-def test_VQVAE_build(
-    latent_dim, n_components,
-):
+def test_VQVAE_build(latent_dim, n_components):
     vqvae = deepof.models.VQVAE(
-        input_shape=(1000, 15, 10), latent_dim=latent_dim, n_components=n_components,
+        input_shape=(1000, 15, 10), latent_dim=latent_dim, n_components=n_components
     )
     vqvae.build((1000, 15, 10))
     vqvae.compile()

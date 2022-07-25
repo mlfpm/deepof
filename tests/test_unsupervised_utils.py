@@ -40,7 +40,7 @@ def test_find_learning_rate():
     test_model.add(tf.keras.layers.Dense(1, input_shape=X.shape[1:]))
 
     test_model.compile(
-        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD(),
+        loss=tf.keras.losses.binary_crossentropy, optimizer=tf.keras.optimizers.SGD()
     )
 
     deepof.unsupervised_utils.find_learning_rate(test_model, data=dataset)
@@ -50,11 +50,9 @@ def test_find_learning_rate():
     encoding=st.integers(min_value=1, max_value=10),
     k=st.integers(min_value=1, max_value=10),
 )
-def test_get_callbacks(
-    encoding, k,
-):
+def test_get_callbacks(encoding, k):
     callbacks = deepof.unsupervised_utils.get_callbacks(
-        input_type=False, cp=True, logparam={"latent_dim": encoding, "n_components": k},
+        input_type=False, cp=True, logparam={"latent_dim": encoding, "n_components": k}
     )
     assert np.any([isinstance(i, str) for i in callbacks])
     assert np.any(
@@ -68,9 +66,7 @@ def test_get_callbacks(
     k=st.just(10),
     pheno_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
-def test_autoencoder_fitting(
-    embedding, k, pheno_prediction,
-):
+def test_autoencoder_fitting(embedding, k, pheno_prediction):
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.ones([20, 1]).astype(float)
@@ -108,9 +104,7 @@ def test_autoencoder_fitting(
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
     pheno_loss=st.one_of(st.just(0.0), st.just(1.0)),
 )
-def test_tune_search(
-    hpt_type, pheno_loss,
-):
+def test_tune_search(hpt_type, pheno_loss):
 
     X_train = np.ones([100, 5, 6]).astype(float)
     y_train = np.ones([100, 1]).astype(float)
