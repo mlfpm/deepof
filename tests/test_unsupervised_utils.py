@@ -62,11 +62,11 @@ def test_get_callbacks(encoding, k):
 
 @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
+    embedding_model=st.sampled_from(["VQVAE", "GMVAE"]),
     embedding=st.integers(min_value=2, max_value=8).filter(lambda x: x % 2 == 0),
     k=st.just(10),
-    pheno_prediction=st.one_of(st.just(0.0), st.just(1.0)),
 )
-def test_autoencoder_fitting(embedding, k, pheno_prediction):
+def test_autoencoder_fitting(embedding_model, embedding, k):
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.ones([20, 1]).astype(float)
@@ -82,6 +82,7 @@ def test_autoencoder_fitting(embedding, k, pheno_prediction):
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,
+        embedding_model=embedding_model,
         batch_size=1,
         latent_dim=embedding,
         epochs=1,
@@ -89,7 +90,6 @@ def test_autoencoder_fitting(embedding, k, pheno_prediction):
         log_hparams=True,
         n_components=k,
         gram_loss=0.1,
-        phenotype_prediction=pheno_prediction,
     )
 
 
@@ -101,10 +101,10 @@ def test_autoencoder_fitting(embedding, k, pheno_prediction):
     stateful_step_count=1,
 )
 @given(
+    embedding_model=st.sampled_from(["VQVAE", "GMVAE"]),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
-    pheno_loss=st.one_of(st.just(0.0), st.just(1.0)),
 )
-def test_tune_search(hpt_type, pheno_loss):
+def test_tune_search(hpt_type, embedding_model):
 
     X_train = np.ones([100, 5, 6]).astype(float)
     y_train = np.ones([100, 1]).astype(float)
@@ -112,6 +112,7 @@ def test_tune_search(hpt_type, pheno_loss):
     callbacks = list(
         deepof.unsupervised_utils.get_callbacks(
             input_type=False,
+            embedding_model=embedding_model,
             cp=False,
             gram_loss=0.1,
             outpath="unsupervised_tuner_search",
@@ -121,13 +122,13 @@ def test_tune_search(hpt_type, pheno_loss):
 
     deepof.unsupervised_utils.tune_search(
         data=tuple([X_train, y_train, X_train, y_train]),
+        embedding_model=embedding_model,
         batch_size=25,
         encoding_size=16,
         hpt_type=hpt_type,
         hypertun_trials=1,
         k=5,
         gram_loss=0.1,
-        phenotype_prediction=pheno_loss,
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=1,

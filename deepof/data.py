@@ -1182,6 +1182,7 @@ class Coordinates:
     @staticmethod
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        embedding_model: str = "VQVAE",
         batch_size: int = 64,
         latent_dim: int = 4,
         epochs: int = 150,
@@ -1190,7 +1191,6 @@ class Coordinates:
         log_hparams: bool = False,
         n_components: int = 10,
         gram_loss: float = 1.0,
-        phenotype_prediction: float = 0.0,
         output_path: str = "unsupervised_trained_models",
         pretrained: str = False,
         save_checkpoints: bool = False,
@@ -1198,6 +1198,8 @@ class Coordinates:
         input_type: str = False,
         run: int = 0,
         strategy: tf.distribute.Strategy = "one_device",
+        kl_annealing_mode: str = "linear",
+        kl_warmup: int = 15,
     ) -> Tuple:
         """
 
@@ -1205,6 +1207,7 @@ class Coordinates:
 
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
+            embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), GMVAE, or contrastive.
             batch_size (int): Batch size for training.
             latent_dim (int): Dimention size of the latent space.
             epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
@@ -1215,7 +1218,6 @@ class Coordinates:
             n_components (int): Number of latent clusters for the embedding model to use.
             gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
-            phenotype_prediction (float): Weight of the phenotype prediction loss.
             output_path (str): Path to save the trained model and all log files.
             pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
             must be the path to a saved model.
@@ -1228,6 +1230,9 @@ class Coordinates:
             or "mirrored_strategy" (capable of handling more than one GPU, ideal for big experiments). If unsure, leave
             as "one_device".
 
+            kl_annealing_mode (str): Mode of the KL annealing. Must be one of "linear", or "sigmoid".
+            kl_warmup (int): Number of epochs to warm up the KL annealing.
+
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
 
@@ -1235,6 +1240,7 @@ class Coordinates:
 
         trained_models = deepof.unsupervised_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
+            embedding_model=embedding_model,
             batch_size=batch_size,
             latent_dim=latent_dim,
             epochs=epochs,
@@ -1243,7 +1249,6 @@ class Coordinates:
             log_hparams=log_hparams,
             n_components=n_components,
             gram_loss=gram_loss,
-            phenotype_prediction=phenotype_prediction,
             output_path=output_path,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
@@ -1251,6 +1256,8 @@ class Coordinates:
             input_type=input_type,
             run=run,
             strategy=strategy,
+            kl_annealing_mode=kl_annealing_mode,
+            kl_warmup=kl_warmup,
         )
 
         # returns a list of trained tensorflow models

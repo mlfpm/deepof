@@ -89,6 +89,7 @@ Shapely = "*"
 shap = "*"
 imblearn = "*"
 keras-tcn = "*"
+probflow = "*"
 
 [dev-packages]
 

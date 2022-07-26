@@ -153,45 +153,6 @@ def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
     return neigh_entropy
 
 
-def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
-    """
-    Initializes the prior latent means in a spread-out fashion,
-    obtained by iteratively picking samples from a uniform distribution
-    while maximizing the minimum euclidean distance between means.
-
-    Args:
-        shape: shape of the latent space.
-        samples: number of initial candidates draw from the uniform distribution.
-
-    Returns:
-        tf.Tensor: the initialized latent means.
-
-    """
-
-    init_shape = (samples, shape[1])
-
-    # Initialize latent mean candidates with a uniform distribution
-    init_means = tf.keras.initializers.variance_scaling(
-        scale=init_shape[0], distribution="uniform"
-    )(init_shape)
-
-    # Select the first random candidate as the first cluster mean
-    final_samples, init_means = init_means[0][np.newaxis, :], init_means[1:]
-
-    # Iteratively complete the mean set by adding new candidates, which maximize the minimum euclidean distance
-    # with all existing means.
-    for i in range(shape[0] - 1):
-        max_dist = cdist(final_samples, init_means, metric="euclidean")
-        max_dist = np.argmax(np.min(max_dist, axis=0))
-
-        final_samples = np.concatenate(
-            [final_samples, init_means[max_dist][np.newaxis, :]]
-        )
-        init_means = np.delete(init_means, max_dist, 0)
-
-    return final_samples
-
-
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     """
 
@@ -351,6 +312,7 @@ def find_learning_rate(
 
 
 def get_callbacks(
+    embedding_model: "str",
     gram_loss: float = 1.0,
     input_type: str = False,
     cp: bool = False,
@@ -363,6 +325,7 @@ def get_callbacks(
     Generates callbacks used for model training.
 
     Args:
+        embedding_model (str): name of the embedding model
         gram_loss (float): Weight of the gram loss
         input_type (str): Input type to use for training
         cp (bool): Whether to use checkpointing or not
@@ -376,7 +339,7 @@ def get_callbacks(
     """
 
     run_ID = "{}{}{}{}{}{}{}".format(
-        "deepof_unsupervised_VQVAE_encodings",
+        "deepof_unsupervised_{}_encodings".format(embedding_model),
         ("_input_type={}".format(input_type if input_type else "coords")),
         ("_gram_loss={}".format(gram_loss)),
         ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
@@ -1039,6 +1002,7 @@ def log_hyperparameters():
 
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    embedding_model: str,
     batch_size: int,
     latent_dim: int,
     epochs: int,
@@ -1048,11 +1012,13 @@ def autoencoder_fitting(
     n_components: int,
     output_path: str,
     gram_loss: float,
-    phenotype_prediction: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
     input_type: str,
+    # GMVAE Model specific parameters
+    kl_annealing_mode: str,
+    kl_warmup: int,
     run: int = 0,
     strategy: tf.distribute.Strategy = "one_device",
 ):
@@ -1062,17 +1028,18 @@ def autoencoder_fitting(
 
     Args:
         preprocessed_object (tuple): Tuple containing the preprocessed data.
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
+        and contrastive.
         batch_size (int): Batch size to use for training.
         latent_dim (int): Encoding size to use for training.
         epochs (int): Number of epochs to train the autoencoder for.
         hparams (dict): Dictionary containing the hyperparameters to use for training.
         log_history (bool): Whether to log the history of the autoencoder.
         log_hparams (bool): Whether to log the hyperparameters used for training.
-        n_components (int): Number of components to use for the VQVAE.
+        n_components (int): Number of components to fit to the data.
         output_path (str): Path to the output directory.
         gram_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
         penalizes the correlation between the dimensions in the latent space.
-        phenotype_prediction (float): Weight of the phenotype prediction loss.
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
@@ -1080,8 +1047,12 @@ def autoencoder_fitting(
         run (int): Run number to use for logging.
         strategy (tf.distribute.Strategy): Distribution strategy to use for training.
 
+        # GMVAE Model specific parameters
+        kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
+        kl_warmup (int): Number of epochs during which KL is annealed.
+
     Returns:
-        List of trained models (encoder, decoder, grouper and full autoencoders.
+        List of trained models corresponding to the selected model class. The full trained model is last.
 
     """
 
@@ -1114,6 +1085,7 @@ def autoencoder_fitting(
 
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
+        embedding_model=embedding_model,
         gram_loss=gram_loss,
         input_type=input_type,
         cp=save_checkpoints,
@@ -1126,14 +1098,6 @@ def autoencoder_fitting(
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
-
-    pheno_num_classes = None
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0][:, np.newaxis]]
-        yvals += [y_val[-Xvals.shape[0] :, 0][:, np.newaxis]]
-        pheno_num_classes = len(set(y_train[-Xs.shape[0] :, 0]))
-        if pheno_num_classes == 2:
-            pheno_num_classes = 1
 
     # Cast to float32
     ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
@@ -1156,25 +1120,51 @@ def autoencoder_fitting(
 
     # Build model
     with strategy.scope():
-        ae_full_model = deepof.models.VQVAE(
-            architecture_hparams=hparams,
-            input_shape=X_train.shape,
-            latent_dim=latent_dim,
-            n_components=n_components,
-            reg_gram=gram_loss,
-            phenotype_prediction_loss=phenotype_prediction,
-            phenotype_num_labels=pheno_num_classes,
-        )
-        ae_full_model.optimizer = tf.keras.optimizers.Nadam(
-            learning_rate=1e-4, clipvalue=0.75
-        )
-        encoder, decoder, quantizer, ae = (
-            ae_full_model.encoder,
-            ae_full_model.decoder,
-            ae_full_model.quantizer,
-            ae_full_model.vqvae,
-        )
-        return_list = (encoder, decoder, quantizer, ae)
+
+        if embedding_model == "VQVAE":
+            ae_full_model = deepof.models.VQVAE(
+                architecture_hparams=hparams,
+                input_shape=X_train.shape,
+                latent_dim=latent_dim,
+                n_components=n_components,
+                reg_gram=gram_loss,
+            )
+            ae_full_model.optimizer = tf.keras.optimizers.Nadam(
+                learning_rate=1e-4, clipvalue=0.75
+            )
+            encoder, decoder, quantizer, ae = (
+                ae_full_model.encoder,
+                ae_full_model.decoder,
+                ae_full_model.quantizer,
+                ae_full_model.vqvae,
+            )
+            return_list = (encoder, decoder, quantizer, ae)
+
+        elif embedding_model == "GMVAE":
+            ae_full_model = deepof.models.GMVAE(
+                architecture_hparams=hparams,
+                input_shape=X_train.shape,
+                batch_size=batch_size,
+                latent_dim=latent_dim,
+                kl_annealing_mode=kl_annealing_mode,
+                kl_warmup_epochs=kl_warmup,
+                montecarlo_kl=1000 * n_components,
+                n_components=n_components,
+                # n_cluster_loss=n_cluster_loss,
+                reg_gram=gram_loss,
+                # reg_cat_clusters=reg_cat_clusters,
+                # reg_cluster_variance=reg_cluster_variance,
+            )
+            encoder, decoder, grouper, ae = (
+                ae_full_model.encoder,
+                ae_full_model.decoder,
+                ae_full_model.grouper,
+                ae_full_model.gmvae,
+            )
+            return_list = (encoder, decoder, grouper, ae)
+
+        elif embedding_model == "contrastive":
+            raise NotImplementedError
 
     if pretrained:
         # If pretrained models are specified, load weights and return
@@ -1242,15 +1232,27 @@ def autoencoder_fitting(
                     step=0,
                 )
                 tf.summary.scalar(
-                    "val_vq_loss",
-                    ae_full_model.history.history["val_vq_loss"][-1],
-                    step=0,
-                )
-                tf.summary.scalar(
                     "val_total_loss",
                     ae_full_model.history.history["val_total_loss"][-1],
                     step=0,
                 )
+
+                if embedding_model == "VQVAE":
+                    tf.summary.scalar(
+                        "val_vq_loss",
+                        ae_full_model.history.history["val_vq_loss"][-1],
+                        step=0,
+                    )
+
+                elif embedding_model == "GMVAE":
+                    tf.summary.scalar(
+                        "val_kl_loss",
+                        ae_full_model.history.history["val_kl_divergence"][-1],
+                        step=0,
+                    )
+
+                elif embedding_model == "contrastive":
+                    raise NotImplementedError
 
     return return_list
 
@@ -1258,11 +1260,11 @@ def autoencoder_fitting(
 def tune_search(
     data: tuple,
     encoding_size: int,
+    embedding_model: str,
     hypertun_trials: int,
     hpt_type: str,
     k: int,
     gram_loss: float,
-    phenotype_prediction: float,
     project_name: str,
     callbacks: List,
     batch_size: int = 64,
@@ -1277,12 +1279,13 @@ def tune_search(
     Args:
         data (tf.data.Dataset): Dataset object for training and validation.
         encoding_size (int): Size of the encoding layer.
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
+        and contrastive.
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
         gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
         between dimensions in the latent space.
-        phenotype_prediction (float): Weight of the phenotype prediction loss.
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
         batch_size (int): Batch size to use.
@@ -1305,14 +1308,6 @@ def tune_search(
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
 
-    pheno_num_classes = None
-    if phenotype_prediction > 0.0:
-        ys += [y_train[-Xs.shape[0] :, 0]]
-        yvals += [y_val[-Xvals.shape[0] :, 0]]
-        pheno_num_classes = len(set(y_train[:, 0]))
-        if pheno_num_classes == 2:
-            pheno_num_classes = 1
-
     # Convert data to tf.data.Dataset objects
     train_dataset = (
         tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
@@ -1323,14 +1318,23 @@ def tune_search(
         batch_size, drop_remainder=True
     )
 
-    hypermodel = deepof.hypermodels.VQVAE(
-        input_shape=X_train.shape,
-        latent_dim=encoding_size,
-        n_components=k,
-        reg_gram=gram_loss,
-        phenotype_prediction=phenotype_prediction,
-        pheno_num_classes=pheno_num_classes,
-    )
+    if embedding_model == "VQVAE":
+        hypermodel = deepof.hypermodels.VQVAE(
+            input_shape=X_train.shape,
+            latent_dim=encoding_size,
+            n_components=k,
+            reg_gram=gram_loss,
+        )
+    elif embedding_model == "GMVAE":
+        hypermodel = deepof.hypermodels.GMVAE(
+            input_shape=X_train.shape,
+            latent_dim=encoding_size,
+            n_components=k,
+            reg_gram=gram_loss,
+            batch_size=batch_size,
+        )
+    elif embedding_model == "contrastive":
+        raise NotImplementedError
 
     tuner_objective = "val_loss"
 

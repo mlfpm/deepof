@@ -26,6 +26,7 @@ tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
 
+from sklearn.mixture import GaussianMixture
 
 # noinspection PyCallingNonCallable
 def get_recurrent_encoder(
@@ -613,7 +614,7 @@ class VQVAE(tf.keras.models.Model):
         beta: float = 1.0,
         reg_gram: float = 0.0,
         architecture_hparams: dict = None,
-        encoder_type: str = "TCN",
+        encoder_type: str = "recurrent",
         **kwargs,
     ):
         """
@@ -627,7 +628,7 @@ class VQVAE(tf.keras.models.Model):
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
             reg_gram (float): Regularization parameter for the Gram matrix.
             architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
-            encoder_type (str): Type of encoder to use. Can be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
+            encoder_type (str): Type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
             **kwargs: Additional keyword arguments.
 
         """
@@ -662,8 +663,8 @@ class VQVAE(tf.keras.models.Model):
         self.encoding_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="encoding_reconstruction_loss"
         )
-        self.embedding_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="embedding_reconstruction_loss"
+        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
+            name="reconstruction_loss"
         )
         self.vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
         self.cluster_population = tf.keras.metrics.Mean(
@@ -673,8 +674,8 @@ class VQVAE(tf.keras.models.Model):
         self.val_encoding_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="encoding_reconstruction_loss"
         )
-        self.val_embedding_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="embedding_reconstruction_loss"
+        self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
+            name="reconstruction_loss"
         )
         self.val_vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
         self.val_cluster_population = tf.keras.metrics.Mean(
@@ -690,12 +691,12 @@ class VQVAE(tf.keras.models.Model):
         metrics = [
             self.total_loss_tracker,
             self.encoding_reconstruction_loss_tracker,
-            self.embedding_reconstruction_loss_tracker,
+            self.reconstruction_loss_tracker,
             self.vq_loss_tracker,
             self.cluster_population,
             self.val_total_loss_tracker,
             self.val_encoding_reconstruction_loss_tracker,
-            self.val_embedding_reconstruction_loss_tracker,
+            self.val_reconstruction_loss_tracker,
             self.val_vq_loss_tracker,
             self.val_cluster_population,
         ]
@@ -733,26 +734,26 @@ class VQVAE(tf.keras.models.Model):
         with tf.GradientTape() as tape:
             # Get outputs from the full model
             encoding_reconstructions = self.vqvae(x, training=True)
-            embedding_reconstructions = self.decoder(
+            reconstructions = self.decoder(
                 [self.encoder(x, training=True), x], training=True
             )
 
             # Get rid of the attention scores that the transformer decoder outputs
             if self.encoder_type == "transformer":
                 encoding_reconstructions = encoding_reconstructions[0]
-                embedding_reconstructions = embedding_reconstructions[0]
+                reconstructions = reconstructions[0]
 
             # Compute losses
             reconstruction_labels = next(y)
             encoding_reconstruction_loss = -tf.reduce_sum(
                 encoding_reconstructions.log_prob(reconstruction_labels)
             )
-            embedding_reconstruction_loss = -tf.reduce_sum(
-                embedding_reconstructions.log_prob(reconstruction_labels)
+            reconstruction_loss = -tf.reduce_sum(
+                reconstructions.log_prob(reconstruction_labels)
             )
             total_loss = (
                 encoding_reconstruction_loss
-                + embedding_reconstruction_loss
+                + reconstruction_loss
                 + sum(self.vqvae.losses)
             )
 
@@ -771,9 +772,7 @@ class VQVAE(tf.keras.models.Model):
         self.encoding_reconstruction_loss_tracker.update_state(
             encoding_reconstruction_loss
         )
-        self.embedding_reconstruction_loss_tracker.update_state(
-            embedding_reconstruction_loss
-        )
+        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.cluster_population.update_state(populated_clusters)
 
@@ -781,7 +780,7 @@ class VQVAE(tf.keras.models.Model):
         log_dict = {
             "total_loss": self.total_loss_tracker.result(),
             "encoding_reconstruction_loss": self.encoding_reconstruction_loss_tracker.result(),
-            "embedding_reconstruction_loss": self.embedding_reconstruction_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
             "number_of_populated_clusters": self.cluster_population.result(),
         }
@@ -804,27 +803,25 @@ class VQVAE(tf.keras.models.Model):
 
         # Get outputs from the full model
         encoding_reconstructions = self.vqvae(x, training=False)
-        embedding_reconstructions = self.decoder(
+        reconstructions = self.decoder(
             [self.encoder(x, training=False), x], training=False
         )
 
         # Get rid of the attention scores that the transformer decoder outputs
         if self.encoder_type == "transformer":
             encoding_reconstructions = encoding_reconstructions[0]
-            embedding_reconstructions = embedding_reconstructions[0]
+            reconstructions = reconstructions[0]
 
         # Compute losses
         reconstruction_labels = next(y)
         encoding_reconstruction_loss = -tf.reduce_sum(
             encoding_reconstructions.log_prob(reconstruction_labels)
         )
-        embedding_reconstruction_loss = -tf.reduce_sum(
-            embedding_reconstructions.log_prob(reconstruction_labels)
+        reconstruction_loss = -tf.reduce_sum(
+            reconstructions.log_prob(reconstruction_labels)
         )
         total_loss = (
-            encoding_reconstruction_loss
-            + embedding_reconstruction_loss
-            + sum(self.vqvae.losses)
+            encoding_reconstruction_loss + reconstruction_loss + sum(self.vqvae.losses)
         )
 
         # Compute populated clusters
@@ -838,9 +835,7 @@ class VQVAE(tf.keras.models.Model):
         self.val_encoding_reconstruction_loss_tracker.update_state(
             encoding_reconstruction_loss
         )
-        self.val_embedding_reconstruction_loss_tracker.update_state(
-            embedding_reconstruction_loss
-        )
+        self.val_reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.val_vq_loss_tracker.update_state(sum(self.vqvae.losses))
         self.val_cluster_population.update_state(populated_clusters)
 
@@ -848,7 +843,7 @@ class VQVAE(tf.keras.models.Model):
         log_dict = {
             "total_loss": self.val_total_loss_tracker.result(),
             "encoding_reconstruction_loss": self.val_encoding_reconstruction_loss_tracker.result(),
-            "embedding_reconstruction_loss": self.val_embedding_reconstruction_loss_tracker.result(),
+            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
             "vq_loss": self.val_vq_loss_tracker.result(),
             "number_of_populated_clusters": self.val_cluster_population.result(),
         }
@@ -873,7 +868,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         batch_size: int,
         kl_warmup: int = 15,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 100,
+        mc_kl: int = 1000,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         n_cluster_loss: float = 0.0,
@@ -959,11 +954,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             ),
             components_distribution=tfd.Independent(
                 tfd.Normal(
-                    loc=unsupervised_utils.far_uniform_initializer(
-                        [self.n_components, self.latent_dim], samples=10000
-                    ),
+                    loc=tf.random.uniform([self.n_components, self.latent_dim]),
                     scale=tf.ones([self.n_components, self.latent_dim])
-                    / (tf.math.sqrt(tf.cast(self.n_components, tf.float32)) / 2),
+                    / (tf.math.sqrt(tf.cast(self.n_components, tf.float32))),
                     name="prior_scales",
                 ),
                 reinterpreted_batch_ndims=1,
@@ -984,13 +977,38 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         )
         self.kl_layer = unsupervised_utils.KLDivergenceLayer(
             distribution_b=self.prior,
-            test_points_fn=lambda q: tf.transpose(
-                q.components_distribution.sample(self.mc_kl), perm=[2, 0, 1, 3]
-            ),
+            test_points_fn=lambda q: q.sample(self.mc_kl * self.n_components),
             test_points_reduce_axis=[0, 1],
             iters=self.optimizer.iterations,
             warm_up_iters=self.kl_warm_up_iters,
             annealing_mode=self.kl_annealing_mode,
+        )
+
+    def update_prior(self, embeddings: tf.Tensor):
+        """
+
+        Updates the prior based on a Gaussian Mixture Model fit to the provided embeddings.
+
+        Args:
+            embeddings (tf.Tensor): embeddings to use for updating the prior.
+
+        """
+
+        gmm = GaussianMixture(
+            n_components=self.n_components, covariance_type="diag", reg_covar=1e-5
+        )
+        gmm.fit(embeddings.numpy())
+
+        self.prior = tfd.MixtureSameFamily(
+            mixture_distribution=tfd.categorical.Categorical(probs=gmm.weights_),
+            components_distribution=tfd.Independent(
+                tfd.Normal(
+                    loc=gmm.means_,
+                    scale=tf.math.sqrt(gmm.covariances_),
+                    name="prior_scales",
+                ),
+                reinterpreted_batch_ndims=1,
+            ),
         )
 
     def call(self, inputs):  # pragma: no cover
@@ -1120,7 +1138,7 @@ def get_gmvae(
     # Instantiate fully connected model
     gmvae = tf.keras.Model(embedding.inputs, gmvae_outputs, name="GMVAE")
 
-    return (embedding, decoder, grouper, gmvae)
+    return embedding, decoder, grouper, gmvae
 
 
 # noinspection PyDefaultArgument,PyCallingNonCallable
@@ -1134,18 +1152,18 @@ class GMVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        batch_size: int = 64,
         latent_dim: int = 4,
+        batch_size: int = 64,
+        n_components: int = 15,
         kl_annealing_mode: str = "sigmoid",
         kl_warmup_epochs: int = 15,
         montecarlo_kl: int = 1000,
-        n_components: int = 15,
         n_cluster_loss: float = 1.0,
         reg_gram: float = 1.0,
         reg_cat_clusters: bool = False,
         reg_cluster_variance: bool = False,
         architecture_hparams: dict = None,
-        encoder_type: str = "TCN",
+        encoder_type: str = "recurrent",
         **kwargs,
     ):
         """
@@ -1165,8 +1183,8 @@ class GMVAE(tf.keras.models.Model):
             reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             architecture_hparams (dict): dictionary of hyperparameters for the architecture. Defaults to None.
-            encoder_type (str): type of encoder to use. Cab be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
-            **kwargs:
+            encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
+            **kwargs: Additional keyword arguments.
 
         """
         super(GMVAE, self).__init__(**kwargs)
@@ -1175,7 +1193,7 @@ class GMVAE(tf.keras.models.Model):
         self.latent_dim = latent_dim
         self.kl_annealing_mode = kl_annealing_mode
         self.kl_warmup = kl_warmup_epochs
-        self.mc_kl = montecarlo_kl * n_components
+        self.mc_kl = montecarlo_kl
         self.n_components = n_components
         self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
         self.n_cluster_loss = n_cluster_loss
@@ -1244,17 +1262,25 @@ class GMVAE(tf.keras.models.Model):
     def prior(self):
         """
 
-        Property to retrieve the current's model prior
+        Property to retrieve the current model prior
 
         """
 
         return self.gmvae.get_layer("gaussian_mixture_latent").prior
 
+    def update_prior(self, embeddings: tf.Tensor):
+        """
+
+        Updates the current prior by fitting a Gaussian Mixture Model to the current embeddings.
+
+        """
+
+        return self.gmvae.get_layer("gaussian_mixture_latent").update_prior(embeddings)
+
     @tf.function
     def call(self, inputs, **kwargs):
         return self.gmvae(inputs, **kwargs)
 
-    @tf.function
     def train_step(self, data):  # pragma: no cover
         """
 
@@ -1281,6 +1307,10 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs[0]
             else:
                 reconstructions = outputs
+
+            # Update the prior to reflect the cluster distribution in the current embeddings
+            embeddings = self.encoder(x, training=False)
+            self.update_prior(embeddings.sample())
 
             # Compute losses
             seq_inputs = next(y)

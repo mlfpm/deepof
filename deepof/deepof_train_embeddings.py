@@ -57,7 +57,7 @@ parser.add_argument(
     "-bs",
     help="set training batch size. Defaults to 256",
     type=int,
-    default=64,
+    default=512,
 )
 parser.add_argument(
     "--n-components",
@@ -72,6 +72,13 @@ parser.add_argument(
     help="set the number of dimensions of the latent space. 16 by default",
     type=int,
     default=16,
+)
+parser.add_argument(
+    "--embedding-model",
+    "-embedding",
+    help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
+    type=str,
+    default="VQVAE",
 )
 parser.add_argument(
     "--exclude-bodyparts",
@@ -184,6 +191,7 @@ try:
     batch_size = args.batch_size
     hypertun_trials = args.hpt_trials
     encoding_size = args.encoding_size
+    embedding_model = args.embedding_model
     exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
     hparams = args.hyperparameters if args.hyperparameters is not None else {}
     input_type = args.input_type
@@ -299,6 +307,7 @@ if not tune:
         (X_train, y_train, X_val, y_val),
         batch_size=batch_size,
         latent_dim=encoding_size,
+        embedding_model=embedding_model,
         hparams={},
         n_components=n_components,
         output_path=output_path,
@@ -333,16 +342,33 @@ if not tune:
         curr_weights = trained_models[3].get_weights()
 
         # Load weights into a newly created model, buit with the current input shape
-        ae_models = deepof.models.VQVAE(
-            input_shape=curr_prep.shape,
-            latent_dim=encoding_size,
-            n_components=n_components,
-        )
-        curr_deep_encoder, curr_deep_grouper, curr_ae = (
-            ae_models.encoder,
-            ae_models.soft_quantizer,
-            ae_models.vqvae,
-        )
+        if embedding_model == "VQVAE":
+            ae_models = deepof.models.VQVAE(
+                input_shape=curr_prep.shape,
+                latent_dim=encoding_size,
+                n_components=n_components,
+            )
+            curr_deep_encoder, curr_deep_grouper, curr_ae = (
+                ae_models.encoder,
+                ae_models.soft_quantizer,
+                ae_models.vqvae,
+            )
+
+        elif embedding_model == "GMVAE":
+            ae_models = deepof.models.GMVAE(
+                input_shape=curr_prep.shape,
+                batch_size=batch_size,
+                latent_dim=encoding_size,
+                n_components=n_components,
+            )
+            curr_deep_encoder, curr_deep_grouper, curr_ae = (
+                ae_models.encoder,
+                ae_models.grouper,
+                ae_models.gmvae,
+            )
+
+        elif embedding_model == "Contrastive":
+            raise NotImplementedError
 
         # noinspection PyUnboundLocalVariable
         curr_ae.set_weights(curr_weights)
