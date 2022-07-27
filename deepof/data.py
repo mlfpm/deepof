@@ -1190,7 +1190,7 @@ class Coordinates:
         log_history: bool = True,
         log_hparams: bool = False,
         n_components: int = 10,
-        gram_loss: float = 1.0,
+        kmeans_loss: float = 1.0,
         output_path: str = "unsupervised_trained_models",
         pretrained: str = False,
         save_checkpoints: bool = False,
@@ -1200,6 +1200,7 @@ class Coordinates:
         strategy: tf.distribute.Strategy = "one_device",
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
+        reg_cat_clusters: float = 1.0,
     ) -> Tuple:
         """
 
@@ -1216,7 +1217,7 @@ class Coordinates:
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
             n_components (int): Number of latent clusters for the embedding model to use.
-            gram_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
+            kmeans_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
             output_path (str): Path to save the trained model and all log files.
             pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
@@ -1232,6 +1233,8 @@ class Coordinates:
 
             kl_annealing_mode (str): Mode of the KL annealing. Must be one of "linear", or "sigmoid".
             kl_warmup (int): Number of epochs to warm up the KL annealing.
+            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+            minimizing the KL divergence between cluster membership and a uniform categorical distribution.
 
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
@@ -1248,7 +1251,7 @@ class Coordinates:
             log_history=log_history,
             log_hparams=log_hparams,
             n_components=n_components,
-            gram_loss=gram_loss,
+            kmeans_loss=kmeans_loss,
             output_path=output_path,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
@@ -1258,6 +1261,7 @@ class Coordinates:
             strategy=strategy,
             kl_annealing_mode=kl_annealing_mode,
             kl_warmup=kl_warmup,
+            reg_cat_clusters=reg_cat_clusters,
         )
 
         # returns a list of trained tensorflow models

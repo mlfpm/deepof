@@ -30,8 +30,7 @@ class VQVAE(HyperModel):
         input_shape: tuple,
         latent_dim: int,
         learn_rate: float = 1e-3,
-        n_components: int = 10,
-        reg_gram: float = 0.0,
+        n_components: int = 12,
     ):
         """
 
@@ -42,7 +41,6 @@ class VQVAE(HyperModel):
             latent_dim (int): dimension of the latent space.
             learn_rate (float): learning rate for the optimizer.
             n_components (int): number of components in the quantization space.
-            reg_gram (float): regularization parameter for the Gram matrix of the latent embeddings.
 
         """
 
@@ -51,31 +49,23 @@ class VQVAE(HyperModel):
         self.latent_dim = latent_dim
         self.learn_rate = learn_rate
         self.n_components = n_components
-        self.reg_gram = reg_gram
 
     def get_hparams(self, hp):
         """
 
-        Retrieve hyperparameters to tune
+        Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.
 
         """
 
         # Architectural hyperparameters
-        bidirectional_merge = "concat"
-        clipvalue = 1.0
-        conv_filters = hp.Int("conv_units", min_value=32, max_value=512, step=32)
-        dense_activation = "relu"
-        k = self.n_components
-        rnn_units_1 = hp.Int("units", min_value=32, max_value=512, step=32)
-
-        return (
-            bidirectional_merge,
-            clipvalue,
-            conv_filters,
-            dense_activation,
-            k,
-            rnn_units_1,
+        encoder = hp.Choice(
+            "encoder", ["recurrent", "TCN", "transformer"], default="recurrent"
         )
+        kmeans_loss = hp.Float(
+            "kmeans_loss", min_value=0.0, max_value=1.0, sampling="linear"
+        )
+
+        return (encoder, kmeans_loss)
 
     def build(self, hp):
         """
@@ -85,27 +75,15 @@ class VQVAE(HyperModel):
         """
 
         # Hyperparameters to tune
-        (
-            bidirectional_merge,
-            clipvalue,
-            conv_filters,
-            dense_activation,
-            k,
-            lstm_units_1,
-        ) = self.get_hparams(hp)
+        (encoder, kmeans_loss) = self.get_hparams(hp)
 
         vqvae = deepof.models.VQVAE(
-            architecture_hparams={
-                "bidirectional_merge": "concat",
-                "clipvalue": clipvalue,
-                "dense_activation": dense_activation,
-                "units_conv": conv_filters,
-                "units_lstm": lstm_units_1,
-            },
             input_shape=self.input_shape,
             latent_dim=self.latent_dim,
-            n_components=k,
-            reg_gram=self.reg_gram,
+            n_components=self.n_components,
+            # hyperparameters to tune
+            encoder_type=encoder,
+            kmeans_loss=kmeans_loss,
         ).vqvae
         vqvae.compile()
 
@@ -124,12 +102,8 @@ class GMVAE(HyperModel):
         input_shape: tuple,
         latent_dim: int,
         batch_size: int,
-        kl_warmup_epochs: int = 0,
-        learn_rate: float = 1e-3,
-        mmd_warmup_epochs: int = 0,
         n_components: int = 10,
-        n_cluster_loss: float = False,
-        reg_gram: float = 1.0,
+        learn_rate: float = 1e-3,
     ):
         """
 
@@ -139,12 +113,8 @@ class GMVAE(HyperModel):
             input_shape (tuple): shape of the input tensor.
             latent_dim (int): dimension of the latent space.
             batch_size (int): batch size for training.
-            kl_warmup_epochs (int): number of epochs to warmup KL loss.
             learn_rate (float): learning rate for the optimizer.
-            mmd_warmup_epochs (int): number of epochs to warmup MMD loss.
             n_components (int): number of components in the quantization space.
-            n_cluster_loss (float): weight of the n_cluster_loss.
-            reg_gram (float): regularization parameter for the Gram matrix of the latent embeddings.
 
         """
 
@@ -152,12 +122,8 @@ class GMVAE(HyperModel):
         self.input_shape = input_shape
         self.latent_dim = latent_dim
         self.batch_size = batch_size
-        self.kl_warmup_epochs = kl_warmup_epochs
         self.learn_rate = learn_rate
-        self.mmd_warmup_epochs = mmd_warmup_epochs
         self.n_components = n_components
-        self.n_cluster_loss = n_cluster_loss
-        self.reg_gram = reg_gram
 
     def get_hparams(self, hp):
         """
@@ -167,20 +133,31 @@ class GMVAE(HyperModel):
         """
 
         # Architectural hyperparameters
-        bidirectional_merge = "concat"
-        clipvalue = 1.0
-        conv_filters = hp.Int("conv_units", min_value=32, max_value=512, step=32)
-        dense_activation = "relu"
-        k = self.n_components
-        rnn_units_1 = hp.Int("units", min_value=32, max_value=512, step=32)
+        encoder = hp.Choice(
+            "encoder", ["recurrent", "TCN", "transformer"], default="recurrent"
+        )
+        kmeans_loss = hp.Float(
+            "kmeans_loss", min_value=0.0, max_value=1.0, sampling="linear"
+        )
+        kl_annealing_mode = hp.Choice(
+            "kl_annealing_mode", ["linear", "sigmoid"], default="linear"
+        )
+        kl_warmup_epochs = hp.Int(
+            "kl_warmup_epochs", min_value=0, max_value=100, sampling="linear"
+        )
+        cluster_assignment_regularizer = hp.Float(
+            "cluster_assignment_regularizer",
+            min_value=0.0,
+            max_value=1.0,
+            sampling="linear",
+        )
 
         return (
-            bidirectional_merge,
-            clipvalue,
-            conv_filters,
-            dense_activation,
-            k,
-            rnn_units_1,
+            encoder,
+            kmeans_loss,
+            kl_annealing_mode,
+            kl_warmup_epochs,
+            cluster_assignment_regularizer,
         )
 
     def build(self, hp):
@@ -192,29 +169,24 @@ class GMVAE(HyperModel):
 
         # Hyperparameters to tune
         (
-            bidirectional_merge,
-            clipvalue,
-            conv_filters,
-            dense_activation,
-            k,
-            lstm_units_1,
+            encoder,
+            kmeans_loss,
+            kl_annealing_mode,
+            kl_warmup_epochs,
+            cluster_assignment_regularizer,
         ) = self.get_hparams(hp)
 
         gmvae = deepof.models.GMVAE(
-            architecture_hparams={
-                "bidirectional_merge": "concat",
-                "clipvalue": clipvalue,
-                "dense_activation": dense_activation,
-                "units_conv": conv_filters,
-                "units_lstm": lstm_units_1,
-            },
             input_shape=self.input_shape,
             latent_dim=self.latent_dim,
+            n_components=self.n_components,
             batch_size=self.batch_size,
-            kl_warmup_epochs=self.kl_warmup_epochs,
-            n_components=k,
-            n_cluster_loss=self.n_cluster_loss,
-            reg_gram=self.reg_gram,
+            # hyperparameters to tune
+            encoder_type=encoder,
+            kmeans_loss=kmeans_loss,
+            kl_annealing_mode=kl_annealing_mode,
+            kl_warmup_epochs=kl_warmup_epochs,
+            reg_cat_clusters=cluster_assignment_regularizer,
         ).gmvae
         gmvae.compile()
 

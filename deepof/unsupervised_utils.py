@@ -63,20 +63,59 @@ def load_treatments(train_path):
     return treatment_dict
 
 
-def compute_gram_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
+def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
+    """
+    Initializes the prior latent means in a spread-out fashion,
+    obtained by iteratively picking samples from a uniform distribution
+    while maximizing the minimum euclidean distance between means.
+
+    Args:
+        shape: shape of the latent space.
+        samples: number of initial candidates draw from the uniform distribution.
+
+    Returns:
+        tf.Tensor: the initialized latent means.
+
+    """
+
+    init_shape = (samples, shape[1])
+
+    # Initialize latent mean candidates with a uniform distribution
+    init_means = tf.keras.initializers.variance_scaling(
+        scale=init_shape[0], distribution="uniform"
+    )(init_shape)
+
+    # Select the first random candidate as the first cluster mean
+    final_samples, init_means = init_means[0][np.newaxis, :], init_means[1:]
+
+    # Iteratively complete the mean set by adding new candidates, which maximize the minimum euclidean distance
+    # with all existing means.
+    for i in range(shape[0] - 1):
+        max_dist = cdist(final_samples, init_means, metric="euclidean")
+        max_dist = np.argmax(np.min(max_dist, axis=0))
+
+        final_samples = np.concatenate(
+            [final_samples, init_means[max_dist][np.newaxis, :]]
+        )
+        init_means = np.delete(init_means, max_dist, 0)
+
+    return final_samples
+
+
+def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
     """
 
     Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
     space.
-    Based on Variational Animal Motion Embedding (VAME) https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
+    Based on https://arxiv.org/pdf/1610.04794.pdf, and https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
 
     Args:
         latent_means: tensor containing the means of the latent distribution
         weight: weight of the Gram loss in the total loss function
-        batch_size: batch size of the data to compute the Gram loss for.
+        batch_size: batch size of the data to compute the kmeans loss for.
 
     Returns:
-        tf.Tensor: Gram loss
+        tf.Tensor: kmeans loss
 
     """
     gram_matrix = (tf.transpose(latent_means) @ latent_means) / tf.cast(
@@ -84,7 +123,7 @@ def compute_gram_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no co
     )
     s = tf.linalg.svd(gram_matrix, compute_uv=False)
     s = tf.sqrt(tf.maximum(s, 1e-9))
-    return weight * tf.reduce_sum(s)
+    return weight * tf.reduce_mean(s)
 
 
 @tf.function
@@ -311,9 +350,59 @@ def find_learning_rate(
     return exp_lr.rates, exp_lr.losses
 
 
+@tf.function
+def get_hard_counts(soft_counts: tf.Tensor):
+    """
+
+    Computes hard counts per cluster in a differentiable way
+
+    Args:
+        soft_counts (tf.Tensor): soft counts per cluster
+
+    """
+
+    max_per_row = tf.expand_dims(tf.reduce_max(soft_counts, axis=1), axis=1)
+
+    mask = tf.cast(soft_counts == max_per_row, tf.float32)
+    mask_forward = tf.multiply(soft_counts, mask)
+    mask_complement = tf.multiply(1 / soft_counts, mask)
+
+    binary_counts = tf.multiply(mask_forward, mask_complement)
+
+    return tf.math.reduce_sum(binary_counts, axis=0) + 1
+
+
+@tf.function
+def cluster_frequencies_regularizer(
+    soft_counts: tf.Tensor, k: int, n_samples: int = 1000
+):
+    """
+
+    Computes the KL divergence between the cluster assignment distribution
+    and a uniform prior across clusters. While this assumes an equal distribution
+    between clusters, the prior can be tweaked to reflect domain knowledge.
+
+    Args:
+        soft_counts (tf.Tensor): soft counts per cluster
+        k (int): number of clusters
+        n_samples (int): number of samples to draw from the categorical distribution
+        modeling cluster assignments.
+
+    """
+
+    hard_counts = get_hard_counts(soft_counts)
+
+    dist_a = tfd.Categorical(probs=hard_counts / k)
+    dist_b = tfd.Categorical(logits=tf.ones(k))
+
+    z = dist_a.sample(n_samples)
+
+    return tf.reduce_mean(dist_a.log_prob(z) - dist_b.log_prob(z))
+
+
 def get_callbacks(
     embedding_model: "str",
-    gram_loss: float = 1.0,
+    kmeans_loss: float = 1.0,
     input_type: str = False,
     cp: bool = False,
     logparam: dict = None,
@@ -326,7 +415,7 @@ def get_callbacks(
 
     Args:
         embedding_model (str): name of the embedding model
-        gram_loss (float): Weight of the gram loss
+        kmeans_loss (float): Weight of the gram loss
         input_type (str): Input type to use for training
         cp (bool): Whether to use checkpointing or not
         logparam (dict): Dictionary containing the hyperparameters to log in tensorboard
@@ -341,7 +430,7 @@ def get_callbacks(
     run_ID = "{}{}{}{}{}{}{}".format(
         "deepof_unsupervised_{}_encodings".format(embedding_model),
         ("_input_type={}".format(input_type if input_type else "coords")),
-        ("_gram_loss={}".format(gram_loss)),
+        ("_kmeans_loss={}".format(kmeans_loss)),
         ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
         ("_k={}".format(logparam["n_components"]) if logparam is not None else ""),
         ("_run={}".format(run) if run else ""),
@@ -529,7 +618,6 @@ class ClusterControl(tf.keras.layers.Layer):
         n_components: int,
         encoding_dim: int,
         k: int = 15,
-        loss_weight: float = 1.0,
         *args,
         **kwargs,
     ):
@@ -553,7 +641,6 @@ class ClusterControl(tf.keras.layers.Layer):
         self.n_components = n_components
         self.enc = encoding_dim
         self.k = k
-        self.loss_weight = loss_weight
 
     def get_config(self):  # pragma: no cover
         """
@@ -612,9 +699,6 @@ class ClusterControl(tf.keras.layers.Layer):
         self.add_metric(
             neighbourhood_entropy, aggregation="mean", name="local_cluster_entropy"
         )
-
-        if self.loss_weight:
-            self.add_loss(-self.loss_weight * tf.reduce_sum(n_components))
 
         return encodings
 
@@ -979,10 +1063,10 @@ def log_hyperparameters():
             description="latent component number",
         ),
         hp.HParam(
-            "gram_weight",
+            "kmeans_weight",
             hp.RealInterval(min_value=0.0, max_value=1.0),
-            display_name="gram_weight",
-            description="weight of the gram loss",
+            display_name="kmeans_weight",
+            description="weight of the kmeans loss",
         ),
     ]
 
@@ -992,7 +1076,7 @@ def log_hyperparameters():
             display_name="number of populated clusters",
         ),
         hp.Metric("val_reconstruction_loss", display_name="reconstruction loss"),
-        hp.Metric("val_gram_loss", display_name="gram loss"),
+        hp.Metric("val_kmeans_loss", display_name="kmeans loss"),
         hp.Metric("val_vq_loss", display_name="vq loss"),
         hp.Metric("val_total_loss", display_name="total loss"),
     ]
@@ -1011,7 +1095,7 @@ def autoencoder_fitting(
     log_hparams: bool,
     n_components: int,
     output_path: str,
-    gram_loss: float,
+    kmeans_loss: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
@@ -1019,6 +1103,7 @@ def autoencoder_fitting(
     # GMVAE Model specific parameters
     kl_annealing_mode: str,
     kl_warmup: int,
+    reg_cat_clusters: float,
     run: int = 0,
     strategy: tf.distribute.Strategy = "one_device",
 ):
@@ -1038,7 +1123,7 @@ def autoencoder_fitting(
         log_hparams (bool): Whether to log the hyperparameters used for training.
         n_components (int): Number of components to fit to the data.
         output_path (str): Path to the output directory.
-        gram_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
+        kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
         penalizes the correlation between the dimensions in the latent space.
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
@@ -1050,6 +1135,8 @@ def autoencoder_fitting(
         # GMVAE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
         kl_warmup (int): Number of epochs during which KL is annealed.
+        reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+        minimizing the KL divergence between cluster membership and a uniform categorical distribution.
 
     Returns:
         List of trained models corresponding to the selected model class. The full trained model is last.
@@ -1080,13 +1167,13 @@ def autoencoder_fitting(
     logparam = {
         "latent_dim": latent_dim,
         "n_components": n_components,
-        "gram_weight": gram_loss,
+        "kmeans_weight": kmeans_loss,
     }
 
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
         embedding_model=embedding_model,
-        gram_loss=gram_loss,
+        kmeans_loss=kmeans_loss,
         input_type=input_type,
         cp=save_checkpoints,
         logparam=logparam,
@@ -1127,7 +1214,7 @@ def autoencoder_fitting(
                 input_shape=X_train.shape,
                 latent_dim=latent_dim,
                 n_components=n_components,
-                reg_gram=gram_loss,
+                kmeans_loss=kmeans_loss,
             )
             ae_full_model.optimizer = tf.keras.optimizers.Nadam(
                 learning_rate=1e-4, clipvalue=0.75
@@ -1150,10 +1237,7 @@ def autoencoder_fitting(
                 kl_warmup_epochs=kl_warmup,
                 montecarlo_kl=1000 * n_components,
                 n_components=n_components,
-                # n_cluster_loss=n_cluster_loss,
-                reg_gram=gram_loss,
-                # reg_cat_clusters=reg_cat_clusters,
-                # reg_cluster_variance=reg_cluster_variance,
+                reg_cat_clusters=reg_cat_clusters,
             )
             encoder, decoder, grouper, ae = (
                 ae_full_model.encoder,
@@ -1227,8 +1311,8 @@ def autoencoder_fitting(
                     step=0,
                 )
                 tf.summary.scalar(
-                    "val_gram_loss",
-                    ae_full_model.history.history["val_gram_loss"][-1],
+                    "val_kmeans_loss",
+                    ae_full_model.history.history["val_kmeans_loss"][-1],
                     step=0,
                 )
                 tf.summary.scalar(
@@ -1264,7 +1348,7 @@ def tune_search(
     hypertun_trials: int,
     hpt_type: str,
     k: int,
-    gram_loss: float,
+    kmeans_loss: float,
     project_name: str,
     callbacks: List,
     batch_size: int = 64,
@@ -1284,7 +1368,7 @@ def tune_search(
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
-        gram_loss (float): Weight of the gram loss, which enforces disentanglement by penalizing the correlation
+        kmeans_loss (float): Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation
         between dimensions in the latent space.
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
@@ -1320,17 +1404,13 @@ def tune_search(
 
     if embedding_model == "VQVAE":
         hypermodel = deepof.hypermodels.VQVAE(
-            input_shape=X_train.shape,
-            latent_dim=encoding_size,
-            n_components=k,
-            reg_gram=gram_loss,
+            input_shape=X_train.shape, latent_dim=encoding_size, n_components=k
         )
     elif embedding_model == "GMVAE":
         hypermodel = deepof.hypermodels.GMVAE(
             input_shape=X_train.shape,
             latent_dim=encoding_size,
             n_components=k,
-            reg_gram=gram_loss,
             batch_size=batch_size,
         )
     elif embedding_model == "contrastive":

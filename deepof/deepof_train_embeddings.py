@@ -128,16 +128,17 @@ parser.add_argument(
     default=".",
 )
 parser.add_argument(
-    "--n-cluster-loss",
-    "-nloss",
-    help="If > 0, adds a regularization term that maximizes the number of clusters in the latent space",
+    "--kmeans-loss",
+    "-kmeans",
+    help="If > 0, adds a regularization term controlling for correlation between dimensions in the latent space",
     type=float,
     default=1.0,
 )
 parser.add_argument(
-    "--gram-loss",
-    "-gram",
-    help="If > 0, adds a regularization term controlling for correlation between dimensions in the latent space",
+    "--cat-kl-loss",
+    "-catkl",
+    help="If > 0, adds a regularization term that minimizes the KL divergence between cluster assignment frequencies"
+    "and a uniform distribution",
     type=float,
     default=1.0,
 )
@@ -197,7 +198,8 @@ try:
     input_type = args.input_type
     n_components = args.n_components
     output_path = os.path.join(args.output_path)
-    gram_loss = float(args.gram_loss)
+    kmeans_loss = float(args.kmeans_loss)
+    cat_kl_loss = float(args.cat_kl_loss)
     smooth_alpha = args.smooth_alpha
     train_path = os.path.abspath(args.train_path)
     tune = args.hyperparameter_tuning
@@ -311,10 +313,12 @@ if not tune:
         hparams={},
         n_components=n_components,
         output_path=output_path,
-        gram_loss=gram_loss,
         save_checkpoints=False,
         save_weights=True,
         input_type=input_type,
+        # Parameters that control the training process
+        kmeans_loss=gram_loss,
+        reg_cat_clusters=cat_kl_loss,
         run=run,
     )
 
@@ -412,7 +416,7 @@ else:
         cp=False,
         logparam=logparam,
         outpath=output_path,
-        gram_loss=gram_loss,
+        kmeans_loss=gram_loss,
         run=run,
     )
 
@@ -423,7 +427,7 @@ else:
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
         k=n_components,
-        gram_loss=gram_loss,
+        kmeans_loss=gram_loss,
         project_name="{}-based_VQVAE_{}".format(input_type, tune.capitalize()),
         callbacks=[
             tensorboard_callback,

@@ -89,7 +89,7 @@ def test_autoencoder_fitting(embedding_model, embedding, k):
         log_history=True,
         log_hparams=True,
         n_components=k,
-        gram_loss=0.1,
+        kmeans_loss=0.1,
     )
 
 
@@ -114,7 +114,7 @@ def test_tune_search(hpt_type, embedding_model):
             input_type=False,
             embedding_model=embedding_model,
             cp=False,
-            gram_loss=0.1,
+            kmeans_loss=0.1,
             outpath="unsupervised_tuner_search",
             logparam={"latent_dim": 16, "n_components": 5},
         )
@@ -128,7 +128,7 @@ def test_tune_search(hpt_type, embedding_model):
         hpt_type=hpt_type,
         hypertun_trials=1,
         k=5,
-        gram_loss=0.1,
+        kmeans_loss=0.1,
         project_name="test_run",
         callbacks=callbacks,
         n_epochs=1,

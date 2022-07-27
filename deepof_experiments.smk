@@ -15,23 +15,24 @@ outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-gram_loss = [1.0]
-encodings = [2]
+kmeans_loss = [1.0]
+encodings = [16]
 cluster_numbers = list(range(5, 26, 1))
 input_types = ["coords"]
 run = list(range(10))
-
+embedding_model = ["VQVAE", "GMVAE"]
 
 rule deepof_experiments:
     input:
         # Train a variety of models
         expand(
             outpath
-            + "train_models/deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
+            + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
+            embedding_model=embedding_model,
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
-            gram_loss=gram_loss,
+            gram_loss=kmeans_loss,
             run=run,
         ),
 
@@ -43,10 +44,11 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "train_models/deepof_unsupervised_VQVAE_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
+        + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_gram_loss={gram_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_unsupervised "
         "--train-path {input.data_path} "
+        "--embedding-model {wildcards.embedding_model}"
         "--val-num 5 "
         "--animal-id B,W "
         "--animal-to-preprocess B "
@@ -55,7 +57,7 @@ rule train_models:
         "--input-type {wildcards.input_type} "
         "--gram-loss {wildcards.gram_loss} "
         "--encoding-size {wildcards.latdim} "
-        "--batch-size 64 "
+        "--batch-size 256 "
         "--window-size 5 "
         "--window-step 1 "
         "--run {wildcards.run} "

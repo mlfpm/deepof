@@ -413,7 +413,7 @@ class VectorQuantizer(tf.keras.models.Model):
     """
 
     def __init__(
-        self, n_components, embedding_dim, beta, reg_gram: float = 0.0, **kwargs
+        self, n_components, embedding_dim, beta, kmeans_loss: float = 0.0, **kwargs
     ):
         """
 
@@ -423,7 +423,7 @@ class VectorQuantizer(tf.keras.models.Model):
             n_components (int): number of embeddings to use
             embedding_dim (int): dimensionality of the embeddings
             beta (float): beta value for the loss function
-            reg_gram (float): regularization parameter for the Gram matrix
+            kmeans_loss (float): regularization parameter for the Gram matrix
             **kwargs: additional arguments for the parent class
 
         """
@@ -432,7 +432,7 @@ class VectorQuantizer(tf.keras.models.Model):
         self.embedding_dim = embedding_dim
         self.n_components = n_components
         self.beta = beta
-        self.reg_gram = reg_gram
+        self.kmeans = kmeans_loss
 
         # Initialize the VQ codebook
         w_init = unsupervised_utils.far_uniform_initializer(
@@ -459,9 +459,9 @@ class VectorQuantizer(tf.keras.models.Model):
         input_shape = tf.shape(x)
 
         # Add a disentangling penalty to the embeddings
-        if self.reg_gram:
-            gram_loss = unsupervised_utils.compute_gram_loss(
-                x, weight=self.reg_gram, batch_size=input_shape[0]
+        if self.kmeans:
+            gram_loss = unsupervised_utils.compute_kmeans_loss(
+                x, weight=self.kmeans, batch_size=input_shape[0]
             )
             self.add_loss(gram_loss)
             self.add_metric(gram_loss, name="gram_loss")
@@ -480,10 +480,10 @@ class VectorQuantizer(tf.keras.models.Model):
         quantized = tf.reshape(quantized, input_shape)
 
         # Compute vector quantization loss, and add it to the layer
-        commitment_loss = self.beta * tf.reduce_sum(
+        commitment_loss = self.beta * tf.reduce_mean(
             (tf.stop_gradient(quantized) - x) ** 2
         )
-        codebook_loss = tf.reduce_sum((quantized - tf.stop_gradient(x)) ** 2)
+        codebook_loss = tf.reduce_mean((quantized - tf.stop_gradient(x)) ** 2)
         self.add_loss(commitment_loss + codebook_loss)
 
         # Straight-through estimator (copy gradients through the undiferentiable layer)
@@ -537,7 +537,7 @@ def get_vqvae(
     latent_dim: int,
     n_components: int,
     beta: float = 1.0,
-    reg_gram: float = 0.0,
+    kmeans_loss: float = 0.0,
     encoder_type: str = "TCN",
 ):
     """
@@ -549,7 +549,7 @@ def get_vqvae(
         latent_dim (int): dimension of the latent space.
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
-        reg_gram (float): regularization parameter for the Gram matrix.
+        kmeans_loss (float): regularization parameter for the Gram matrix.
         encoder_type (str): type of encoder to use. Cab be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
 
     Returns:
@@ -562,7 +562,11 @@ def get_vqvae(
 
     """
     vq_layer = VectorQuantizer(
-        n_components, latent_dim, beta=beta, reg_gram=reg_gram, name="vector_quantizer"
+        n_components,
+        latent_dim,
+        beta=beta,
+        kmeans_loss=kmeans_loss,
+        name="vector_quantizer",
     )
 
     if encoder_type == "recurrent":
@@ -612,8 +616,7 @@ class VQVAE(tf.keras.models.Model):
         latent_dim: int = 4,
         n_components: int = 15,
         beta: float = 1.0,
-        reg_gram: float = 0.0,
-        architecture_hparams: dict = None,
+        kmeans_loss: float = 0.0,
         encoder_type: str = "recurrent",
         **kwargs,
     ):
@@ -626,8 +629,7 @@ class VQVAE(tf.keras.models.Model):
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
-            reg_gram (float): Regularization parameter for the Gram matrix.
-            architecture_hparams (dict): Dictionary of architecture hyperparameters. Defaults to None.
+            kmeans_loss (float): Regularization parameter for the Gram matrix.
             encoder_type (str): Type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
             **kwargs: Additional keyword arguments.
 
@@ -638,8 +640,7 @@ class VQVAE(tf.keras.models.Model):
         self.latent_dim = latent_dim
         self.n_components = n_components
         self.beta = beta
-        self.reg_gram = reg_gram
-        self.architecture_hparams = architecture_hparams
+        self.kmeans = kmeans_loss
         self.encoder_type = encoder_type
 
         # Define VQ_VAE model
@@ -654,7 +655,7 @@ class VQVAE(tf.keras.models.Model):
             self.latent_dim,
             self.n_components,
             self.beta,
-            self.reg_gram,
+            self.kmeans,
             self.encoder_type,
         )
 
@@ -703,20 +704,6 @@ class VQVAE(tf.keras.models.Model):
 
         return metrics
 
-    @property
-    def hparams(self):
-        hparams = {
-            "conv_filters": 64,
-            "dense_activation": "relu",
-            "gru_units_1": 32,
-            "gru_unroll": False,
-            "bidirectional_merge": "concat",
-        }
-        if self.architecture_hparams is not None:
-            hparams.update(self.architecture_hparams)
-
-        return hparams
-
     @tf.function
     def train_step(self, data):  # pragma: no cover
         """
@@ -745,12 +732,13 @@ class VQVAE(tf.keras.models.Model):
 
             # Compute losses
             reconstruction_labels = next(y)
-            encoding_reconstruction_loss = -tf.reduce_sum(
+            encoding_reconstruction_loss = -tf.reduce_mean(
                 encoding_reconstructions.log_prob(reconstruction_labels)
             )
-            reconstruction_loss = -tf.reduce_sum(
+            reconstruction_loss = -tf.reduce_mean(
                 reconstructions.log_prob(reconstruction_labels)
             )
+
             total_loss = (
                 encoding_reconstruction_loss
                 + reconstruction_loss
@@ -814,10 +802,10 @@ class VQVAE(tf.keras.models.Model):
 
         # Compute losses
         reconstruction_labels = next(y)
-        encoding_reconstruction_loss = -tf.reduce_sum(
+        encoding_reconstruction_loss = -tf.reduce_mean(
             encoding_reconstructions.log_prob(reconstruction_labels)
         )
-        reconstruction_loss = -tf.reduce_sum(
+        reconstruction_loss = -tf.reduce_mean(
             reconstructions.log_prob(reconstruction_labels)
         )
         total_loss = (
@@ -866,14 +854,12 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         n_components: int,
         latent_dim: int,
         batch_size: int,
-        kl_warmup: int = 15,
+        kl_warmup: int = 5,
         kl_annealing_mode: str = "linear",
         mc_kl: int = 1000,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
-        n_cluster_loss: float = 0.0,
-        reg_gram: float = 0.0,
-        reg_cat_clusters: bool = False,
+        kmeans_loss: float = 0.0,
         reg_cluster_variance: bool = False,
         **kwargs,
     ):
@@ -891,9 +877,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             mmd_warmup (int): number of epochs to warm up the MMD.
             mmd_annealing_mode (str): mode to use for annealing the MMD. Must be one of "linear" and "sigmoid".
-            n_cluster_loss (float): weight of the clustering loss as described in deepof.unsupervised_utils.ClusterControl
-            reg_gram (float): weight of the Gram matrix regularization loss.
-            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
+            kmeans_loss (float): weight of the Gram matrix regularization loss.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             **kwargs: keyword arguments passed to the parent class
 
@@ -909,10 +893,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.mc_kl = mc_kl
         self.mmd_warmup = mmd_warmup
         self.mmd_annealing_mode = mmd_annealing_mode
-        self.n_cluster_loss = n_cluster_loss
-        self.reg_gram = reg_gram
+        self.kmeans = kmeans_loss
         self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
-        self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
 
         # Initialize layers
@@ -968,7 +950,6 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             n_components=self.n_components,
             encoding_dim=self.latent_dim,
             k=self.n_components,
-            loss_weight=self.n_cluster_loss,
         )
 
         # Initialize metric layers
@@ -1031,9 +1012,9 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         z = self.latent_distribution(z_gauss)
 
-        if self.reg_gram:
-            gram_loss = unsupervised_utils.compute_gram_loss(
-                z, weight=self.reg_gram, batch_size=self.batch_size
+        if self.kmeans:
+            gram_loss = unsupervised_utils.compute_kmeans_loss(
+                z, weight=self.kmeans, batch_size=self.batch_size
             )
             self.add_loss(gram_loss)
             self.add_metric(gram_loss, name="gram_loss")
@@ -1044,7 +1025,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         # noinspection PyCallingNonCallable
         z = self.kl_layer(z)
 
-        # Tracks clustering metrics and adds a KNN regularizer if self.n_cluster_loss != 0
+        # Tracks clustering metrics
         if self.n_components > 1:
             z = self.cluster_control_layer([z, z_cat])
 
@@ -1060,9 +1041,7 @@ def get_gmvae(
     kl_warmup: int = 15,
     kl_annealing_mode: str = "sigmoid",
     mc_kl: int = 100,
-    n_cluster_loss: float = 1.0,
-    reg_gram: float = 1.0,
-    reg_cat_clusters: bool = False,
+    kmeans_loss: float = 1.0,
     reg_cluster_variance: bool = False,
     encoder_type: str = "TCN",
 ):
@@ -1078,9 +1057,7 @@ def get_gmvae(
             kl_warmup: Number of iterations during which to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
-            n_cluster_loss (float): weight of the n_cluster_loss as described in deepof.unsupervised_utils.ClusterControl.
-            reg_gram (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_gram_loss.
-            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
+            kmeans_loss (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_gram_loss.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             encoder_type (str): type of encoder to use. Cab be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
 
@@ -1118,9 +1095,7 @@ def get_gmvae(
         kl_warmup=kl_warmup,
         kl_annealing_mode=kl_annealing_mode,
         mc_kl=mc_kl,
-        n_cluster_loss=n_cluster_loss,
-        reg_gram=reg_gram,
-        reg_cat_clusters=reg_cat_clusters,
+        kmeans_loss=kmeans_loss,
         reg_cluster_variance=reg_cluster_variance,
         name="gaussian_mixture_latent",
     )
@@ -1153,16 +1128,14 @@ class GMVAE(tf.keras.models.Model):
         self,
         input_shape: tuple,
         latent_dim: int = 4,
-        batch_size: int = 64,
         n_components: int = 15,
-        kl_annealing_mode: str = "sigmoid",
+        batch_size: int = 64,
+        kl_annealing_mode: str = "linear",
         kl_warmup_epochs: int = 15,
         montecarlo_kl: int = 1000,
-        n_cluster_loss: float = 1.0,
-        reg_gram: float = 1.0,
-        reg_cat_clusters: bool = False,
+        kmeans_loss: float = 1.0,
+        reg_cat_clusters: float = 1.0,
         reg_cluster_variance: bool = False,
-        architecture_hparams: dict = None,
         encoder_type: str = "recurrent",
         **kwargs,
     ):
@@ -1178,11 +1151,10 @@ class GMVAE(tf.keras.models.Model):
             kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
             n_components (int): Number of mixture components in the latent space.
-            n_cluster_loss (float): weight of the n_cluster_loss as described in deepof.unsupervised_utils.ClusterControl.
-            reg_gram (float): weight of the gram matrix regularization loss.
-            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space.
+            kmeans_loss (float): weight of the gram matrix regularization loss.
+            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+            minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
-            architecture_hparams (dict): dictionary of hyperparameters for the architecture. Defaults to None.
             encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
             **kwargs: Additional keyword arguments.
 
@@ -1196,11 +1168,9 @@ class GMVAE(tf.keras.models.Model):
         self.mc_kl = montecarlo_kl
         self.n_components = n_components
         self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
-        self.n_cluster_loss = n_cluster_loss
-        self.reg_gram = reg_gram
+        self.kmeans = kmeans_loss
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
-        self.architecture_hparams = architecture_hparams
         self.encoder_type = encoder_type
 
         # Define GMVAE model
@@ -1212,9 +1182,7 @@ class GMVAE(tf.keras.models.Model):
             kl_warmup=self.kl_warmup,
             kl_annealing_mode=self.kl_annealing_mode,
             mc_kl=self.mc_kl,
-            n_cluster_loss=self.n_cluster_loss,
-            reg_gram=self.reg_gram,
-            reg_cat_clusters=self.reg_cat_clusters,
+            kmeans_loss=self.kmeans,
             reg_cluster_variance=self.reg_cluster_variance,
             encoder_type=self.encoder_type,
         )
@@ -1235,28 +1203,31 @@ class GMVAE(tf.keras.models.Model):
             name="reconstruction_loss"
         )
 
+        if self.reg_cat_clusters:
+            self.cat_cluster_loss_tracker = tf.keras.metrics.Mean(
+                name="cat_cluster_loss"
+            )
+            self.val_cat_cluster_loss_tracker = tf.keras.metrics.Mean(
+                name="cat_cluster_loss"
+            )
+
     @property
     def metrics(self):  # pragma: no cover
-        metrics = [self.total_loss_tracker, self.val_total_loss_tracker]
-        metrics += [self.reconstruction_loss_tracker]
-        metrics += [self.val_reconstruction_loss_tracker]
+        metrics = [
+            self.total_loss_tracker,
+            self.val_total_loss_tracker,
+            self.reconstruction_loss_tracker,
+            self.val_reconstruction_loss_tracker,
+        ]
         metrics += self.gmvae.metrics
 
+        if self.reg_cat_clusters:
+            metrics += [
+                self.cat_cluster_loss_tracker,
+                self.val_cat_cluster_loss_tracker,
+            ]
+
         return metrics
-
-    @property
-    def hparams(self):
-        hparams = {
-            "conv_filters": 64,
-            "dense_activation": "relu",
-            "gru_units_1": 32,
-            "gru_unroll": True,
-            "bidirectional_merge": "concat",
-        }
-        if self.architecture_hparams is not None:
-            hparams.update(self.architecture_hparams)
-
-        return hparams
 
     @property
     def prior(self):
@@ -1309,14 +1280,29 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs
 
             # Update the prior to reflect the cluster distribution in the current embeddings
-            embeddings = self.encoder(x, training=False)
+            embeddings = self.encoder(x, training=True)
             self.update_prior(embeddings.sample())
 
             # Compute losses
             seq_inputs = next(y)
             total_loss = sum(self.gmvae.losses)
 
-            reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
+            # Add a regularization term to the soft_counts, to prevent the embedding layer from
+            # collapsing into a few clusters.
+            if self.reg_cat_clusters:
+
+                soft_counts = self.grouper(x, training=True)
+                soft_counts_regulrization = (
+                    self.reg_cat_clusters
+                    * deepof.unsupervised_utils.cluster_frequencies_regularizer(
+                        soft_counts=soft_counts, k=self.n_components
+                    )
+                )
+                total_loss += soft_counts_regulrization
+
+            # Compute reconstruction loss
+            reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(seq_inputs))
+
             total_loss += reconstruction_loss
 
         # Backpropagation
@@ -1332,6 +1318,10 @@ class GMVAE(tf.keras.models.Model):
             "total_loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
         }
+
+        if self.reg_cat_clusters:
+            self.cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
+            log_dict["cat_cluster_loss"] = self.cat_cluster_loss_tracker.result()
 
         # Log to TensorBoard, both explitly and implicitly (within model) tracked metrics
         return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
@@ -1367,7 +1357,20 @@ class GMVAE(tf.keras.models.Model):
         seq_inputs = next(y)
         total_loss = sum(self.gmvae.losses)
 
-        reconstruction_loss = -tf.reduce_sum(reconstructions.log_prob(seq_inputs))
+        # Add a regularization term to the soft_counts, to prevent the embedding layer from
+        # collapsing into a few clusters.
+        if self.reg_cat_clusters:
+            soft_counts = self.grouper(x, training=False)
+            soft_counts_regulrization = (
+                self.reg_cat_clusters
+                * deepof.unsupervised_utils.cluster_frequencies_regularizer(
+                    soft_counts=soft_counts, k=self.n_components
+                )
+            )
+            total_loss += soft_counts_regulrization
+
+        # Compute reconstruction loss
+        reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(seq_inputs))
         total_loss += reconstruction_loss
 
         # Track losses
@@ -1379,5 +1382,9 @@ class GMVAE(tf.keras.models.Model):
             "total_loss": self.val_total_loss_tracker.result(),
             "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
         }
+
+        if self.reg_cat_clusters:
+            self.val_cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
+            log_dict["cat_cluster_loss"] = self.val_cat_cluster_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
