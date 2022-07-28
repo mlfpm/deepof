@@ -435,11 +435,13 @@ class VectorQuantizer(tf.keras.models.Model):
         self.kmeans = kmeans_loss
 
         # Initialize the VQ codebook
-        w_init = unsupervised_utils.far_uniform_initializer(
-            shape=(self.embedding_dim, self.n_components), samples=10000
-        )
+        w_init = tf.random_uniform_initializer()
         self.codebook = tf.Variable(
-            initial_value=w_init, trainable=True, name="vqvae_codebook"
+            initial_value=w_init(
+                shape=(self.embedding_dim, self.n_components), dtype="float32"
+            ),
+            trainable=True,
+            name="vqvae_codebook",
         )
 
     def call(self, x):  # pragma: no cover

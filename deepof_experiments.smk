@@ -58,7 +58,7 @@ rule train_models:
         "--input-type {wildcards.input_type} "
         "--kmeans-loss {wildcards.kmeans_loss} "
         "--encoding-size {wildcards.latdim} "
-        "--batch-size 256 "
+        "--batch-size 128 "
         "--window-size 5 "
         "--window-step 1 "
         "--run {wildcards.run} "

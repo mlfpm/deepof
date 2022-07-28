@@ -63,45 +63,6 @@ def load_treatments(train_path):
     return treatment_dict
 
 
-def far_uniform_initializer(shape: tuple, samples: int) -> tf.Tensor:
-    """
-    Initializes the prior latent means in a spread-out fashion,
-    obtained by iteratively picking samples from a uniform distribution
-    while maximizing the minimum euclidean distance between means.
-
-    Args:
-        shape: shape of the latent space.
-        samples: number of initial candidates draw from the uniform distribution.
-
-    Returns:
-        tf.Tensor: the initialized latent means.
-
-    """
-
-    init_shape = (samples, shape[1])
-
-    # Initialize latent mean candidates with a uniform distribution
-    init_means = tf.keras.initializers.variance_scaling(
-        scale=init_shape[0], distribution="uniform"
-    )(init_shape)
-
-    # Select the first random candidate as the first cluster mean
-    final_samples, init_means = init_means[0][np.newaxis, :], init_means[1:]
-
-    # Iteratively complete the mean set by adding new candidates, which maximize the minimum euclidean distance
-    # with all existing means.
-    for i in range(shape[0] - 1):
-        max_dist = cdist(final_samples, init_means, metric="euclidean")
-        max_dist = np.argmax(np.min(max_dist, axis=0))
-
-        final_samples = np.concatenate(
-            [final_samples, init_means[max_dist][np.newaxis, :]]
-        )
-        init_means = np.delete(init_means, max_dist, 0)
-
-    return final_samples
-
-
 def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
     """
 
