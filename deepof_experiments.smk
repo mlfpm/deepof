@@ -15,7 +15,7 @@ outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
 automatic_changepoints = ["rbf"]
 animal_to_preprocess = ["B"]
-kmeans_loss = [1.0]
+kmeans_loss = [0.0, 1.0]
 encodings = [16]
 cluster_numbers = [12] #list(range(5, 26, 1))
 input_types = ["coords"]
@@ -49,7 +49,7 @@ rule train_models:
     shell:
         "pipenv run python -m deepof.deepof_train_embeddings "
         "--train-path {input.data_path} "
-        "--embedding-model {wildcards.embedding_model}"
+        "--embedding-model {wildcards.embedding_model} "
         "--val-num 15 "
         "--animal-id B,W "
         "--animal-to-preprocess B "
