@@ -460,11 +460,11 @@ class VectorQuantizer(tf.keras.models.Model):
 
         # Add a disentangling penalty to the embeddings
         if self.kmeans:
-            gram_loss = unsupervised_utils.compute_kmeans_loss(
+            kmeans_loss = unsupervised_utils.compute_kmeans_loss(
                 x, weight=self.kmeans, batch_size=input_shape[0]
             )
-            self.add_loss(gram_loss)
-            self.add_metric(gram_loss, name="gram_loss")
+            self.add_loss(kmeans_loss)
+            self.add_metric(kmeans_loss, name="kmeans_loss")
 
         flattened = tf.reshape(x, [-1, self.embedding_dim])
 
@@ -1013,11 +1013,11 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         z = self.latent_distribution(z_gauss)
 
         if self.kmeans:
-            gram_loss = unsupervised_utils.compute_kmeans_loss(
+            kmeans_loss = unsupervised_utils.compute_kmeans_loss(
                 z, weight=self.kmeans, batch_size=self.batch_size
             )
-            self.add_loss(gram_loss)
-            self.add_metric(gram_loss, name="gram_loss")
+            self.add_loss(kmeans_loss)
+            self.add_metric(kmeans_loss, name="kmeans_loss")
 
         # Update KL weight based on the current iteration
         self.kl_layer._iters = self.optimizer.iterations
@@ -1057,7 +1057,7 @@ def get_gmvae(
             kl_warmup: Number of iterations during which to warm up the KL divergence.
             kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
-            kmeans_loss (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_gram_loss.
+            kmeans_loss (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_kmeans_loss.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
 

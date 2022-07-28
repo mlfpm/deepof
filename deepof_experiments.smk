@@ -50,7 +50,7 @@ rule train_models:
         "pipenv run python -m deepof.deepof_train_embeddings "
         "--train-path {input.data_path} "
         "--embedding-model {wildcards.embedding_model} "
-        "--val-num 15 "
+        "--val-num 5 "
         "--animal-id B,W "
         "--animal-to-preprocess B "
         "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
