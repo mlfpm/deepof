@@ -47,7 +47,7 @@ rule train_models:
         trained_models=outpath
         + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_kmeans_loss={kmeans_loss}_run={run}.pkl",
     shell:
-        "pipenv run python -m deepof.deepof_train_unsupervised "
+        "pipenv run python -m deepof.deepof_train_embeddings "
         "--train-path {input.data_path} "
         "--embedding-model {wildcards.embedding_model}"
         "--val-num 15 "
