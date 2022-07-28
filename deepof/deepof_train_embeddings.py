@@ -317,7 +317,7 @@ if not tune:
         save_weights=True,
         input_type=input_type,
         # Parameters that control the training process
-        kmeans_loss=gram_loss,
+        kmeans_loss=kmeans_loss,
         reg_cat_clusters=cat_kl_loss,
         run=run,
     )
@@ -389,8 +389,8 @@ if not tune:
     with open(
         os.path.join(
             output_path,
-            "deepof_unsupervised_VQVAE_encodings_input={}_k={}_latdim={}_gram_loss={}_run={}.pkl".format(
-                input_type, n_components, encoding_size, gram_loss, run
+            "deepof_unsupervised_VQVAE_encodings_input={}_k={}_latdim={}_kmeans_loss={}_run={}.pkl".format(
+                input_type, n_components, encoding_size, kmeans_loss, run
             ),
         ),
         "wb",
@@ -416,7 +416,7 @@ else:
         cp=False,
         logparam=logparam,
         outpath=output_path,
-        kmeans_loss=gram_loss,
+        kmeans_loss=kmeans_loss,
         run=run,
     )
 
@@ -427,7 +427,7 @@ else:
         hypertun_trials=hypertun_trials,
         hpt_type=tune,
         k=n_components,
-        kmeans_loss=gram_loss,
+        kmeans_loss=kmeans_loss,
         project_name="{}-based_VQVAE_{}".format(input_type, tune.capitalize()),
         callbacks=[
             tensorboard_callback,
