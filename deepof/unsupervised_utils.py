@@ -1348,7 +1348,6 @@ def tune_search(
     hypertun_trials: int,
     hpt_type: str,
     k: int,
-    kmeans_loss: float,
     project_name: str,
     callbacks: List,
     batch_size: int = 64,

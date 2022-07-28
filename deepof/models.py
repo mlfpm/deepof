@@ -538,7 +538,7 @@ def get_vqvae(
     n_components: int,
     beta: float = 1.0,
     kmeans_loss: float = 0.0,
-    encoder_type: str = "TCN",
+    encoder_type: str = "recurrent",
 ):
     """
 
@@ -550,7 +550,7 @@ def get_vqvae(
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
         kmeans_loss (float): regularization parameter for the Gram matrix.
-        encoder_type (str): type of encoder to use. Cab be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
+        encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
 
     Returns:
         encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -1043,7 +1043,7 @@ def get_gmvae(
     mc_kl: int = 100,
     kmeans_loss: float = 1.0,
     reg_cluster_variance: bool = False,
-    encoder_type: str = "TCN",
+    encoder_type: str = "recurrent",
 ):
     """
 
@@ -1059,7 +1059,7 @@ def get_gmvae(
             mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
             kmeans_loss (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_gram_loss.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
-            encoder_type (str): type of encoder to use. Cab be set to "TCN", "recurrent", or "transformer". Defaults to "TCN".
+            encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
 
     Returns:
         encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
