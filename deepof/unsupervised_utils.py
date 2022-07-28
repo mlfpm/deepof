@@ -1210,7 +1210,6 @@ def autoencoder_fitting(
 
         if embedding_model == "VQVAE":
             ae_full_model = deepof.models.VQVAE(
-                architecture_hparams=hparams,
                 input_shape=X_train.shape,
                 latent_dim=latent_dim,
                 n_components=n_components,
@@ -1229,7 +1228,6 @@ def autoencoder_fitting(
 
         elif embedding_model == "GMVAE":
             ae_full_model = deepof.models.GMVAE(
-                architecture_hparams=hparams,
                 input_shape=X_train.shape,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
