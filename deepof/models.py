@@ -615,7 +615,7 @@ class VQVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        latent_dim: int = 4,
+        latent_dim: int = 16,
         n_components: int = 15,
         beta: float = 1.0,
         kmeans_loss: float = 0.0,
@@ -1129,7 +1129,7 @@ class GMVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        latent_dim: int = 4,
+        latent_dim: int = 16,
         n_components: int = 15,
         batch_size: int = 64,
         kl_annealing_mode: str = "linear",
@@ -1388,5 +1388,178 @@ class GMVAE(tf.keras.models.Model):
         if self.reg_cat_clusters:
             self.val_cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
             log_dict["cat_cluster_loss"] = self.val_cat_cluster_loss_tracker.result()
+
+        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
+
+
+# noinspection PyDefaultArgument,PyCallingNonCallable
+class Contrastive(tf.keras.models.Model):
+    """
+
+    Gaussian Mixture Variational Autoencoder for pose motif elucidation.
+
+    """
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        latent_dim: int = 16,
+        n_components: int = 15,
+        kmeans_loss: float = 1.0,
+        encoder_type: str = "recurrent",
+        **kwargs,
+    ):
+        """
+
+        Initalizes a self-supervised Contrastive embedding model.
+
+        Args:
+            input_shape (tuple): Shape of the input to the full model.
+            latent_dim (int): Dimensionality of the latent space.
+            n_components (int): Number of mixture components in the latent space.
+            kmeans_loss (float): weight of the gram matrix regularization loss.
+            encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
+            **kwargs: Additional keyword arguments.
+
+        """
+        super(Contrastive, self).__init__(**kwargs)
+        self.seq_shape = input_shape
+        self.latent_dim = latent_dim
+        self.n_components = n_components
+        self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
+        self.kmeans = kmeans_loss
+        self.encoder_type = encoder_type
+
+        # Define GMVAE model
+        if encoder_type == "recurrent":
+            self.encoder = get_recurrent_encoder(
+                input_shape=input_shape[1:], latent_dim=latent_dim
+            )
+
+        elif encoder_type == "TCN":
+            self.encoder = get_TCN_encoder(
+                input_shape=input_shape[1:], latent_dim=latent_dim
+            )
+
+        elif encoder_type == "transformer":
+            self.encoder = get_transformer_encoder(
+                input_shape[1:], latent_dim=latent_dim
+            )
+
+        # Define metrics to track
+
+        # Track all loss function components
+        self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+        self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+
+    @property
+    def metrics(self):  # pragma: no cover
+        metrics = [self.total_loss_tracker, self.val_total_loss_tracker]
+
+        return metrics
+
+    @tf.function
+    def call(self, inputs, **kwargs):
+        return self.encoder(inputs, **kwargs)
+
+    def train_step(self, x):  # pragma: no cover
+        """
+
+        Performs a training step.
+
+        """
+
+        with tf.GradientTape() as tape:
+
+            # Get positive and negative pairs
+            def ts_samples(mbatch, win):
+
+                x = mbatch[:, :win]
+                y = mbatch[:, -win:]
+
+                return x, y
+
+            pos, neg = ts_samples(x, self.window_length)
+
+            # Compute contrastive loss
+            enc_pos = self.encoder(pos, training=True)
+            enc_neg = self.encoder(neg, training=True)
+
+            # normalize projection feature vectors
+            enc_pos = tf.math.l2_normalize(enc_pos, axis=1)
+            enc_neg = tf.math.l2_normalize(enc_neg, axis=1)
+
+            # loss, mean_sim = ls.dcl_loss_fn(zis, zjs, temperature, lfn)
+            contrastive_loss, mean_sim, neg_sim = unsupervised_utils.select_contrastive_loss(
+                enc_pos,
+                enc_neg,
+                similarity=self.similarity_function,
+                loss_fn=self.loss_function,
+                temperature=self.temperature,
+                tau=self.tau,
+                beta=self.beta,
+                elimination_th=0,
+                attraction=False,
+            )
+
+            total_loss = contrastive_loss
+
+            # Add kmeans loss if required
+            if self.kmeans:
+                kmeans_loss = unsupervised_utils.compute_kmeans_loss(
+                    x, weight=self.kmeans, batch_size=self.input_shape[0]
+                )
+                self.add_loss(kmeans_loss)
+                self.add_metric(kmeans_loss, name="kmeans_loss")
+
+                total_loss += kmeans_loss
+
+        # Backpropagation
+        grads = tape.gradient(total_loss, self.encoder.trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, self.encoder.trainable_variables))
+
+        # Track losses
+        self.total_loss_tracker.update_state(total_loss)
+
+        # Log results (coupled with TensorBoard)
+        log_dict = {"total_loss": self.total_loss_tracker.result()}
+
+        # Log to TensorBoard, both explitly and implicitly (within model) tracked metrics
+        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
+
+    # noinspection PyUnboundLocalVariable
+    @tf.function
+    def test_step(self, x):  # pragma: no cover
+        """
+
+        Performs a test step.
+
+        """
+
+        # Get outputs from the full model
+        outputs = self.encoder(x, training=False)
+
+        # Get rid of the attention scores that the transformer decoder outputs
+        if self.encoder_type == "transformer":
+            outputs = outputs[0]
+
+        # Compute losses
+        n_pairs_loss = 0  # TODO
+        total_loss = n_pairs_loss
+
+        if self.kmeans:
+            kmeans_loss = unsupervised_utils.compute_kmeans_loss(
+                x, weight=self.kmeans, batch_size=self.input_shape[0]
+            )
+            self.add_loss(kmeans_loss)
+            self.add_metric(kmeans_loss, name="kmeans_loss")
+
+            total_loss = kmeans_loss
+
+        # Track losses
+        self.val_total_loss_tracker.update_state(total_loss)
+
+        # Log results (coupled with TensorBoard)
+        log_dict = {"total_loss": self.val_total_loss_tracker.result()}
 
         return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}

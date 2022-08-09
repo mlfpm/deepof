@@ -90,6 +90,7 @@ shap = "*"
 imblearn = "*"
 keras-tcn = "*"
 probflow = "*"
+colorcet = "*"
 
 [dev-packages]
 

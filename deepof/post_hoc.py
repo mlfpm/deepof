@@ -17,11 +17,13 @@ from collections import Counter, defaultdict
 from joblib import delayed, Parallel
 from multiprocessing import cpu_count
 from scipy import stats
+from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from tsfresh.feature_extraction.settings import ComprehensiveFCParameters
 
 import deepof.data
 
@@ -73,8 +75,16 @@ def get_time_on_cluster(
     counter_df = counter_df[sorted(counter_df.columns)]
 
     if reduce_dim:
+
+        agg_pipeline = Pipeline(
+            [
+                ("PCA", PCA(n_components=2)),
+                ("scaler", StandardScaler()),
+            ]
+        )
+
         counter_df = pd.DataFrame(
-            PCA(n_components=2).fit_transform(counter_df), index=counter_df.index
+            agg_pipeline.fit_transform(counter_df), index=counter_df.index
         )
 
     return counter_df
@@ -103,16 +113,26 @@ def get_aggregated_embedding(
     # aggregate the provided embeddings and cast to a dataframe
     if agg == "mean":
         embedding = pd.DataFrame(
-            {key: np.mean(value.numpy(), axis=0) for key, value in embedding.items()}
+            {key: np.nanmean(value.numpy(), axis=0) for key, value in embedding.items()}
         ).T
     elif agg == "median":
         embedding = pd.DataFrame(
-            {key: np.median(value.numpy(), axis=0) for key, value in embedding.items()}
+            {
+                key: np.nanmedian(value.numpy(), axis=0)
+                for key, value in embedding.items()
+            }
         ).T
 
     if reduce_dim:
+        agg_pipeline = Pipeline(
+            [
+                ("PCA", PCA(n_components=2)),
+                ("scaler", StandardScaler()),
+            ]
+        )
+
         embedding = pd.DataFrame(
-            PCA(n_components=2).fit_transform(embedding), index=embedding.index
+            agg_pipeline.fit_transform(embedding), index=embedding.index
         )
 
     return embedding
@@ -171,7 +191,7 @@ def condition_distance_binning(
     step_bin: int,
     scan_mode: str = "growing-window",
     agg: str = "mean",
-    metric: str = "auc-linear",
+    metric: str = "auc",
     n_jobs: int = cpu_count(),
 ):
     """
@@ -196,8 +216,8 @@ def condition_distance_binning(
         (used to select optimal binning) or "per-bin" (used to evaluate how discriminability
         evolves in subsequent bins of a specified size).
         agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
-        metric (str): The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
-        is based on performance of a linear classifier when separating aggregated embeddings), or
+        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance'
+        is based on performance of a classifier when separating aggregated embeddings), or
         "wasserstein" (which computes distances based on optimal transport).
         n_jobs (int): The number of jobs to use for parallel processing.
 
@@ -264,8 +284,8 @@ def separation_between_conditions(
         names of the experiments, and the values are the names of their corresponding
         experimental conditions.
         agg (str): The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
-        metric (str): The distance metric to use. Can be either "auc-linear" (where the reported 'distance'
-        is based on performance of a linear classifier when separating aggregated embeddings), or
+        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance'
+        is based on performance of a classifier when separating aggregated embeddings), or
         "wasserstein" (which computes distances based on optimal transport).
 
     Returns:
@@ -283,7 +303,7 @@ def separation_between_conditions(
             cur_embedding, agg=agg, reduce_dim=True
         )
 
-    if metric == "auc-linear":
+    if metric == "auc":
 
         # Compute AUC of a logistic regression classifying between conditions in the current bin
         y = LabelEncoder().fit_transform(
@@ -313,7 +333,7 @@ def separation_between_conditions(
 
         # Compute Wasserstein distance between conditions in the current bin
         current_distance = ot.sliced_wasserstein_distance(
-            *arrays_to_compare, n_projections=100
+            *arrays_to_compare, n_projections=10000
         )
 
     return current_distance
@@ -541,28 +561,12 @@ def align_deepof_kinematics_with_unsupervised_labels(
         if animal_id is not None:
             cur_kinematics = cur_kinematics.filter_id(animal_id)
 
-        if der == 0:
-            cur_kinematics = {key: pd.DataFrame() for key in cur_kinematics.keys()}
-
         if include_distances:
             cur_distances = deepof_project.get_distances(speed=der)
 
             # If specified, filter on specific animals
             if animal_id is not None:
                 cur_distances = cur_distances.filter_id(animal_id)
-
-            # Select only relevant distances
-            cur_distances = {
-                key: dists.loc[
-                    :,
-                    [
-                        i
-                        for i in dists.columns
-                        if "Spine_1" in str(i) and "Tail_base" in str(i)
-                    ],
-                ]
-                for key, dists in cur_distances.items()
-            }
 
             cur_kinematics = {
                 key: pd.concat([kin, dist], axis=1)
@@ -637,7 +641,11 @@ def chunk_summary_statistics(
 
     # Extract time series features with ts-learn and tsfresh
     extracted_features = tsfresh.extract_relevant_features(
-        chunked_processed, hard_counts, column_id="id", n_jobs=cpu_count()
+        chunked_processed,
+        hard_counts,
+        column_id="id",
+        n_jobs=cpu_count(),
+        default_fc_parameters=ComprehensiveFCParameters(),
     )
 
     return extracted_features
@@ -724,7 +732,7 @@ def annotate_time_chunks(
     return comprehensive_features, hard_counts
 
 
-def chunk_cv_splitter(chunk_stats, breaks, n_folds=10):
+def chunk_cv_splitter(chunk_stats:np.ndarray, breaks:np.ndarray, n_folds: int = 10, qual_filter:np.ndarray = None):
     """
 
     Given a matrix with extracted features per chunk, returns a list containing
@@ -736,6 +744,7 @@ def chunk_cv_splitter(chunk_stats, breaks, n_folds=10):
         chunk_stats: matrix with statistics per chunk, sorted by experiment
         breaks: dictionary containing ruprures per video
         n_folds: number of cross-validation folds to compute
+        qual_filter: quality filter to use for the cross-validation. If None, no filter is used.
 
     Returns:
         list containing a training and testing set per CV fold.
@@ -750,6 +759,9 @@ def chunk_cv_splitter(chunk_stats, breaks, n_folds=10):
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
+    if qual_filter is not None:
+        cv_indices = cv_indices[qual_filter]
+
     cv_splitter = GroupKFold(n_splits=n_folds).split(chunk_stats, groups=cv_indices)
 
     return list(cv_splitter)
