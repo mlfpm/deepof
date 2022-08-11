@@ -1186,7 +1186,6 @@ class Coordinates:
         batch_size: int = 64,
         latent_dim: int = 4,
         epochs: int = 150,
-        hparams: dict = None,
         log_history: bool = True,
         log_hparams: bool = False,
         n_components: int = 10,
@@ -1213,7 +1212,6 @@ class Coordinates:
             latent_dim (int): Dimention size of the latent space.
             epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
             will stop training when validation loss stops decreasing.
-            hparams (dict): Hyperparameters for the model. See deepof.models for more details.
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
             n_components (int): Number of latent clusters for the embedding model to use.
@@ -1247,7 +1245,6 @@ class Coordinates:
             batch_size=batch_size,
             latent_dim=latent_dim,
             epochs=epochs,
-            hparams=hparams,
             log_history=log_history,
             log_hparams=log_hparams,
             n_components=n_components,
