@@ -77,10 +77,7 @@ def get_time_on_cluster(
     if reduce_dim:
 
         agg_pipeline = Pipeline(
-            [
-                ("PCA", PCA(n_components=2)),
-                ("scaler", StandardScaler()),
-            ]
+            [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
 
         counter_df = pd.DataFrame(
@@ -125,10 +122,7 @@ def get_aggregated_embedding(
 
     if reduce_dim:
         agg_pipeline = Pipeline(
-            [
-                ("PCA", PCA(n_components=2)),
-                ("scaler", StandardScaler()),
-            ]
+            [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
 
         embedding = pd.DataFrame(
@@ -732,7 +726,12 @@ def annotate_time_chunks(
     return comprehensive_features, hard_counts
 
 
-def chunk_cv_splitter(chunk_stats:np.ndarray, breaks:np.ndarray, n_folds: int = 10, qual_filter:np.ndarray = None):
+def chunk_cv_splitter(
+    chunk_stats: np.ndarray,
+    breaks: np.ndarray,
+    n_folds: int = 10,
+    qual_filter: np.ndarray = None,
+):
     """
 
     Given a matrix with extracted features per chunk, returns a list containing

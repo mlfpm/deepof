@@ -310,7 +310,6 @@ if not tune:
         batch_size=batch_size,
         latent_dim=encoding_size,
         embedding_model=embedding_model,
-        hparams={},
         n_components=n_components,
         output_path=output_path,
         save_checkpoints=False,
