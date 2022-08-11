@@ -23,7 +23,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from tsfresh.feature_extraction.settings import ComprehensiveFCParameters
+from tsfresh.feature_extraction.settings import EfficientFCParameters
 
 import deepof.data
 
@@ -243,7 +243,7 @@ def condition_distance_binning(
         )
 
     if scan_mode == "per-bin":
-        bin_range = range((end_bin // step_bin) + 1)
+        bin_range = range((end_bin // step_bin))
     else:
         bin_range = range(start_bin, end_bin, step_bin)
 
@@ -639,7 +639,7 @@ def chunk_summary_statistics(
         hard_counts,
         column_id="id",
         n_jobs=cpu_count(),
-        default_fc_parameters=ComprehensiveFCParameters(),
+        default_fc_parameters=EfficientFCParameters(),
     )
 
     return extracted_features
