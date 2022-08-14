@@ -23,7 +23,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from tsfresh.feature_extraction.settings import EfficientFCParameters
+from tsfresh.feature_extraction.settings import MinimalFCParameters
 
 import deepof.data
 
@@ -555,6 +555,9 @@ def align_deepof_kinematics_with_unsupervised_labels(
         if animal_id is not None:
             cur_kinematics = cur_kinematics.filter_id(animal_id)
 
+        if der == 0:
+            cur_kinematics = {key: pd.DataFrame() for key in cur_kinematics.keys()}
+
         if include_distances:
             cur_distances = deepof_project.get_distances(speed=der)
 
@@ -584,7 +587,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
         # Add corresponding suffixes to most common moments
         if der == 0:
-            suffix = "_value"
+            suffix = "_raw"
         elif der == 1:
             suffix = "_speed"
         elif der == 2:
@@ -597,7 +600,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
                 [kinematic_features[key], kins.add_suffix(suffix)], axis=1
             )
 
-    # Align with breaks per video, by taking averages on the corresponding windows
+    # Return aligned kinematics
     return deepof.data.TableDict(kinematic_features, typ="annotations")
 
 
@@ -640,7 +643,7 @@ def chunk_summary_statistics(
         column_id="id",
         n_jobs=0,
         ml_task="classification",
-        default_fc_parameters=EfficientFCParameters(),
+        default_fc_parameters=MinimalFCParameters(),
     )
 
     return extracted_features
