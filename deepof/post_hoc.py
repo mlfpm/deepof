@@ -638,7 +638,8 @@ def chunk_summary_statistics(
         chunked_processed,
         hard_counts,
         column_id="id",
-        n_jobs=cpu_count(),
+        n_jobs=0,
+        ml_task="classification",
         default_fc_parameters=EfficientFCParameters(),
     )
 
