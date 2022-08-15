@@ -589,7 +589,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
             }
 
         if include_areas:
-            cur_areas = deepof_project.get_areas(speed=der, animal_id=animal_id)
+            cur_areas = deepof_project.get_areas(speed=der, selected_id=animal_id)
 
             cur_kinematics = {
                 key: pd.concat([kin, area], axis=1)
