@@ -1097,8 +1097,6 @@ class Coordinates:
 
             areas_tabdict[key] = exp_table
 
-            break
-
         areas = TableDict(areas_tabdict, typ="areas")
 
         if speed:
