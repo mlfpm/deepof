@@ -660,8 +660,9 @@ def annotate_time_chunks(
     supervised_annotations: deepof.data.table_dict = None,
     animal_id: str = None,
     kin_derivative: int = 1,
-    include_distances: bool = False,
-    include_angles: bool = False,
+    include_distances: bool = True,
+    include_angles: bool = True,
+    include_areas: bool = True,
     aggregate: str = "tsfresh",
 ):
     """
@@ -678,10 +679,12 @@ def annotate_time_chunks(
         kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
         include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
         include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
+        include_areas: Whether to include areas in the alignment. kin_derivative is taken into account.
         aggregate: aggregation mode. Can be either "mean" (computationally cheapest), just use the average per feature,
         or "tsfresh" which runs a thorough feature extraction and selection pipeline on each time series.
 
     Returns:
+        A dataframe of kinematic features, of shape chunks by features.
 
     """
 
@@ -697,6 +700,7 @@ def annotate_time_chunks(
         kin_derivative=kin_derivative,
         include_distances=include_distances,
         include_angles=include_angles,
+        include_areas=include_areas,
         animal_id=animal_id,
     )
 
