@@ -26,6 +26,7 @@ import tensorflow as tf
 from dask_image.imread import imread
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
+from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
 from tqdm import tqdm
@@ -264,6 +265,50 @@ def angle_trio(bpart_array: np.array) -> np.array:
     ang_trio = np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c)])
 
     return ang_trio
+
+
+def compute_areas(coords, animal_id=None):
+    """
+    Computes relevant areas (head, torso, back, full) for the provided coordinates.
+    Args:
+        coords: coordinates of the body parts for a single time point.
+        animal_id: animal id for the provided coordinates, if any.
+
+    Returns:
+        areas: list including head, torso, back, and full areas for the provided coordinates.
+
+    """
+
+    head = ["Nose", "Left_ear", "Left_fhip", "Spine_1"]
+
+    torso = ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"]
+
+    back = ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"]
+
+    full = [
+        "Nose",
+        "Left_ear",
+        "Left_fhip",
+        "Left_bhip",
+        "Tail_base",
+        "Right_bhip",
+        "Right_fhip",
+        "Right_ear",
+    ]
+
+    areas = []
+
+    for bps in [head, torso, back, full]:
+
+        if animal_id is not None:
+            bps = ["_".join([animal_id, bp]) for bp in bps]
+
+        x = coords.xs(key="x", level=1)[bps]
+        y = coords.xs(key="y", level=1)[bps]
+
+        areas.append(Polygon(zip(x, y)).area)
+
+    return areas
 
 
 def rotate(
@@ -894,6 +939,9 @@ def filter_columns(columns: list, selected_id: str) -> list:
         filtered_columns (list): List of filtered columns.
 
     """
+
+    if selected_id is None:
+        return columns
 
     columns_to_keep = []
     for column in columns:

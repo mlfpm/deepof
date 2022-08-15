@@ -729,6 +729,7 @@ class Coordinates:
         self._videos = videos
         self._video_resolution = video_resolution
         self.angles = angles
+        self.areas = None
         self.distances = distances
 
     def __str__(self):  # pragma: no cover
@@ -1046,6 +1047,68 @@ class Coordinates:
         raise ValueError(
             "Angles not computed. Read the documentation for more details"
         )  # pragma: no cover
+
+    def get_areas(self, speed: int = 0, selected_id: str = "all") -> table_dict:
+        """
+        Returns a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise,
+        the areas are computed for all animals.
+
+        Args:
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals.
+            declared in self._animal_ids.
+
+        Returns:
+            table_dict: A table_dict object with the areas of the body parts animal as values.
+        """
+
+        if selected_id == "all":
+            selected_ids = self._animal_ids
+        else:
+            selected_ids = [selected_id]
+
+        areas_tabdict = {}
+
+        for key, tab in self._tables.items():
+
+            exp_table = pd.DataFrame()
+
+            for id in selected_ids:
+
+                if id == "":
+                    id = None
+
+                # get the current table for the current animal
+                current_table = tab.loc[:, deepof.utils.filter_columns(tab.columns, id)]
+                current_table = current_table.apply(
+                    lambda x: deepof.utils.compute_areas(x, animal_id=id), axis=1
+                )
+                current_table = pd.DataFrame(
+                    current_table.to_list(),
+                    index=current_table.index,
+                    columns=["head_area", "torso_area", "back_area", "full_area"],
+                ).add_prefix(
+                    "{}{}".format(
+                        (id if id is not None else ""), ("_" if id is not None else "")
+                    )
+                )
+
+                exp_table = exp_table.append(current_table)
+
+            areas_tabdict[key] = exp_table
+
+            break
+
+        areas = TableDict(areas_tabdict, typ="areas")
+
+        if speed:
+            for key, tab in areas.items():
+                vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+                areas[key] = vel
+        else:
+            self.areas = areas
+
+        return areas
 
     def get_videos(self, play: bool = False):
         """

@@ -519,8 +519,9 @@ def compute_steady_state(
 def align_deepof_kinematics_with_unsupervised_labels(
     deepof_project: deepof.data.project,
     kin_derivative: int = 1,
-    include_distances: bool = False,
-    include_angles: bool = False,
+    include_distances: bool = True,
+    include_angles: bool = True,
+    include_areas: bool = True,
     animal_id: str = None,
 ):
     """
@@ -534,6 +535,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
         kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
         include_distances (bool): Whether to include distances in the alignment. kin_derivative is taken into account.
         include_angles (bool): Whether to include angles in the alignment. kin_derivative is taken into account.
+        include_areas (bool): Whether to include areas in the alignment. kin_derivative is taken into account.
         animal_id (str): The animal ID to use, in case of multi-animal projects.
 
     Returns:
@@ -571,6 +573,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
                     cur_kinematics.items(), cur_distances.values()
                 )
             }
+
         if include_angles:
             cur_angles = deepof_project.get_angles(speed=der)
 
@@ -583,6 +586,14 @@ def align_deepof_kinematics_with_unsupervised_labels(
                 for (key, kin), angle in zip(
                     cur_kinematics.items(), cur_angles.values()
                 )
+            }
+
+        if include_areas:
+            cur_areas = deepof_project.get_areas(speed=der, animal_id=animal_id)
+
+            cur_kinematics = {
+                key: pd.concat([kin, area], axis=1)
+                for (key, kin), area in zip(cur_kinematics.items(), cur_areas.values())
             }
 
         # Add corresponding suffixes to most common moments
@@ -604,17 +615,14 @@ def align_deepof_kinematics_with_unsupervised_labels(
     return deepof.data.TableDict(kinematic_features, typ="annotations")
 
 
-def chunk_summary_statistics(
-    chunked_dataset: np.ndarray, hard_counts: np.ndarray, body_part_names: list
-):
+def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list):
     """
 
     Extracts summary statistics from a chunked dataset using tsfresh.
 
     Args:
-        chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features), where each entry corresponds to
-        a time chunk of data.
-        hard_counts (np.ndarray): Array containing a cluster lable for each time chunk in chunked_dataset.
+        chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features),
+        where each entry corresponds to a time chunk of data.
         body_part_names (list): A list of the names of the body parts.
 
     Returns:
@@ -622,8 +630,6 @@ def chunk_summary_statistics(
 
 
     """
-
-    assert chunked_dataset.shape[0] == len(hard_counts)
 
     # Add index and concatenate
     chunked_processed = []
@@ -637,12 +643,10 @@ def chunk_summary_statistics(
     chunked_processed.columns = ["id"] + body_part_names
 
     # Extract time series features with ts-learn and tsfresh
-    extracted_features = tsfresh.extract_relevant_features(
+    extracted_features = tsfresh.extract_features(
         chunked_processed,
-        hard_counts,
         column_id="id",
         n_jobs=0,
-        ml_task="classification",
         default_fc_parameters=MinimalFCParameters(),
     )
 
@@ -724,7 +728,7 @@ def annotate_time_chunks(
 
         # Extract all relevant features for each cluster
         comprehensive_features = chunk_summary_statistics(
-            comprehensive_features, hard_counts, feature_names
+            comprehensive_features, feature_names
         )
 
     return comprehensive_features, hard_counts
