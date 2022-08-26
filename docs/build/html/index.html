@@ -15,6 +15,7 @@
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -75,20 +76,20 @@
              
   <p><a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines"><img alt="Pipeline" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg" /></a> <a class="reference external" href="https://coverage.readthedocs.io/en/coverage-5.3/"><img alt="Coverage" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg" /></a> <a class="reference external" href="https://deepof.readthedocs.io/en/latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/deepof/badge/?version=latest" /></a> <a class="reference external" href="https://www.codefactor.io/repository/github/lucasmiranda42/deepof"><img alt="CodeFactor" src="https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="Version" src="https://img.shields.io/badge/release-v0.1.6-informational" /></a> <a class="reference external" href="https://pypi.org/project/deepof/"><img alt="MLFPM" src="https://img.shields.io/badge/funding-MLFPM-informational" /></a> <a class="reference external" href="https://github.com/psf/black"><img alt="Black" src="https://img.shields.io/badge/code%20style-black-black" /></a></p>
 <section id="welcome-to-deepof">
-<h1>Welcome to DeepOF!<a class="headerlink" href="#welcome-to-deepof" title="Permalink to this headline"></a></h1>
+<h1>Welcome to DeepOF!<a class="headerlink" href="#welcome-to-deepof" title="Permalink to this heading"></a></h1>
 <p>A suite for postprocessing time-series extracted from videos of freely moving rodents using <a class="reference external" href="http://www.mousemotorlab.org/deeplabcut">DeepLabCut</a></p>
 <div class="toctree-wrapper compound">
 </div>
 <a class="reference internal image-reference" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png"><img alt="DeepOF logo" class="align-center" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png" style="width: 400px;" /></a>
 </section>
 <section id="getting-started">
-<h1>Getting started<a class="headerlink" href="#getting-started" title="Permalink to this headline"></a></h1>
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Permalink to this heading"></a></h1>
 <p>You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing,
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically
 compare user-defined experimental groups.</p>
 <section id="installation">
-<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h2>
 <p>The easiest way to install DeepOF is to use <a class="reference external" href="https://pypi.org/project/deepof/">pip</a>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install deepof
 </pre></div>
@@ -103,7 +104,7 @@ docker run -it lucasmiranda42/deepof
 </div>
 </section>
 <section id="what-you-need">
-<h2>What you need<a class="headerlink" href="#what-you-need" title="Permalink to this headline"></a></h2>
+<h2>What you need<a class="headerlink" href="#what-you-need" title="Permalink to this heading"></a></h2>
 <p>DeepOF relies heavily on DeepLabCut’s output. Thorough tutorials on how to get started with DLC for pose estimation can be found <a class="reference external" href="https://www.mousemotorlab.org/deeplabcut">here</a>.
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Currently, DeepOF requires videos to be filmed from a top-view perspective, and follow a set of labels
 equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing <strong>C57Bl6</strong> and <strong>CD1</strong> mice can be downloaded from <a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models">our repository</a>.</p>
@@ -112,7 +113,7 @@ equivalent to the ones shown in the figure below. A pre-trained model capable of
 updated in future releases.</p>
 </section>
 <section id="basic-usage">
-<h2>Basic usage<a class="headerlink" href="#basic-usage" title="Permalink to this headline"></a></h2>
+<h2>Basic usage<a class="headerlink" href="#basic-usage" title="Permalink to this heading"></a></h2>
 <p>To start, create a folder for your project with at least two subdirectories inside, called ‘Videos’ and ‘Tables’. The former should contain the videos you’re
 working with (either you original data or the labeled ones obtained from DLC); the latter should have all the tracking
 tables you got from DeepLabCut, either in .h5 or .csv format. If you don’t want to use DLC yourself, don’t worry:
@@ -178,7 +179,7 @@ you get a generative model for free).</p>
 </section>
 </section>
 <section id="full-api-reference">
-<h1>Full API reference<a class="headerlink" href="#full-api-reference" title="Permalink to this headline"></a></h1>
+<h1>Full API reference<a class="headerlink" href="#full-api-reference" title="Permalink to this heading"></a></h1>
 <ul class="simple">
 <li><p><a class="reference external" href="deepof.data.html">deepof.data (main data-wrangling module)</a></p></li>
 <li><p><a class="reference external" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></p></li>
@@ -191,7 +192,7 @@ you get a generative model for free).</p>
 </ul>
 </section>
 <section id="advanced-tutorials">
-<h1>Advanced tutorials<a class="headerlink" href="#advanced-tutorials" title="Permalink to this headline"></a></h1>
+<h1>Advanced tutorials<a class="headerlink" href="#advanced-tutorials" title="Permalink to this heading"></a></h1>
 <ul class="simple">
 <li><p><cite>Formatting your data: feature extraction from DLC output</cite></p></li>
 <li><p><cite>DeepOF supervised pipeline: detecting pre-defined behaviors</cite></p></li>

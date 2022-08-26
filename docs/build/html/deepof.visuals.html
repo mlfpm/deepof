@@ -15,6 +15,7 @@
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -65,8 +66,77 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="deepof-visuals-module">
-<h1>deepof.visuals module<a class="headerlink" href="#deepof-visuals-module" title="Permalink to this headline"></a></h1>
+  <section id="module-deepof.visuals">
+<span id="deepof-visuals-module"></span><h1>deepof.visuals module<a class="headerlink" href="#module-deepof.visuals" title="Permalink to this heading"></a></h1>
+<p>General plotting functions for the deepof package</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.visuals.plot_heatmap">
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_heatmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_heatmap" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a heatmap of the movement of a specific bodypart in the arena.
+If more than one bodypart is passed, it returns one subplot for each</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>dframe (pandas.DataFrame): table_dict value with info to plot</p></li>
+<li><p>bodyparts (List): bodyparts to represent (at least 1)</p></li>
+<li><p>xlim (float): limits of the x-axis</p></li>
+<li><p>ylim (float): limits of the y-axis</p></li>
+<li><p>save (str): name of the file to which the figure should be saved</p></li>
+<li><p>dpi (int): dots per inch of the returned image</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><p>heatmaps (plt.figure): figure with the specified characteristics</p></li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.visuals.plot_projection">
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_projection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">projection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_projection" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+If labels are propagated, it automatically colours all data points with their respective condition.</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Args:</dt><dd><ul class="simple">
+<li><p>projection (tuple): tuple containing the projection and the associated conditions when available</p></li>
+<li><p>save (str): name of the file to which the figure should be saved</p></li>
+<li><p>dpi (int): dots per inch of the returned image</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><p>projection_scatter (plt.figure): figure with the specified characteristics</p></li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.visuals.plot_unsupervised_embeddings">
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_unsupervised_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregation_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_unsupervised_embeddings" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+If labels are propagated, it automatically colours all data points with their respective condition.</p>
+<blockquote>
+<div><dl>
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof</p></li>
+<li><p>exp_labels (tuple): labels of the experiments. If None, aggregation method must be None as well.</p></li>
+<li><p>cluster_labels (tuple): labels of the clusters. If None, aggregation method should be provided.</p></li>
+<li><p>aggregation_method (str): method to aggregate the data. If None, exp_labels must be None as well.</p></li>
+</ul>
+<p>Must be one of [None, “mean”, “cluster_population”].</p>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><p>projection_scatter (plt.figure): figure with the specified characteristics</p></li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
 </section>
 
 
