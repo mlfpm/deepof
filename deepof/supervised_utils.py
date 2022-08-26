@@ -565,7 +565,7 @@ def supervised_tagging(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
-        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
+        vid_name = re.findall("(.*?)DLC", tracks[vid_index])[0]
     except IndexError:
         vid_name = tracks[vid_index]
 

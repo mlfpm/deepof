@@ -346,12 +346,12 @@ class Project:
                 loaded_tab.columns = loaded_tab.loc["scorer", :]
                 loaded_tab = loaded_tab.iloc[1:]
 
-                tab_dict[deepof.utils.re.findall("(.*)DLC", tab)[0]] = loaded_tab
+                tab_dict[deepof.utils.re.findall("(.*?)DLC", tab)[0]] = loaded_tab
 
         elif self.table_format == ".csv":
 
             tab_dict = {
-                deepof.utils.re.findall("(.*)DLC", tab)[0]: pd.read_csv(
+                deepof.utils.re.findall("(.*?)DLC", tab)[0]: pd.read_csv(
                     deepof.utils.os.path.join(self.table_path, tab), index_col=0
                 )
                 for tab in self.tables

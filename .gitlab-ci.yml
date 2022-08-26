@@ -18,7 +18,9 @@ test:
 
   artifacts:
     reports:
-      cobertura: deepof_cov.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: deepof_cov.xml
 
 deploy:
 
