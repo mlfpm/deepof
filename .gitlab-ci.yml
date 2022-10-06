@@ -10,6 +10,9 @@ test:
     name: lucasmiranda42/deepof:latest
     entrypoint: [""]
 
+  before_script:
+    - export PATH="./root/.local/pipx/venvs/poetry/bin:$PATH"
+
   script:
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/unsupervised_utils.py,deepof/supervised_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py
