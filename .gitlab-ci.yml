@@ -8,7 +8,7 @@ test:
 
   image:
     name: lucasmiranda42/deepof
-    entrypoint: [""]
+    entrypoint: ["/bin/sh", "-c"]
 
   script:
     - coverage run --source deepof -m pytest
