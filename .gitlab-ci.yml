@@ -28,7 +28,7 @@ deploy:
   retry: 1
 
   image:
-    name: continuumio/anaconda3:2021.05
+    name: python:3.9.14
 
   script:
     - pip install deepof

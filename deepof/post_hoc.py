@@ -11,19 +11,20 @@ Data structures and functions for analyzing supervised and unsupervised model re
 import numpy as np
 import ot
 import pandas as pd
-import tsfresh
 import tqdm
 from collections import Counter, defaultdict
+from itertools import product
 from joblib import delayed, Parallel
 from multiprocessing import cpu_count
 from scipy import stats
+from seglearn import feature_functions
+from seglearn.transform import FeatureRep
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from tsfresh.feature_extraction.settings import MinimalFCParameters
 
 import deepof.data
 
@@ -618,7 +619,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
 def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list):
     """
 
-    Extracts summary statistics from a chunked dataset using tsfresh.
+    Extracts summary statistics from a chunked dataset using seglearn.
 
     Args:
         chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features),
@@ -631,24 +632,13 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
 
     """
 
-    # Add index and concatenate
-    chunked_processed = []
-    for i, chunk in enumerate(chunked_dataset):
-        cur_dataset = chunk[~np.all(chunk == 0, axis=1)]
-        cur_dataset = np.c_[np.ones(cur_dataset.shape[0]) * i, cur_dataset]
+    # Extract time series features with ts-learn and seglearn
+    extracted_features = FeatureRep(feature_functions.base_features()).fit_transform(chunked_dataset)
 
-        chunked_processed.append(cur_dataset)
-
-    chunked_processed = pd.DataFrame(np.concatenate(chunked_processed, axis=0))
-    chunked_processed.columns = ["id"] + body_part_names
-
-    # Extract time series features with ts-learn and tsfresh
-    extracted_features = tsfresh.extract_features(
-        chunked_processed,
-        column_id="id",
-        n_jobs=0,
-        default_fc_parameters=MinimalFCParameters(),
-    )
+    # Convert to data frame and add feature names
+    extracted_features = pd.DataFrame(extracted_features)
+    columns = list(product(body_part_names, list(feature_functions.base_features().keys())))
+    extracted_features.columns = ["_".join(idx) for idx in columns]
 
     return extracted_features
 
@@ -663,7 +653,7 @@ def annotate_time_chunks(
     include_distances: bool = True,
     include_angles: bool = True,
     include_areas: bool = True,
-    aggregate: str = "tsfresh",
+    aggregate: str = "seglearn",
 ):
     """
 
@@ -681,7 +671,7 @@ def annotate_time_chunks(
         include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
         include_areas: Whether to include areas in the alignment. kin_derivative is taken into account.
         aggregate: aggregation mode. Can be either "mean" (computationally cheapest), just use the average per feature,
-        or "tsfresh" which runs a thorough feature extraction and selection pipeline on each time series.
+        or "seglearn" which runs a thorough feature extraction and selection pipeline on each time series.
 
     Returns:
         A dataframe of kinematic features, of shape chunks by features.
@@ -728,7 +718,7 @@ def annotate_time_chunks(
             comprehensive_features, columns=feature_names
         )
 
-    elif aggregate == "tsfresh":
+    elif aggregate == "seglearn":
 
         # Extract all relevant features for each cluster
         comprehensive_features = chunk_summary_statistics(
