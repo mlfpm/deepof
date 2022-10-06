@@ -1,71 +1,103 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
-<head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+<html  lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.utils module &mdash; deepof 0.1.5 documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-    <link rel="shortcut icon" href="_static/deepof.ico"/>
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
+      <title>deepof.utils module</title>
+    
+          <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="_static/theme.css " type="text/css" />
+      
+      <!-- sphinx script_files -->
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
-</head>
+        <script src="_static/sphinx_highlight.js"></script>
 
-<body class="wy-body-for-nav"> 
-  <div class="wy-grid-for-nav">
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> deepof
-          </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.utils module</a></li>
-</ul>
-</div>
-        </div>
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="_static/theme-vendors.js"></script> -->
+      <script src="_static/theme.js" defer></script>
+    
+      <link rel="shortcut icon" href="_static/deepof.ico"/>
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="index.html" class="home-link">
+    
+      <span class="site-name">deepof</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
       </div>
-    </nav>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">deepof</a>
-      </nav>
 
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>deepof.utils module</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/deepof.utils.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="index.html#welcome-to-deepof">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+      </ul>
+    </div>
+  
 </div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+    
+    <li>deepof.utils module</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
   <section id="module-deepof.utils">
 <span id="deepof-utils-module"></span><h1>deepof.utils module<a class="headerlink" href="#module-deepof.utils" title="Permalink to this heading"></a></h1>
 <p>Functions and general utilities for the deepof package.</p>
@@ -75,10 +107,10 @@
 <dd><p>Creates a nx.Graph object with the connectivity of the bodyparts in the
 DLC topview model for a single mouse. Used later for angle computing, among others.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>animal_id</strong> (<em>str</em>) – if more than one animal is tagged, specify the animal identyfier as a string.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>connectivity (nx.Graph)</p>
 </dd>
 </dl>
@@ -89,10 +121,10 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">str2bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#deepof.utils.str2bool" title="Permalink to this definition"></a></dt>
 <dd><p>Returns the passed string as a boolean.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>v</strong> (<em>str</em>) – String to transform to boolean value.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>bool. If conversion is not possible, it raises an error</p>
 </dd>
 </dl>
@@ -103,16 +135,16 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">likelihood_qc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.likelihood_qc" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dframe</strong> (<em>pandas.DataFrame</em>) – DeepLabCut output, with positions over time and associated likelihood.</p></li>
 <li><p><strong>threshold</strong> (<em>float</em>) – Minimum acceptable confidence.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>mask on the rows of dframe</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>filt_mask (np.array)</p>
 </dd>
 </dl>
@@ -123,13 +155,13 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">bp2polar</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tab</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.utils.bp2polar" title="Permalink to this definition"></a></dt>
 <dd><p>Returns the DataFrame in polar coordinates.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>tab</strong> (<em>pandas.DataFrame</em>) – Table with cartesian coordinates.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Equivalent to input, but with values in polar coordinates.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>polar (pandas.DataFrame)</p>
 </dd>
 </dl>
@@ -140,13 +172,13 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">tab2polar</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cartesian_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.utils.tab2polar" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a pandas.DataFrame in which all the coordinates are polar.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>cartesian_df</strong> (<em>pandas.DataFrame</em>) – DataFrame containing tables with cartesian coordinates.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Equivalent to input, but with values in polar coordinates.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>result (pandas.DataFrame)</p>
 </dd>
 </dl>
@@ -157,18 +189,18 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">compute_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pair_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_abs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_rel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.utils.compute_dist" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a pandas.DataFrame with the scaled distances between a pair of body parts.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>pair_array</strong> (<em>numpy.array</em>) – np.array of shape N * 4 containing X, y positions.</p></li>
-<li><p><strong>parts.</strong> (<em>over time for a given pair of body</em>) – </p></li>
+<li><p><strong>parts.</strong> (<em>over time for a given pair</em><em> of </em><em>body</em>) – </p></li>
 <li><p><strong>arena_abs</strong> (<em>int</em>) – Diameter of the real arena in cm.</p></li>
 <li><p><strong>arena_rel</strong> (<em>int</em>) – Diameter of the captured arena in pixels.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>pandas.DataFrame with the absolute distances between a pair of body parts.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>result (pd.DataFrame)</p>
 </dd>
 </dl>
@@ -179,18 +211,18 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">bpart_distance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_abs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_rel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.utils.bpart_distance" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dataframe</strong> (<em>pandas.DataFrame</em>) – pd.DataFrame of shape N*(2*bp) containing X,y positions</p></li>
-<li><p><strong>parts.</strong> (<em>over time for a given set of bp body</em>) – </p></li>
+<li><p><strong>parts.</strong> (<em>over time for a given set</em><em> of </em><em>bp body</em>) – </p></li>
 <li><p><strong>arena_abs</strong> (<em>int</em>) – Diameter of the real arena in cm.</p></li>
 <li><p><strong>arena_rel</strong> (<em>int</em>) – Diameter of the captured arena in pixels.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>pandas.DataFrame with the absolute distances between all pairs of body parts.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>result (pd.DataFrame)</p>
 </dd>
 </dl>
@@ -201,17 +233,17 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">angle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">c</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.angle" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a numpy.array with the angles between the provided instances.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>a</strong> (<em>np.array</em>) – 2D positions over time for a body part.</p></li>
 <li><p><strong>b</strong> (<em>np.array</em>) – 2D positions over time for a body part.</p></li>
 <li><p><strong>c</strong> (<em>np.array</em>) – 2D positions over time for a body part.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>1D angles between the three-point-instances.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>ang (np.array)</p>
 </dd>
 </dl>
@@ -222,13 +254,13 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">angle_trio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bpart_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.angle_trio" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a numpy.array with all three possible angles between the provided instances.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>bpart_array</strong> (<em>numpy.array</em>) – 2D positions over time for a bodypart.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>2D all-three angles between the three-point-instances.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>ang_trio (numpy.array)</p>
 </dd>
 </dl>
@@ -241,10 +273,10 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 :param coords: coordinates of the body parts for a single time point.
 :param animal_id: animal id for the provided coordinates, if any.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>list including head, torso, back, and full areas for the provided coordinates.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>areas</p>
 </dd>
 </dl>
@@ -255,17 +287,17 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">rotate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">array([0,</span> <span class="pre">0])</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.rotate" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a 2D numpy.ndarray with the initial values rotated by angles radians.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>p</strong> (<em>numpy.ndarray</em>) – 2D Array containing positions of bodyparts over time.</p></li>
 <li><p><strong>angles</strong> (<em>numpy.ndarray</em>) – Set of angles (in radians) to rotate p with.</p></li>
 <li><p><strong>origin</strong> (<em>numpy.ndarray</em>) – Rotation axis (zero vector by default).</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>rotated positions over time</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
 <li><p>rotated (numpy.ndarray)</p></li>
 </ul>
@@ -280,7 +312,7 @@ DLC topview model for a single mouse. Used later for angle computing, among othe
 <dd><p>Returns a numpy.array with the positions rotated in a way that the center (0 vector)
 and the body part in the first column of data are aligned with the y axis.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data</strong> (<em>numpy.ndarray</em>) – 3D array containing positions of body parts over time, where</p></li>
 <li><p><strong>N</strong> (<em>shape is</em>) – </p></li>
@@ -289,10 +321,10 @@ and the body part in the first column of data are aligned with the y axis.</p>
 <li><p><strong>center</strong> (<em>or only the</em>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>2D aligned positions over time.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>aligned_trajs (np.ndarray)</p>
 </dd>
 </dl>
@@ -323,16 +355,16 @@ k: maximum burst level</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">smooth_boolean_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.smooth_boolean_array" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a boolean array in which isolated appearances of a feature are smoothed.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>a</strong> (<em>numpy.ndarray</em>) – Boolean instances.</p></li>
 <li><p><strong>scale</strong> (<em>int</em>) – Kleinberg scale parameter. Higher values result in stricter smoothing.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Smoothened boolean instances.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>a (numpy.ndarray)</p>
 </dd>
 </dl>
@@ -343,16 +375,16 @@ k: maximum burst level</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">split_with_breakpoints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breakpoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#deepof.utils.split_with_breakpoints" title="Permalink to this definition"></a></dt>
 <dd><p>Split a numpy.ndarray at the given breakpoints.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>a</strong> (<em>np.ndarray</em>) – N (instances) * m (features) shape</p></li>
 <li><p><strong>breakpoints</strong> (<em>list</em>) – list of breakpoints obtained with ruptures</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>padded array of shape N (instances) * l (maximum break length) * m (features)</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>split_a (np.ndarray)</p>
 </dd>
 </dl>
@@ -363,7 +395,7 @@ k: maximum burst level</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">rolling_window</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">automatic_changepoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed_breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#deepof.utils.rolling_window" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a 3D numpy.array with a sliding-window extra dimension.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>a</strong> (<em>np.ndarray</em>) – N (instances) * m (features) shape</p></li>
 <li><p><strong>window_size</strong> (<em>int</em>) – Size of the window to apply</p></li>
@@ -375,10 +407,10 @@ k: maximum burst level</p>
 <li><p><strong>default</strong> (<em>None by</em>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>N (sliding window instances) * l (sliding window size) * m (features)</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>rolled_a (np.ndarray)</p>
 </dd>
 </dl>
@@ -391,32 +423,32 @@ k: maximum burst level</p>
 at the end. Returns a dataset and the rupture indices, adapted to be used in a concatenated version
 of the labels.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>table_dict</strong> (<em>deepof.data.table_dict</em>) – table_dict with all experiments.</p></li>
 <li><p><strong>to_rupture</strong> (<em>np.ndarray</em>) – Array with dataset to rupture.</p></li>
 <li><p><strong>rupture_indices</strong> (<em>list</em>) – Indices of tables to rupture. Useful to select training and test sets.</p></li>
 <li><p><strong>automatic_changepoints</strong> (<em>str</em>) – Rupture method to apply.</p></li>
 <li><p><strong>false</strong> (<em>If</em>) – </p></li>
-<li><p><strong>obtained.</strong> (<em>a sliding window of window_length * window_size is</em>) – </p></li>
+<li><p><strong>obtained.</strong> (<em>a sliding window</em><em> of </em><em>window_length * window_size is</em>) – </p></li>
 <li><p><strong>&quot;l1&quot;</strong> (<em>If one of</em>) – </p></li>
 <li><p><strong>&quot;rbf&quot;</strong> (<em>&quot;l2&quot; or</em>) – </p></li>
 <li><p><strong>applied</strong> (<em>different automatic change point detection algorithms are</em>) – </p></li>
 <li><p><strong>experiment.</strong> (<em>on each independent</em>) – </p></li>
 <li><p><strong>window_size</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the length of the sliding window.</p></li>
 <li><p><strong>not</strong> (<em>If</em>) – </p></li>
-<li><p><strong>breaks.</strong> (<em>it determines the minimum step size of the obtained time series</em>) – </p></li>
+<li><p><strong>breaks.</strong> (<em>it determines the minimum step size</em><em> of </em><em>the obtained time series</em>) – </p></li>
 <li><p><strong>window_step</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the stride of the sliding window.</p></li>
 <li><p><strong>not</strong> – </p></li>
 <li><p><strong>breaks.</strong> – </p></li>
 <li><p><strong>precomputed_breaks</strong> (<em>dict</em>) – If provided, changepoint detection is prevented, and provided breaks are used instead.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Dataset with all ruptures concatenated across the first axis.
 rupture_indices (list): Indices of ruptures.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>ruptured_dataset (np.ndarray)</p>
 </dd>
 </dl>
@@ -427,7 +459,7 @@ rupture_indices (list): Indices of ruptures.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">smooth_mult_trajectory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">series</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">w_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">11</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#deepof.utils.smooth_mult_trajectory" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a smoothed a trajectory using a Savitzky-Golay 1D filter.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>series</strong> (<em>numpy.ndarray</em>) – 1D trajectory array with N (instances)</p></li>
 <li><p><strong>alpha</strong> (<em>int</em>) – 0 &lt;= alpha &lt; w_length; indicates the difference between the degree of the polynomial and the window</p></li>
@@ -437,10 +469,10 @@ rupture_indices (list): Indices of ruptures.</p>
 <li><p><strong>smoothing.</strong> – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>smoothed version of the input, with equal shape</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>smoothed_series (np.ndarray)</p>
 </dd>
 </dl>
@@ -451,16 +483,16 @@ rupture_indices (list): Indices of ruptures.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">moving_average</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time_series</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Series</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Series</span></span></span><a class="headerlink" href="#deepof.utils.moving_average" title="Permalink to this definition"></a></dt>
 <dd><p>Fast implementation of a moving average function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>time_series</strong> (<em>pd.Series</em>) – Uni-variate time series to take the moving average of.</p></li>
 <li><p><strong>lag</strong> (<em>int</em>) – size of the convolution window used to compute the moving average.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Uni-variate moving average over time_series.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>moving_avg (pd.Series)</p>
 </dd>
 </dl>
@@ -473,7 +505,7 @@ rupture_indices (list): Indices of ruptures.</p>
 An outlier can be marked with one of two criteria: 1) the likelihood reported by DLC is below likelihood_tolerance,
 and/or 2) the deviation from a moving average model is greater than n_std.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>time_series</strong> (<em>pd.DataFrame</em>) – Bi-variate time series representing the x, y positions of a single body part</p></li>
 <li><p><strong>likelihood</strong> (<em>pd.DataFrame</em>) – Data frame with likelihood data per body part as extracted from deeplabcut</p></li>
@@ -496,7 +528,7 @@ and/or 2) the deviation from a moving average model is greater than n_std.</p>
 <dd><p>Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
 replaced by a boolean mask, where True indicates an outlier.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>experiment</strong> (<em>pd.DataFrame</em>) – Data frame with time series representing the x, y positions of a every body part</p></li>
 <li><p><strong>likelihood</strong> (<em>pd.DataFrame</em>) – Data frame with likelihood data per body part as extracted from deeplabcut</p></li>
@@ -507,10 +539,10 @@ replaced by a boolean mask, where True indicates an outlier.</p>
 <li><p><strong>mode</strong> (<em>str</em>) – If “and” (default) both x and y have to be marked in order to call an outlier. If “or”, one is enough.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Mask over all body parts in experiment. True indicates an outlier</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>full_mask (pd.DataFrame)</p>
 </dd>
 </dl>
@@ -522,7 +554,7 @@ replaced by a boolean mask, where True indicates an outlier.</p>
 <dd><p>Marks all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
 Note that this approach only works for equally spaced data (constant camera acquisition rates).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>experiment</strong> (<em>pd.DataFrame</em>) – Data frame with time series representing the x, y positions of a every body part.</p></li>
 <li><p><strong>likelihood</strong> (<em>pd.DataFrame</em>) – Data frame with likelihood data per body part as extracted from deeplabcut.</p></li>
@@ -534,10 +566,10 @@ Note that this approach only works for equally spaced data (constant camera acqu
 <li><p><strong>limit</strong> (<em>int</em>) – Maximum of consecutive outliers to interpolate. Defaults to 10.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Interpolated version of experiment.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>interpolated_exp (pd.DataFrame)</p>
 </dd>
 </dl>
@@ -548,16 +580,16 @@ Note that this approach only works for equally spaced data (constant camera acqu
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">filter_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#deepof.utils.filter_columns" title="Permalink to this definition"></a></dt>
 <dd><p>Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>columns</strong> (<em>list</em>) – List of columns to filter.</p></li>
 <li><p><strong>selected_id</strong> (<em>str</em>) – Animal ID to filter for.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>List of filtered columns.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>filtered_columns (list)</p>
 </dd>
 </dl>
@@ -569,7 +601,7 @@ Note that this approach only works for equally spaced data (constant camera acqu
 <dd><p>Returns numpy.array with information about the arena recognised from the first frames
 of the video. WARNING: estimates won’t be reliable if the camera moves along the video.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>videos</strong> (<em>list</em>) – Relative paths of the videos to analise.</p></li>
 <li><p><strong>vid_index</strong> (<em>int</em>) – Element of videos list to use.</p></li>
@@ -585,7 +617,7 @@ of the video. WARNING: estimates won’t be reliable if the camera moves along t
 <li><p><strong>cnn_model</strong> (<em>tf.keras.models.Model</em>) – Model to use if detection_mode==”cnn”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>1D-array containing information about the arena.
 “circular-autodetect” (3-element-array) -&gt; x-y position of the center and the radius.
 “circular-manual” (3-element-array) -&gt; x-y position of the center and the radius.
@@ -593,7 +625,7 @@ of the video. WARNING: estimates won’t be reliable if the camera moves along t
 h (int): Height of the video in pixels.
 w (int): Width of the video in pixels.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>arena (np.ndarray)</p>
 </dd>
 </dl>
@@ -605,16 +637,16 @@ w (int): Width of the video in pixels.</p>
 <dd><p>Opens a window and waits for the user to click on all corners of the polygonal arena.
 The user should click on the corners in sequential order.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>frame</strong> (<em>np.ndarray</em>) – Frame to display.</p></li>
 <li><p><strong>arena_type</strong> (<em>str</em>) – Type of arena to be used. Must be one of the following: “circular-manual”, “polygon-manual”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>nx2 array containing the x-y coordinates of all n corners.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>corners (np.ndarray)</p>
 </dd>
 </dl>
@@ -626,18 +658,18 @@ The user should click on the corners in sequential order.</p>
 <dd><p>Reads a random frame from the selected video, and opens an interactive GUI to let the user delineate
 the arena manually.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>video_path</strong> – Path to the video file.</p></li>
 <li><p><strong>arena_type</strong> – Type of arena to be used. Must be one of the following: “circular-manual”, “polygon-manual”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
 int: Height of the video.
 int: Width of the video.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
@@ -648,15 +680,15 @@ int: Width of the video.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">fit_ellipse_to_polygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polygon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.fit_ellipse_to_polygon" title="Permalink to this definition"></a></dt>
 <dd><p>Fits an ellipse to the provided polygon.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>polygon</strong> – List of (x,y) coordinates of the corners of the polygon.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>(x,y) coordinates of the center of the ellipse.
 tuple: (a,b) semi-major and semi-minor axes of the ellipse.
 float: Angle of the ellipse.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>tuple</p>
 </dd>
 </dl>
@@ -668,7 +700,7 @@ float: Angle of the ellipse.</p>
 <dd><p>Returns x,y position of the center, the lengths of the major and minor axes,
 and the angle of the recognised arena.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>frame</strong> (<em>np.ndarray</em>) – numpy.ndarray representing an individual frame of a video</p></li>
 <li><p><strong>detection_mode</strong> (<em>str</em>) – Algorithm to use to detect the arena. “cnn” uses a</p></li>
@@ -677,11 +709,11 @@ and the angle of the recognised arena.</p>
 <li><p><strong>cnn_model</strong> (<em>tf.keras.models.Model</em>) – Model to use if detection_mode==”cnn”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>3-element-array containing x,y positions of the center
 of the arena, and a third value indicating the radius.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>circles (np.ndarray)</p>
 </dd>
 </dl>
@@ -692,7 +724,7 @@ of the arena, and a third value indicating the radius.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">rolling_speed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DatetimeIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rounds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deriv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shift</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">typ</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'coords'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.utils.rolling_speed" title="Permalink to this definition"></a></dt>
 <dd><p>Returns the average speed over n frames in pixels per frame.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dframe</strong> (<em>pandas.DataFrame</em>) – Position over time dataframe.</p></li>
 <li><p><strong>window</strong> (<em>int</em>) – Number of frames to average over.</p></li>
@@ -704,11 +736,11 @@ of the arena, and a third value indicating the radius.</p>
 <li><p><strong>typ</strong> (<em>str</em>) – Type of dataset. Intended for internal usage only.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Data frame containing 2D speeds for each body part in the original data or their
 consequent derivatives.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>speeds (pd.DataFrame)</p>
 </dd>
 </dl>
@@ -719,7 +751,7 @@ consequent derivatives.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">gmm_compute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cv_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#deepof.utils.gmm_compute" title="Permalink to this definition"></a></dt>
 <dd><p>Fits a Gaussian Mixture Model to the provided data and returns evaluation metrics.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>x</strong> (<em>numpy.ndarray</em>) – Data matrix to train the model</p></li>
 <li><p><strong>n_components</strong> (<em>int</em>) – Number of Gaussian components to use</p></li>
@@ -730,10 +762,10 @@ consequent derivatives.</p>
 <li><p><strong>&quot;full&quot;.</strong> – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>model and associated BIC for downstream selection.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
 <li><p>gmm_eval (list)</p></li>
 </ul>
@@ -748,7 +780,7 @@ consequent derivatives.</p>
 <dd><p>Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
 a vector with the median BICs and an object with the overall best model.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>x</strong> (<em>pandas.DataFrame</em>) – Data matrix to train the models</p></li>
 <li><p><strong>n_components_range</strong> (<em>range</em>) – Generator with numbers of components to evaluate</p></li>
@@ -758,14 +790,14 @@ a vector with the median BICs and an object with the overall best model.</p>
 <li><p><strong>cv_types</strong> (<em>tuple</em>) – Covariance Matrices to try. All four available by default</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>All recorded BIC values for all attempted parameter combinations
 (useful for plotting)
 - m_bic(list): All minimum BIC values recorded throughout the process
 (useful for plottinh)
 - best_bic_gmm (sklearn.GMM): Unfitted version of the best found model</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
 <li><p>bic (list)</p></li>
 </ul>
@@ -779,7 +811,7 @@ a vector with the median BICs and an object with the overall best model.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">cluster_transition_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cluster_sequence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nclusts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">autocorrelation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_graph</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Graph</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#deepof.utils.cluster_transition_matrix" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the transition matrix between clusters and the autocorrelation in the sequence.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>cluster_sequence</strong> (<em>numpy.array</em>) – Sequence of cluster assignments.</p></li>
 <li><p><strong>nclusts</strong> (<em>int</em>) – Number of clusters in the sequence.</p></li>
@@ -787,12 +819,12 @@ a vector with the median BICs and an object with the overall best model.</p>
 <li><p><strong>return_graph</strong> (<em>bool</em>) – Whether to return the transition matrix as an networkx.DiGraph object.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Transition matrix as numpy.ndarray or networkx.DiGraph.
 autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation
 values on cluster assignment.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>trans_normed (numpy.ndarray / networkx.Graph)</p>
 </dd>
 </dl>
@@ -801,31 +833,19 @@ values on cluster assignment.</p>
 </section>
 
 
-           </div>
           </div>
-          <footer>
-
-  <hr/>
-
-  <div role="contentinfo">
-    <p>&#169; Copyright 2021, Lucas Miranda.</p>
-  </div>
-
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
-
-</footer>
-        </div>
-      </div>
-    </section>
-  </div>
-  <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
-
-</body>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Lucas Miranda.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 5.2.3 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
 </html>

@@ -1,6 +1,0 @@
-Sphinx
-pockets
-six
-sphinxcontrib-napoleon
-typeguard
-typing-extensions

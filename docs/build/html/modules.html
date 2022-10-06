@@ -1,85 +1,180 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
-<head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+<html  lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof &mdash; deepof 0.1.5 documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-    <link rel="shortcut icon" href="_static/deepof.ico"/>
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
+      <title>deepof</title>
+    
+          <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="_static/theme.css " type="text/css" />
+      
+      <!-- sphinx script_files -->
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
-</head>
+        <script src="_static/sphinx_highlight.js"></script>
 
-<body class="wy-body-for-nav"> 
-  <div class="wy-grid-for-nav">
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> deepof
-          </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof</a></li>
-</ul>
-</div>
-        </div>
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="_static/theme-vendors.js"></script> -->
+      <script src="_static/theme.js" defer></script>
+    
+      <link rel="shortcut icon" href="_static/deepof.ico"/>
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="index.html" class="home-link">
+    
+      <span class="site-name">deepof</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
       </div>
-    </nav>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">deepof</a>
-      </nav>
 
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>deepof</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/modules.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="index.html#welcome-to-deepof">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+      </ul>
+    </div>
+  
 </div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+    
+    <li>deepof</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
   <section id="deepof">
 <h1>deepof<a class="headerlink" href="#deepof" title="Permalink to this heading"></a></h1>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="deepof.html">deepof package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="deepof.html#submodules">Submodules</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="deepof.data.html">deepof.data module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.data.html">deepof.data module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Project"><code class="docutils literal notranslate"><span class="pre">Project</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Coordinates"><code class="docutils literal notranslate"><span class="pre">Coordinates</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.TableDict"><code class="docutils literal notranslate"><span class="pre">TableDict</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.hypermodels.html#deepof.hypermodels.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.hypermodels.html#deepof.hypermodels.GMVAE"><code class="docutils literal notranslate"><span class="pre">GMVAE</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.model_utils.html">deepof.model_utils module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.models.html">deepof.models module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.models.html">deepof.models module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_recurrent_encoder"><code class="docutils literal notranslate"><span class="pre">get_recurrent_encoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_recurrent_decoder"><code class="docutils literal notranslate"><span class="pre">get_recurrent_decoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_TCN_encoder"><code class="docutils literal notranslate"><span class="pre">get_TCN_encoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_TCN_decoder"><code class="docutils literal notranslate"><span class="pre">get_TCN_decoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_transformer_encoder"><code class="docutils literal notranslate"><span class="pre">get_transformer_encoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_transformer_decoder"><code class="docutils literal notranslate"><span class="pre">get_transformer_decoder()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.VectorQuantizer"><code class="docutils literal notranslate"><span class="pre">VectorQuantizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_vqvae"><code class="docutils literal notranslate"><span class="pre">get_vqvae()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.GaussianMixtureLatent"><code class="docutils literal notranslate"><span class="pre">GaussianMixtureLatent</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_gmvae"><code class="docutils literal notranslate"><span class="pre">get_gmvae()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.GMVAE"><code class="docutils literal notranslate"><span class="pre">GMVAE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.Contrastive"><code class="docutils literal notranslate"><span class="pre">Contrastive</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.pose_utils.html">deepof.pose_utils module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.train_utils.html">deepof.train_utils module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.utils.html">deepof.utils module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.visuals.html">deepof.visuals module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.utils.html">deepof.utils module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.connect_mouse_topview"><code class="docutils literal notranslate"><span class="pre">connect_mouse_topview()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.str2bool"><code class="docutils literal notranslate"><span class="pre">str2bool()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.likelihood_qc"><code class="docutils literal notranslate"><span class="pre">likelihood_qc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.bp2polar"><code class="docutils literal notranslate"><span class="pre">bp2polar()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.tab2polar"><code class="docutils literal notranslate"><span class="pre">tab2polar()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.compute_dist"><code class="docutils literal notranslate"><span class="pre">compute_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.bpart_distance"><code class="docutils literal notranslate"><span class="pre">bpart_distance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.angle"><code class="docutils literal notranslate"><span class="pre">angle()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.angle_trio"><code class="docutils literal notranslate"><span class="pre">angle_trio()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.compute_areas"><code class="docutils literal notranslate"><span class="pre">compute_areas()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.align_trajectories"><code class="docutils literal notranslate"><span class="pre">align_trajectories()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.kleinberg"><code class="docutils literal notranslate"><span class="pre">kleinberg()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.smooth_boolean_array"><code class="docutils literal notranslate"><span class="pre">smooth_boolean_array()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.split_with_breakpoints"><code class="docutils literal notranslate"><span class="pre">split_with_breakpoints()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rolling_window"><code class="docutils literal notranslate"><span class="pre">rolling_window()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rupture_per_experiment"><code class="docutils literal notranslate"><span class="pre">rupture_per_experiment()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.smooth_mult_trajectory"><code class="docutils literal notranslate"><span class="pre">smooth_mult_trajectory()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.moving_average"><code class="docutils literal notranslate"><span class="pre">moving_average()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.mask_outliers"><code class="docutils literal notranslate"><span class="pre">mask_outliers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.full_outlier_mask"><code class="docutils literal notranslate"><span class="pre">full_outlier_mask()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.interpolate_outliers"><code class="docutils literal notranslate"><span class="pre">interpolate_outliers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.filter_columns"><code class="docutils literal notranslate"><span class="pre">filter_columns()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.automatically_recognize_arena"><code class="docutils literal notranslate"><span class="pre">automatically_recognize_arena()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.retrieve_corners_from_image"><code class="docutils literal notranslate"><span class="pre">retrieve_corners_from_image()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.extract_polygonal_arena_coordinates"><code class="docutils literal notranslate"><span class="pre">extract_polygonal_arena_coordinates()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.fit_ellipse_to_polygon"><code class="docutils literal notranslate"><span class="pre">fit_ellipse_to_polygon()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.circular_arena_recognition"><code class="docutils literal notranslate"><span class="pre">circular_arena_recognition()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rolling_speed"><code class="docutils literal notranslate"><span class="pre">rolling_speed()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.gmm_compute"><code class="docutils literal notranslate"><span class="pre">gmm_compute()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.gmm_model_selection"><code class="docutils literal notranslate"><span class="pre">gmm_model_selection()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.cluster_transition_matrix"><code class="docutils literal notranslate"><span class="pre">cluster_transition_matrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.visuals.html">deepof.visuals module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_heatmap"><code class="docutils literal notranslate"><span class="pre">plot_heatmap()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_projection"><code class="docutils literal notranslate"><span class="pre">plot_projection()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_unsupervised_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_unsupervised_embeddings()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="deepof.html#module-deepof">Module contents</a></li>
@@ -90,31 +185,19 @@
 </section>
 
 
-           </div>
           </div>
-          <footer>
-
-  <hr/>
-
-  <div role="contentinfo">
-    <p>&#169; Copyright 2021, Lucas Miranda.</p>
-  </div>
-
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
-
-</footer>
-        </div>
-      </div>
-    </section>
-  </div>
-  <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
-
-</body>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Lucas Miranda.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 5.2.3 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
 </html>
