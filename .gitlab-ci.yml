@@ -1,6 +1,21 @@
 stages:
+  - build
   - test
   - deploy
+
+build:
+  stage: build
+  retry: 1
+
+  image:
+    name: lucasmiranda42/deepof:latest
+    entrypoint: [""]
+
+  before_script:
+    - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
+
+  script:
+    - poetry install
 
 test:
   stage: test
@@ -10,8 +25,10 @@ test:
     name: lucasmiranda42/deepof:latest
     entrypoint: [""]
 
-  script:
+  before_script:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
+
+  script:
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/unsupervised_utils.py,deepof/supervised_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py
     - coverage xml -o deepof_cov.xml
