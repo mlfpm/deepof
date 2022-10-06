@@ -7,7 +7,7 @@ test:
   retry: 1
 
   image:
-    name: lucasmiranda42/deepof
+    name: lucasmiranda42/deepof:latest
     entrypoint: [""]
 
   script:
