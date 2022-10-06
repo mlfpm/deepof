@@ -11,7 +11,7 @@ test:
     entrypoint: [""]
 
   script:
-    - export PATH="$PATH:./.local/pipx/venvs/poetry/bin"
+    - export PATH="./.local/pipx/venvs/poetry/bin:$PATH"
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/unsupervised_utils.py,deepof/supervised_utils.py,deepof/visuals.py,deepof/models.py,deepof/hypermodels.py
     - coverage xml -o deepof_cov.xml
