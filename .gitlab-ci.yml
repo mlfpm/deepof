@@ -8,7 +8,7 @@ test:
 
   image:
     name: lucasmiranda42/deepof
-    entrypoint: ["pipenv", "run"]
+    entrypoint: ["poetry", "run"]
 
   script:
     - pip uninstall deepof
