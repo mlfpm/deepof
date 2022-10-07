@@ -267,7 +267,6 @@ if __name__ == "__main__":
     dists_angles = distances.merge(angles)
     coords_dist_angles = coords.merge(distances, angles)
 
-
     def batch_preprocess(tab_dict):
         """Returns a preprocessed instance of the input table_dict object"""
 
@@ -279,7 +278,6 @@ if __name__ == "__main__":
             test_videos=val_num,
             shuffle=True,
         )
-
 
     input_dict_train = {
         "coords": coords,

@@ -483,15 +483,14 @@ about the recognised patterns</p>
 <li><p><strong>params</strong> (<em>-</em>) – dictionary to overwrite the default values of the hyperparameters of the functions</p></li>
 <li><p><strong>be</strong> (<em>that the supervised pose estimation utilizes. Values can</em>) – <ul>
 <li><p>speed_pause (int): size of the rolling window to use when computing speeds</p></li>
-<li><p>close_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait</p></li>
-<li><p>side_contact_tol (int): maximum distance between single bodyparts that can be used to report the trait</p></li>
+<li><p>close_contact_tol (int): maximum distance between single body parts that can be used to report the trait</p></li>
+<li><p>side_contact_tol (int): maximum distance between single body parts that can be used to report the trait</p></li>
 <li><p>follow_frames (int): number of frames during which the following trait is tracked</p></li>
-<li><p>follow_tol (int): maximum distance between follower and followed’s path during the last follow_frames,</p></li>
+<li><p>follow_tol (int): maximum distance between follower and followed paths during the last follow_frames, in order to report a detection</p></li>
+<li><p>huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection</p></li>
+<li><p>huddle_speed (int): maximum speed to report a huddle detection</p></li>
+<li><p>fps (float): frames per second of the analysed video. Same as input by default</p></li>
 </ul>
-<p>in order to report a detection
-- huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
-- huddle_speed (int): maximum speed to report a huddle detection
-- fps (float): frames per second of the analysed video. Same as input by default</p>
 </p></li>
 </ul>
 </dd>
