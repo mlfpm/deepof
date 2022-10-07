@@ -160,14 +160,12 @@ Tutorials
 Full API reference
 ======================
 
-.. toctree::
-   :maxdepth: 1
+* :doc:`deepof.data (main data-wrangling module) <deepof.data.html>`_
+* :doc:`deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
+* :doc:`deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
+* :doc:`deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
+* :doc:`deepof.models (deep unsupervised models) <deepof.models.html>`_
+* :doc:`deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
+* :doc:`deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
+* :doc:`deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
 
-   deepof.data (main data-wrangling module) <deepof.data.html>
-   deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>
-   deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>
-   deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>
-   deepof.models (deep unsupervised models) <deepof.models.html>
-   deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>
-   deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>
-   deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>

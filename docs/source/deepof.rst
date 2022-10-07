@@ -4,77 +4,18 @@ deepof package
 Submodules
 ----------
 
-deepof.data module
-------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: deepof.data
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.deepof\_train\_embeddings module
----------------------------------------
-
-.. automodule:: deepof.deepof_train_embeddings
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.hypermodels module
--------------------------
-
-.. automodule:: deepof.hypermodels
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.models module
---------------------
-
-.. automodule:: deepof.models
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.post\_hoc module
------------------------
-
-.. automodule:: deepof.post_hoc
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.supervised\_utils module
--------------------------------
-
-.. automodule:: deepof.supervised_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.unsupervised\_utils module
----------------------------------
-
-.. automodule:: deepof.unsupervised_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.utils module
--------------------
-
-.. automodule:: deepof.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.visuals module
----------------------
-
-.. automodule:: deepof.visuals
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   deepof.data
+   deepof.deepof_train_embeddings
+   deepof.hypermodels
+   deepof.models
+   deepof.post_hoc
+   deepof.supervised_utils
+   deepof.unsupervised_utils
+   deepof.utils
+   deepof.visuals
 
 Module contents
 ---------------
