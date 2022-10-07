@@ -1,4 +1,4 @@
-Sphinx
+sphinx
 sphinx-rtd-theme
 sphinxcontrib-applehelp
 sphinxcontrib-devhelp
@@ -7,5 +7,11 @@ sphinxcontrib-jsmath
 sphinxcontrib-napoleon
 sphinxcontrib-qthelp
 sphinxcontrib-serializinghtml
+readthedocs-sphinx-search
 typeguard
 typing-extensions
+Click
+boto3
+awscli
+humanize
+docutils
