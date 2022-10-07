@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>deepof.post_hoc module &mdash; deepof 0.1.85 documentation</title>
@@ -128,7 +128,7 @@
 <dd><p>Given a set of cluster assignments and the corresponding breaks, computes how much each
 animal spent on each cluster.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -142,7 +142,7 @@ animal spent on each cluster.</p>
 <li><p><strong>dimensionality.</strong> (<em>the embeddings are kept in their original</em>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dataframe with the time spent on each cluster for each experiment.</p>
 </dd>
 </dl>
@@ -154,7 +154,7 @@ animal spent on each cluster.</p>
 <dd><p>Aggregates the embeddings of a set of videos, using the specified aggregation method.
 Instead of an embedding per chunk, the function returns an embedding per experiment.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -164,7 +164,7 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <li><p><strong>agg</strong> (<em>str</em>) – The aggregation method to use. Can be either “mean” or “median”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dataframe with the aggregated embeddings for each experiment.</p>
 </dd>
 </dl>
@@ -175,7 +175,7 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">select_time_bin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.select_time_bin" title="Permalink to this definition"></a></dt>
 <dd><p>Selects a time bin and filters all relevant objects (embeddings, soft_counts and breaks).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -190,7 +190,7 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <li><p><strong>bin_index</strong> (<em>int</em>) – The index of the time bin to select.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A tuple of the filtered embeddings, soft counts, and breaks.</p>
 </dd>
 </dl>
@@ -202,7 +202,7 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <dd><p>Computes the distance between the embeddings of two conditions, using the specified
 aggregation method.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -231,7 +231,7 @@ aggregation method.</p>
 <li><p><strong>n_jobs</strong> (<em>int</em>) – The number of jobs to use for parallel processing.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>An array with distances between conditions across the resulting time bins</p>
 </dd>
 </dl>
@@ -243,7 +243,7 @@ aggregation method.</p>
 <dd><p>Computes the distance between the embeddings of two conditions, using the specified
 aggregation method.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>cur_embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -265,7 +265,7 @@ aggregation method.</p>
 <li><p><strong>&quot;wasserstein&quot;</strong> (<em>which computes distances based on optimal transport</em>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>The distance between the embeddings of the two conditions.</p>
 </dd>
 </dl>
@@ -276,7 +276,7 @@ aggregation method.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">cluster_enrichment_across_conditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.cluster_enrichment_across_conditions" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the population of each cluster across conditions.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -296,7 +296,7 @@ aggregation method.</p>
 <li><p><strong>normalize</strong> (<em>bool</em>) – Whether to normalize the population of each cluster across conditions.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A long format dataframe with the population of each cluster across conditions.</p>
 </dd>
 </dl>
@@ -307,13 +307,13 @@ aggregation method.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">get_transitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_sequence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_states</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.get_transitions" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the transitions between states in a state sequence.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>state_sequence</strong> (<em>list</em>) – A list of states.</p></li>
 <li><p><strong>n_states</strong> (<em>int</em>) – The number of states.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>The resulting transition matrix.</p>
 </dd>
 </dl>
@@ -324,7 +324,7 @@ aggregation method.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">compute_transition_matrix_per_condition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.compute_transition_matrix_per_condition" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the transition matrices specific to each condition.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
@@ -344,7 +344,7 @@ aggregation method.</p>
 <li><p><strong>normalize</strong> (<em>str</em>) – Whether to normalize the population of each cluster across conditions.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dictionary of transition matrices, where the keys are the names of the experimental
 conditions, and the values are the transition matrices for each condition.</p>
 </dd>
@@ -356,7 +356,7 @@ conditions, and the values are the transition matrices for each condition.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">compute_steady_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transition_matrices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_entropy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_iters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.compute_steady_state" title="Permalink to this definition"></a></dt>
 <dd><p>Computes the steady state of each transition matrix provided in a dictionary.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>transition_matrices</strong> (<em>dict</em>) – A dictionary of transition matrices, where the keys are</p></li>
 <li><p><strong>conditions</strong> (<em>the names</em><em> of </em><em>the experimental</em>) – </p></li>
@@ -366,7 +366,7 @@ conditions, and the values are the transition matrices for each condition.</p>
 <li><p><strong>n_iters</strong> (<em>int</em>) – The number of iterations to use for the Markov chain.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dictionary of steady states, where the keys are the names of the experimental conditions, and the values are
 the steady states for each condition. If return_entropy is True, values correspond to the entropy of each
 steady state.</p>
@@ -381,7 +381,7 @@ steady state.</p>
 of a deepof project (speed and acceleration of body parts, distances, and angles) with the hard cluster assignments
 obtained from the unsupervised pipeline.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>deepof_project</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.Project" title="deepof.data.Project"><em>Project</em></a>) – A deepof.Project object.</p></li>
 <li><p><strong>kin_derivative</strong> (<em>int</em>) – The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.</p></li>
@@ -391,7 +391,7 @@ obtained from the unsupervised pipeline.</p>
 <li><p><strong>animal_id</strong> (<em>str</em>) – The animal ID to use, in case of multi-animal projects.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dictionary of aligned kinematics, where the keys are the names of the experimental conditions, and the
 values are the aligned kinematics for each condition.</p>
 </dd>
@@ -403,14 +403,14 @@ values are the aligned kinematics for each condition.</p>
 <span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">chunk_summary_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunked_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body_part_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.chunk_summary_statistics" title="Permalink to this definition"></a></dt>
 <dd><p>Extracts summary statistics from a chunked dataset using seglearn.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>chunked_dataset</strong> (<em>np.ndarray</em>) – Preprocessed training set (of shape chunks x time x features),</p></li>
 <li><p><strong>data.</strong> (<em>where each entry corresponds to a time chunk of</em>) – </p></li>
 <li><p><strong>body_part_names</strong> (<em>list</em>) – A list of the names of the body parts.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dataframe of kinematic features, of shape chunks by features.</p>
 </dd>
 </dl>
@@ -422,7 +422,7 @@ values are the aligned kinematics for each condition.</p>
 <dd><p>Annotate time chunks produced after change-point detection using the unsupervised pipeline, using a set
 of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>deepof_project</strong> – deepof.data.Project object.</p></li>
 <li><p><strong>soft_counts</strong> – matrix with soft cluster assignments produced by the unsupervised pipeline.</p></li>
@@ -437,7 +437,7 @@ of summary statistics coming from kinematics, distances, angles, and supervised 
 <li><p><strong>series.</strong> (<em>or &quot;seglearn&quot; which runs a thorough feature extraction and selection pipeline on each time</em>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A dataframe of kinematic features, of shape chunks by features.</p>
 </dd>
 </dl>
@@ -451,7 +451,7 @@ a set of cross-validation folds, grouped by experimental video. This makes
 sure that chunks coming from the same experiment will never be leaked between
 training and testing sets.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>chunk_stats</strong> – matrix with statistics per chunk, sorted by experiment</p></li>
 <li><p><strong>breaks</strong> – dictionary containing ruprures per video</p></li>
@@ -459,7 +459,7 @@ training and testing sets.</p>
 <li><p><strong>qual_filter</strong> – quality filter to use for the cross-validation. If None, no filter is used.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dt class="field-even">Returns</dt>
 <dd class="field-even"><p>list containing a training and testing set per CV fold.</p>
 </dd>
 </dl>
