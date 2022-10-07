@@ -633,11 +633,15 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
     """
 
     # Extract time series features with ts-learn and seglearn
-    extracted_features = FeatureRep(feature_functions.base_features()).fit_transform(chunked_dataset)
+    extracted_features = FeatureRep(feature_functions.base_features()).fit_transform(
+        chunked_dataset
+    )
 
     # Convert to data frame and add feature names
     extracted_features = pd.DataFrame(extracted_features)
-    columns = list(product(body_part_names, list(feature_functions.base_features().keys())))
+    columns = list(
+        product(body_part_names, list(feature_functions.base_features().keys()))
+    )
     extracted_features.columns = ["_".join(idx) for idx in columns]
 
     return extracted_features

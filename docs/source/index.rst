@@ -153,17 +153,9 @@ That's it for this (very basic) introduction. Check out the tutorials below for 
 Tutorials
 ==================
 
-.. role:: raw-html(raw)
-    :format: html
-
 * `Formatting your data: feature extraction from DLC output`
-:raw-html:`<br />`
-
 * `DeepOF supervised pipeline: detecting pre-defined behaviors`
-:raw-html:`<br />`
-
 * `DeepOF unsupervised pipeline: exploring the behavioral space`
-:raw-html:`<br />`
 
 Full API reference
 ======================

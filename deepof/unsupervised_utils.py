@@ -103,7 +103,7 @@ def nce_loss_fn(history, future, similarity, temperature=0.1):
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N ** 2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     all_sim = K.exp(sim / temperature)
@@ -135,7 +135,7 @@ def dcl_loss_fn(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N ** 2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
@@ -174,7 +174,7 @@ def fc_loss_fn(
 
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim))
 
-    tri_mask = np.ones(N ** 2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg_sim = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
 
@@ -218,7 +218,7 @@ def hard_loss_fn(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N ** 2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
@@ -493,7 +493,7 @@ def create_masks(inp: tf.Tensor):
 
 
 def find_learning_rate(
-    model, data, epochs=1, batch_size=32, min_rate=10 ** -8, max_rate=10 ** -1
+    model, data, epochs=1, batch_size=32, min_rate=10**-8, max_rate=10**-1
 ):
     """
 
@@ -938,7 +938,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
                 if self._annealing_mode == "sigmoid":
                     self._kl_weight = tf.math.sigmoid(
                         (2 * self._kl_weight - 1)
-                        / (self._kl_weight - self._kl_weight ** 2)
+                        / (self._kl_weight - self._kl_weight**2)
                     )
             else:
                 raise NotImplementedError(

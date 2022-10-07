@@ -515,8 +515,8 @@ class VectorQuantizer(tf.keras.models.Model):
         # Compute L2-norm distance between inputs and codes at a given time
         similarity = tf.matmul(flattened_inputs, self.codebook)
         distances = (
-            tf.reduce_sum(flattened_inputs ** 2, axis=1, keepdims=True)
-            + tf.reduce_sum(self.codebook ** 2, axis=0)
+            tf.reduce_sum(flattened_inputs**2, axis=1, keepdims=True)
+            + tf.reduce_sum(self.codebook**2, axis=0)
             - 2 * similarity
         )
 
@@ -1490,7 +1490,11 @@ class Contrastive(tf.keras.models.Model):
             enc_neg = tf.math.l2_normalize(enc_neg, axis=1)
 
             # loss, mean_sim = ls.dcl_loss_fn(zis, zjs, temperature, lfn)
-            contrastive_loss, mean_sim, neg_sim = unsupervised_utils.select_contrastive_loss(
+            (
+                contrastive_loss,
+                mean_sim,
+                neg_sim,
+            ) = unsupervised_utils.select_contrastive_loss(
                 enc_pos,
                 enc_neg,
                 similarity=self.similarity_function,

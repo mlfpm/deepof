@@ -441,7 +441,7 @@ def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
         else:
             return (j - i) * gamma_log_n
 
-    alpha_function = np.vectorize(lambda x: s ** x / g_hat)
+    alpha_function = np.vectorize(lambda x: s**x / g_hat)
     alpha = alpha_function(np.arange(k))
 
     def f(j, x):
