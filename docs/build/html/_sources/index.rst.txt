@@ -160,12 +160,12 @@ Tutorials
 Full API reference
 ======================
 
-* `deepof.data (main data-wrangling module) <deepof.data.html>`_
-* `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
-* `deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
-* `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
+* `deepof.data (main data-wrangling module) <"../build/html/deepof.data.html">`_
+* `deepof.utils (data-wrangling auxiliary functions) <"../build/html/deepof.utils.html">`_
+* `deepof.supervised_utils (deep supervised model training auxiliary functions) <"../build/html/deepof.supervised_utils.html">`_
+* `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <"../build/html/deepof.unsupervised_utils.html">`_
 * `deepof.models (deep unsupervised models) <deepof.models.html>`_
-* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
-* `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
-* `deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
+* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <"../build/html/deepof.hypermodels.html">`_
+* `deepof.visuals (auxiliary visualization functions) <"../build/html/deepof.visuals.html">`_
+* `deepof.post_hoc (auxiliary annotation analysis functions) <"../build/html/deepof.post_hoc.html">`_
 
