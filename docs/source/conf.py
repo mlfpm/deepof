@@ -13,6 +13,7 @@
 import sys
 import re
 
+sys.path.insert(0, "../../deepof")
 sys.path.insert(0, "../../")
 
 # -- Project information -----------------------------------------------------
@@ -46,7 +47,7 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 # Define mock imports for RTD
-with open("requirements.txt") as reqs:
+with open("../../requirements.txt") as reqs:
     autodoc_mock_imports = [re.findall("(.+?)=", i)[0] for i in reqs]
 
 # -- Options for HTML output -------------------------------------------------
