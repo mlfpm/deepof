@@ -44,6 +44,17 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
 
+# Define mock imports for RTD
+autodoc_mock_imports = [
+    "numpy",
+    'scipy',
+    'tensorflow',
+    'tcn',
+    'tensorflow-probability',
+    'shapely',
+    'matplotlib',
+    'pandas',
+]
 
 # -- Options for HTML output -------------------------------------------------
 

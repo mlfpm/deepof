@@ -10,8 +10,4 @@ sphinxcontrib-serializinghtml
 readthedocs-sphinx-search
 typeguard
 typing-extensions
-Click
-boto3
-awscli
-humanize
-docutils
+mock
