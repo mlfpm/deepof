@@ -11,6 +11,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import sys
+import re
 
 sys.path.insert(0, "../../")
 
@@ -45,16 +46,8 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 # Define mock imports for RTD
-autodoc_mock_imports = [
-    "numpy",
-    'scipy',
-    'tensorflow',
-    'tcn',
-    'tensorflow-probability',
-    'shapely',
-    'matplotlib',
-    'pandas',
-]
+with open("requirements.txt") as reqs:
+    autodoc_mock_imports = [re.findall("(.+?)=", i)[0] for i in reqs]
 
 # -- Options for HTML output -------------------------------------------------
 
