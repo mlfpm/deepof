@@ -18,6 +18,5 @@ sphinx:
 
 # Optionally declare the Python requirements required to build your docs
 python:
-   install:
-   - setup_py_install: true
-   - requirements: requirements.txt
+   version: 3.9
+   setup_py_install: true
