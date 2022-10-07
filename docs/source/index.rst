@@ -153,9 +153,9 @@ That's it for this (very basic) introduction. Check out the tutorials below for 
 Tutorials
 ==================
 
-* `Formatting your data: feature extraction from DLC output`
-* `DeepOF supervised pipeline: detecting pre-defined behaviors`
-* `DeepOF unsupervised pipeline: exploring the behavioral space`
+* `Formatting your data: feature extraction from DLC output <deepof_preprocessing_tutorial.ipynb>`_
+* `DeepOF supervised pipeline: detecting pre-defined behaviors <deepof_supervised_tutorial.ipynb>`_
+* `DeepOF unsupervised pipeline: exploring the behavioral space <deepof_unsupervised_tutorial.ipynb>`_
 
 Full API reference
 ======================
