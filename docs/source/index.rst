@@ -160,7 +160,7 @@ Tutorials
 Full API reference
 ======================
 
-* `deepof.data (main data-wrangling module) <deepof.data.html>`_
+* `deepof.data (main data-wrangling module) <deepof.data.rst>`_
 * `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
 * `deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
 * `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
