@@ -15,6 +15,8 @@ import re
 
 sys.path.insert(0, "../../deepof")
 sys.path.insert(0, "../../")
+sys.path.insert(0, "../")
+sys.path.insert(0, "./")
 
 # -- Project information -----------------------------------------------------
 
