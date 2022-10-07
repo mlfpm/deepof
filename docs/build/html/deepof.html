@@ -112,10 +112,10 @@
 <span id="deepof-data-module"></span><h2>deepof.data module<a class="headerlink" href="#module-deepof.data" title="Permalink to this heading"></a></h2>
 <p>Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
 There are three main data structures to pay attention to:
-- <a class="reference internal" href="deepof.data.html#deepof.data.Project" title="deepof.data.Project"><code class="xref py py-class docutils literal notranslate"><span class="pre">Project</span></code></a>, which serves as a configuration hub for the whole pipeline
-- <a class="reference internal" href="deepof.data.html#deepof.data.Coordinates" title="deepof.data.Coordinates"><code class="xref py py-class docutils literal notranslate"><span class="pre">Coordinates</span></code></a>, which acts as an intermediary between project configuration and data, and contains
+- <a class="reference internal" href="#deepof.data.Project" title="deepof.data.Project"><code class="xref py py-class docutils literal notranslate"><span class="pre">Project</span></code></a>, which serves as a configuration hub for the whole pipeline
+- <a class="reference internal" href="#deepof.data.Coordinates" title="deepof.data.Coordinates"><code class="xref py py-class docutils literal notranslate"><span class="pre">Coordinates</span></code></a>, which acts as an intermediary between project configuration and data, and contains
 a plethora of processing methods to apply, and
-- <a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableDict</span></code></a>, which is the main data structure to store the data, having experiment IDs as keys
+- <a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableDict</span></code></a>, which is the main data structure to store the data, having experiment IDs as keys
 and processed time-series as values in a dictionary-like object.</p>
 <p>For a detailed tutorial on how to use this module, see the advanced tutorials in the main section.</p>
 <dl class="py class">
@@ -551,7 +551,7 @@ for selecting data coming from videos of a specified condition.</p>
 <dd class="field-even"><p>Subset of the original table_dict object, containing only the specified keys.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict">TableDict</a></p>
+<dd class="field-odd"><p><a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict">TableDict</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -759,8 +759,10 @@ unsupervised pipeline (in which case this is an empty array).</p>
 </dd></dl>
 
 </section>
-<section id="deepof-deepof-train-embeddings-module">
-<h2>deepof.deepof_train_embeddings module<a class="headerlink" href="#deepof-deepof-train-embeddings-module" title="Permalink to this heading"></a></h2>
+<section id="module-deepof.deepof_train_embeddings">
+<span id="deepof-deepof-train-embeddings-module"></span><h2>deepof.deepof_train_embeddings module<a class="headerlink" href="#module-deepof.deepof_train_embeddings" title="Permalink to this heading"></a></h2>
+<p>Model training command line tool for the deepof package.
+usage: python -m examples.model_training -h</p>
 </section>
 <section id="module-deepof.hypermodels">
 <span id="deepof-hypermodels-module"></span><h2>deepof.hypermodels module<a class="headerlink" href="#module-deepof.hypermodels" title="Permalink to this heading"></a></h2>
@@ -1443,10 +1445,10 @@ animal spent on each cluster.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>each</em>) – </p></li>
-<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>normalize</strong> (<em>bool</em>) – Whether to normalize the time by the total number of frames in</p></li>
@@ -1469,7 +1471,7 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the embeddings for each</em>) – </p></li>
 <li><p><strong>reduce_dim</strong> (<em>bool</em>) – Whether to reduce the dimensionality of the embeddings to 2D. If False,</p></li>
@@ -1490,13 +1492,13 @@ Instead of an embedding per chunk, the function returns an embedding per experim
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
-<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
-<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>bin_size</strong> (<em>int</em>) – The size of the time bin to select.</p></li>
@@ -1517,13 +1519,13 @@ aggregation method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
-<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
-<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
@@ -1558,13 +1560,13 @@ aggregation method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>cur_embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>cur_embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
-<li><p><strong>cur_soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>cur_soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
-<li><p><strong>cur_breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>cur_breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
@@ -1591,13 +1593,13 @@ aggregation method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
-<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
-<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
@@ -1639,13 +1641,13 @@ aggregation method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>embedding</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
 <li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
-<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
-<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
 <li><p><strong>conditions</strong> – </p></li>
 <li><p><strong>condition.</strong> – </p></li>
 <li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
@@ -1696,7 +1698,7 @@ obtained from the unsupervised pipeline.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>deepof_project</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.Project" title="deepof.data.Project"><em>Project</em></a>) – A deepof.Project object.</p></li>
+<li><p><strong>deepof_project</strong> (<a class="reference internal" href="#deepof.data.Project" title="deepof.data.Project"><em>Project</em></a>) – A deepof.Project object.</p></li>
 <li><p><strong>kin_derivative</strong> (<em>int</em>) – The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.</p></li>
 <li><p><strong>include_distances</strong> (<em>bool</em>) – Whether to include distances in the alignment. kin_derivative is taken into account.</p></li>
 <li><p><strong>include_angles</strong> (<em>bool</em>) – Whether to include angles in the alignment. kin_derivative is taken into account.</p></li>
