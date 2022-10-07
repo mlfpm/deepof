@@ -34,6 +34,7 @@ keras-tcn = [
 ]
 tensorflow-probability = "0.17.0"
 tifffile = "^2022.8.12"
+tables = "^3.7.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -42,6 +43,7 @@ hypothesis = "^6.56.1"
 sphynx = "^0.0.3"
 sphinx-press-theme = "^0.8.0"
 coverage = "^6.5.0"
+sphinxcontrib-napoleon = "^0.7"
 
 [build-system]
 requires = ["poetry==1.2.1"]
