@@ -964,7 +964,6 @@ def annotate_video(
             - huddle_speed (int): maximum speed to report a huddle detection
             - fps (float): frames per second of the analysed video. Same as input by default
 
-
     Returns:
         True
 

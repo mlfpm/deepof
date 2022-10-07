@@ -150,21 +150,30 @@ you get a generative model for free).
 
 That's it for this (very basic) introduction. Check out the tutorials below for more advanced examples!
 
+Tutorials
+==================
+
+.. role:: raw-html(raw)
+    :format: html
+
+* `Formatting your data: feature extraction from DLC output`
+:raw-html:`<br />`
+
+* `DeepOF supervised pipeline: detecting pre-defined behaviors`
+:raw-html:`<br />`
+
+* `DeepOF unsupervised pipeline: exploring the behavioral space`
+:raw-html:`<br />`
+
 Full API reference
 ======================
 
 * `deepof.data (main data-wrangling module) <deepof.data.html>`_
 * `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
+* `deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
+* `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
 * `deepof.models (deep unsupervised models) <deepof.models.html>`_
-* `deepof.model_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
 * `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
-* `deepof.train_utils (deep unsupervised model training auxiliary functions) <deepof.train_utils.html>`_
-* `deepof.pose_utils (supervised pipeline annotation functions) <deepof.supervised_utils.html>`_
 * `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
+* `deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
 
-Advanced tutorials
-==================
-* `Formatting your data: feature extraction from DLC output`
-* `DeepOF supervised pipeline: detecting pre-defined behaviors`
-* `DeepOF unsupervised pipeline: exploring the behavioral space`
-* `Case study: Characterizing CSDS`

@@ -638,7 +638,7 @@ def get_callbacks(
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
     """
 
-    Custom early stopping callback. Prevents the model from stopping before warmup is over
+    Custom early stopping callback. Prevents the model from stopping before warmup is over.
 
     """
 
@@ -668,6 +668,7 @@ class CustomStopper(tf.keras.callbacks.EarlyStopping):
         return config
 
     def on_epoch_end(self, epoch, logs=None):
+
         if epoch > self.start_epoch:
             super().on_epoch_end(epoch, logs)
 
@@ -957,7 +958,7 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
 class TransformerEncoderLayer(tf.keras.layers.Layer):
     """
 
-    Transformer encoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer
+    Transformer encoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer.
 
     """
 
@@ -1012,7 +1013,7 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
 class TransformerDecoderLayer(tf.keras.layers.Layer):
     """
 
-    Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer
+    Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer.
 
     """
 
@@ -1149,11 +1150,9 @@ class TransformerEncoder(tf.keras.layers.Layer):
 # noinspection PyCallingNonCallable
 class TransformerDecoder(tf.keras.layers.Layer):
     """
-
     Transformer decoder. Based on https://www.tensorflow.org/text/tutorials/transformer.
     Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
     and https://arxiv.org/abs/1711.03905.
-
     """
 
     def __init__(
@@ -1195,6 +1194,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(self.rate)
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+
         seq_len = tf.shape(x)[1]
         attention_weights = {}
         x = self.embedding(x)
