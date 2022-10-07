@@ -18,6 +18,7 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" /> 
@@ -38,11 +39,22 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.deepof_train_embeddings module</a></li>
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
 </ul>
-</div>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
+</ul>
+
         </div>
       </div>
     </nav>
@@ -67,7 +79,31 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="deepof-deepof-train-embeddings-module">
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="deepof-deepof-train-embeddings-module">
 <h1>deepof.deepof_train_embeddings module<a class="headerlink" href="#deepof-deepof-train-embeddings-module" title="Permalink to this heading"></a></h1>
 </section>
 

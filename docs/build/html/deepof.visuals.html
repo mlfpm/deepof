@@ -18,9 +18,12 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="deepof.post_hoc module" href="deepof.post_hoc.html" />
+    <link rel="prev" title="deepof.hypermodels module" href="deepof.hypermodels.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -38,16 +41,27 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.visuals module</a><ul>
-<li><a class="reference internal" href="#deepof.visuals.plot_heatmap"><code class="docutils literal notranslate"><span class="pre">plot_heatmap()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.visuals.plot_projection"><code class="docutils literal notranslate"><span class="pre">plot_projection()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.visuals.plot_unsupervised_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_unsupervised_embeddings()</span></code></a></li>
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">deepof.visuals (auxiliary visualization functions)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#deepof.visuals.plot_heatmap"><code class="docutils literal notranslate"><span class="pre">plot_heatmap()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deepof.visuals.plot_projection"><code class="docutils literal notranslate"><span class="pre">plot_projection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deepof.visuals.plot_unsupervised_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_unsupervised_embeddings()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
 </ul>
-</div>
+
         </div>
       </div>
     </nav>
@@ -72,12 +86,36 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-deepof.visuals">
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="module-deepof.visuals">
 <span id="deepof-visuals-module"></span><h1>deepof.visuals module<a class="headerlink" href="#module-deepof.visuals" title="Permalink to this heading"></a></h1>
 <p>General plotting functions for the deepof package</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.visuals.plot_heatmap">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_heatmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_heatmap" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_heatmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_heatmap" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a heatmap of the movement of a specific bodypart in the arena.
 If more than one bodypart is passed, it returns one subplot for each</p>
 <blockquote>
@@ -101,7 +139,7 @@ If more than one bodypart is passed, it returns one subplot for each</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.visuals.plot_projection">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_projection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">projection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_projection" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_projection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">projection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_projection" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
 If labels are propagated, it automatically colours all data points with their respective condition.</p>
 <blockquote>
@@ -122,7 +160,7 @@ If labels are propagated, it automatically colours all data points with their re
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.visuals.plot_unsupervised_embeddings">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_unsupervised_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregation_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.pyplot.figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_unsupervised_embeddings" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_unsupervised_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregation_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">figure</span></span></span><a class="headerlink" href="#deepof.visuals.plot_unsupervised_embeddings" title="Permalink to this definition"></a></dt>
 <dd><p>Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
 If labels are propagated, it automatically colours all data points with their respective condition.</p>
 <blockquote>
@@ -148,7 +186,10 @@ If labels are propagated, it automatically colours all data points with their re
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="deepof.hypermodels.html" class="btn btn-neutral float-left" title="deepof.hypermodels module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="deepof.post_hoc.html" class="btn btn-neutral float-right" title="deepof.post_hoc module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
