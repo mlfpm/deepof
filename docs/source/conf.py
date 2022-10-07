@@ -17,7 +17,7 @@ sys.path.insert(0, "../../deepof")
 # -- Project information -----------------------------------------------------
 
 project = "deepof"
-copyright = "2021, Lucas Miranda"
+copyright = "2022, Lucas Miranda"
 author = "Lucas Miranda"
 
 # The full version, including alpha/beta/rc tags
