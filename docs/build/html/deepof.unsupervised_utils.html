@@ -21,9 +21,7 @@
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="deepof.models module" href="deepof.models.html" />
-    <link rel="prev" title="deepof.supervised_utils module" href="deepof.supervised_utils.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -41,95 +39,84 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.select_contrastive_loss"><code class="docutils literal notranslate"><span class="pre">select_contrastive_loss()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.nce_loss_fn"><code class="docutils literal notranslate"><span class="pre">nce_loss_fn()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.dcl_loss_fn"><code class="docutils literal notranslate"><span class="pre">dcl_loss_fn()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.fc_loss_fn"><code class="docutils literal notranslate"><span class="pre">fc_loss_fn()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.hard_loss_fn"><code class="docutils literal notranslate"><span class="pre">hard_loss_fn()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.load_treatments"><code class="docutils literal notranslate"><span class="pre">load_treatments()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.compute_kmeans_loss"><code class="docutils literal notranslate"><span class="pre">compute_kmeans_loss()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.get_k_nearest_neighbors"><code class="docutils literal notranslate"><span class="pre">get_k_nearest_neighbors()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.compute_shannon_entropy"><code class="docutils literal notranslate"><span class="pre">compute_shannon_entropy()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.get_neighbourhood_entropy"><code class="docutils literal notranslate"><span class="pre">get_neighbourhood_entropy()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.plot_lr_vs_loss"><code class="docutils literal notranslate"><span class="pre">plot_lr_vs_loss()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.get_angles"><code class="docutils literal notranslate"><span class="pre">get_angles()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.positional_encoding"><code class="docutils literal notranslate"><span class="pre">positional_encoding()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.create_padding_mask"><code class="docutils literal notranslate"><span class="pre">create_padding_mask()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.create_look_ahead_mask"><code class="docutils literal notranslate"><span class="pre">create_look_ahead_mask()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.create_masks"><code class="docutils literal notranslate"><span class="pre">create_masks()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.find_learning_rate"><code class="docutils literal notranslate"><span class="pre">find_learning_rate()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.get_hard_counts"><code class="docutils literal notranslate"><span class="pre">get_hard_counts()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.cluster_frequencies_regularizer"><code class="docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.get_callbacks"><code class="docutils literal notranslate"><span class="pre">get_callbacks()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper"><code class="docutils literal notranslate"><span class="pre">CustomStopper</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.__init__"><code class="docutils literal notranslate"><span class="pre">CustomStopper.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.get_config"><code class="docutils literal notranslate"><span class="pre">CustomStopper.get_config()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.on_epoch_end"><code class="docutils literal notranslate"><span class="pre">CustomStopper.on_epoch_end()</span></code></a></li>
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">deepof.unsupervised_utils module</a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.select_contrastive_loss"><code class="docutils literal notranslate"><span class="pre">select_contrastive_loss()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.nce_loss_fn"><code class="docutils literal notranslate"><span class="pre">nce_loss_fn()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.dcl_loss_fn"><code class="docutils literal notranslate"><span class="pre">dcl_loss_fn()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.fc_loss_fn"><code class="docutils literal notranslate"><span class="pre">fc_loss_fn()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.hard_loss_fn"><code class="docutils literal notranslate"><span class="pre">hard_loss_fn()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.load_treatments"><code class="docutils literal notranslate"><span class="pre">load_treatments()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.compute_kmeans_loss"><code class="docutils literal notranslate"><span class="pre">compute_kmeans_loss()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.get_k_nearest_neighbors"><code class="docutils literal notranslate"><span class="pre">get_k_nearest_neighbors()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.compute_shannon_entropy"><code class="docutils literal notranslate"><span class="pre">compute_shannon_entropy()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.get_neighbourhood_entropy"><code class="docutils literal notranslate"><span class="pre">get_neighbourhood_entropy()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.plot_lr_vs_loss"><code class="docutils literal notranslate"><span class="pre">plot_lr_vs_loss()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.get_angles"><code class="docutils literal notranslate"><span class="pre">get_angles()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.positional_encoding"><code class="docutils literal notranslate"><span class="pre">positional_encoding()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.create_padding_mask"><code class="docutils literal notranslate"><span class="pre">create_padding_mask()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.create_look_ahead_mask"><code class="docutils literal notranslate"><span class="pre">create_look_ahead_mask()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.create_masks"><code class="docutils literal notranslate"><span class="pre">create_masks()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.find_learning_rate"><code class="docutils literal notranslate"><span class="pre">find_learning_rate()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.get_hard_counts"><code class="docutils literal notranslate"><span class="pre">get_hard_counts()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.cluster_frequencies_regularizer"><code class="docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.get_callbacks"><code class="docutils literal notranslate"><span class="pre">get_callbacks()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper"><code class="docutils literal notranslate"><span class="pre">CustomStopper</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.__init__"><code class="docutils literal notranslate"><span class="pre">CustomStopper.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.get_config"><code class="docutils literal notranslate"><span class="pre">CustomStopper.get_config()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.CustomStopper.on_epoch_end"><code class="docutils literal notranslate"><span class="pre">CustomStopper.on_epoch_end()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate.__init__"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate.on_batch_end"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate.on_batch_end()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate.__init__"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ExponentialLearningRate.on_batch_end"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate.on_batch_end()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder.__init__"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder.call"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder.__init__"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ProbabilisticDecoder.call"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl"><code class="docutils literal notranslate"><span class="pre">ClusterControl</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.__init__"><code class="docutils literal notranslate"><span class="pre">ClusterControl.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.get_config"><code class="docutils literal notranslate"><span class="pre">ClusterControl.get_config()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.call"><code class="docutils literal notranslate"><span class="pre">ClusterControl.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl"><code class="docutils literal notranslate"><span class="pre">ClusterControl</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.__init__"><code class="docutils literal notranslate"><span class="pre">ClusterControl.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.get_config"><code class="docutils literal notranslate"><span class="pre">ClusterControl.get_config()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.ClusterControl.call"><code class="docutils literal notranslate"><span class="pre">ClusterControl.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.__init__"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.get_config"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.get_config()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.call"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.__init__"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.get_config"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.get_config()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.KLDivergenceLayer.call"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer.call"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoderLayer.call"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer.call"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoderLayer.call"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder.call"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerEncoder.call"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder.__init__()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder.call"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder.__init__"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.TransformerDecoder.call"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder.call()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.log_hyperparameters"><code class="docutils literal notranslate"><span class="pre">log_hyperparameters()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.autoencoder_fitting"><code class="docutils literal notranslate"><span class="pre">autoencoder_fitting()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.unsupervised_utils.tune_search"><code class="docutils literal notranslate"><span class="pre">tune_search()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.log_hyperparameters"><code class="docutils literal notranslate"><span class="pre">log_hyperparameters()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.autoencoder_fitting"><code class="docutils literal notranslate"><span class="pre">autoencoder_fitting()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.unsupervised_utils.tune_search"><code class="docutils literal notranslate"><span class="pre">tune_search()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
 </ul>
-
+</div>
         </div>
       </div>
     </nav>
@@ -1097,10 +1084,7 @@ best_run (str): Name of the best run.</p>
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="deepof.supervised_utils.html" class="btn btn-neutral float-left" title="deepof.supervised_utils module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="deepof.models.html" class="btn btn-neutral float-right" title="deepof.models module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

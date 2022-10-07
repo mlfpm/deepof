@@ -21,8 +21,7 @@
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Formatting your data: feature extraction from DLC output" href="tutorial_notebooks/deepof_preprocessing_tutorial.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -40,22 +39,19 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">Welcome to DeepOF!</a></li>
+<li><a class="reference internal" href="#getting-started">Getting started</a><ul>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#what-you-need">What you need</a></li>
+<li><a class="reference internal" href="#basic-usage">Basic usage</a></li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
+</li>
+<li><a class="reference internal" href="#tutorials">Tutorials</a></li>
+<li><a class="reference internal" href="#full-api-reference">Full API reference</a></li>
 </ul>
-
+</div>
         </div>
       </div>
     </nav>
@@ -108,8 +104,6 @@
 <section id="welcome-to-deepof">
 <h1>Welcome to DeepOF!<a class="headerlink" href="#welcome-to-deepof" title="Permalink to this heading"></a></h1>
 <p>A suite for postprocessing time-series extracted from videos of freely moving rodents using <a class="reference external" href="http://www.mousemotorlab.org/deeplabcut">DeepLabCut</a></p>
-<div class="toctree-wrapper compound">
-</div>
 <a class="reference internal image-reference" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png"><img alt="DeepOF logo" class="align-center" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png" style="width: 400px;" /></a>
 </section>
 <section id="getting-started">
@@ -210,36 +204,30 @@ you get a generative model for free).</p>
 </section>
 <section id="tutorials">
 <h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this heading"></a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
+<ul class="simple">
+<li><p><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html"><span class="doc">Formatting your data: feature extraction from DLC output</span></a></p></li>
+<li><p><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html"><span class="doc">DeepOF supervised pipeline: detecting pre-defined behaviors</span></a></p></li>
+<li><p><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html"><span class="doc">DeepOF unsupervised pipeline: exploring the behavioral space</span></a></p></li>
 </ul>
-</div>
 </section>
 <section id="full-api-reference">
 <h1>Full API reference<a class="headerlink" href="#full-api-reference" title="Permalink to this heading"></a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
+<ul class="simple">
+<li><p><a class="reference external" href="deepof.data.html">deepof.data (main data-wrangling module)</a></p></li>
+<li><p><a class="reference external" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></p></li>
+<li><p><a class="reference external" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></p></li>
+<li><p><a class="reference external" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models’ auxiliary functions)</a></p></li>
+<li><p><a class="reference external" href="deepof.models.html">deepof.models (deep unsupervised models)</a></p></li>
+<li><p><a class="reference external" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></p></li>
+<li><p><a class="reference external" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></p></li>
+<li><p><a class="reference external" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></p></li>
 </ul>
-</div>
 </section>
 
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="tutorial_notebooks/deepof_preprocessing_tutorial.html" class="btn btn-neutral float-right" title="Formatting your data: feature extraction from DLC output" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

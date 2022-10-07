@@ -22,10 +22,6 @@ Welcome to DeepOF!
 
 A suite for postprocessing time-series extracted from videos of freely moving rodents using `DeepLabCut <http://www.mousemotorlab.org/deeplabcut>`_
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
 .. image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png
   :width: 400
   :align: center
@@ -153,25 +149,19 @@ That's it for this (very basic) introduction. Check out the tutorials below for 
 Tutorials
 =========
 
-.. toctree::
-   :maxdepth: 1
-
-   Formatting your data: feature extraction from DLC output <tutorial_notebooks/deepof_preprocessing_tutorial>
-   DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial>
-   DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial>
+* `Formatting your data: feature extraction from DLC output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
+* `DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial.ipynb>`_
+* `DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial.ipynb>`_
 
 Full API reference
 ==================
 
-.. toctree::
-   :maxdepth: 1
-
-   deepof.data (main data-wrangling module) <deepof.data>
-   deepof.utils (data-wrangling auxiliary functions) <deepof.utils>
-   deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils>
-   deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils>
-   deepof.models (deep unsupervised models) <deepof.models>
-   deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels>
-   deepof.visuals (auxiliary visualization functions) <deepof.visuals>
-   deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc>
+* `deepof.data (main data-wrangling module) <deepof.data.html>`_
+* `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
+* `deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
+* `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
+* `deepof.models (deep unsupervised models) <deepof.models.html>`_
+* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
+* `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
+* `deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
 

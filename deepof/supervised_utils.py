@@ -953,15 +953,7 @@ def annotate_video(
         - vid_index: for internal usage only; index of the video to tag in coordinates._videos
         - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
         - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
-        that the supervised pose estimation utilizes. Values can be:
-            * speed_pause (int): size of the rolling window to use when computing speeds
-            * close_contact_tol (int): maximum distance between single body parts that can be used to report the trait
-            * side_contact_tol (int): maximum distance between single body parts that can be used to report the trait
-            * follow_frames (int): number of frames during which the following trait is tracked
-            * follow_tol (int): maximum distance between follower and followed paths during the last follow_frames, in order to report a detection
-            * huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection
-            * huddle_speed (int): maximum speed to report a huddle detection
-            * fps (float): frames per second of the analysed video. Same as input by default
+        that the supervised pose estimation utilizes.
 
     Returns:
         True

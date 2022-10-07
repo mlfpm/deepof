@@ -21,9 +21,7 @@
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="deepof.unsupervised_utils module" href="deepof.unsupervised_utils.html" />
-    <link rel="prev" title="deepof.utils module" href="deepof.utils.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -41,40 +39,29 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_preprocessing_tutorial.html">Formatting your data: feature extraction from DLC output</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_supervised_tutorial.html">DeepOF supervised pipeline: detecting pre-defined behaviors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_notebooks/deepof_unsupervised_tutorial.html">DeepOF unsupervised pipeline: exploring the behavioral space</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="deepof.data.html">deepof.data (main data-wrangling module)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">deepof.supervised_utils (deep supervised model training auxiliary functions)</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.close_single_contact"><code class="docutils literal notranslate"><span class="pre">close_single_contact()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.close_double_contact"><code class="docutils literal notranslate"><span class="pre">close_double_contact()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.outside_ellipse"><code class="docutils literal notranslate"><span class="pre">outside_ellipse()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.climb_wall"><code class="docutils literal notranslate"><span class="pre">climb_wall()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.sniff_object"><code class="docutils literal notranslate"><span class="pre">sniff_object()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.huddle"><code class="docutils literal notranslate"><span class="pre">huddle()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.dig"><code class="docutils literal notranslate"><span class="pre">dig()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.look_around"><code class="docutils literal notranslate"><span class="pre">look_around()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.following_path"><code class="docutils literal notranslate"><span class="pre">following_path()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.max_behaviour"><code class="docutils literal notranslate"><span class="pre">max_behaviour()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.get_hparameters"><code class="docutils literal notranslate"><span class="pre">get_hparameters()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.frame_corners"><code class="docutils literal notranslate"><span class="pre">frame_corners()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.supervised_tagging"><code class="docutils literal notranslate"><span class="pre">supervised_tagging()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.tag_annotated_frames"><code class="docutils literal notranslate"><span class="pre">tag_annotated_frames()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#deepof.supervised_utils.annotate_video"><code class="docutils literal notranslate"><span class="pre">annotate_video()</span></code></a></li>
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">deepof.supervised_utils module</a><ul>
+<li><a class="reference internal" href="#deepof.supervised_utils.close_single_contact"><code class="docutils literal notranslate"><span class="pre">close_single_contact()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.close_double_contact"><code class="docutils literal notranslate"><span class="pre">close_double_contact()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.outside_ellipse"><code class="docutils literal notranslate"><span class="pre">outside_ellipse()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.climb_wall"><code class="docutils literal notranslate"><span class="pre">climb_wall()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.sniff_object"><code class="docutils literal notranslate"><span class="pre">sniff_object()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.huddle"><code class="docutils literal notranslate"><span class="pre">huddle()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.dig"><code class="docutils literal notranslate"><span class="pre">dig()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.look_around"><code class="docutils literal notranslate"><span class="pre">look_around()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.following_path"><code class="docutils literal notranslate"><span class="pre">following_path()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.max_behaviour"><code class="docutils literal notranslate"><span class="pre">max_behaviour()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.get_hparameters"><code class="docutils literal notranslate"><span class="pre">get_hparameters()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.frame_corners"><code class="docutils literal notranslate"><span class="pre">frame_corners()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.supervised_tagging"><code class="docutils literal notranslate"><span class="pre">supervised_tagging()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.tag_annotated_frames"><code class="docutils literal notranslate"><span class="pre">tag_annotated_frames()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.supervised_utils.annotate_video"><code class="docutils literal notranslate"><span class="pre">annotate_video()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models' auxiliary functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.models.html">deepof.models (deep unsupervised models)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></li>
 </ul>
-
+</div>
         </div>
       </div>
     </nav>
@@ -481,17 +468,7 @@ about the recognised patterns</p>
 <li><p><strong>vid_index</strong> (<em>-</em>) – for internal usage only; index of the video to tag in coordinates._videos</p></li>
 <li><p><strong>frame_limit</strong> (<em>-</em>) – limit the number of frames to output. Generates all annotated frames by default</p></li>
 <li><p><strong>params</strong> (<em>-</em>) – dictionary to overwrite the default values of the hyperparameters of the functions</p></li>
-<li><p><strong>be</strong> (<em>that the supervised pose estimation utilizes. Values can</em>) – <ul>
-<li><p>speed_pause (int): size of the rolling window to use when computing speeds</p></li>
-<li><p>close_contact_tol (int): maximum distance between single body parts that can be used to report the trait</p></li>
-<li><p>side_contact_tol (int): maximum distance between single body parts that can be used to report the trait</p></li>
-<li><p>follow_frames (int): number of frames during which the following trait is tracked</p></li>
-<li><p>follow_tol (int): maximum distance between follower and followed paths during the last follow_frames, in order to report a detection</p></li>
-<li><p>huddle_forward (int): maximum distance between ears and forward limbs to report a huddle detection</p></li>
-<li><p>huddle_speed (int): maximum speed to report a huddle detection</p></li>
-<li><p>fps (float): frames per second of the analysed video. Same as input by default</p></li>
-</ul>
-</p></li>
+<li><p><strong>utilizes.</strong> (<em>that the supervised pose estimation</em>) – </p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -505,10 +482,7 @@ about the recognised patterns</p>
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="deepof.utils.html" class="btn btn-neutral float-left" title="deepof.utils module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="deepof.unsupervised_utils.html" class="btn btn-neutral float-right" title="deepof.unsupervised_utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 
