@@ -35,6 +35,7 @@ keras-tcn = [
 tensorflow-probability = "0.17.0"
 tifffile = "^2022.8.12"
 tables = "^3.7.0"
+ipykernel = "^6.16.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

@@ -159,7 +159,7 @@ class Project:
         self.angles = True
         self.animal_ids = animal_ids
         self.connectivity = None
-        self.distances = "all"
+        self.distances = False
         self.ego = False
         self.exp_conditions = exp_conditions
         self.high_fidelity = high_fidelity_arena
@@ -302,6 +302,9 @@ class Project:
                 arena_params.append(ellipse)
                 video_resolution.append((h, w))
 
+        elif not self.arena:
+            return None, None, None
+
         else:
             raise NotImplementedError(
                 "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
@@ -352,7 +355,7 @@ class Project:
 
             tab_dict = {
                 deepof.utils.re.findall("(.*?)DLC", tab)[0]: pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab), index_col=0
+                    deepof.utils.os.path.join(self.table_path, tab), index_col=0, low_memory=False,
                 )
                 for tab in self.tables
             }
@@ -472,7 +475,7 @@ class Project:
 
                 imputed = IterativeImputer(
                     skip_complete=True,
-                    max_iter=1,
+                    max_iter=250,
                     n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
                 ).fit_transform(tab)
@@ -1746,7 +1749,7 @@ class TableDict(dict):
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
-        automatic_changepoints="rbf",
+        automatic_changepoints=False,
         window_size: int = 15,
         window_step: int = 1,
         scale: str = "standard",

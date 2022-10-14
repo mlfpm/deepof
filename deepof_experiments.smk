@@ -13,15 +13,15 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
-automatic_changepoints = ["rbf"]
+automatic_changepoints = [False]
 animal_to_preprocess = ["B"]
 kmeans_loss = [0.0, 1.0]
 encodings = [16]
 cluster_numbers = [12] #list(range(5, 26, 1))
 input_types = ["coords"]
-run = list(range(5))
-embedding_model = ["VQVAE", "GMVAE"]
-encoder_model = ["recurrent", "TCN", "transformer"]
+run = [1]
+embedding_model = ["VQVAE"]#, "GMVAE"]
+encoder_model = ["recurrent"]#, "TCN", "transformer"]
 
 rule deepof_experiments:
     input:
