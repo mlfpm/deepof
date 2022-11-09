@@ -17,9 +17,12 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 """
 
 import copy
+import datetime
 import os
+import pickle
 import warnings
 from collections import defaultdict
+from time import time
 from typing import Dict, List, Tuple
 from typing import Any, NewType, Union
 
@@ -29,6 +32,7 @@ import pandas as pd
 import tensorflow as tf
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
+from shapely.geometry import Polygon
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -52,6 +56,22 @@ table_dict = NewType("deepof_table_dict", Any)
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
+def load(project_name: str) -> coordinates:
+    """
+    Loads a pre-saved pickled Coordinates object.
+
+    Args:
+        project_name (str): name of the file to load.
+
+    Returns:
+        Pre-run coordinates object.
+
+    """
+
+    with open(project_name, "rb") as handle:
+        return pickle.load(handle)
+
+
 class Project:
     """
 
@@ -62,14 +82,12 @@ class Project:
 
     def __init__(
         self,
-        arena_dims: int,
         animal_ids: List = tuple([""]),
         arena: str = "polygonal-manual",
-        arena_detection: str = "rule-based",
         enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
-        high_fidelity_arena: bool = False,
+        frame_rate: int = None,
         interpolate_outliers: bool = True,
         interpolation_limit: int = 2,
         interpolation_std: int = 3,
@@ -78,34 +96,33 @@ class Project:
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
-        frame_rate: int = None,
         video_format: str = ".mp4",
+        video_scale: int = 1,
     ):
         """
 
         Initializes a Project object.
 
         Args:
-            arena_dims (int): diameter of the arena in mm (so far, only round arenas are supported).
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
-            arena_detection (str): method for detecting the arena (must be either 'rule-based' (default) or 'cnn').
-            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended,
-            but slow.
+            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts.
+            Recommended, but slow.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
-            high_fidelity_arena (bool): whether to use high-fidelity arena detection. Recommended if light conditions
+            frame_rate (int): frame rate of the videos. If not specified, it will be inferred from the video files.
             are uneven across videos.
             interpolate_outliers (bool): whether to interpolate missing data.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
-            model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
+            model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the
+            documentation).
             path (str): path to the folder containing the DLC output data.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
-            frame_rate (int): frame rate of the videos. If not specified, it will be inferred from the video files.
             video_format (str): video format. Defaults to '.mp4'.
+            video_scale (int): diameter of the arena in mm (so far, only round arenas are supported).
 
         """
 
@@ -143,26 +160,16 @@ class Project:
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
-        self.arena_detection = arena_detection
-        self.arena_dims = arena_dims
+        self.arena_dims = video_scale
         self.ellipse_detection = None
-        if self.arena == "circular-autodetect" and arena_detection == "cnn":
-            self.ellipse_detection = tf.keras.models.load_model(
-                [
-                    os.path.join(self.trained_path, i)
-                    for i in os.listdir(self.trained_path)
-                    if i.startswith("elliptical")
-                ][0]
-            )
 
         # Set the rest of the init parameters
         self.angles = True
         self.animal_ids = animal_ids
         self.connectivity = None
-        self.distances = False
+        self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
-        self.high_fidelity = high_fidelity_arena
         self.interpolate_outliers = interpolate_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
@@ -237,11 +244,16 @@ class Project:
         video_resolution = []
 
         if self.arena in ["polygonal-manual", "circular-manual"]:
+
             for video_path in self.videos:
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
                     os.path.join(self.path, "Videos", video_path), self.arena
                 )
-                cur_scales = [*np.mean(arena_corners, axis=0).astype(int), h, w]
+                cur_scales = [
+                    *np.mean(arena_corners, axis=0).astype(int),
+                    Polygon(arena_corners).length,
+                    self.arena_dims,
+                ]
                 cur_arena_params = arena_corners
 
                 if self.arena == "circular-manual":
@@ -279,9 +291,6 @@ class Project:
                     vid_index=vid_index,
                     path=self.video_path,
                     arena_type=self.arena,
-                    high_fidelity=self.high_fidelity,
-                    detection_mode=self.arena_detection,
-                    cnn_model=self.ellipse_detection,
                 )
 
                 # scales contains the coordinates of the center of the arena,
@@ -355,7 +364,9 @@ class Project:
 
             tab_dict = {
                 deepof.utils.re.findall("(.*?)DLC", tab)[0]: pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab), index_col=0, low_memory=False,
+                    deepof.utils.os.path.join(self.table_path, tab),
+                    index_col=0,
+                    low_memory=False,
                 )
                 for tab in self.tables
             }
@@ -641,7 +652,6 @@ class Project:
             angles=angles,
             animal_ids=self.animal_ids,
             arena=self.arena,
-            arena_detection=self.arena_detection,
             arena_dims=self.arena_dims,
             distances=distances,
             exp_conditions=self.exp_conditions,
@@ -677,7 +687,6 @@ class Coordinates:
     def __init__(
         self,
         arena: str,
-        arena_detection: str,
         arena_dims: np.array,
         path: str,
         quality: dict,
@@ -699,8 +708,6 @@ class Coordinates:
 
         Args:
             arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
-            arena_detection (str): Type of arena detection used for the experiment. See deepof.data.Project for more
-            information.
             arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
@@ -720,7 +727,6 @@ class Coordinates:
 
         self._animal_ids = animal_ids
         self._arena = arena
-        self._arena_detection = arena_detection
         self._arena_params = arena_params
         self._arena_dims = arena_dims
         self._exp_conditions = exp_conditions
@@ -777,7 +783,7 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with
             (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the
-            selected body part with the y axis, for all time points (default).
+            selected body part with the y-axis, for all time points (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
             propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through
@@ -799,16 +805,16 @@ class Coordinates:
                 tabs[key] = deepof.utils.tab2polar(tab)
 
         if center == "arena":
-            if self._arena == "circular-autodetect":
 
-                for i, (key, value) in enumerate(tabs.items()):
-                    value.loc[:, (slice("coords"), [coord_1])] = (
-                        value.loc[:, (slice("coords"), [coord_1])] - scales[i][0]
-                    )
+            for i, (key, value) in enumerate(tabs.items()):
 
-                    value.loc[:, (slice("coords"), [coord_2])] = (
-                        value.loc[:, (slice("coords"), [coord_2])] - scales[i][1]
-                    )
+                value.loc[:, (slice("x"), [coord_1])] = (
+                    value.loc[:, (slice("x"), [coord_1])] - scales[i][0]
+                )
+
+                value.loc[:, (slice("x"), [coord_2])] = (
+                    value.loc[:, (slice("x"), [coord_2])] - scales[i][1]
+                )
 
         elif isinstance(center, str) and center != "arena":
 
@@ -823,7 +829,7 @@ class Coordinates:
                     # center on x / rho
                     value.update(
                         value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
-                        .loc[:, (slice("coords"), [coord_1])]
+                        .loc[:, (slice("x"), [coord_1])]
                         .subtract(
                             value[aid + ("_" if aid != "" else "") + center][coord_1],
                             axis=0,
@@ -833,7 +839,7 @@ class Coordinates:
                     # center on y / phi
                     value.update(
                         value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
-                        .loc[:, (slice("coords"), [coord_2])]
+                        .loc[:, (slice("x"), [coord_2])]
                         .subtract(
                             value[aid + ("_" if aid != "" else "") + center][coord_2],
                             axis=0,
@@ -1096,7 +1102,7 @@ class Coordinates:
                     )
                 )
 
-                exp_table = exp_table.append(current_table)
+                exp_table = pd.concat([exp_table, current_table], axis=1)
 
             areas_tabdict[key] = exp_table
 
@@ -1143,6 +1149,24 @@ class Coordinates:
         """
 
         return self._arena, [self._arena_dims], self._scales
+
+    def save(self, filename: str = None, timestamp: bool = True):
+        """
+
+        Saves the current state of the Coordinates object to a pickled file.
+
+        Args:
+            filename (str): Name of the pickled file to store. If no name is provided, a default is used.
+            timestamp (bool): Whether to append a time stamp at the end of the output file name.
+        """
+
+        pkl_out = "{}{}.pkl".format(
+            (filename if filename is not None else "deepOF_Coordinates"),
+            (f"_{int(time())}" if timestamp else ""),
+        )
+
+        with open(pkl_out, "wb") as handle:
+            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
@@ -1398,54 +1422,6 @@ class TableDict(dict):
             propagate_annotations=self._propagate_annotations,
         )
 
-    # noinspection PyTypeChecker
-    def plot_heatmaps(
-        self,
-        bodyparts: list,
-        xlim: float = None,
-        ylim: float = None,
-        save: bool = False,
-        i: int = 0,
-        dpi: int = 100,
-    ) -> plt.figure:  # pragma: no cover
-        """
-
-        Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
-
-        Args:
-            bodyparts (list): list of body parts to plot.
-            xlim (float): x-axis limits.
-            ylim (float): y-axis limits.
-            save (str):  if provided, the figure is saved to the specified path.
-            i (int): index of the animal to plot.
-            dpi (int): resolution of the figure.
-
-        Returns:
-            plt.figure: Figure object containing the heatmaps.
-
-        """
-
-        if self._type != "coords" or self._polar:
-            raise NotImplementedError(
-                "Heatmaps only available for cartesian coordinates. "
-                "Set polar to False in get_coordinates and try again"
-            )  # pragma: no cover
-
-        if not self._center:  # pragma: no cover
-            warnings.warn("Heatmaps look better if you center the data")
-
-        if self._arena == "circular-autodetect":
-            heatmaps = deepof.visuals.plot_heatmap(
-                list(self.values())[i],
-                bodyparts,
-                xlim=xlim,
-                ylim=ylim,
-                save=save,
-                dpi=dpi,
-            )
-
-            return heatmaps
-
     def _prepare_projection(self) -> np.ndarray:
         """
         Returns a numpy ndarray from the preprocessing of the table_dict object,
@@ -1476,7 +1452,7 @@ class TableDict(dict):
         """
 
         Returns a training set generated from the 2D original data (time x features) and a specified projection
-        to a n_components space. The sample parameter allows the user to randomly pick a subset of the data for
+        to an n_components space. The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons. For internal usage only.
 
         Args:
@@ -1888,7 +1864,7 @@ class TableDict(dict):
                 cur_tab = (
                     pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
                     .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                    .interpolate()
+                    .interpolate(limit_direction="both")
                 )
 
                 to_interpolate[key] = cur_tab
@@ -2038,6 +2014,15 @@ if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+# Data loading and preprocessing
+# TODO: Fix incorrect type issues (read tutorials about it).
+
+# Annotation
 # TODO: Fix issues and add supervised parameters (time in zone, etc).
-# TODO: Label more data for supervised model training
+# TODO: Make rules universal. Measures shouldn't be necessary.
+# TODO: Label more data for supervised model training using SimBA, and integrate SimBA models
+# TODO: Digging and huddling could now be examples of SimBA trained and loaded models.
+# TODO: Think about it, but we could add three pipelines: rule based, SimBA supervised, and unsupervised embeddings
+
+# Visualization
 # TODO: Finish visualization pipeline (Projections and time-wise analyses)

@@ -137,8 +137,9 @@ def select_time_bin(
     embedding: deepof.data.table_dict,
     soft_counts: deepof.data.table_dict,
     breaks: deepof.data.table_dict,
-    bin_size: int,
-    bin_index: int,
+    bin_size: int = 0,
+    bin_index: int = 0,
+    precomputed: np.ndarray = None,
 ):
     """
 
@@ -153,18 +154,37 @@ def select_time_bin(
         conditions, and the values are the breaks for each condition.
         bin_size (int): The size of the time bin to select.
         bin_index (int): The index of the time bin to select.
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each
+        experiment using the provided mask.
 
     Returns:
         A tuple of the filtered embeddings, soft counts, and breaks.
     """
 
-    # Get cumulative length of each video using breaks, and mask the cumsum dictionary,
-    # to check whether a certain instance falls into the desired bin
-    breaks_mask_dict = {
-        key: (np.cumsum(value) >= bin_size * bin_index)
-        & (np.cumsum(value) < bin_size * (bin_index + 1))
-        for key, value in breaks.items()
-    }
+    # If precomputed, filter each experiment using the provided boolean array
+    if precomputed is not None:
+        breaks_mask_dict = {}
+
+        for key in breaks.keys():
+            if embedding[key].shape[0] > len(precomputed):
+                breaks_mask_dict[key] = np.concatenate(
+                    [
+                        precomputed,
+                        [False] * (embedding[key].shape[0] - len(precomputed)),
+                    ]
+                ).astype(bool)
+
+            else:
+                breaks_mask_dict[key] = precomputed[: embedding[key].shape[0]]
+
+    else:
+        # Get cumulative length of each video using breaks, and mask the cumsum dictionary,
+        # to check whether a certain instance falls into the desired bin
+        breaks_mask_dict = {
+            key: (np.cumsum(value) >= bin_size * bin_index)
+            & (np.cumsum(value) < bin_size * (bin_index + 1))
+            for key, value in breaks.items()
+        }
 
     # Filter embedding, soft_counts and breaks using the above masks
     embedding = {key: value[breaks_mask_dict[key]] for key, value in embedding.items()}
@@ -181,10 +201,11 @@ def condition_distance_binning(
     soft_counts: deepof.data.table_dict,
     breaks: deepof.data.table_dict,
     exp_conditions: dict,
-    start_bin: int,
-    end_bin: int,
-    step_bin: int,
+    start_bin: int = None,
+    end_bin: int = None,
+    step_bin: int = None,
     scan_mode: str = "growing-window",
+    precomputed_bins: np.ndarray = None,
     agg: str = "mean",
     metric: str = "auc",
     n_jobs: int = cpu_count(),
@@ -207,9 +228,12 @@ def condition_distance_binning(
         start_bin (int): The index of the first bin to compute the distance for.
         end_bin (int): The index of the last bin to compute the distance for.
         step_bin (int): The step size of the bins to compute the distance for.
-        scan_mode (str): The mode to use for computing the distance. Can be either "growing-window"
-        (used to select optimal binning) or "per-bin" (used to evaluate how discriminability
-        evolves in subsequent bins of a specified size).
+        scan_mode (str): The mode to use for computing the distance. Can be one of "growing-window"
+        (used to select optimal binning), "per-bin" (used to evaluate how discriminability
+        evolves in subsequent bins of a specified size) or "precomputed", which requires a numpy ndarray
+        with bin IDs to be passed to precomputed_bins.
+        precomputed_bins (np.ndarray): numpy array with IDs mapping to different bins, not necessarily having
+        the same size. Difference across conditions for each of these bins will be reported.
         agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
         metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance'
         is based on performance of a classifier when separating aggregated embeddings), or
@@ -229,9 +253,22 @@ def condition_distance_binning(
                 embedding, soft_counts, breaks, step_bin, bin_index
             )
 
-        else:
+        elif scan_mode == "growing_window":
             cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
                 embedding, soft_counts, breaks, bin_index, 0
+            )
+
+        else:
+            assert precomputed_bins is not None, (
+                "For precomputed binning, provide a numpy array with bin IDs under "
+                "the precomputed_bins parameter"
+            )
+
+            cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
+                embedding,
+                soft_counts,
+                breaks,
+                precomputed=(precomputed_bins == bin_index),
             )
 
         return separation_between_conditions(
@@ -245,8 +282,10 @@ def condition_distance_binning(
 
     if scan_mode == "per-bin":
         bin_range = range((end_bin // step_bin))
-    else:
+    elif scan_mode == "growing_window":
         bin_range = range(start_bin, end_bin, step_bin)
+    else:
+        bin_range = pd.Series(precomputed_bins).unique()
 
     exp_condition_distance_array = Parallel(n_jobs=n_jobs)(
         delayed(embedding_distance)(bin_index) for bin_index in tqdm.tqdm(bin_range)
@@ -341,6 +380,7 @@ def cluster_enrichment_across_conditions(
     exp_conditions: dict,
     bin_size: int = None,
     bin_index: int = None,
+    precomputed: np.ndarray = None,
     normalize: bool = False,
 ):
     """
@@ -359,6 +399,8 @@ def cluster_enrichment_across_conditions(
         experimental conditions.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each
+        experiment using the provided mask.
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -367,7 +409,15 @@ def cluster_enrichment_across_conditions(
     """
 
     # Select time bin and filter all relevant objects
-    if bin_size is not None and bin_index is not None:
+    if precomputed is not None:
+        embedding, soft_counts, breaks = select_time_bin(
+            embedding,
+            soft_counts,
+            breaks,
+            precomputed=precomputed,
+        )
+
+    elif bin_size is not None and bin_index is not None:
         embedding, soft_counts, breaks = select_time_bin(
             embedding, soft_counts, breaks, bin_size, bin_index
         )

@@ -13,26 +13,27 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
-automatic_changepoints = [False]
+automatic_changepoints = [False, "rbf", "linear"]
 animal_to_preprocess = ["B"]
 kmeans_loss = [0.0, 1.0]
 encodings = [16]
 cluster_numbers = [12] #list(range(5, 26, 1))
 input_types = ["coords"]
 run = [1]
-embedding_model = ["VQVAE"]#, "GMVAE"]
-encoder_model = ["recurrent"]#, "TCN", "transformer"]
+embedding_model = ["VQVAE", "GMVAE"]
+encoder_model = ["recurrent", "TCN", "transformer"]
 
 rule deepof_experiments:
     input:
         # Train a variety of models
         expand(
             outpath
-            + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_kmeans_loss={kmeans_loss}_run={run}.pkl",
+            + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints={automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
             embedding_model=embedding_model,
             input_type=input_types,
             k=cluster_numbers,
             latdim=encodings,
+            automatic_changepoints=automatic_changepoints,
             kmeans_loss=kmeans_loss,
             run=run,
         ),
@@ -45,11 +46,12 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_kmeans_loss={kmeans_loss}_run={run}.pkl",
+        + "train_models/deepof_unsupervised_{embedding_model}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints={automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_embeddings "
         "--train-path {input.data_path} "
         "--embedding-model {wildcards.embedding_model} "
+        "--automatic-changepoints {wildcards.automatic_changepoints} "
         "--val-num 5 "
         "--animal-id B,W "
         "--animal-to-preprocess B "

@@ -353,7 +353,7 @@ def test_interpolate_outliers(mode):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},

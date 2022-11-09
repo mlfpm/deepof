@@ -27,7 +27,7 @@ def test_plot_heatmap(bparts):
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular-autodetect",
-            arena_dims=tuple([380]),
+            video_scale=tuple([380]),
             video_format=".mp4",
             table_format=".h5",
         )
@@ -36,7 +36,7 @@ def test_plot_heatmap(bparts):
     )
 
     assert isinstance(
-        deepof.visuals.plot_heatmap(
+        deepof.visuals.heatmap(
             prun["test"], bparts, tuple([-100, 100]), tuple([-100, 100]), dpi=200
         ),
         matplotlib.figure.Figure,

@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "-ruptures",
         help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
         "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
-        type=str,
+        choices=[False, "linear", "rbf"],
         default="rbf",
     )
     parser.add_argument(
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         "-bs",
         help="set training batch size. Defaults to 256",
         type=int,
-        default=512,
+        default=256,
     )
     parser.add_argument(
         "--n-components",
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         "--embedding-model",
         "-embedding",
         help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
-        type=str,
+        choices=["VQVAE", "GMVAE", "Contrastive"],
         default="VQVAE",
     )
     parser.add_argument(
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         "-tune",
         help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
         "See documentation for details",
-        type=str,
+        choices=[False, "bayopt", "hyperband"],
         default=False,
     )
     parser.add_argument(
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. "
         "To any of these, '+speed' can be added at the end, which includes overall speed of each bodypart. "
         "Defaults to coords.",
-        type=str,
+        choices=str,
         default="coords",
     )
     parser.add_argument(
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         "-kmeans",
         help="If > 0, adds a regularization term controlling for correlation between dimensions in the latent space",
         type=float,
-        default=1.0,
+        default=0.0,
     )
     parser.add_argument(
         "--cat-kl-loss",
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         help="If > 0, adds a regularization term that minimizes the KL divergence between cluster assignment frequencies"
         "and a uniform distribution",
         type=float,
-        default=1.0,
+        default=0.0,
     )
     parser.add_argument(
         "--smooth-alpha",
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         help="Sets the exponential smoothing factor to apply to the input data. "
         "Float between 0 and 1 (lower is more smooting)",
         type=float,
-        default=4,
+        default=2,
     )
     parser.add_argument("--train-path", "-tp", help="set training set path", type=str)
     parser.add_argument(
@@ -158,14 +158,14 @@ if __name__ == "__main__":
         "-vn",
         help="set number of videos of the training" "set to use for validation",
         type=int,
-        default=1,
+        default=5,
     )
     parser.add_argument(
         "--window-size",
         "-ws",
         help="Sets the sliding window size to be used when building both training and validation sets. Defaults to 15",
         type=int,
-        default=5,
+        default=15,
     )
     parser.add_argument(
         "--window-step",
@@ -238,13 +238,13 @@ if __name__ == "__main__":
     project_coords = deepof.data.Project(
         animal_ids=animal_ids.split(","),
         arena="circular-autodetect",
-        arena_dims=arena_dims,
+        video_scale=arena_dims,
         enable_iterative_imputation=True,
         exclude_bodyparts=exclude_bodyparts,
         exp_conditions=treatment_dict,
         path=train_path,
         smooth_alpha=smooth_alpha,
-        table_format=".h5",
+        table_format="autodetect",
         video_format=".mp4",
     )
 
@@ -426,7 +426,6 @@ if __name__ == "__main__":
             hypertun_trials=hypertun_trials,
             hpt_type=tune,
             k=n_components,
-            kmeans_loss=kmeans_loss,
             project_name="{}-based_VQVAE_{}".format(input_type, tune.capitalize()),
             callbacks=[
                 tensorboard_callback,

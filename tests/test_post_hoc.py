@@ -237,7 +237,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
@@ -296,7 +296,7 @@ def test_annotate_time_chunks(mode, sampler):
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",

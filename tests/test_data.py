@@ -36,7 +36,7 @@ def test_project_init(table_type, arena_type):
             prun = deepof.data.Project(
                 path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
                 arena=arena_type,
-                arena_dims=380,
+                video_scale=380,
                 video_format=".mp4",
                 table_format=table_type,
             ).run()
@@ -44,7 +44,7 @@ def test_project_init(table_type, arena_type):
         prun = deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena=arena_type,
-            arena_dims=380,
+            video_scale=380,
             video_format=".mp4",
             table_format=table_type,
         )
@@ -60,7 +60,7 @@ def test_project_properties():
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -91,7 +91,7 @@ def test_get_distances(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -119,7 +119,7 @@ def test_get_angles(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -144,7 +144,7 @@ def test_run(nodes, ego):
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
     )
@@ -161,7 +161,7 @@ def test_get_supervised_annotation():
     prun = deepof.data.Project(
         path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         animal_ids=["B", "W"],
         video_format=".mp4",
         table_format=".h5",
@@ -186,14 +186,21 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
+    if mode == "multi":
+        animal_ids = ["B", "W"]
+    elif mode == "madlc":
+        animal_ids = ["mouse_black_tail", "mouse_white_tail"]
+    else:
+        animal_ids = [""]
+
     prun = deepof.data.Project(
         path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
-        animal_ids=(["B", "W"] if mode == "multi" else [""]),
+        animal_ids=animal_ids,
         table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -211,10 +218,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
     propagate = sampler.draw(st.booleans())
     propagate_annots = False
-    if exclude == tuple([""]) and nodes == "all" and not ego:
-        propagate_annots = sampler.draw(
-            st.one_of(st.just(prun.supervised_annotation()), st.just(False))
-        )
+    # if exclude == tuple([""]) and nodes == "all" and not ego:
+    #     propagate_annots = sampler.draw(
+    #         st.one_of(st.just(prun.supervised_annotation()), st.just(False))
+    #     )
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -246,6 +253,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         propagate_labels=propagate,
         selected_id=selected_id,
     )
+   # areas = prun.get_areas()
 
     # deepof.coordinates testing
 
@@ -253,6 +261,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
     assert isinstance(speeds, deepof.data.TableDict)
     assert isinstance(distances, deepof.data.TableDict)
     assert isinstance(angles, deepof.data.TableDict)
+   # assert isinstance(areas, deepof.data.TableDict)
     assert isinstance(prun.get_videos(), list)
     assert prun.get_exp_conditions is not None
     assert isinstance(prun.get_quality(), defaultdict)

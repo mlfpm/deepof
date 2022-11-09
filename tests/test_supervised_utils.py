@@ -107,7 +107,7 @@ def test_climb_wall(center, axes, angle, tol):
         deepof.data.Project(
             path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular-autodetect",
-            arena_dims=int(arena[2]),
+            video_scale=int(arena[2]),
             video_format=".mp4",
             table_format=".h5",
         )
@@ -146,7 +146,7 @@ def test_single_animal_traits(animal_id):
         path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         arena="circular-autodetect",
         animal_ids=["B", "W"],
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
     ).run(verbose=True)
@@ -296,7 +296,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     prun = deepof.data.Project(
         path=path,
         arena="circular-autodetect",
-        arena_dims=380,
+        video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),

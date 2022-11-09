@@ -967,14 +967,11 @@ def automatically_recognize_arena(
     path: str = ".",
     tables: dict = None,
     recoglimit: int = 500,
-    high_fidelity: bool = False,
     arena_type: str = "circular-autodetect",
-    detection_mode: str = "rule-based",
-    cnn_model: tf.keras.models.Model = None,
 ) -> Tuple[np.array, int, int]:
     """
 
-    Returns numpy.array with information about the arena recognised from the first frames
+    Returns numpy.ndarray with information about the arena recognised from the first frames
     of the video. WARNING: estimates won't be reliable if the camera moves along the video.
 
     Args:
@@ -983,13 +980,8 @@ def automatically_recognize_arena(
         path (str): Full path of the directory where the videos are.
         tables (dict): Dictionary with DLC time series in DataFrames as values.
         recoglimit (int): Number of frames to use for position estimates.
-        high_fidelity (bool): If True, runs arena recognition on the whole video. Slow, but
         potentially more accurate in poor lighting conditions.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
-        detection_mode (str): Algorithm to use to detect the arena. "cnn" uses a
-        pretrained model based on ResNet50 to predict the ellipse parameters from
-        the image. "rule-based" (default) uses a simpler (and faster) image segmentation approach.
-        cnn_model (tf.keras.models.Model): Model to use if detection_mode=="cnn".
 
     Returns:
         arena (np.ndarray): 1D-array containing information about the arena.
@@ -1002,9 +994,6 @@ def automatically_recognize_arena(
     """
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
-
-    if high_fidelity:
-        recoglimit = int(1e10)  # set recoglimit to a very big value
 
     if tables is not None:
         # Select relevant table to check animal positions; if animals are close to the arena, do not take those frames
@@ -1033,9 +1022,7 @@ def automatically_recognize_arena(
         if arena_type == "circular-autodetect":
 
             # Detect arena and extract positions
-            temp_center, temp_axes, temp_angle = circular_arena_recognition(
-                frame, detection_mode=detection_mode, cnn_model=cnn_model
-            )
+            temp_center, temp_axes, temp_angle = circular_arena_recognition(frame)
             temp_arena = np.array([[*temp_center, *temp_axes, temp_angle]])
 
             # Set if not assigned, else concat and return the median
@@ -1228,8 +1215,6 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 
 def circular_arena_recognition(
     frame: np.ndarray,
-    detection_mode: str = "rule-based",
-    cnn_model: tf.keras.models.Model = None,
 ) -> np.array:
     """
 
@@ -1238,10 +1223,6 @@ def circular_arena_recognition(
 
     Args:
         frame (np.ndarray): numpy.ndarray representing an individual frame of a video
-        detection_mode (str): Algorithm to use to detect the arena. "cnn" uses a
-        pretrained model based on ResNet50 to predict the ellipse parameters from
-        the image. "rule-based" uses a simpler (and faster) image segmentation approach.
-        cnn_model (tf.keras.models.Model): Model to use if detection_mode=="cnn".
 
     Returns:
         circles (np.ndarray): 3-element-array containing x,y positions of the center
@@ -1249,47 +1230,22 @@ def circular_arena_recognition(
 
     """
 
-    if detection_mode == "rule-based":
+    # Convert image to grayscale, threshold it and close it with a 5x5 kernel
+    kernel = np.ones((5, 5))
+    gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
+    for _ in range(5):
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
-        # Convert image to grayscale, threshold it and close it with a 5x5 kernel
-        kernel = np.ones((5, 5))
-        gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
-        for _ in range(5):
-            thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    # Obtain contours from the image, and retain the largest one
+    cnts, _ = cv2.findContours(
+        thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS
+    )
+    main_cnt = np.argmax([len(c) for c in cnts])
 
-        # Obtain contours from the image, and retain the largest one
-        cnts, _ = cv2.findContours(
-            thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS
-        )
-        main_cnt = np.argmax([len(c) for c in cnts])
-
-        center_coordinates, axes_length, ellipse_angle = fit_ellipse_to_polygon(
-            cnts[main_cnt]
-        )
-
-    elif detection_mode == "cnn":
-
-        input_shape = tuple(cnn_model.input.shape[1:-1])
-        image_temp = cv2.resize(frame, input_shape)
-        image_temp = image_temp / 255
-
-        # Detect the main ellipse containing the arena
-        predicted_arena = cnn_model.predict(image_temp[np.newaxis, :])[0]
-
-        # Parameters to return
-        center_coordinates = tuple(
-            (predicted_arena[:2] * frame.shape[:2][::-1] / input_shape).astype(int)
-        )
-        axes_length = tuple(
-            (predicted_arena[2:4] * frame.shape[:2][::-1] / input_shape).astype(int)
-        )
-        ellipse_angle = predicted_arena[4]
-
-    else:
-        raise ValueError(
-            "Invalid detection mode. Select between 'cnn' and 'rule-based'"
-        )
+    center_coordinates, axes_length, ellipse_angle = fit_ellipse_to_polygon(
+        cnts[main_cnt]
+    )
 
     # noinspection PyUnboundLocalVariable
     return center_coordinates, axes_length, ellipse_angle
