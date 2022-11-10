@@ -305,4 +305,3 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
 
     assert isinstance(table.random_projection(n_components=2), tuple)
     assert isinstance(table.pca(n_components=2), tuple)
-    assert isinstance(table.tsne(n_components=2), tuple)

@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import umap
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from shapely.geometry import Polygon
@@ -931,6 +932,7 @@ class Coordinates:
             arena_dims=self._scales,
             center=center,
             polar=polar,
+            exp_conditions=self._exp_conditions,
             propagate_labels=propagate_labels,
             propagate_annotations=propagate_annotations,
         )
@@ -985,6 +987,7 @@ class Coordinates:
 
             return TableDict(
                 tabs,
+                exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
                 typ="dists",
@@ -1048,6 +1051,7 @@ class Coordinates:
 
             return TableDict(
                 tabs,
+                exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
                 typ="angles",
@@ -1106,7 +1110,9 @@ class Coordinates:
 
             areas_tabdict[key] = exp_table
 
-        areas = TableDict(areas_tabdict, typ="areas")
+        areas = TableDict(
+            areas_tabdict, typ="areas", exp_conditions=self._exp_conditions
+        )
 
         if speed:
             for key, tab in areas.items():
@@ -1264,6 +1270,7 @@ class Coordinates:
             typ="supervised",
             arena=self._arena,
             arena_dims=self._arena_dims,
+            exp_conditions=self._exp_conditions,
             propagate_labels=propagate_labels,
         )
 
@@ -1367,6 +1374,7 @@ class TableDict(dict):
         arena_dims: np.array = None,
         center: str = None,
         polar: bool = None,
+        exp_conditions: dict = None,
         propagate_labels: bool = False,
         propagate_annotations: Union[Dict, bool] = False,
     ):
@@ -1382,6 +1390,7 @@ class TableDict(dict):
             arena_dims (np.array): Dimensions of the arena in mm.
             center (str): Type of the center. Handled internally.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
+            exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the
             transformed dataset.
             propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations
@@ -1395,6 +1404,7 @@ class TableDict(dict):
         self._polar = polar
         self._arena = arena
         self._arena_dims = arena_dims
+        self._exp_conditions = exp_conditions
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
 
@@ -1447,7 +1457,6 @@ class TableDict(dict):
         projection_type: str,
         n_components: int = 2,
         kernel: str = None,
-        perplexity: int = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
         """
 
@@ -1474,8 +1483,8 @@ class TableDict(dict):
             )
         elif projection_type == "pca":
             projection_type = KernelPCA(n_components=n_components, kernel=kernel)
-        elif projection_type == "tsne":
-            projection_type = TSNE(n_components=n_components, perplexity=perplexity)
+        elif projection_type == "umap":  # pragma: no cover
+            projection_type = umap.UMAP(n_components=n_components)
 
         X = projection_type.fit_transform(X)
 
@@ -1524,9 +1533,10 @@ class TableDict(dict):
 
         return self._projection("pca", n_components=n_components, kernel=kernel)
 
-    def tsne(
-        self, n_components: int = 2, perplexity: int = 30
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+    def umap(
+        self,
+        n_components: int = 2,
+    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:  # pragma: no cover
         """
 
         Returns a training set generated from the 2D original data (time x features) and a PCA projection
@@ -1543,7 +1553,8 @@ class TableDict(dict):
         """
 
         return self._projection(
-            "tsne", n_components=n_components, perplexity=perplexity
+            "umap",
+            n_components=n_components,
         )
 
     def filter_id(self, selected_id: str = None) -> table_dict:
