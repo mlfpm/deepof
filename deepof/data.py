@@ -1061,7 +1061,9 @@ class Coordinates:
             "Angles not computed. Read the documentation for more details"
         )  # pragma: no cover
 
-    def get_areas(self, speed: int = 0, selected_id: str = "all") -> table_dict:
+    def get_areas(
+        self, speed: int = 0, selected_id: str = "all"
+    ) -> table_dict:  # TODO: Precompute as we do with the rest of the features!
         """
         Returns a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise,
         the areas are computed for all animals.

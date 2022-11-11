@@ -45,17 +45,17 @@ def plot_arena(
 
     """
 
-    if isinstance(i, str):
-        arena = [
-            np.mean(np.array([i[0] for i in coordinates._arena_params]), axis=0),
-            np.mean(np.array([i[1] for i in coordinates._arena_params]), axis=0),
-            np.mean(np.array([i[2] for i in coordinates._arena_params]), axis=0),
-        ]
-
-    else:
+    if isinstance(i, np.int64):
         arena = coordinates._arena_params[i]
 
     if "circular" in coordinates._arena:
+
+        if i == "average":
+            arena = [
+                np.mean(np.array([i[0] for i in coordinates._arena_params]), axis=0),
+                np.mean(np.array([i[1] for i in coordinates._arena_params]), axis=0),
+                np.mean(np.array([i[2] for i in coordinates._arena_params]), axis=0),
+            ]
 
         ax.add_patch(
             Ellipse(
@@ -72,9 +72,20 @@ def plot_arena(
 
     elif "polygonal" in coordinates._arena:
 
-        arena_corners = np.array(arena + [arena[0]])
-        if center == "arena":
-            arena_corners -= np.array(arena[:2]).astype(int)
+        if center == "arena" and i == "average":
+            arena = np.stack(coordinates._arena_params)
+            arena -= np.expand_dims(
+                np.array(coordinates._scales[:, :2]).astype(int), axis=1
+            )
+            arena = arena.mean(axis=0)
+
+        elif center == "arena":
+            arena -= np.expand_dims(
+                np.array(coordinates._scales[i, :2]).astype(int), axis=1
+            ).T
+
+        # Repeat first element for the drawn polygon to be closed
+        arena_corners = np.array(list(arena) + [arena[0]])
 
         ax.plot(
             *arena_corners.T,
@@ -92,6 +103,7 @@ def heatmap(
     title: str,
     save: str = False,
     dpi: int = 200,
+    ax: Any = None,
     **kwargs,
 ) -> plt.figure:
     """
@@ -106,7 +118,8 @@ def heatmap(
          - ylim (float): limits of the y-axis
          - save (str): if provided, saves the figure to the specified file.
          - dpi (int): dots per inch of the figure to create.
-
+         - ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+         a new figure will be created.
 
      Returns:
          - heatmaps (plt.figure): figure with the specified characteristics
@@ -114,17 +127,19 @@ def heatmap(
     """
 
     # noinspection PyTypeChecker
-    heatmaps, ax = plt.subplots(
-        1,
-        len(bodyparts),
-        sharex=True,
-        sharey=True,
-        dpi=dpi,
-        figsize=(8 * len(bodyparts), 8),
-    )
+    if ax is None:
+        heatmaps, ax = plt.subplots(
+            1,
+            len(bodyparts),
+            sharex=True,
+            sharey=True,
+            dpi=dpi,
+            figsize=(8 * len(bodyparts), 8),
+        )
 
     for i, bpart in enumerate(bodyparts):
         heatmap = dframe[bpart]
+
         if len(bodyparts) > 1:
             sns.kdeplot(
                 x=heatmap.x,
@@ -144,7 +159,7 @@ def heatmap(
     for x, bp in zip(ax, bodyparts):
         x.set_xlim(xlim)
         x.set_ylim(ylim)
-        x.set_title(f"{bp} - {title}", fontsize=15)
+        x.set_title(f"{bp} - {title}", fontsize=10)
 
     if save:  # pragma: no cover
         plt.savefig(save)
@@ -165,6 +180,7 @@ def plot_heatmaps(
     save: bool = False,
     experiment_id: int = "average",
     dpi: int = 100,
+    ax: Any = None,
     show: bool = True,
     **kwargs,
 ) -> plt.figure:  # pragma: no cover
@@ -172,29 +188,32 @@ def plot_heatmaps(
 
     Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
 
-    Args:
-        coordinates (coordinates): deepof Coordinates object.
-        bodyparts (list): list of body parts to plot.
-        center (str): Name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with
-        (see preprocess in table_dict documentation).
-        exp_condition (str): Experimental condition to plot. If available, it filters the experiments
-        to keep only those whose condition matches the given string.
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        xlim (float): x-axis limits.
-        ylim (float): y-axis limits.
-        save (str):  if provided, the figure is saved to the specified path.
-        experiment_id (str): index of the animal to plot.
-        dpi (int): resolution of the figure.
-        show (bool): whether to show the created figure. If False, returns al axes.
+     Parameters:
+         coordinates (coordinates): deepof Coordinates object.
+         bodyparts (list): list of body parts to plot.
+         center (str): Name of the body part to which the positions will be centered. If false,
+         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+         align (str): Selects the body part to which later processes will align the frames with
+         (see preprocess in table_dict documentation).
+         exp_condition (str): Experimental condition to plot. If available, it filters the experiments
+         to keep only those whose condition matches the given string.
+         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+         xlim (float): x-axis limits.
+         ylim (float): y-axis limits.
+         save (str):  if provided, the figure is saved to the specified path.
+         experiment_id (str): index of the animal to plot.
+         dpi (int): resolution of the figure.
+         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+         a new figure will be created.
+         show (bool): whether to show the created figure. If False, returns al axes.
 
-    Returns:
-        plt.figure: Figure object containing the heatmaps.
+     Returns:
+         heatmaps (plt.figure): figure with the specified characteristics
 
     """
 
     coords = coordinates.get_coords(center=center, align=align)
+
     if exp_condition is not None:
         coords = coords.filter_videos(
             [k for k, v in coordinates.get_exp_conditions.items() if v == exp_condition]
@@ -214,12 +233,15 @@ def plot_heatmaps(
         title_suffix += f" - {exp_condition}"
 
     if experiment_id != "average":
+
+        i = np.argmax(np.array(list(coords.keys())) == experiment_id)
         coords = coords[experiment_id]
-        i = np.argmax(np.array(coordinates.get_exp_conditions.keys()) == experiment_id)
 
     else:
-        coords = pd.concat([val for val in coords.values()], axis=0)
         i = experiment_id
+        coords = pd.concat([val for val in coords.values()], axis=0).reset_index(
+            drop=True
+        )
 
     heatmaps = heatmap(
         coords,
@@ -229,6 +251,7 @@ def plot_heatmaps(
         title=title_suffix,
         save=save,
         dpi=dpi,
+        ax=ax,
         **kwargs,
     )
 
@@ -340,7 +363,7 @@ def animate_skeleton(
         data = data.filter_id(animal_id)
 
     # Select requested experiment and frames
-    data = data[experiment_id].iloc[:frame_limit]
+    data = data[experiment_id]
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
@@ -436,7 +459,7 @@ def animate_skeleton(
     )
 
     if display_arena and center in [False, "arena"] and align is None:
-        i = np.argmax(list(coordinates.get_coords().keys()) == experiment_id)
+        i = np.argmax(np.array(list(coordinates.get_coords().keys())) == experiment_id)
         plot_arena(coordinates, center, "black", ax2, i)
 
     # Update data in main plot
@@ -463,7 +486,7 @@ def animate_skeleton(
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=data.shape[0],
+        frames=np.minimum(data.shape[0], frame_limit),
         interval=50,
     )
 
@@ -485,8 +508,8 @@ def animate_skeleton(
             np.abs(data.loc[:, (slice("x"), ["y"])].max().max()),
         )
 
-        ax2.set_xlim(-2 * x_dv, 2 * x_dv)
-        ax2.set_ylim(-2 * y_dv, 2 * y_dv)
+        ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
+        ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
     plt.tight_layout()
 
