@@ -35,7 +35,7 @@ def plot_arena(
 ):
     """
 
-    Args:
+    Parameters:
         coordinates (coordinates): deepof Coordinates object.
         center (str): Name of the body part to which the positions will be centered. If false,
         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
@@ -112,17 +112,17 @@ def heatmap(
     If more than one bodypart is passed, it returns one subplot for each
 
      Parameters:
-         - dframe (pandas.DataFrame): table_dict value with info to plot
-         - bodyparts (List): bodyparts to represent (at least 1)
-         - xlim (float): limits of the x-axis
-         - ylim (float): limits of the y-axis
-         - save (str): if provided, saves the figure to the specified file.
-         - dpi (int): dots per inch of the figure to create.
-         - ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-         a new figure will be created.
+         dframe (pandas.DataFrame): table_dict value with info to plot
+         bodyparts (List): bodyparts to represent (at least 1)
+         xlim (float): limits of the x-axis
+         ylim (float): limits of the y-axis
+         save (str): if provided, saves the figure to the specified file.
+         dpi (int): dots per inch of the figure to create.
+         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+         new figure will be created.
 
      Returns:
-         - heatmaps (plt.figure): figure with the specified characteristics
+         heatmaps (plt.figure): figure with the specified characteristics
 
     """
 
@@ -185,7 +185,6 @@ def plot_heatmaps(
     **kwargs,
 ) -> plt.figure:  # pragma: no cover
     """
-
     Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
 
      Parameters:
@@ -209,7 +208,6 @@ def plot_heatmaps(
 
      Returns:
          heatmaps (plt.figure): figure with the specified characteristics
-
     """
 
     coords = coordinates.get_coords(center=center, align=align)
@@ -278,15 +276,15 @@ def plot_embeddings(
     If labels are propagated, it automatically colours all data points with their respective condition.
 
      Parameters:
-         - embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
-         - cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
-         - ax: axes where to plot the arena.
-         - save (str): if provided, saves the figure to the specified file.
-         - show (bool): if True, displays the current figure. If not, returns the given axes.
-         - dpi (int): dots per inch of the figure to create.
+         embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
+         cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
+         ax: axes where to plot the arena.
+         save (str): if provided, saves the figure to the specified file.
+         show (bool): if True, displays the current figure. If not, returns the given axes.
+         dpi (int): dots per inch of the figure to create.
 
      Returns:
-         - projection_scatter (plt.figure): figure with the specified characteristics"""
+         projection_scatter (plt.figure): figure with the specified characteristics"""
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, dpi=dpi)
@@ -331,27 +329,27 @@ def animate_skeleton(
     FuncAnimation function to plot motion trajectories over time
 
     Args:
-        - coordinates (coordinates): deepof Coordinates object.
-        - experiment_id (str): Name of the experiment to display.
-        - animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        - center (str): Name of the body part to which the positions will be centered. If false,
-          the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        - align (str): Selects the body part to which later processes will align the frames with
-          (see preprocess in table_dict documentation).
-        - frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
-        - cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
-          If provided together with selected_cluster, only instances of the specified component are returned.
-          Defaults to None.
-          only instances of the specified component are returned. Defaults to None.
-        - embedding (np.ndarray): UMAP 2D embedding of the datapoints provided. If not None, a second animation
-          shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
-          are available.
-        - selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
-        - display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        - legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
-          than one animal in the representation, False otherwise.
-        - save (str): name of the file where to save the produced animation.
-        - dpi (int): dots per inch of the figure to create.
+        coordinates (coordinates): deepof Coordinates object.
+        experiment_id (str): Name of the experiment to display.
+        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
+        center (str): Name of the body part to which the positions will be centered. If false,
+        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with
+        (see preprocess in table_dict documentation).
+        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
+        If provided together with selected_cluster, only instances of the specified component are returned.
+        Defaults to None.
+        only instances of the specified component are returned. Defaults to None.
+        embedding (np.ndarray): UMAP 2D embedding of the datapoints provided. If not None, a second animation
+        shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
+        are available.
+        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
+        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
+        than one animal in the representation, False otherwise.
+        save (str): name of the file where to save the produced animation.
+        dpi (int): dots per inch of the figure to create.
 
     """
 

@@ -225,7 +225,7 @@ def bpart_distance(
 def angle(a: np.array, b: np.array, c: np.array) -> np.array:
     """
 
-    Returns a numpy.array with the angles between the provided instances.
+    Returns a numpy.ndarray with the angles between the provided instances.
 
     Args:
         a (np.array): 2D positions over time for a body part.
@@ -251,7 +251,7 @@ def angle(a: np.array, b: np.array, c: np.array) -> np.array:
 def angle_trio(bpart_array: np.array) -> np.array:
     """
 
-    Returns a numpy.array with all three possible angles between the provided instances.
+    Returns a numpy.ndarray with all three possible angles between the provided instances.
 
     Args:
         bpart_array (numpy.array): 2D positions over time for a bodypart.

@@ -167,6 +167,7 @@ class Project:
         # Set the rest of the init parameters
         self.angles = True
         self.animal_ids = animal_ids
+        self.areas = True
         self.connectivity = None
         self.distances = "all"
         self.ego = False
@@ -322,7 +323,7 @@ class Project:
 
         return np.array(scales), arena_params, video_resolution
 
-    def load_tables(self, verbose: bool = False) -> deepof.utils.Tuple:
+    def load_tables(self, verbose: bool = True) -> deepof.utils.Tuple:
         """
 
         Loads videos and tables into dictionaries.
@@ -509,7 +510,7 @@ class Project:
 
         return tab_dict, lik_dict
 
-    def get_distances(self, tab_dict: dict, verbose: bool = False) -> dict:
+    def get_distances(self, tab_dict: dict, verbose: bool = True) -> dict:
         """
 
         Computes the distances between all selected body parts over time. If ego is provided, it only returns
@@ -517,7 +518,7 @@ class Project:
 
         Args:
             tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to False.
+            verbose (bool): If True, prints progress. Defaults to True.
 
         Returns:
             dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
@@ -558,14 +559,14 @@ class Project:
 
         return distance_dict
 
-    def get_angles(self, tab_dict: dict, verbose: bool = False) -> dict:
+    def get_angles(self, tab_dict: dict, verbose: bool = True) -> dict:
         """
 
         Computes all the angles between adjacent bodypart trios per video and per frame in the data.
 
         Args:
             tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to False.
+            verbose (bool): If True, prints progress. Defaults to True.
 
         Returns:
             dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
@@ -613,6 +614,55 @@ class Project:
 
         return angle_dict
 
+    def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
+        """
+
+        Computes all relevant areas (head, torso, back) per video and per frame in the data.
+
+        Args:
+            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+            verbose (bool): If True, prints progress. Defaults to True.
+
+        Returns:
+            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+
+        """
+
+        if verbose:
+            print("Computing areas...")
+
+        areas_dict = {}
+
+        for key, tab in tab_dict.items():
+
+            exp_table = pd.DataFrame()
+
+            for id in self.animal_ids:
+
+                if id == "":
+                    id = None
+
+                # get the current table for the current animal
+                current_table = tab.loc[:, deepof.utils.filter_columns(tab.columns, id)]
+                current_table = current_table.apply(
+                    lambda x: deepof.utils.compute_areas(x, animal_id=id), axis=1
+                )
+                current_table = pd.DataFrame(
+                    current_table.to_list(),
+                    index=current_table.index,
+                    columns=["head_area", "torso_area", "back_area", "full_area"],
+                ).add_prefix(
+                    "{}{}".format(
+                        (id if id is not None else ""), ("_" if id is not None else "")
+                    )
+                )
+
+                exp_table = pd.concat([exp_table, current_table], axis=1)
+
+            areas_dict[key] = exp_table
+
+        return areas_dict
+
     def run(self, verbose: bool = True) -> coordinates:
         """
 
@@ -634,6 +684,7 @@ class Project:
 
         distances = None
         angles = None
+        areas = None
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
@@ -646,12 +697,16 @@ class Project:
         if self.angles:
             angles = self.get_angles(tables, verbose)
 
+        if self.areas:
+            areas = self.get_areas(tables, verbose)
+
         if verbose:
             print("Done!")
 
         return Coordinates(
             angles=angles,
             animal_ids=self.animal_ids,
+            areas=areas,
             arena=self.arena,
             arena_dims=self.arena_dims,
             distances=distances,
@@ -699,6 +754,7 @@ class Coordinates:
         video_resolution: List,
         angles: dict = None,
         animal_ids: List = tuple([""]),
+        areas: dict = None,
         distances: dict = None,
         exp_conditions: dict = None,
     ):
@@ -738,9 +794,9 @@ class Coordinates:
         self._trained_model_path = trained_model_path
         self._videos = videos
         self._video_resolution = video_resolution
-        self.angles = angles
-        self.areas = None
-        self.distances = distances
+        self._angles = angles
+        self._areas = areas
+        self._distances = distances
 
     def __str__(self):  # pragma: no cover
         if self._exp_conditions:
@@ -959,9 +1015,9 @@ class Coordinates:
 
         """
 
-        tabs = deepof.utils.deepcopy(self.distances)
+        tabs = deepof.utils.deepcopy(self._distances)
 
-        if self.distances is not None:
+        if self._distances is not None:
 
             if speed:
                 for key, tab in tabs.items():
@@ -1021,9 +1077,9 @@ class Coordinates:
 
         """
 
-        tabs = deepof.utils.deepcopy(self.angles)
+        tabs = deepof.utils.deepcopy(self._angles)
 
-        if self.angles is not None:
+        if self._angles is not None:
             if degrees:
                 tabs = {key: np.degrees(tab) for key, tab in tabs.items()}
 
@@ -1077,53 +1133,44 @@ class Coordinates:
             table_dict: A table_dict object with the areas of the body parts animal as values.
         """
 
-        if selected_id == "all":
-            selected_ids = self._animal_ids
-        else:
-            selected_ids = [selected_id]
+        tabs = deepof.utils.deepcopy(self._areas)
 
-        areas_tabdict = {}
+        if self._areas is not None:
 
-        for key, tab in self._tables.items():
+            if selected_id == "all":
+                selected_ids = self._animal_ids
+            else:
+                selected_ids = [selected_id]
 
-            exp_table = pd.DataFrame()
+            for key, tab in tabs.items():
 
-            for id in selected_ids:
+                exp_table = pd.DataFrame()
 
-                if id == "":
-                    id = None
+                for id in selected_ids:
 
-                # get the current table for the current animal
-                current_table = tab.loc[:, deepof.utils.filter_columns(tab.columns, id)]
-                current_table = current_table.apply(
-                    lambda x: deepof.utils.compute_areas(x, animal_id=id), axis=1
-                )
-                current_table = pd.DataFrame(
-                    current_table.to_list(),
-                    index=current_table.index,
-                    columns=["head_area", "torso_area", "back_area", "full_area"],
-                ).add_prefix(
-                    "{}{}".format(
-                        (id if id is not None else ""), ("_" if id is not None else "")
-                    )
-                )
+                    if id == "":
+                        id = None
 
-                exp_table = pd.concat([exp_table, current_table], axis=1)
+                    # get the current table for the current animal
+                    current_table = tab.loc[
+                        :, deepof.utils.filter_columns(tab.columns, id)
+                    ]
+                    exp_table = pd.concat([exp_table, current_table], axis=1)
 
-            areas_tabdict[key] = exp_table
+                tabs[key] = exp_table
 
-        areas = TableDict(
-            areas_tabdict, typ="areas", exp_conditions=self._exp_conditions
-        )
+            areas = TableDict(tabs, typ="areas", exp_conditions=self._exp_conditions)
 
-        if speed:
-            for key, tab in areas.items():
-                vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-                areas[key] = vel
-        else:
-            self.areas = areas
+            if speed:
+                for key, tab in areas.items():
+                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+                    areas[key] = vel
 
-        return areas
+            return areas
+
+        raise ValueError(
+            "Areas not computed. Read the documentation for more details"
+        )  # pragma: no cover
 
     def get_videos(self, play: bool = False):
         """
