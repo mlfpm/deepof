@@ -316,9 +316,9 @@ def animate_skeleton(
     center: str = "arena",
     align: str = None,
     frame_limit: int = None,
-    cluster_assignments=None,
-    embedding=None,
-    selected_cluster=None,
+    cluster_assignments: np.ndarray = None,
+    embedding: Union[List, np.ndarray] = None,
+    selected_cluster: np.ndarray = None,
     display_arena: bool = True,
     legend: bool = True,
     save: bool = None,
@@ -341,7 +341,7 @@ def animate_skeleton(
         If provided together with selected_cluster, only instances of the specified component are returned.
         Defaults to None.
         only instances of the specified component are returned. Defaults to None.
-        embedding (np.ndarray): UMAP 2D embedding of the datapoints provided. If not None, a second animation
+        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation
         shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
         are available.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
@@ -366,9 +366,24 @@ def animate_skeleton(
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
 
-        assert (
-            embedding.shape[0] == data.shape[0]
-        ), "there should be one embedding per row in data"
+        if isinstance(embedding, np.ndarray):
+            assert (
+                embedding.shape[0] == data.shape[0]
+            ), "there should be one embedding per row in data"
+
+            concat_embedding = embedding
+            embedding = [embedding]
+
+        elif isinstance(embedding, list):
+
+            assert len(embedding) == len(coordinates._animal_ids)
+
+            for emb in embedding:
+                assert (
+                    emb.shape[0] == data.shape[0]
+                ), "there should be one embedding per row in data"
+
+            concat_embedding = np.concatenate(embedding)
 
         if selected_cluster is not None:
             cluster_embedding = embedding[cluster_assignments == selected_cluster]
@@ -401,17 +416,23 @@ def animate_skeleton(
     if embedding is not None:
         ax1 = fig.add_subplot(121)
 
-        plot_embeddings(embedding, cluster_assignments, ax1, show=False)
+        plot_embeddings(concat_embedding, cluster_assignments, ax1, show=False)
 
         # Plot current position
-        umap_scatter = ax1.scatter(
-            cluster_embedding[0, 0],
-            cluster_embedding[0, 1],
-            color="red",
-            s=75,
-            linewidths=2,
-            edgecolors="black",
-        )
+        umap_scatter = {}
+        for i, emb in enumerate(embedding):
+            umap_scatter[i] = ax1.scatter(
+                emb[0, 0],
+                emb[0, 1],
+                color=(
+                    "red"
+                    if len(embedding) == 1
+                    else list(sns.color_palette("tab10"))[i]
+                ),
+                s=200,
+                linewidths=2,
+                edgecolors="black",
+            )
 
         ax1.set_title("UMAP projection of time embedding", fontsize=15)
         ax1.set_xlabel("UMAP-1")
@@ -465,10 +486,11 @@ def animate_skeleton(
 
         if embedding is not None:
             # Update umap scatter
-            umap_x = cluster_embedding[i, 0]
-            umap_y = cluster_embedding[i, 1]
+            for j, xy in umap_scatter.items():
+                umap_x = cluster_embedding[j][i, 0]
+                umap_y = cluster_embedding[j][i, 1]
 
-            umap_scatter.set_offsets(np.c_[umap_x, umap_y])
+                umap_scatter[j].set_offsets(np.c_[umap_x, umap_y])
 
         # Update skeleton scatter plot
         x = data.loc[:, (slice("x"), ["x"])].iloc[i, :]
