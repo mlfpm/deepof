@@ -14,6 +14,7 @@ from matplotlib.colors import ListedColormap
 from matplotlib.patches import Ellipse
 from typing import Any, List, NewType, Union
 
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -33,16 +34,15 @@ table_dict = NewType("deepof_table_dict", Any)
 def plot_arena(
     coordinates: coordinates, center: str, color: str, ax: Any, i: Union[int, str]
 ):
-    """
+    """Plots the arena in the given canvas.
 
-    Parameters:
-        coordinates (coordinates): deepof Coordinates object.
-        center (str): Name of the body part to which the positions will be centered. If false,
+    Args:
+        coordinates: deepof Coordinates object.
+        center: Name of the body part to which the positions will be centered. If false,
         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         color: color of the displayed arena.
         ax: axes where to plot the arena.
-        i (Union[int, str]): index of the animal to plot.
-
+        i: index of the animal to plot.
     """
 
     if isinstance(i, np.int64):
@@ -106,24 +106,20 @@ def heatmap(
     ax: Any = None,
     **kwargs,
 ) -> plt.figure:
-    """
+    """Returns a heatmap of the movement of a specific bodypart in the arena.
+    If more than one bodypart is passed, it returns one subplot for each.
 
-    Returns a heatmap of the movement of a specific bodypart in the arena.
-    If more than one bodypart is passed, it returns one subplot for each
-
-     Parameters:
-         dframe (pandas.DataFrame): table_dict value with info to plot
-         bodyparts (List): bodyparts to represent (at least 1)
-         xlim (float): limits of the x-axis
-         ylim (float): limits of the y-axis
-         save (str): if provided, saves the figure to the specified file.
-         dpi (int): dots per inch of the figure to create.
-         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-         new figure will be created.
+     Args:
+         dframe: table_dict value with info to plot
+         bodyparts: bodyparts to represent (at least 1)
+         xlim: limits of the x-axis
+         ylim: limits of the y-axis
+         save: if provided, saves the figure to the specified file.
+         dpi: dots per inch of the figure to create.
+         ax: axes where to plot the current figure. If not provided, a new figure will be created.
 
      Returns:
          heatmaps (plt.figure): figure with the specified characteristics
-
     """
 
     # noinspection PyTypeChecker
@@ -184,30 +180,29 @@ def plot_heatmaps(
     show: bool = True,
     **kwargs,
 ) -> plt.figure:  # pragma: no cover
-    """
-    Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
+    """Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
 
-     Parameters:
-         coordinates (coordinates): deepof Coordinates object.
-         bodyparts (list): list of body parts to plot.
-         center (str): Name of the body part to which the positions will be centered. If false,
-         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-         align (str): Selects the body part to which later processes will align the frames with
-         (see preprocess in table_dict documentation).
-         exp_condition (str): Experimental condition to plot. If available, it filters the experiments
-         to keep only those whose condition matches the given string.
-         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-         xlim (float): x-axis limits.
-         ylim (float): y-axis limits.
-         save (str):  if provided, the figure is saved to the specified path.
-         experiment_id (str): index of the animal to plot.
-         dpi (int): resolution of the figure.
-         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-         a new figure will be created.
-         show (bool): whether to show the created figure. If False, returns al axes.
+    Args:
+        coordinates: deepof Coordinates object.
+        bodyparts: list of body parts to plot.
+        center: Name of the body part to which the positions will be centered. If false,
+        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align: Selects the body part to which later processes will align the frames with
+        (see preprocess in table_dict documentation).
+        exp_condition: Experimental condition to plot. If available, it filters the experiments
+        to keep only those whose condition matches the given string.
+        display_arena: whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        xlim: x-axis limits.
+        ylim: y-axis limits.
+        save:  if provided, the figure is saved to the specified path.
+        experiment_id: index of the animal to plot.
+        dpi: resolution of the figure.
+        ax: axes where to plot the current figure. If not provided,
+        a new figure will be created.
+        show: whether to show the created figure. If False, returns al axes.
 
-     Returns:
-         heatmaps (plt.figure): figure with the specified characteristics
+    Returns:
+        heatmaps (plt.figure): figure with the specified characteristics
     """
 
     coords = coordinates.get_coords(center=center, align=align)
@@ -271,20 +266,20 @@ def plot_embeddings(
     show: bool = True,
     dpi: int = 200,
 ) -> plt.figure:
+    """Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+      If labels are propagated, it automatically colours all data points with their respective condition.
+
+    Args:
+        embeddings: sequence embeddings obtained with the unsupervised pipeline within deepof
+        cluster_assignments: labels of the clusters. If None, aggregation method should be provided.
+        ax: axes where to plot the arena.
+        save: if provided, saves the figure to the specified file.
+        show: if True, displays the current figure. If not, returns the given axes.
+        dpi: dots per inch of the figure to create.
+
+    Returns:
+        projection_scatter (plt.figure): figure with the specified characteristics
     """
-    Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
-    If labels are propagated, it automatically colours all data points with their respective condition.
-
-     Parameters:
-         embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
-         cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
-         ax: axes where to plot the arena.
-         save (str): if provided, saves the figure to the specified file.
-         show (bool): if True, displays the current figure. If not, returns the given axes.
-         dpi (int): dots per inch of the figure to create.
-
-     Returns:
-         projection_scatter (plt.figure): figure with the specified characteristics"""
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, dpi=dpi)
@@ -324,33 +319,30 @@ def animate_skeleton(
     save: bool = None,
     dpi: int = 300,
 ):
-    """
-
-    FuncAnimation function to plot motion trajectories over time
+    """FuncAnimation function to plot motion trajectories over time.
 
     Args:
-        coordinates (coordinates): deepof Coordinates object.
-        experiment_id (str): Name of the experiment to display.
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false,
+        coordinates: deepof Coordinates object.
+        experiment_id: Name of the experiment to display.
+        animal_id: ID list of animals to display. If None (default) it shows all animals.
+        center: Name of the body part to which the positions will be centered. If false,
         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with
+        align: Selects the body part to which later processes will align the frames with
         (see preprocess in table_dict documentation).
-        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
-        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
+        frame_limit: Number of frames to plot. If None, the entire video is rendered.
+        cluster_assignments: contain sorted cluster assignments for all instances in data.
         If provided together with selected_cluster, only instances of the specified component are returned.
         Defaults to None.
         only instances of the specified component are returned. Defaults to None.
-        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation
+        embedding: UMAP 2D embedding of the datapoints provided. If not None, a second animation
         shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
         are available.
-        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
+        selected_cluster: cluster to filter. If provided together with cluster_assignments,
+        display_arena: whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        legend: whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
         than one animal in the representation, False otherwise.
-        save (str): name of the file where to save the produced animation.
-        dpi (int): dots per inch of the figure to create.
-
+        save: name of the file where to save the produced animation.
+        dpi: dots per inch of the figure to create.
     """
 
     # Get data to plot from coordinates object
@@ -409,6 +401,44 @@ def animate_skeleton(
     # Sort column index to allow for multiindex slicing
     data = data.sort_index(ascending=True, inplace=False, axis=1)
 
+    def get_polygon_coords(data, animal_id=None):
+        """Generates polygons to animate for the indicated animal in the provided dataframe."""
+
+        if animal_id is not None:
+            animal_id += "_"
+
+        head = np.concatenate(
+            [
+                data.xs(f"{animal_id}Nose", 1).values,
+                data.xs(f"{animal_id}Left_ear", 1).values,
+                data.xs(f"{animal_id}Spine_1", 1).values,
+                data.xs(f"{animal_id}Right_ear", 1).values,
+            ],
+            axis=1,
+        )
+
+        body = np.concatenate(
+            [
+                data.xs(f"{animal_id}Spine_1", 1).values,
+                data.xs(f"{animal_id}Left_fhip", 1).values,
+                data.xs(f"{animal_id}Left_bhip", 1).values,
+                data.xs(f"{animal_id}Spine_2", 1).values,
+                data.xs(f"{animal_id}Right_bhip", 1).values,
+                data.xs(f"{animal_id}Right_fhip", 1).values,
+            ],
+            axis=1,
+        )
+
+        tail = np.concatenate(
+            [
+                data.xs(f"{animal_id}Spine_2", 1).values,
+                data.xs(f"{animal_id}Tail_base", 1).values,
+            ],
+            axis=1,
+        )
+
+        return [head, body, tail]
+
     # Define canvas
     fig = plt.figure(figsize=((16 if embedding is not None else 8), 8), dpi=dpi)
 
@@ -450,6 +480,13 @@ def animate_skeleton(
     cmap = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
 
     if animal_id is None:
+        animal_ids = coordinates._animal_ids
+    else:
+        animal_ids = [animal_id]
+
+    polygons = [get_polygon_coords(data, aid) for aid in animal_ids]
+
+    if animal_id is None:
         hue = np.zeros(len(np.array(init_x)))
         for i, id in enumerate(coordinates._animal_ids):
 
@@ -477,6 +514,28 @@ def animate_skeleton(
         c=hue,
     )
 
+    tail_lines = []
+    for p, aid in enumerate(polygons):
+        ax2.add_patch(
+            patches.Polygon(
+                aid[0][0, :].reshape(-1, 2),
+                closed=True,
+                fc=cmap.colors[p],
+                ec=cmap.colors[p],
+                alpha=0.5,
+            )
+        )
+        ax2.add_patch(
+            patches.Polygon(
+                aid[1][0, :].reshape(-1, 2),
+                closed=True,
+                fc=cmap.colors[p],
+                ec=cmap.colors[p],
+                alpha=0.5,
+            )
+        )
+        tail_lines.append(ax2.plot(*aid[2][0, :].reshape(-1, 2).T))
+
     if display_arena and center in [False, "arena"] and align is None:
         i = np.argmax(np.array(list(coordinates.get_coords().keys())) == experiment_id)
         plot_arena(coordinates, center, "black", ax2, i)
@@ -497,6 +556,15 @@ def animate_skeleton(
         y = data.loc[:, (slice("x"), ["y"])].iloc[i, :]
 
         skeleton_scatter.set_offsets(np.c_[x, y])
+
+        for p, aid in enumerate(polygons):
+            # Update polygons
+            ax2.patches[2 * p].set_xy(aid[0][i, :].reshape(-1, 2))
+            ax2.patches[2 * p + 1].set_xy(aid[1][i, :].reshape(-1, 2))
+
+            # Update tails
+            tail_lines[p][0].set_xdata(aid[2][i, :].reshape(-1, 2)[:, 0])
+            tail_lines[p][0].set_ydata(aid[2][i, :].reshape(-1, 2)[:, 1])
 
         if embedding is not None:
             return umap_scatter, skeleton_scatter

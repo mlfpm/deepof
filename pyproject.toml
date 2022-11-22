@@ -44,6 +44,7 @@ catboost = "^1.1"
 openpyxl = "^3.0.10"
 kaleido = "0.2.1"
 av = "^10.0.0"
+imblearn = "^0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
