@@ -1,10 +1,5 @@
-# @author lucasmiranda42
-# encoding: utf-8
-# module deepof
+"""Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
 
-"""
-
-Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
 There are three main data structures to pay attention to:
 - :class:`~deepof.data.Project`, which serves as a configuration hub for the whole pipeline
 - :class:`~deepof.data.Coordinates`, which acts as an intermediary between project configuration and data, and contains
@@ -13,8 +8,11 @@ a plethora of processing methods to apply, and
 and processed time-series as values in a dictionary-like object.
 
 For a detailed tutorial on how to use this module, see the advanced tutorials in the main section.
-
 """
+# @author lucasmiranda42
+# encoding: utf-8
+# module deepof
+
 
 import copy
 import datetime
@@ -58,8 +56,7 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def load(project_name: str) -> coordinates:
-    """
-    Loads a pre-saved pickled Coordinates object.
+    """Loads a pre-saved pickled Coordinates object.
 
     Args:
         project_name (str): name of the file to load.
@@ -68,19 +65,16 @@ def load(project_name: str) -> coordinates:
         Pre-run coordinates object.
 
     """
-
     with open(project_name, "rb") as handle:
         return pickle.load(handle)
 
 
 class Project:
+    """Class for loading and preprocessing DLC data of individual and multiple animals.
+
+    All main computations are handled from here.
+
     """
-
-    Class for loading and preprocessing DLC data of individual and multiple animals. All main computations are
-    handled from here.
-
-    """
-
     def __init__(
         self,
         animal_ids: List = tuple([""]),
@@ -100,9 +94,7 @@ class Project:
         video_format: str = ".mp4",
         video_scale: int = 1,
     ):
-        """
-
-        Initializes a Project object.
+        """Initializes a Project object.
 
         Args:
             animal_ids (list): list of animal ids.
@@ -126,7 +118,6 @@ class Project:
             video_scale (int): diameter of the arena in mm (so far, only round arenas are supported).
 
         """
-
         # Set working paths
         self.path = path
         self.video_path = os.path.join(self.path, "Videos")
@@ -184,6 +175,7 @@ class Project:
         self.exclude_bodyparts = exclude_bodyparts
 
     def __str__(self):  # pragma: no cover
+        """Prints the object to stdout."""
         if self.exp_conditions:
             return "deepof analysis of {} videos across {} condition{}".format(
                 len(self.videos),
@@ -193,6 +185,7 @@ class Project:
         return "deepof analysis of {} videos".format(len(self.videos))
 
     def __repr__(self):  # pragma: no cover
+        """Prints the object to stdout."""
         if self.exp_conditions:
             return "deepof analysis of {} videos across {} condition{}".format(
                 len(self.videos),
@@ -203,31 +196,27 @@ class Project:
 
     @property
     def distances(self):
-        """
-        List. If not 'all', sets the body parts among which the
+        """List. If not 'all', sets the body parts among which the
         distances will be computed
         """
         return self._distances
 
     @property
     def ego(self):
-        """
-        String, name of a body part. If True, computes only the distances
+        """String, name of a body part. If True, computes only the distances
         between the specified body part and the rest
         """
         return self._ego
 
     @property
     def angles(self):
-        """
-        Bool. Toggles angle computation. True by default. If turned off,
+        """Bool. Toggles angle computation. True by default. If turned off,
         enhances performance for big datasets
         """
         return self._angles
 
     def get_arena(self, tables, verbose=False) -> np.array:
-        """
-        Returns the arena as recognised from the videos
+        """Returns the arena as recognised from the videos
 
         Args:
             tables (list): list of coordinate tables
@@ -237,7 +226,6 @@ class Project:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
 
         """
-
         if verbose:
             print("Detecting arena...")
 
