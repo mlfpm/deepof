@@ -83,6 +83,13 @@ if __name__ == "__main__":
         default="VQVAE",
     )
     parser.add_argument(
+        "--encoder-type",
+        "-encoder",
+        help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
+        choices=["VQVAE", "GMVAE", "Contrastive"],
+        default="VQVAE",
+    )
+    parser.add_argument(
         "--exclude-bodyparts",
         "-exc",
         help="Excludes the indicated bodyparts from all analyses. It should consist of several values separated by commas",
@@ -195,6 +202,7 @@ if __name__ == "__main__":
         hypertun_trials = args.hpt_trials
         encoding_size = args.encoding_size
         embedding_model = args.embedding_model
+        encoder_type = args.encoder_type
         exclude_bodyparts = [i for i in args.exclude_bodyparts.split(",") if i]
         hparams = args.hyperparameters if args.hyperparameters is not None else {}
         input_type = args.input_type

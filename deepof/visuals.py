@@ -348,6 +348,19 @@ def animate_skeleton(
     # Select requested experiment and frames
     data = data[experiment_id]
 
+    # Sort column index to allow for multiindex slicing
+    data = data.sort_index(ascending=True, inplace=False, axis=1)
+
+    # Get output scale
+    x_dv = np.maximum(
+        np.abs(data.loc[:, (slice("x"), ["x"])].min().mean()),
+        np.abs(data.loc[:, (slice("x"), ["x"])].max().mean()),
+    )
+    y_dv = np.maximum(
+        np.abs(data.loc[:, (slice("x"), ["y"])].min().mean()),
+        np.abs(data.loc[:, (slice("x"), ["y"])].max().mean()),
+    )
+
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
 
@@ -371,7 +384,8 @@ def animate_skeleton(
             concat_embedding = np.concatenate(embedding)
 
         if selected_cluster is not None:
-            cluster_embedding = embedding[cluster_assignments == selected_cluster]
+
+            cluster_embedding = [embedding[0][cluster_assignments == selected_cluster]]
 
         else:
             cluster_embedding = embedding
@@ -390,9 +404,6 @@ def animate_skeleton(
             ), "selected cluster should be in the clusters provided"
 
             data = data.loc[cluster_assignments == selected_cluster, :]
-
-    # Sort column index to allow for multiindex slicing
-    data = data.sort_index(ascending=True, inplace=False, axis=1)
 
     def get_polygon_coords(data, animal_id=None):
         """Generates polygons to animate for the indicated animal in the provided dataframe."""
@@ -578,15 +589,6 @@ def animate_skeleton(
     ax2.set_ylabel("y")
 
     if center not in [False, "arena"]:
-
-        x_dv = np.maximum(
-            np.abs(data.loc[:, (slice("x"), ["x"])].min().mean()),
-            np.abs(data.loc[:, (slice("x"), ["x"])].max().mean()),
-        )
-        y_dv = np.maximum(
-            np.abs(data.loc[:, (slice("x"), ["y"])].min().mean()),
-            np.abs(data.loc[:, (slice("x"), ["y"])].max().mean()),
-        )
 
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)

@@ -1261,6 +1261,7 @@ def log_hyperparameters():
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     embedding_model: str,
+    encoder_type: str,
     batch_size: int,
     latent_dim: int,
     epochs: int,
@@ -1288,6 +1289,7 @@ def autoencoder_fitting(
         preprocessed_object (tuple): Tuple containing the preprocessed data.
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
         and contrastive.
+        encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
         batch_size (int): Batch size to use for training.
         latent_dim (int): Encoding size to use for training.
         epochs (int): Number of epochs to train the autoencoder for.
@@ -1386,6 +1388,7 @@ def autoencoder_fitting(
                 latent_dim=latent_dim,
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
+                encoder_type=encoder_type,
             )
             ae_full_model.optimizer = tf.keras.optimizers.Nadam(
                 learning_rate=1e-4, clipvalue=0.75
@@ -1405,9 +1408,10 @@ def autoencoder_fitting(
                 latent_dim=latent_dim,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
-                montecarlo_kl=1000 * n_components,
+                montecarlo_kl=np.min([100 * n_components, 1000]),
                 n_components=n_components,
                 reg_cat_clusters=reg_cat_clusters,
+                encoder_type=encoder_type,
             )
             encoder, decoder, grouper, ae = (
                 ae_full_model.encoder,

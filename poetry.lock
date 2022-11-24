@@ -591,6 +591,23 @@ python-versions = ">=3.7"
 numpy = ">=1.14.5"
 
 [[package]]
+name = "hmmlearn"
+version = "0.2.8"
+description = "Hidden Markov Models in Python with scikit-learn like API"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+numpy = ">=1.10"
+scikit-learn = ">=0.16"
+scipy = ">=0.19"
+
+[package.extras]
+docs = ["matplotlib", "pydata-sphinx-theme", "sphinx (>=2.0)", "sphinx-gallery"]
+tests = ["pytest"]
+
+[[package]]
 name = "hypothesis"
 version = "6.56.1"
 description = "A library for property-based testing"
@@ -2815,7 +2832,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "9896268290047e212da061c7b392717d38cae74ba5862c32480eb019210cdb4b"
+content-hash = "8101ac108d3b2937d64bd33196e97461aaadcd35441d3ea5921e306715def198"
 
 [metadata.files]
 absl-py = [
@@ -3367,6 +3384,29 @@ h5py = [
     {file = "h5py-3.7.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9e7535df5ee3dc3e5d1f408fdfc0b33b46bc9b34db82743c82cd674d8239b9ad"},
     {file = "h5py-3.7.0-cp39-cp39-win_amd64.whl", hash = "sha256:9e2ad2aa000f5b1e73b5dfe22f358ca46bf1a2b6ca394d9659874d7fc251731a"},
     {file = "h5py-3.7.0.tar.gz", hash = "sha256:3fcf37884383c5da64846ab510190720027dca0768def34dd8dcb659dbe5cbf3"},
+]
+hmmlearn = [
+    {file = "hmmlearn-0.2.8-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:f28da60da96379d4320eb9c529187f1a1c0bcd9be437a5d1002528f6f994eb62"},
+    {file = "hmmlearn-0.2.8-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:527f29556fc33f7f0bdd9ba3b070d5e5d8b7048eb5d8c490ece15c471696e6ee"},
+    {file = "hmmlearn-0.2.8-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:72414eb50921ea3c7a15293fbb4fc93f6bf2d020834dc58350cad77500737ad4"},
+    {file = "hmmlearn-0.2.8-cp310-cp310-win_amd64.whl", hash = "sha256:adb057e68e195416c04c1c2a875b84f32ac45a49f70f605f7bbdc4122b239dc8"},
+    {file = "hmmlearn-0.2.8-cp36-cp36m-macosx_10_14_x86_64.whl", hash = "sha256:9a8a5e7ae10fe28e2d2afcbbe7caff92e04588ffd2054ddb4ed5ed35e51dd58a"},
+    {file = "hmmlearn-0.2.8-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a9fe549522dcebc46fefdc74d5d16feaf8224dd5816cf33fbbb9ae6185dc15df"},
+    {file = "hmmlearn-0.2.8-cp36-cp36m-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:44664483ad7c7433cf9995f393b405f7488741c42417ad1c5f9a6c6ab00e2340"},
+    {file = "hmmlearn-0.2.8-cp36-cp36m-win_amd64.whl", hash = "sha256:78df606d307fabed92f8bcdf7f1cb2dc2e7ef1964f4613de977e662bd1895e33"},
+    {file = "hmmlearn-0.2.8-cp37-cp37m-macosx_10_15_x86_64.whl", hash = "sha256:aa6849979c1ec53b5fe06bc1663de267ead3891f75cd3cc13a65b3520e29390c"},
+    {file = "hmmlearn-0.2.8-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3c17461015640cc2ede69b75d6fd32cac39339d497ac21ef48e0e86125618af2"},
+    {file = "hmmlearn-0.2.8-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:30f427383689ae1e34983e41f8a0b59e210326b6ae23f15dffa20feba3c7eb21"},
+    {file = "hmmlearn-0.2.8-cp37-cp37m-win_amd64.whl", hash = "sha256:2c9e154ffab6f9d70c37ac472a2ce5a798fc351af5d9410360f113200e4aa0d1"},
+    {file = "hmmlearn-0.2.8-cp38-cp38-macosx_10_15_x86_64.whl", hash = "sha256:40b29bbbf2ea8441d1ea1cb7b1cf04f1d0cf3d8b3486cfa1b57f9d98d4c38cbe"},
+    {file = "hmmlearn-0.2.8-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d7add09c9c30c221eea9eade492441c6d707177220dc8b1ee04e4ebe49f51c1b"},
+    {file = "hmmlearn-0.2.8-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:93d16582ca8be996beb361791d3620ae9566904ff12dd556dc5f88a2158691cc"},
+    {file = "hmmlearn-0.2.8-cp38-cp38-win_amd64.whl", hash = "sha256:63cb380ce707ab7bc22ebf76cb095b28224363a63ba4ccb6a61c3237005bea32"},
+    {file = "hmmlearn-0.2.8-cp39-cp39-macosx_10_15_x86_64.whl", hash = "sha256:dec1916bab77108c36cefa3ee5baca72ced6ba1f3673a52672046a63a2b0dba6"},
+    {file = "hmmlearn-0.2.8-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a9eb2cd5647cdb96085fe4108705dd0e34f9eab43fa3ac50079d25d8df87bd44"},
+    {file = "hmmlearn-0.2.8-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:127097d6be73880ac4b9cb6e4d11fd8ab3028827ea62a826647cbfe6de5955e6"},
+    {file = "hmmlearn-0.2.8-cp39-cp39-win_amd64.whl", hash = "sha256:4cf3e6de054b2a7ec2d75946e5b1cd3c3485c0b60e9b7de81374b5b8703f2387"},
+    {file = "hmmlearn-0.2.8.tar.gz", hash = "sha256:696931e3dce6801cc9b78c629f543061dd7eb67a71155b03d1b39ea172a2a5f9"},
 ]
 hypothesis = [
     {file = "hypothesis-6.56.1-py3-none-any.whl", hash = "sha256:df01b518d3c79c34ca5a15462af5407d1e73dd2d7003d374299dddb195aa155d"},

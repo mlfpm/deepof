@@ -1255,6 +1255,7 @@ class Coordinates:
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         embedding_model: str = "VQVAE",
+        encoder_type: str = "recurrent",
         batch_size: int = 64,
         latent_dim: int = 4,
         epochs: int = 150,
@@ -1278,6 +1279,7 @@ class Coordinates:
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
             embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), GMVAE, or contrastive.
+            encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
             batch_size (int): Batch size for training.
             latent_dim (int): Dimention size of the latent space.
             epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
@@ -1309,6 +1311,7 @@ class Coordinates:
         trained_models = deepof.unsupervised_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
             embedding_model=embedding_model,
+            encoder_type=encoder_type,
             batch_size=batch_size,
             latent_dim=latent_dim,
             epochs=epochs,
@@ -1819,7 +1822,11 @@ class TableDict(dict):
                     .interpolate(limit_direction="both")
                 )
 
-                to_interpolate[key] = cur_tab
+                to_interpolate[key] = pd.DataFrame(
+                    StandardScaler().fit_transform(cur_tab),
+                    index=cur_tab.index,
+                    columns=cur_tab.columns,
+                )
 
             table_temp = to_interpolate
 
