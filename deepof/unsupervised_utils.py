@@ -33,7 +33,7 @@ tfpl = tfp.layers
 tf.get_logger().setLevel("ERROR")
 tf.autograph.set_verbosity(0)
 
-
+### CONTRASTIVE LEARNING UTILITIES
 def select_contrastive_loss(
     history,
     future,
@@ -46,8 +46,6 @@ def select_contrastive_loss(
     attraction=False,
 ):
     """
-
-
 
     Args:
         history:
@@ -64,14 +62,22 @@ def select_contrastive_loss(
 
     """
 
+    similarity_dict = {
+        "cosine": _cosine_similarity,
+        "dot": _dot_similarity,
+        "euclidean": _euclidean_similarity,
+        "edit": _edit_similarity,
+    }
+    similarity = similarity_dict[similarity]
+
     if loss_fn == "nce":
-        loss, pos, neg = nce_loss_fn(history, future, similarity, temperature)
+        loss, pos, neg = nce_loss(history, future, similarity, temperature)
     elif loss_fn == "dcl":
-        loss, pos, neg = dcl_loss_fn(
+        loss, pos, neg = dcl_loss(
             history, future, similarity, temperature, debiased=True, tau_plus=tau
         )
     elif loss_fn == "fc":
-        loss, pos, neg = fc_loss_fn(
+        loss, pos, neg = fc_loss(
             history,
             future,
             similarity,
@@ -80,7 +86,7 @@ def select_contrastive_loss(
             attraction=attraction,
         )
     elif loss_fn == "hard_dcl":
-        loss, pos, neg = hard_loss_fn(
+        loss, pos, neg = hard_loss(
             history,
             future,
             similarity,
@@ -94,7 +100,39 @@ def select_contrastive_loss(
     return loss, pos, neg
 
 
-def nce_loss_fn(history, future, similarity, temperature=0.1):
+def _cosine_similarity(x, y):
+
+    v = tf.keras.losses.CosineSimilarity(
+        axis=2, reduction=tf.keras.losses.Reduction.NONE
+    )(tf.expand_dims(x, 1), tf.expand_dims(y, 0))
+    return -v
+
+
+def _dot_similarity(x, y):
+    v = tf.tensordot(tf.expand_dims(x, 1), tf.expand_dims(tf.transpose(y), 0), axes=2)
+
+    return v
+
+
+def _euclidean_similarity(x, y):
+
+    x1 = tf.expand_dims(x, 1)
+    y1 = tf.expand_dims(y, 0)
+    d = tf.sqrt(tf.reduce_sum(tf.square(x1 - y1), axis=2))
+    s = 1 / (1 + d)
+    return s
+
+
+def _edit_similarity(x, y):
+
+    x1 = tf.expand_dims(x, 1)
+    y1 = tf.expand_dims(y, 0)
+    d = tf.sqrt(tf.reduce_sum(tf.square(x1 - y1), axis=2))
+    s = 1 / (1 + d)
+    return s
+
+
+def nce_loss(history, future, similarity, temperature=0.1):
     criterion = tf.keras.losses.BinaryCrossentropy(
         from_logits=True, reduction=tf.keras.losses.Reduction.SUM
     )
@@ -121,9 +159,7 @@ def nce_loss_fn(history, future, similarity, temperature=0.1):
     return loss, mean_sim, mean_neg
 
 
-def dcl_loss_fn(
-    history, future, similarity, temperature=0.1, debiased=True, tau_plus=0.1
-):
+def dcl_loss(history, future, similarity, temperature=0.1, debiased=True, tau_plus=0.1):
     # from Debiased Contrastive Learning paper: https://github.com/chingyaoc/DCL/
     # pos: exponential for positive example
     # neg: sum of exponentials for negative examples
@@ -162,7 +198,7 @@ def dcl_loss_fn(
     return loss, mean_sim, mean_neg
 
 
-def fc_loss_fn(
+def fc_loss(
     history, future, similarity, temperature=0.1, elimination_topk=0.1, attraction=False
 ):
     N = history.shape[0]
@@ -199,7 +235,7 @@ def fc_loss_fn(
     return loss, mean_sim, mean_neg
 
 
-def hard_loss_fn(
+def hard_loss(
     history, future, similarity, temperature, beta=0.0, debiased=True, tau_plus=0.1
 ):
     # from ICLR2021 paper: Contrastive LEarning with Hard Negative Samples https://www.groundai.com/project/contrastive-learning-with-hard-negative-samples
@@ -1422,7 +1458,13 @@ def autoencoder_fitting(
             return_list = (encoder, decoder, grouper, ae)
 
         elif embedding_model == "contrastive":
-            raise NotImplementedError
+            ae_full_model = deepof.models.Contrastive(
+                input_shape=X_train.shape,
+                latent_dim=latent_dim,
+                encoder_type=encoder_type,
+            )
+            ae = ae_full_model
+            return_list = ae
 
     if pretrained:
         # If pretrained models are specified, load weights and return
