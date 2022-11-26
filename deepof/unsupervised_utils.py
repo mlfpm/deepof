@@ -1314,6 +1314,12 @@ def autoencoder_fitting(
     kl_annealing_mode: str,
     kl_warmup: int,
     reg_cat_clusters: float,
+    # Contrastive Model specific parameters
+    temperature: float,
+    contrastive_similarity_function: str,
+    contrastive_loss_function: str,
+    beta: float,
+    tau: float,
     run: int = 0,
     strategy: tf.distribute.Strategy = "one_device",
 ):
@@ -1345,8 +1351,15 @@ def autoencoder_fitting(
         # GMVAE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
         kl_warmup (int): Number of epochs during which KL is annealed.
-        reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+        reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
         minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+
+        # Contrastive Model specific parameters
+        temperature (float): temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.
+        contrastive_similarity_function (str): similarity function between positive and negative pairs. Must be one of 'cosine' (default), 'euclidean', 'dot', and 'edit'.
+        contrastive_loss_function (str): contrastive loss function. Must be one of 'nce' (default), 'dcl', 'fc', and 'hard_dcl'. See specific documentation for details.
+        beta (float): Beta (concentration) parameter for the hard_dcl contrastive loss. Higher values lead to 'harder' negative samples.
+        tau (float): Tau parameter for the dcl and hard_dcl contrastive losses, indicating positive class probability.
 
     Returns:
         List of trained models corresponding to the selected model class. The full trained model is last.
@@ -1462,6 +1475,11 @@ def autoencoder_fitting(
                 input_shape=X_train.shape,
                 latent_dim=latent_dim,
                 encoder_type=encoder_type,
+                temperature=temperature,
+                similarity_function=contrastive_similarity_function,
+                loss_function=contrastive_loss_function,
+                beta=beta,
+                tau=tau,
             )
             ae = ae_full_model
             return_list = ae

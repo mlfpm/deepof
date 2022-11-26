@@ -1272,6 +1272,11 @@ class Coordinates:
         log_hparams: bool = False,
         n_components: int = 10,
         kmeans_loss: float = 1.0,
+        temperature: float = 0.1,
+        contrastive_similarity_function: str = "cosine",
+        contrastive_loss_function: str = "nce",
+        beta: float = 0.1,
+        tau: float = 0.1,
         output_path: str = "unsupervised_trained_models",
         pretrained: str = False,
         save_checkpoints: bool = False,
@@ -1298,6 +1303,11 @@ class Coordinates:
             n_components (int): Number of latent clusters for the embedding model to use.
             kmeans_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
+            temperature (float): temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.
+            contrastive_similarity_function (str): similarity function between positive and negative pairs. Must be one of 'cosine' (default), 'euclidean', 'dot', and 'edit'.
+            contrastive_loss_function (str): contrastive loss function. Must be one of 'nce' (default), 'dcl', 'fc', and 'hard_dcl'. See specific documentation for details.
+            beta (float): Beta (concentration) parameter for the hard_dcl contrastive loss. Higher values lead to 'harder' negative samples.
+            tau (float): Tau parameter for the dcl and hard_dcl contrastive losses, indicating positive class probability.
             output_path (str): Path to save the trained model and all log files.
             pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
             must be the path to a saved model.
@@ -1328,6 +1338,11 @@ class Coordinates:
             log_hparams=log_hparams,
             n_components=n_components,
             kmeans_loss=kmeans_loss,
+            temperature=temperature,
+            contrastive_similarity_function=contrastive_similarity_function,
+            contrastive_loss_function=contrastive_loss_function,
+            beta=beta,
+            tau=tau,
             output_path=output_path,
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
@@ -1596,6 +1611,9 @@ class TableDict(dict):
                 merged_tables[key] = tab.drop(pheno_cols, axis=1)
                 merged_tables[key]["pheno"] = labels
 
+        # Retake original table dict properties
+        merged_tables._animal_ids = self._animal_ids
+
         return merged_tables
 
     def get_training_set(
@@ -1749,6 +1767,11 @@ class TableDict(dict):
         # to avoid modifying it in place
         table_temp = copy.deepcopy(self)
 
+        assert handle_ids in [
+            "concat",
+            "split",
+        ], "handle IDs should be one of 'concat', and 'split'. See documentation for more details."
+
         if filter_low_variance:
 
             # Remove body parts with extremely low variance (usually the result of vertical alignment).
@@ -1839,7 +1862,7 @@ class TableDict(dict):
                 )
 
                 to_interpolate[key] = pd.DataFrame(
-                    StandardScaler().fit_transform(cur_tab),
+                    StandardScaler().fit_transform(cur_tab.values),
                     index=cur_tab.index,
                     columns=cur_tab.columns,
                 )
@@ -1982,15 +2005,45 @@ class TableDict(dict):
                 X_test.shape[0] == y_test.shape[0]
             ), "training set and labels do not have the same shape"
 
+        # If indicated and there are more than one animal in the dataset, split all animals as separate inputs
+        if len(self._animal_ids) > 1 and handle_ids == "split":
+            X_train_split, X_test_split = [], []
+            for aid in self._animal_ids:
+                X_train_split.append(
+                    X_train[
+                        :,
+                        :,
+                        np.where(
+                            [
+                                np.array([i]).flatten()[0].startswith(aid)
+                                for i in list(table_temp.values())[0].columns
+                            ]
+                        ),
+                    ]
+                )
+                X_test_split.append(
+                    X_test[
+                        :,
+                        :,
+                        np.where(
+                            [
+                                np.array([i]).flatten()[0].startswith(aid)
+                                for i in list(table_temp.values())[0].columns
+                            ]
+                        ),
+                    ]
+                )
+
+            X_train, X_test = np.squeeze(np.concatenate(X_train_split)), np.squeeze(
+                np.concatenate(X_test_split)
+            )
+
         return X_train, y_train, X_test, y_test
 
 
 if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-# Data loading and preprocessing
-# TODO: Fix incorrect type issues (read tutorials about it).
 
 # Annotation
 # TODO: Fix issues and add supervised parameters (time in zone, etc).
