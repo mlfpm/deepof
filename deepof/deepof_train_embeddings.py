@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "-ruptures",
         help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
         "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
-        choices=[False, "linear", "rbf"],
+        choices=['False', "linear", "rbf"],
         nargs='?',
         default="rbf",
     )
