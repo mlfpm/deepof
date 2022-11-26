@@ -87,7 +87,7 @@ if __name__ == "__main__":
         "-encoder",
         help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
         choices=["recurrent", "TCN", "transformer"],
-        default="VQVAE",
+        default="recurrent",
     )
     parser.add_argument(
         "--exclude-bodyparts",
