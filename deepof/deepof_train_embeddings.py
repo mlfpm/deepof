@@ -79,14 +79,14 @@ if __name__ == "__main__":
         "--embedding-model",
         "-embedding",
         help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
-        choices=["VQVAE", "GMVAE", "Contrastive"],
+        choices=["VQVAE", "GMVAE", "contrastive"],
         default="VQVAE",
     )
     parser.add_argument(
         "--encoder-type",
         "-encoder",
         help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
-        choices=["VQVAE", "GMVAE", "Contrastive"],
+        choices=["recurrent", "TCN", "transformer"],
         default="VQVAE",
     )
     parser.add_argument(
