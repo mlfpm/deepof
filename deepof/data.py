@@ -944,6 +944,7 @@ class Coordinates:
         return TableDict(
             tabs,
             "coords",
+            animal_ids=self._animal_ids,
             arena=self._arena,
             arena_dims=self._scales,
             center=center,
@@ -1000,6 +1001,7 @@ class Coordinates:
 
             return TableDict(
                 tabs,
+                animal_ids=self._animal_ids,
                 exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -1061,6 +1063,7 @@ class Coordinates:
 
             return TableDict(
                 tabs,
+                animal_ids=self._animal_ids,
                 exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -1108,7 +1111,12 @@ class Coordinates:
 
                 tabs[key] = exp_table
 
-            areas = TableDict(tabs, typ="areas", exp_conditions=self._exp_conditions)
+            areas = TableDict(
+                tabs,
+                animal_ids=self._animal_ids,
+                typ="areas",
+                exp_conditions=self._exp_conditions,
+            )
 
             if speed:
                 for key, tab in areas.items():
@@ -1245,6 +1253,7 @@ class Coordinates:
         return TableDict(
             tag_dict,
             typ="supervised",
+            animal_ids=self._animal_ids,
             arena=self._arena,
             arena_dims=self._arena_dims,
             exp_conditions=self._exp_conditions,
@@ -1347,6 +1356,7 @@ class TableDict(dict):
         typ: str,
         arena: str = None,
         arena_dims: np.array = None,
+        animal_ids: List = tuple([""]),
         center: str = None,
         polar: bool = None,
         exp_conditions: dict = None,
@@ -1362,6 +1372,7 @@ class TableDict(dict):
             typ (str): Type of the dataset. Examples are "coords", "dists", and "angles". For logging purposes only.
             arena (str): Type of the arena. Must be one of "circular-autodetect", "circular-manual", or "polygon-manual". Handled internally.
             arena_dims (np.array): Dimensions of the arena in mm.
+            animal_ids (list): list of animal ids.
             center (str): Type of the center. Handled internally.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
@@ -1377,6 +1388,7 @@ class TableDict(dict):
         self._polar = polar
         self._arena = arena
         self._arena_dims = arena_dims
+        self._animal_ids = animal_ids
         self._exp_conditions = exp_conditions
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
@@ -1684,6 +1696,7 @@ class TableDict(dict):
     def preprocess(
         self,
         automatic_changepoints=False,
+        handle_ids: str = "concat",
         window_size: int = 15,
         window_step: int = 1,
         scale: str = "standard",
@@ -1702,6 +1715,9 @@ class TableDict(dict):
             automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the
             data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are
             appiled.
+            handle_ids (str): indicates the default action to handle multiple animals in the TableDict object. Must be
+            one of "concat" (body parts from different animals are treated as features) and "split" (different sliding windows
+            are created for each animal).
             window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
             specifies the size of the sliding window to pass through the data to generate training instances.
             window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
