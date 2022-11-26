@@ -52,6 +52,7 @@ if __name__ == "__main__":
         help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
         "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
         choices=[False, "linear", "rbf"],
+        nargs='?',
         default="rbf",
     )
     parser.add_argument(
@@ -79,6 +80,7 @@ if __name__ == "__main__":
         "--embedding-model",
         "-embedding",
         help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
+        nargs='?',
         choices=["VQVAE", "GMVAE", "contrastive"],
         default="VQVAE",
     )
@@ -86,6 +88,7 @@ if __name__ == "__main__":
         "--encoder-type",
         "-encoder",
         help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
+        nargs='?',
         choices=["recurrent", "TCN", "transformer"],
         default="recurrent",
     )
@@ -109,6 +112,7 @@ if __name__ == "__main__":
         help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
         "See documentation for details",
         choices=[False, "bayopt", "hyperband"],
+        nargs='?',
         default=False,
     )
     parser.add_argument(
@@ -126,7 +130,7 @@ if __name__ == "__main__":
         "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. "
         "To any of these, '+speed' can be added at the end, which includes overall speed of each bodypart. "
         "Defaults to coords.",
-        choices=str,
+        type=str,
         default="coords",
     )
     parser.add_argument(
