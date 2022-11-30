@@ -1203,7 +1203,7 @@ class GMVAE(tf.keras.models.Model):
 
             # Update the prior to reflect the cluster distribution in the current embeddings
             embeddings = self.encoder(x, training=True)
-            self.update_prior(embeddings.sample())
+            # self.update_prior(embeddings.sample())
 
             # Compute losses
             seq_inputs = next(y)

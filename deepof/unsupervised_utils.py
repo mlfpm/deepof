@@ -1500,7 +1500,7 @@ def autoencoder_fitting(
     ]
 
     ae_full_model.compile(
-        optimizer=ae_full_model.optimizer, run_eagerly=(embedding_model == "GMVAE")
+        optimizer=ae_full_model.optimizer, run_eagerly=False,
     )
     ae_full_model.fit(
         x=train_dataset,
