@@ -611,7 +611,8 @@ def cluster_frequencies_regularizer(
 
 
 def get_callbacks(
-    embedding_model: "str",
+    embedding_model: str,
+    encoder_type: str,
     kmeans_loss: float = 1.0,
     input_type: str = False,
     cp: bool = False,
@@ -625,6 +626,7 @@ def get_callbacks(
 
     Args:
         embedding_model (str): name of the embedding model
+        encoder_type (str): Architecture used for the encoder. Must be one of "recurrent", "TCN", and "transformer"
         kmeans_loss (float): Weight of the gram loss
         input_type (str): Input type to use for training
         cp (bool): Whether to use checkpointing or not
@@ -638,7 +640,7 @@ def get_callbacks(
     """
 
     run_ID = "{}{}{}{}{}{}{}".format(
-        "deepof_unsupervised_{}_encodings".format(embedding_model),
+        "deepof_unsupervised_{}_{}_encodings".format(embedding_model, encoder_type),
         ("_input_type={}".format(input_type if input_type else "coords")),
         ("_kmeans_loss={}".format(kmeans_loss)),
         ("_encoding={}".format(logparam["latent_dim"]) if logparam is not None else ""),
@@ -1396,6 +1398,7 @@ def autoencoder_fitting(
     # Load callbacks
     run_ID, *cbacks = get_callbacks(
         embedding_model=embedding_model,
+        encoder_type=encoder_type,
         kmeans_loss=kmeans_loss,
         input_type=input_type,
         cp=save_checkpoints,
@@ -1581,6 +1584,7 @@ def tune_search(
     data: tuple,
     encoding_size: int,
     embedding_model: str,
+    encoder_type: str,
     hypertun_trials: int,
     hpt_type: str,
     k: int,
@@ -1598,6 +1602,7 @@ def tune_search(
     Args:
         data (tf.data.Dataset): Dataset object for training and validation.
         encoding_size (int): Size of the encoding layer.
+        encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
         and contrastive.
         hypertun_trials (int): Number of hypertuning trials to run.
@@ -1639,10 +1644,12 @@ def tune_search(
 
     if embedding_model == "VQVAE":
         hypermodel = deepof.hypermodels.VQVAE(
+            encoder_type=encoder_type,
             input_shape=X_train.shape, latent_dim=encoding_size, n_components=k
         )
     elif embedding_model == "GMVAE":
         hypermodel = deepof.hypermodels.GMVAE(
+            encoder_type=encoder_type,
             input_shape=X_train.shape,
             latent_dim=encoding_size,
             n_components=k,

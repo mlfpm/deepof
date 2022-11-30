@@ -63,10 +63,11 @@ def test_get_callbacks(encoding, k):
 @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding_model=st.sampled_from(["VQVAE", "GMVAE"]),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
     embedding=st.integers(min_value=2, max_value=8).filter(lambda x: x % 2 == 0),
     k=st.just(10),
 )
-def test_autoencoder_fitting(embedding_model, embedding, k):
+def test_autoencoder_fitting(embedding_model, encoder_type, embedding, k):
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.ones([20, 1]).astype(float)
@@ -83,6 +84,7 @@ def test_autoencoder_fitting(embedding_model, embedding, k):
     prun.deep_unsupervised_embedding(
         preprocessed_data,
         embedding_model=embedding_model,
+        encoder_type=encoder_type,
         batch_size=1,
         latent_dim=embedding,
         epochs=1,
@@ -102,9 +104,10 @@ def test_autoencoder_fitting(embedding_model, embedding, k):
 )
 @given(
     embedding_model=st.sampled_from(["VQVAE", "GMVAE"]),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
     hpt_type=st.one_of(st.just("bayopt"), st.just("hyperband")),
 )
-def test_tune_search(hpt_type, embedding_model):
+def test_tune_search(hpt_type, encoder_type, embedding_model):
 
     X_train = np.ones([100, 5, 6]).astype(float)
     y_train = np.ones([100, 1]).astype(float)
@@ -113,6 +116,7 @@ def test_tune_search(hpt_type, embedding_model):
         deepof.unsupervised_utils.get_callbacks(
             input_type=False,
             embedding_model=embedding_model,
+            encoder_type=encoder_type,
             cp=False,
             kmeans_loss=0.1,
             outpath="unsupervised_tuner_search",

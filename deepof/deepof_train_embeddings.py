@@ -400,12 +400,13 @@ if __name__ == "__main__":
         with open(
             os.path.join(
                 output_path,
-                "deepof_unsupervised_VQVAE_encodings_input={}_k={}_latdim={}_kmeans_loss={}_run={}.pkl".format(
-                    input_type, n_components, encoding_size, kmeans_loss, run
+                "deepof_unsupervised_{}_encoder_{}_encodings_input={}_k={}_latdim={}_changepoints_{}_kmeans_loss={}_run={}.pkl".format(
+                    embedding_model, encoder_type, input_type, n_components, encoding_size, automatic_changepoints, kmeans_loss, run
                 ),
             ),
             "wb",
         ) as x:
+
             pickle.dump(
                 [
                     deep_encodings_per_video,
