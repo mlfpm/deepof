@@ -322,6 +322,7 @@ if __name__ == "__main__":
             batch_size=batch_size,
             latent_dim=encoding_size,
             embedding_model=embedding_model,
+            encoder_type=encoder_type,
             n_components=n_components,
             output_path=output_path,
             save_checkpoints=False,
@@ -356,10 +357,11 @@ if __name__ == "__main__":
             # Get current model weights
             curr_weights = trained_models[3].get_weights()
 
-            # Load weights into a newly created model, buit with the current input shape
+            # Load weights into a newly created model, built with the current input shape
             if embedding_model == "VQVAE":
                 ae_models = deepof.models.VQVAE(
                     input_shape=curr_prep.shape,
+                    encoder_type=encoder_type,
                     latent_dim=encoding_size,
                     n_components=n_components,
                 )
@@ -372,6 +374,7 @@ if __name__ == "__main__":
             elif embedding_model == "GMVAE":
                 ae_models = deepof.models.GMVAE(
                     input_shape=curr_prep.shape,
+                    encoder_type=encoder_type,
                     batch_size=batch_size,
                     latent_dim=encoding_size,
                     n_components=n_components,
