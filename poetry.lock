@@ -373,6 +373,22 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
+name = "dgl"
+version = "0.9.1"
+description = "Deep Graph Library"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+networkx = ">=2.1"
+numpy = ">=1.14.0"
+psutil = ">=5.8.0"
+requests = ">=2.19.0"
+scipy = ">=1.1.0"
+tqdm = "*"
+
+[[package]]
 name = "dm-tree"
 version = "0.1.7"
 description = "Tree is a library for working with nested data structures."
@@ -2832,7 +2848,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "8101ac108d3b2937d64bd33196e97461aaadcd35441d3ea5921e306715def198"
+content-hash = "c336d3f01779b67216c1e2fae6228352f7f5d36c09c5cb775dbf7e4232c29719"
 
 [metadata.files]
 absl-py = [
@@ -3234,6 +3250,28 @@ decorator = [
 defusedxml = [
     {file = "defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"},
     {file = "defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69"},
+]
+dgl = [
+    {file = "dgl-0.9.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:7b9848c2c643d7b4d4c1969d05e511aff776b101c69573defd3382107b25a5c9"},
+    {file = "dgl-0.9.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:973d30b8d7aba76ad0fdc49c12f5c9359f0913be73708f9e1b6a71e40b181252"},
+    {file = "dgl-0.9.1-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:1c4c0d3f3003cdda5b3ceffafb6246a821ee7ccbd4941dfef7826e99119218bb"},
+    {file = "dgl-0.9.1-cp310-cp310-win_amd64.whl", hash = "sha256:e51b9050eb4237b2c72e3e6f78511e65e4532dfc35fb70825ad42df1aee1ad8f"},
+    {file = "dgl-0.9.1-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:76635838f09bef50684763d5ed81075f92e547d4c984c1cf840be16a86b5a409"},
+    {file = "dgl-0.9.1-cp36-cp36m-macosx_11_0_arm64.whl", hash = "sha256:af42754a5ac2437e5b36a9aa04403f622b846f48a4ae4e4763f09c6b00fd00fb"},
+    {file = "dgl-0.9.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:2b63fb0eb224c65113ef26cc68ef206565106b9aee6e221c7e6bfcc1cdacc5c9"},
+    {file = "dgl-0.9.1-cp36-cp36m-win_amd64.whl", hash = "sha256:b245d988954db65c002a77da3ad80f97b13cc3c1a9027799c7d239d8e7e4dbd8"},
+    {file = "dgl-0.9.1-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:e3ddfdbd0eca8401be2fc2ea18bef4d1c5bf9c844a67afacf54720d3a5d574da"},
+    {file = "dgl-0.9.1-cp37-cp37m-macosx_11_0_arm64.whl", hash = "sha256:14acd668646cb214f6409da09874b4237d62deef3d48a0b1a02eeefd4f84cd17"},
+    {file = "dgl-0.9.1-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:9d7b740db8f0b84a7d98c3557e60fb05965fe1c4ec7f91c606aa99e21f835b03"},
+    {file = "dgl-0.9.1-cp37-cp37m-win_amd64.whl", hash = "sha256:b09bd5e301b5483f9f4684fb19cfacc6d10333d54c28f345ffca3ce86afa66e1"},
+    {file = "dgl-0.9.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:71282ec77d99d2de439fcdbf3529a636b6ca80134b7ccd6926e7b5ec433d7cfe"},
+    {file = "dgl-0.9.1-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:10b940df11175001f0df016e004333c746b15bb22842cf1de863d20ec5b8740c"},
+    {file = "dgl-0.9.1-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:4be35f9942b700603d730a770ab5b24a8ed11ad6c992051dc917ccf02fae70c1"},
+    {file = "dgl-0.9.1-cp38-cp38-win_amd64.whl", hash = "sha256:9fb788b4ba2df07b19a4982700e75a143c611847a52c3c5fd670a46d33f26061"},
+    {file = "dgl-0.9.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:8c1efe436309ff7932aea1ecc2439baf8d82f478443a6a6d6e7372ab44315613"},
+    {file = "dgl-0.9.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:fecbd81a2fe1a15f3d2eb0952343ea33a406c9d3b24741e9d86cb0a5ce6946c0"},
+    {file = "dgl-0.9.1-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:242a7cf52335fa91de35b80f5c1671b0f5aede10490cf9812bb4375aa1937620"},
+    {file = "dgl-0.9.1-cp39-cp39-win_amd64.whl", hash = "sha256:e4481112f528e8d2b74e20dee2b26d0ac67de3c1872814f595a865b5ad92a241"},
 ]
 dm-tree = [
     {file = "dm-tree-0.1.7.tar.gz", hash = "sha256:30fec8aca5b92823c0e796a2f33b875b4dccd470b57e91e6c542405c5f77fd2a"},

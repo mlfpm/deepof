@@ -51,8 +51,8 @@ if __name__ == "__main__":
         "-ruptures",
         help="Algorithm to use to rupture the time series. L2-regularized BottomUp approach (l2) by default."
         "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
-        choices=['False', "linear", "rbf"],
-        nargs='?',
+        choices=["False", "linear", "rbf"],
+        nargs="?",
         default="rbf",
     )
     parser.add_argument(
@@ -80,7 +80,7 @@ if __name__ == "__main__":
         "--embedding-model",
         "-embedding",
         help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
-        nargs='?',
+        nargs="?",
         choices=["VQVAE", "GMVAE", "contrastive"],
         default="VQVAE",
     )
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         "--encoder-type",
         "-encoder",
         help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
-        nargs='?',
+        nargs="?",
         choices=["recurrent", "TCN", "transformer"],
         default="recurrent",
     )
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         help="Indicates whether hyperparameters should be tuned either using 'bayopt' of 'hyperband'. "
         "See documentation for details",
         choices=[False, "bayopt", "hyperband"],
-        nargs='?',
+        nargs="?",
         default=False,
     )
     parser.add_argument(
@@ -404,7 +404,14 @@ if __name__ == "__main__":
             os.path.join(
                 output_path,
                 "deepof_unsupervised_{}_encoder_{}_encodings_input={}_k={}_latdim={}_changepoints_{}_kmeans_loss={}_run={}.pkl".format(
-                    embedding_model, encoder_type, input_type, n_components, encoding_size, automatic_changepoints, kmeans_loss, run
+                    embedding_model,
+                    encoder_type,
+                    input_type,
+                    n_components,
+                    encoding_size,
+                    automatic_changepoints,
+                    kmeans_loss,
+                    run,
                 ),
             ),
             "wb",

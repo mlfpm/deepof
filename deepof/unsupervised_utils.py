@@ -1503,7 +1503,8 @@ def autoencoder_fitting(
     ]
 
     ae_full_model.compile(
-        optimizer=ae_full_model.optimizer, run_eagerly=False,
+        optimizer=ae_full_model.optimizer,
+        run_eagerly=False,
     )
     ae_full_model.fit(
         x=train_dataset,
@@ -1645,7 +1646,9 @@ def tune_search(
     if embedding_model == "VQVAE":
         hypermodel = deepof.hypermodels.VQVAE(
             encoder_type=encoder_type,
-            input_shape=X_train.shape, latent_dim=encoding_size, n_components=k
+            input_shape=X_train.shape,
+            latent_dim=encoding_size,
+            n_components=k,
         )
     elif embedding_model == "GMVAE":
         hypermodel = deepof.hypermodels.GMVAE(
