@@ -46,7 +46,8 @@ kaleido = "0.2.1"
 av = "^10.0.0"
 imblearn = "^0.0"
 hmmlearn = "^0.2.8"
-dgl = "^0.9.1"
+lxml = "^4.9.1"
+spektral = {git = "https://github.com/lucasmiranda42/spektral"}
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

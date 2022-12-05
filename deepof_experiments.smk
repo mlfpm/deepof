@@ -28,7 +28,7 @@ rule deepof_experiments:
         # Train a variety of models
         expand(
             outpath
-            + "train_models/deepof_unsupervised_{embedding_model}_encoder_{encoder}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints={automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
+            + "train_models/deepof_unsupervised_{embedding_model}_encoder_{encoder}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints_{automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
             embedding_model=embedding_model,
             encoder=encoder_model,
             input_type=input_types,
@@ -47,7 +47,7 @@ rule train_models:
         ),
     output:
         trained_models=outpath
-        + "train_models/deepof_unsupervised_{embedding_model}_encoder_{encoder}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints={automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
+        + "train_models/deepof_unsupervised_{embedding_model}_encoder_{encoder}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints_{automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
     shell:
         "pipenv run python -m deepof.deepof_train_embeddings "
         "--train-path {input.data_path} "
