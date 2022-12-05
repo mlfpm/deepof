@@ -212,7 +212,6 @@ def get_TCN_encoder(
     encoder = Dense(latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = tf.keras.layers.Dense(latent_dim)(encoder)
-    encoder = tf.keras.layers.BatchNormalization()(encoder)
 
     return Model(x, encoder, name="TCN_encoder")
 
@@ -326,7 +325,6 @@ def get_transformer_encoder(
     encoder = tf.keras.layers.Dense(latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = tf.keras.layers.Dense(latent_dim)(encoder)
-    encoder = tf.keras.layers.BatchNormalization()(encoder)
 
     return tf.keras.models.Model(x, encoder, name="transformer_encoder")
 
@@ -920,28 +918,28 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             annealing_mode=self.kl_annealing_mode,
         )
 
-    def update_prior(self, embeddings: tf.Tensor):
-        """Updates the prior based on a Gaussian Mixture Model fit to the provided embeddings.
-
-        Args:
-            embeddings (tf.Tensor): embeddings to use for updating the prior.
-        """
-        gmm = GaussianMixture(
-            n_components=self.n_components, covariance_type="diag", reg_covar=1e-5
-        )
-        gmm.fit(embeddings.numpy())
-
-        self.prior = tfd.MixtureSameFamily(
-            mixture_distribution=tfd.categorical.Categorical(probs=gmm.weights_),
-            components_distribution=tfd.Independent(
-                tfd.Normal(
-                    loc=gmm.means_,
-                    scale=tf.math.sqrt(gmm.covariances_),
-                    name="prior_scales",
-                ),
-                reinterpreted_batch_ndims=1,
-            ),
-        )
+    # def update_prior(self, embeddings: tf.Tensor):
+    #     """Updates the prior based on a Gaussian Mixture Model fit to the provided embeddings.
+    #
+    #     Args:
+    #         embeddings (tf.Tensor): embeddings to use for updating the prior.
+    #     """
+    #     gmm = GaussianMixture(
+    #         n_components=self.n_components, covariance_type="diag", reg_covar=1e-5
+    #     )
+    #     gmm.fit(embeddings.numpy())
+    #
+    #     self.prior = tfd.MixtureSameFamily(
+    #         mixture_distribution=tfd.categorical.Categorical(probs=gmm.weights_),
+    #         components_distribution=tfd.Independent(
+    #             tfd.Normal(
+    #                 loc=gmm.means_,
+    #                 scale=tf.math.sqrt(gmm.covariances_),
+    #                 name="prior_scales",
+    #             ),
+    #             reinterpreted_batch_ndims=1,
+    #         ),
+    #     )
 
     def call(self, inputs):  # pragma: no cover
         """Computes the output of the layer."""
