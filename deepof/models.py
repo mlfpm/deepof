@@ -813,7 +813,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         batch_size: int,
         kl_warmup: int = 5,
         kl_annealing_mode: str = "linear",
-        mc_kl: int = 1000,
+        mc_kl: int = 100,
         mmd_warmup: int = 15,
         mmd_annealing_mode: str = "linear",
         kmeans_loss: float = 0.0,
@@ -917,29 +917,6 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             warm_up_iters=self.kl_warm_up_iters,
             annealing_mode=self.kl_annealing_mode,
         )
-
-    # def update_prior(self, embeddings: tf.Tensor):
-    #     """Updates the prior based on a Gaussian Mixture Model fit to the provided embeddings.
-    #
-    #     Args:
-    #         embeddings (tf.Tensor): embeddings to use for updating the prior.
-    #     """
-    #     gmm = GaussianMixture(
-    #         n_components=self.n_components, covariance_type="diag", reg_covar=1e-5
-    #     )
-    #     gmm.fit(embeddings.numpy())
-    #
-    #     self.prior = tfd.MixtureSameFamily(
-    #         mixture_distribution=tfd.categorical.Categorical(probs=gmm.weights_),
-    #         components_distribution=tfd.Independent(
-    #             tfd.Normal(
-    #                 loc=gmm.means_,
-    #                 scale=tf.math.sqrt(gmm.covariances_),
-    #                 name="prior_scales",
-    #             ),
-    #             reinterpreted_batch_ndims=1,
-    #         ),
-    #     )
 
     def call(self, inputs):  # pragma: no cover
         """Computes the output of the layer."""
@@ -1068,7 +1045,7 @@ class GMVAE(tf.keras.models.Model):
         batch_size: int = 64,
         kl_annealing_mode: str = "linear",
         kl_warmup_epochs: int = 15,
-        montecarlo_kl: int = 1000,
+        montecarlo_kl: int = 100,
         kmeans_loss: float = 1.0,
         reg_cat_clusters: float = 1.0,
         reg_cluster_variance: bool = False,
@@ -1199,9 +1176,8 @@ class GMVAE(tf.keras.models.Model):
             else:
                 reconstructions = outputs
 
-            # Update the prior to reflect the cluster distribution in the current embeddings
-            embeddings = self.encoder(x, training=True)
-            # self.update_prior(embeddings.sample())
+            # Regularize embeddings
+            groups = self.grouper(x, training=True)
 
             # Compute losses
             seq_inputs = next(y)

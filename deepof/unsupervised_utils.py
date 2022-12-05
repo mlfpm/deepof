@@ -985,9 +985,10 @@ class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
         else:
             self._kl_weight = tf.cast(1.0, tf.float32)
 
-        kl_batch = self._kl_weight * self._regularizer(distribution_a)
+        kl_batch = self._kl_weight * self._regularizer(distribution_a) * 0.1
 
         self.add_loss(kl_batch, inputs=[distribution_a])
+        self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
         self.add_metric(kl_batch, aggregation="mean", name="kl_divergence")
 
         return distribution_a
@@ -1460,7 +1461,7 @@ def autoencoder_fitting(
                 latent_dim=latent_dim,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
-                montecarlo_kl=np.min([100 * n_components, 1000]),
+                montecarlo_kl=10 * n_components,
                 n_components=n_components,
                 reg_cat_clusters=reg_cat_clusters,
                 encoder_type=encoder_type,
