@@ -380,28 +380,6 @@ def compute_shannon_entropy(tensor):  # pragma: no cover
     return -tf.reduce_sum(bins * tf.math.log(bins + 1e-5))
 
 
-@tf.function
-def get_neighbourhood_entropy(index, tensor, clusters, k):  # pragma: no cover
-    """
-
-    Computes the neighbourhood entropy for a given vector in a tensor.
-
-    Args:
-        index (int): index of the vector to compute the neighbourhood entropy for
-        tensor (tf.Tensor): tensor to compute the neighbourhood entropy for
-        clusters (tf.Tensor): tensor containing the cluster labels for each vector in the tensor
-        k (int): number of nearest neighbours to consider
-
-    Returns:
-        tf.Tensor: neighbourhood entropy of the vector with the specified index
-
-    """
-    neighborhood = get_k_nearest_neighbors(tensor, k, index)
-    cluster_z = tf.gather(clusters, neighborhood, batch_dims=0)
-    neigh_entropy = compute_shannon_entropy(cluster_z)
-    return neigh_entropy
-
-
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
     """
 
@@ -603,7 +581,7 @@ def cluster_frequencies_regularizer(
     hard_counts = get_hard_counts(soft_counts)
 
     dist_a = tfd.Categorical(probs=hard_counts / k)
-    dist_b = tfd.Categorical(logits=tf.ones(k))
+    dist_b = tfd.Categorical(probs=tf.ones(k))
 
     z = dist_a.sample(n_samples)
 
@@ -870,7 +848,7 @@ class ClusterControl(tf.keras.layers.Layer):
         config.update({"loss_weight": self.loss_weight})
         return config
 
-    def call(self, inputs, **kwargs):  # pragma: no cover
+    def call(self, inputs):  # pragma: no cover
         """
 
         Updates Layer's call method
@@ -882,20 +860,6 @@ class ClusterControl(tf.keras.layers.Layer):
         hard_groups = tf.math.argmax(categorical, axis=1)
         max_groups = tf.reduce_max(categorical, axis=1)
 
-        # Reduce k if it's too big when compared to the number of instances
-        if self.k >= self.batch_size // 4:
-            self.k = self.batch_size // 4
-
-        get_local_neighbourhood_entropy = partial(
-            get_neighbourhood_entropy, tensor=encodings, clusters=hard_groups, k=self.k
-        )
-
-        neighbourhood_entropy = tf.map_fn(
-            get_local_neighbourhood_entropy,
-            tf.range(tf.shape(encodings)[0]),
-            dtype=tf.dtypes.float32,
-        )
-
         n_components = tf.cast(
             tf.shape(
                 tf.unique(tf.reshape(tf.cast(hard_groups, tf.dtypes.float32), [-1]))[0]
@@ -904,94 +868,11 @@ class ClusterControl(tf.keras.layers.Layer):
         )
 
         self.add_metric(n_components, name="number_of_populated_clusters")
-
         self.add_metric(
             max_groups, aggregation="mean", name="confidence_in_selected_cluster"
         )
 
-        self.add_metric(
-            neighbourhood_entropy, aggregation="mean", name="local_cluster_entropy"
-        )
-
         return encodings
-
-
-class KLDivergenceLayer(tfpl.KLDivergenceAddLoss):
-    """
-
-    Identity transform layer that adds KL Divergence
-    to the final model loss.
-
-    """
-
-    def __init__(self, iters, warm_up_iters, annealing_mode, *args, **kwargs):
-        """
-
-        Initializes the KL Divergence layer
-
-        Args:
-            iters (int): number of training iterations taken so far
-            warm_up_iters (int): maximum number of training iterations for warmup
-            annealing_mode (str): mode of annealing, either 'linear' or 'sigmoid'
-            *args: additional positional arguments
-            **kwargs: additional keyword arguments
-
-        """
-
-        super(KLDivergenceLayer, self).__init__(*args, **kwargs)
-        self._iters = iters
-        self._warm_up_iters = warm_up_iters
-        self._annealing_mode = annealing_mode
-        self._kl_weight = tf.Variable(
-            1.0, trainable=False, dtype=tf.float32, name="kl_weight"
-        )
-
-    def get_config(self):  # pragma: no cover
-        """
-
-        Updates Constraint metadata
-
-        """
-
-        config = super().get_config().copy()
-        config.update({"_iters": self._iters})
-        config.update({"_warm_up_iters": self._warm_up_iters})
-        config.update({"_annealing_mode": self._annealing_mode})
-        config.update({"_kl_weight": self._kl_weight})
-        return config
-
-    def call(self, distribution_a):  # pragma: no cover
-        """
-
-        Updates Layer's call method
-
-        """
-
-        # Define and update KL weight for warmup
-        if self._warm_up_iters > 0:
-            if self._annealing_mode in ["linear", "sigmoid"]:
-                self._kl_weight = tf.cast(
-                    K.min([self._iters / self._warm_up_iters, 1.0]), tf.float32
-                )
-                if self._annealing_mode == "sigmoid":
-                    self._kl_weight = tf.math.sigmoid(
-                        (2 * self._kl_weight - 1)
-                        / (self._kl_weight - self._kl_weight**2)
-                    )
-            else:
-                raise NotImplementedError(
-                    "annealing_mode must be one of 'linear' and 'sigmoid'"
-                )
-        else:
-            self._kl_weight = tf.cast(1.0, tf.float32)
-
-        kl_batch = self._kl_weight * self._regularizer(distribution_a) * 0.1
-
-        self.add_loss(kl_batch, inputs=[distribution_a])
-        self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
-        self.add_metric(kl_batch, aggregation="mean", name="kl_divergence")
-
-        return distribution_a
 
 
 class TransformerEncoderLayer(tf.keras.layers.Layer):
@@ -1313,7 +1194,7 @@ def autoencoder_fitting(
     save_checkpoints: bool,
     save_weights: bool,
     input_type: str,
-    # GMVAE Model specific parameters
+    # VaDE Model specific parameters
     kl_annealing_mode: str,
     kl_warmup: int,
     reg_cat_clusters: float,
@@ -1332,7 +1213,7 @@ def autoencoder_fitting(
 
     Args:
         preprocessed_object (tuple): Tuple containing the preprocessed data.
-        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
         and contrastive.
         encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
         batch_size (int): Batch size to use for training.
@@ -1351,7 +1232,7 @@ def autoencoder_fitting(
         run (int): Run number to use for logging.
         strategy (tf.distribute.Strategy): Distribution strategy to use for training.
 
-        # GMVAE Model specific parameters
+        # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
         kl_warmup (int): Number of epochs during which KL is annealed.
         reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
@@ -1452,16 +1333,15 @@ def autoencoder_fitting(
                 ae_full_model.quantizer,
                 ae_full_model.vqvae,
             )
-            return_list = (encoder, decoder, quantizer, ae)
 
-        elif embedding_model == "GMVAE":
-            ae_full_model = deepof.models.GMVAE(
+        elif embedding_model == "VaDE":
+            ae_full_model = deepof.models.VaDE(
                 input_shape=X_train.shape,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
-                montecarlo_kl=10 * n_components,
+                montecarlo_kl=100,
                 n_components=n_components,
                 reg_cat_clusters=reg_cat_clusters,
                 encoder_type=encoder_type,
@@ -1470,9 +1350,8 @@ def autoencoder_fitting(
                 ae_full_model.encoder,
                 ae_full_model.decoder,
                 ae_full_model.grouper,
-                ae_full_model.gmvae,
+                ae_full_model.vade,
             )
-            return_list = (encoder, decoder, grouper, ae)
 
         elif embedding_model == "contrastive":
             ae_full_model = deepof.models.Contrastive(
@@ -1485,13 +1364,16 @@ def autoencoder_fitting(
                 beta=beta,
                 tau=tau,
             )
-            ae = ae_full_model
-            return_list = ae
+
+        else:
+            raise ValueError(
+                "Invalid embedding model. Select one of 'VQVAE', 'VaDE', and 'Contrastive'"
+            )
 
     if pretrained:
         # If pretrained models are specified, load weights and return
-        ae.load_weights(pretrained)
-        return return_list
+        ae_full_model.load_weights(pretrained)
+        return ae_full_model
 
     callbacks_ = cbacks + [
         CustomStopper(
@@ -1507,6 +1389,15 @@ def autoencoder_fitting(
         optimizer=ae_full_model.optimizer,
         run_eagerly=False,
     )
+    if embedding_model == "VaDE":
+        ae_full_model.pretrain(
+            train_dataset,
+            embed_x=Xs,
+            epochs=epochs,
+            verbose=1,
+        )
+        ae_full_model.optimizer._iterations.assign(0)
+
     ae_full_model.fit(
         x=train_dataset,
         epochs=epochs,
@@ -1569,7 +1460,7 @@ def autoencoder_fitting(
                         step=0,
                     )
 
-                elif embedding_model == "GMVAE":
+                elif embedding_model == "VaDE":
                     tf.summary.scalar(
                         "val_kl_loss",
                         ae_full_model.history.history["val_kl_divergence"][-1],
@@ -1579,7 +1470,7 @@ def autoencoder_fitting(
                 elif embedding_model == "contrastive":
                     raise NotImplementedError
 
-    return return_list
+    return ae_full_model
 
 
 def tune_search(
@@ -1605,7 +1496,7 @@ def tune_search(
         data (tf.data.Dataset): Dataset object for training and validation.
         encoding_size (int): Size of the encoding layer.
         encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
-        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), GMVAE,
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
         and contrastive.
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
@@ -1651,8 +1542,8 @@ def tune_search(
             latent_dim=encoding_size,
             n_components=k,
         )
-    elif embedding_model == "GMVAE":
-        hypermodel = deepof.hypermodels.GMVAE(
+    elif embedding_model == "VaDE":
+        hypermodel = deepof.hypermodels.VaDE(
             encoder_type=encoder_type,
             input_shape=X_train.shape,
             latent_dim=encoding_size,

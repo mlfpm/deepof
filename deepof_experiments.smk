@@ -20,7 +20,7 @@ encodings = [16]
 cluster_numbers = [12] #list(range(5, 26, 1))
 input_types = ["coords"]
 run = [1]
-embedding_model = ["VQVAE", "GMVAE"]
+embedding_model = ["VQVAE", "VaDE"]
 encoder_model = ["recurrent", "TCN", "transformer"]
 
 rule deepof_experiments:

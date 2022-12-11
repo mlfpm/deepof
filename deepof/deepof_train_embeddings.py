@@ -79,9 +79,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--embedding-model",
         "-embedding",
-        help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), GMVAE, or Contrastive",
+        help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), VaDE, or Contrastive",
         nargs="?",
-        choices=["VQVAE", "GMVAE", "contrastive"],
+        choices=["VQVAE", "VaDE", "contrastive"],
         default="VQVAE",
     )
     parser.add_argument(
@@ -371,8 +371,8 @@ if __name__ == "__main__":
                     ae_models.vqvae,
                 )
 
-            elif embedding_model == "GMVAE":
-                ae_models = deepof.models.GMVAE(
+            elif embedding_model == "VaDE":
+                ae_models = deepof.models.VaDE(
                     input_shape=curr_prep.shape,
                     encoder_type=encoder_type,
                     batch_size=batch_size,
@@ -382,7 +382,7 @@ if __name__ == "__main__":
                 curr_deep_encoder, curr_deep_grouper, curr_ae = (
                     ae_models.encoder,
                     ae_models.grouper,
-                    ae_models.gmvae,
+                    ae_models.vade,
                 )
 
             elif embedding_model == "Contrastive":

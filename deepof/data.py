@@ -1271,7 +1271,7 @@ class Coordinates:
         log_history: bool = True,
         log_hparams: bool = False,
         n_components: int = 10,
-        kmeans_loss: float = 1.0,
+        kmeans_loss: float = 0.0,
         temperature: float = 0.1,
         contrastive_similarity_function: str = "cosine",
         contrastive_loss_function: str = "nce",
@@ -1286,13 +1286,13 @@ class Coordinates:
         strategy: tf.distribute.Strategy = "one_device",
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
-        reg_cat_clusters: float = 1.0,
+        reg_cat_clusters: float = 0.0,
     ) -> Tuple:
         """Annotates coordinates using a deep unsupervised autoencoder.
 
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
-            embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), GMVAE, or contrastive.
+            embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), VaDE, or contrastive.
             encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
             batch_size (int): Batch size for training.
             latent_dim (int): Dimention size of the latent space.
@@ -1301,7 +1301,7 @@ class Coordinates:
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
             n_components (int): Number of latent clusters for the embedding model to use.
-            kmeans_loss (float): Weight of the gram loss, which adds a regularization term to GMVAE and VQVAE models which
+            kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VaDE and VQVAE models which
             penalizes the correlation between the dimensions in the latent space.
             temperature (float): temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.
             contrastive_similarity_function (str): similarity function between positive and negative pairs. Must be one of 'cosine' (default), 'euclidean', 'dot', and 'edit'.

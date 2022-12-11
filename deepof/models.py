@@ -11,6 +11,7 @@
 import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
+from sklearn.mixture import GaussianMixture
 from tensorflow.keras import Input, Model
 from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
@@ -23,8 +24,6 @@ from deepof import unsupervised_utils
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
-
-from sklearn.mixture import GaussianMixture
 
 # noinspection PyCallingNonCallable
 def get_recurrent_encoder(
@@ -800,9 +799,10 @@ class VQVAE(tf.keras.models.Model):
 class GaussianMixtureLatent(tf.keras.models.Model):
     """Gaussian Mixture probabilistic latent space model.
 
-    Used to represent the embedding of motion tracking data in a
-    mixture of Gaussians with a specified number of components, with means, covariances and weights specified by
-    neural network layers.
+    Used to represent the embedding of motion tracking data in a mixture of Gaussians
+    with a provided number of components, with means, covariances and weights.
+    Implementation based on VaDE (https://arxiv.org/abs/1611.05148)
+    and VaDE-SC (https://openreview.net/forum?id=RQ428ZptQfU).
     """
 
     def __init__(
@@ -849,53 +849,35 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         self.kmeans = kmeans_loss
         self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
         self.reg_cluster_variance = reg_cluster_variance
+        self.pretrain = tf.Variable(0.0, name="pretrain", trainable=False)
 
-        # Initialize layers
-        self.z_cat = Dense(
-            self.n_components,
-            name="cluster_assignment",
-            kernel_initializer="random_normal",
-            activation="linear",
-            activity_regularizer=None,
+        # Initialize GM parameters
+        self.c_mu = tf.Variable(
+            tf.initializers.GlorotNormal()(shape=[self.n_components, self.latent_dim]),
+            name="mu_c",
         )
-        self.z_gauss_mean = Dense(
-            tfpl.IndependentNormal.params_size(self.latent_dim * self.n_components)
-            // 2,
-            name="cluster_means",
-            activation="linear",
-            activity_regularizer=None,
-            kernel_initializer=he_uniform(),
-        )
-        self.z_gauss_var = Dense(
-            tfpl.IndependentNormal.params_size(self.latent_dim * self.n_components)
-            // 2,
-            name="cluster_variances",
-            activation="linear",
-            kernel_regularizer=(
-                tf.keras.regularizers.l2(0.01) if self.reg_cluster_variance else None
-            ),
-        )
-        self.latent_distribution = tfpl.MixtureNormal(
-            self.n_components,
-            self.latent_dim,
-            convert_to_tensor_fn="sample",
-            name="encoding_distribution",
+        self.log_c_sigma = tf.Variable(
+            tf.initializers.GlorotNormal()([self.n_components, self.latent_dim]),
+            name="log_sigma_c",
         )
 
         # Initialize the Gaussian Mixture prior with the specified number of components
-        self.prior = tfd.MixtureSameFamily(
-            mixture_distribution=tfd.categorical.Categorical(
-                probs=tf.ones(self.n_components) / self.n_components
-            ),
-            components_distribution=tfd.Independent(
-                tfd.Normal(
-                    loc=tf.random.uniform([self.n_components, self.latent_dim]),
-                    scale=tf.ones([self.n_components, self.latent_dim])
-                    / (tf.math.sqrt(tf.cast(self.n_components, tf.float32))),
-                    name="prior_scales",
-                ),
-                reinterpreted_batch_ndims=1,
-            ),
+        self.prior = tf.constant(tf.ones([self.n_components]) * (1 / self.n_components))
+
+        # Initialize layers
+        self.z_gauss_mean = Dense(
+            tfpl.IndependentNormal.params_size(self.latent_dim) // 2,
+            name="cluster_means",
+            activation="linear",
+            kernel_initializer="glorot_uniform",
+            activity_regularizer=None,
+        )
+        self.z_gauss_var = Dense(
+            tfpl.IndependentNormal.params_size(self.latent_dim) // 2,
+            name="cluster_variances",
+            activation="softplus",
+            kernel_initializer="glorot_uniform",
+            activity_regularizer=tf.keras.regularizers.l2(0.1),
         )
 
         self.cluster_control_layer = unsupervised_utils.ClusterControl(
@@ -905,33 +887,102 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             k=self.n_components,
         )
 
-        # Initialize metric layers
+        # control KL weight
         self.kl_warm_up_iters = tf.cast(
             self.kl_warmup * (self.seq_shape // self.batch_size), tf.int64
         )
-        self.kl_layer = unsupervised_utils.KLDivergenceLayer(
-            distribution_b=self.prior,
-            test_points_fn=lambda q: q.sample(self.mc_kl * self.n_components),
-            test_points_reduce_axis=[0, 1],
-            iters=self.optimizer.iterations,
-            warm_up_iters=self.kl_warm_up_iters,
-            annealing_mode=self.kl_annealing_mode,
+        self._kl_weight = tf.Variable(
+            1.0, trainable=False, dtype=tf.float32, name="kl_weight"
         )
 
-    def call(self, inputs):  # pragma: no cover
+    def call(self, inputs, training=False):  # pragma: no cover
         """Computes the output of the layer."""
-        z_cat = self.z_cat(inputs)
         z_gauss_mean = self.z_gauss_mean(inputs)
         z_gauss_var = self.z_gauss_var(inputs)
-        z_gauss_var = tf.keras.layers.ActivityRegularization(l2=0.01)(z_gauss_var)
 
-        # Prepare layer to be handled by the mixture normal layer
-        z_gauss = tf.keras.layers.concatenate(
-            [z_cat, z_gauss_mean, z_gauss_var], axis=-1
+        z = tfd.MultivariateNormalDiag(
+            loc=z_gauss_mean, scale_diag=tf.math.sqrt(tf.math.exp(z_gauss_var))
         )
-        z_gauss = tf.keras.layers.Flatten()(z_gauss)
+        z_sample = tf.squeeze(z.sample())
 
-        z = self.latent_distribution(z_gauss)
+        # Compute embedding probabilities given each cluster
+        p_z_c = tf.stack(
+            [
+                tfd.MultivariateNormalDiag(
+                    loc=self.c_mu[i, :],
+                    scale_diag=tf.math.exp(self.log_c_sigma)[i, :],
+                ).log_prob((z_sample if training else z_gauss_mean))
+                + 1e-6
+                for i in range(self.n_components)
+            ],
+            axis=-1,
+        )
+
+        # Update prior
+        prior = self.prior
+
+        # Compute cluster probabilitie given embedding
+        z_cat = tf.math.log(prior + 1e-6) + p_z_c
+        z_cat = tf.nn.log_softmax(z_cat, axis=-1)
+        z_cat = tf.math.exp(z_cat)
+
+        # Add clustering loss
+        loss_clustering = -tf.reduce_sum(
+            tf.multiply(z_cat, tf.math.softmax(p_z_c, axis=-1)), axis=-1
+        ) * (1.0 - tf.cast(self.pretrain, tf.float32))
+        loss_prior = -tf.math.reduce_sum(
+            tf.math.xlogy(z_cat, 1e-6 + prior), axis=-1
+        ) * (1.0 - tf.cast(self.pretrain, tf.float32))
+
+        self.add_metric(loss_clustering, name="clustering_loss", aggregation="mean")
+        self.add_metric(loss_prior, name="prior_loss", aggregation="mean")
+
+        # Update KL weight based on the current iteration
+        if self.kl_warm_up_iters > 0:
+            if self.kl_annealing_mode in ["linear", "sigmoid"]:
+                self._kl_weight = tf.cast(
+                    tf.keras.backend.min(
+                        [self.optimizer.iterations / self.kl_warm_up_iters, 1.0]
+                    ),
+                    tf.float32,
+                )
+                if self.kl_annealing_mode == "sigmoid":
+                    self._kl_weight = tf.math.sigmoid(
+                        (2 * self._kl_weight - 1)
+                        / (self._kl_weight - self._kl_weight**2)
+                    )
+            else:
+                raise NotImplementedError(
+                    "annealing_mode must be one of 'linear' and 'sigmoid'"
+                )
+        else:
+            self._kl_weight = tf.cast(1.0, tf.float32)
+
+        loss_variational_1 = -1 / 2 * tf.reduce_sum(z_gauss_var + 1, axis=-1)
+        loss_variational_2 = tf.math.reduce_sum(
+            tf.math.xlogy(z_cat, 1e-6 + z_cat), axis=-1
+        )
+        kl = loss_variational_1 + loss_variational_2 * (
+            1.0 - tf.cast(self.pretrain, tf.float32)
+        )
+        kl_batch = self._kl_weight * kl
+
+        self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
+        self.add_metric(kl, aggregation="mean", name="kl_divergence")
+
+        self.add_loss(tf.math.reduce_mean(loss_clustering))
+        self.add_loss(tf.math.reduce_mean(loss_prior))
+        self.add_loss(tf.math.reduce_mean(kl_batch))
+
+        if training:
+            z = z_sample
+        else:
+            # Select corresponding mean
+            z = z_gauss_mean
+
+        # Tracks clustering metrics
+        if self.n_components > 1:
+            z = self.cluster_control_layer([z, z_cat])
 
         if self.kmeans:
             kmeans_loss = unsupervised_utils.compute_kmeans_loss(
@@ -940,21 +991,11 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.add_loss(kmeans_loss)
             self.add_metric(kmeans_loss, name="kmeans_loss")
 
-        # Update KL weight based on the current iteration
-        self.kl_layer._iters = self.optimizer.iterations
-
-        # noinspection PyCallingNonCallable
-        z = self.kl_layer(z)
-
-        # Tracks clustering metrics
-        if self.n_components > 1:
-            z = self.cluster_control_layer([z, z_cat])
-
         return z, z_cat
 
 
 # noinspection PyCallingNonCallable
-def get_gmvae(
+def get_vade(
     input_shape: tuple,
     latent_dim: int,
     n_components: int,
@@ -966,7 +1007,7 @@ def get_gmvae(
     reg_cluster_variance: bool = False,
     encoder_type: str = "recurrent",
 ):
-    """Builds a Gaussian mixture variational autoencoder (GMVAE) model, adapted to the DeepOF setting.
+    """Builds a Gaussian mixture variational autoencoder (VaDE) model, adapted to the DeepOF setting.
 
     Args:
             input_shape (tuple): shape of the input data
@@ -986,7 +1027,7 @@ def get_gmvae(
         decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
         grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,).
         for each training instance, corresponding to the soft counts for each cluster.
-        gmvae (tf.keras.Model): complete GMVAE model
+        vade (tf.keras.Model): complete VaDE model
     """
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
@@ -1025,16 +1066,16 @@ def get_gmvae(
     grouper = tf.keras.Model(inputs, categorical, name="grouper")
 
     # Connect decoder
-    gmvae_outputs = decoder([embedding.outputs, inputs])
+    vade_outputs = decoder([embedding.outputs, inputs])
 
     # Instantiate fully connected model
-    gmvae = tf.keras.Model(embedding.inputs, gmvae_outputs, name="GMVAE")
+    vade = tf.keras.Model(embedding.inputs, vade_outputs, name="VaDE")
 
-    return embedding, decoder, grouper, gmvae
+    return embedding, decoder, grouper, vade
 
 
 # noinspection PyDefaultArgument,PyCallingNonCallable
-class GMVAE(tf.keras.models.Model):
+class VaDE(tf.keras.models.Model):
     """Gaussian Mixture Variational Autoencoder for pose motif elucidation."""
 
     def __init__(
@@ -1052,7 +1093,7 @@ class GMVAE(tf.keras.models.Model):
         encoder_type: str = "recurrent",
         **kwargs,
     ):
-        """Initalizes a GMVAE model.
+        """Initalizes a VaDE model.
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
@@ -1063,13 +1104,13 @@ class GMVAE(tf.keras.models.Model):
             montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
             n_components (int): Number of mixture components in the latent space.
             kmeans_loss (float): weight of the gram matrix regularization loss.
-            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+            reg_cat_clusters (bool): whether to use the penalized uneven cluster membership in the latent space, by
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
-            encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
+            encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
             **kwargs: Additional keyword arguments.
         """
-        super(GMVAE, self).__init__(**kwargs)
+        super(VaDE, self).__init__(**kwargs)
         self.seq_shape = input_shape
         self.batch_size = batch_size
         self.latent_dim = latent_dim
@@ -1083,8 +1124,8 @@ class GMVAE(tf.keras.models.Model):
         self.reg_cluster_variance = reg_cluster_variance
         self.encoder_type = encoder_type
 
-        # Define GMVAE model
-        self.encoder, self.decoder, self.grouper, self.gmvae = get_gmvae(
+        # Define VaDE model
+        self.encoder, self.decoder, self.grouper, self.vade = get_vade(
             input_shape=self.seq_shape,
             n_components=self.n_components,
             latent_dim=self.latent_dim,
@@ -1096,9 +1137,10 @@ class GMVAE(tf.keras.models.Model):
             reg_cluster_variance=self.reg_cluster_variance,
             encoder_type=self.encoder_type,
         )
+
         # Propagate the optimizer to all relevant sub-models, to enable metric annealing
-        self.gmvae.optimizer = self.optimizer
-        self.gmvae.get_layer("gaussian_mixture_latent").optimizer = self.optimizer
+        self.vade.optimizer = self.optimizer
+        self.vade.get_layer("gaussian_mixture_latent").optimizer = self.optimizer
 
         # Define metrics to track
 
@@ -1123,14 +1165,14 @@ class GMVAE(tf.keras.models.Model):
 
     @property
     def metrics(self):  # pragma: no cover
-        """Initializes tracked metrics of GMVAE model."""
+        """Initializes tracked metrics of VaDE model."""
         metrics = [
             self.total_loss_tracker,
             self.val_total_loss_tracker,
             self.reconstruction_loss_tracker,
             self.val_reconstruction_loss_tracker,
         ]
-        metrics += self.gmvae.metrics
+        metrics += self.vade.metrics
 
         if self.reg_cat_clusters:
             metrics += [
@@ -1141,18 +1183,68 @@ class GMVAE(tf.keras.models.Model):
         return metrics
 
     @property
-    def prior(self):
-        """Property to retrieve the current model prior."""
-        return self.gmvae.get_layer("gaussian_mixture_latent").prior
+    def get_gmm_params(self):
 
-    def update_prior(self, embeddings: tf.Tensor):
-        """Updates the current prior by fitting a Gaussian Mixture Model to the current embeddings."""
-        return self.gmvae.get_layer("gaussian_mixture_latent").update_prior(embeddings)
+        # Get GMM parameters
+        return {
+            "means": self.grouper.get_layer("gaussian_mixture_latent").c_mu,
+            "sigmas": tf.math.exp(
+                self.grouper.get_layer("gaussian_mixture_latent").log_c_sigma
+            ),
+            "weights": tf.math.softmax(
+                self.grouper.get_layer("gaussian_mixture_latent").prior
+            ),
+        }
+
+    def set_pretrain_mode(self, switch):
+        self.grouper.get_layer("gaussian_mixture_latent").pretrain.assign(switch)
+
+    def pretrain(
+        self, data, embed_x, epochs=10, gmm_initialize=True, verbose=1, **kwargs
+    ):
+        """Runs a GMM directed pretraining of the encoder, to minimize the likelihood of getting stuck in a local minimum."""
+
+        # Turn on pretrain mode
+        self.set_pretrain_mode(1.0)
+
+        # pre-train
+        self.fit(
+            data,
+            epochs=epochs,
+            verbose=verbose,
+        )
+
+        # Turn off pretrain mode
+        self.set_pretrain_mode(0.0)
+
+        if gmm_initialize:
+
+            # map to latent
+            z = self.encoder(embed_x)
+            # fit GMM
+            gmm = GaussianMixture(
+                n_components=self.n_components,
+                covariance_type="diag",
+                reg_covar=1e-04,
+            ).fit(z)
+            # get GMM parameters
+            mu = gmm.means_
+            sigma2 = gmm.covariances_
+
+            # initialize mixture components
+            self.grouper.get_layer("gaussian_mixture_latent").c_mu.assign(
+                tf.convert_to_tensor(value=mu, dtype=tf.float32)
+            )
+            self.grouper.get_layer("gaussian_mixture_latent").log_c_sigma.assign(
+                tf.math.log(
+                    tf.math.sqrt(tf.convert_to_tensor(value=sigma2, dtype=tf.float32))
+                )
+            )
 
     @tf.function
     def call(self, inputs, **kwargs):
-        """Calls the GMVAE model."""
-        return self.gmvae(inputs, **kwargs)
+        """Calls the VaDE model."""
+        return self.vade(inputs, **kwargs)
 
     def train_step(self, data):  # pragma: no cover
         """Performs a training step."""
@@ -1165,7 +1257,7 @@ class GMVAE(tf.keras.models.Model):
         with tf.GradientTape() as tape:
 
             # Get outputs from the full model
-            outputs = self.gmvae(x, training=True)
+            outputs = self.vade(x, training=True)
 
             # Get rid of the attention scores that the transformer decoder outputs
             if self.encoder_type == "transformer":
@@ -1177,11 +1269,11 @@ class GMVAE(tf.keras.models.Model):
                 reconstructions = outputs
 
             # Regularize embeddings
-            groups = self.grouper(x, training=True)
+            # groups = self.grouper(x, training=True)
 
             # Compute losses
             seq_inputs = next(y)
-            total_loss = sum(self.gmvae.losses)
+            total_loss = sum(self.vade.losses)
 
             # Add a regularization term to the soft_counts, to prevent the embedding layer from
             # collapsing into a few clusters.
@@ -1198,12 +1290,11 @@ class GMVAE(tf.keras.models.Model):
 
             # Compute reconstruction loss
             reconstruction_loss = -tf.reduce_mean(reconstructions.log_prob(seq_inputs))
-
             total_loss += reconstruction_loss
 
         # Backpropagation
-        grads = tape.gradient(total_loss, self.gmvae.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.gmvae.trainable_variables))
+        grads = tape.gradient(total_loss, self.vade.trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, self.vade.trainable_variables))
 
         # Track losses
         self.total_loss_tracker.update_state(total_loss)
@@ -1220,7 +1311,7 @@ class GMVAE(tf.keras.models.Model):
             log_dict["cat_cluster_loss"] = self.cat_cluster_loss_tracker.result()
 
         # Log to TensorBoard, both explicitly and implicitly (within model) tracked metrics
-        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
+        return {**log_dict, **{met.name: met.result() for met in self.vade.metrics}}
 
     # noinspection PyUnboundLocalVariable
     @tf.function
@@ -1233,7 +1324,7 @@ class GMVAE(tf.keras.models.Model):
         y = (labels for labels in y)
 
         # Get outputs from the full model
-        outputs = self.gmvae(x, training=False)
+        outputs = self.vade(x, training=False)
 
         # Get rid of the attention scores that the transformer decoder outputs
         if self.encoder_type == "transformer":
@@ -1246,7 +1337,7 @@ class GMVAE(tf.keras.models.Model):
 
         # Compute losses
         seq_inputs = next(y)
-        total_loss = sum(self.gmvae.losses)
+        total_loss = sum(self.vade.losses)
 
         # Add a regularization term to the soft_counts, to prevent the embedding layer from
         # collapsing into a few clusters.
@@ -1278,7 +1369,7 @@ class GMVAE(tf.keras.models.Model):
             self.val_cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
             log_dict["cat_cluster_loss"] = self.val_cat_cluster_loss_tracker.result()
 
-        return {**log_dict, **{met.name: met.result() for met in self.gmvae.metrics}}
+        return {**log_dict, **{met.name: met.result() for met in self.vade.metrics}}
 
 
 # noinspection PyDefaultArgument,PyCallingNonCallable
