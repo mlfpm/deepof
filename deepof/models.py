@@ -8,10 +8,12 @@
 # encoding: utf-8
 # module deepof
 
+import numpy as np
 import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
 from sklearn.mixture import GaussianMixture
+from spektral.layers import GATConv
 from tensorflow.keras import Input, Model
 from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
@@ -25,27 +27,51 @@ tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
 
+
 # noinspection PyCallingNonCallable
 def get_recurrent_encoder(
-    input_shape, latent_dim, gru_unroll=False, bidirectional_merge="concat"
+    input_shape: tuple,
+    adj_shape: tuple,
+    latent_dim: int,
+    gat_heads: int = 8,
+    gru_unroll: bool = False,
+    bidirectional_merge: str = "concat",
 ):
     """Returns a deep recurrent neural encoder.
 
-     Builds an neural network capable of encoding the motion tracking instances into a vector ready to be fed to
+     Builds a neural network capable of encoding the motion tracking instances into a vector ready to be fed to
     one of the provided structured latent spaces.
 
     Args:
-        input_shape (tuple): shape of the input data
-        latent_dim (int): dimension of the latent space
-        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
-        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+        - input_shape (tuple): shape of the node features for the input data. Should be time x nodes x features.
+        - adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
+        - latent_dim (int): dimension of the latent space.
+        - gat_heads (int): number of attention heads in the graph attention layers.
+        - gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
+        - bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
     Returns:
         keras.Model: a keras model that can be trained to encode motion tracking instances into a vector.
 
     """
-    # Define and instantiate encoder
+    # Define feature and adjacency inputs
     x = Input(shape=input_shape)
+    a = Input(shape=adj_shape)
+
+    # Instanciate spatial GAT block
+    x_flat = tf.transpose(
+        tf.reshape(
+            tf.transpose(x), [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1]
+        )
+    )
+    a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+
+    x_spatial = GATConv(channels=2 * latent_dim, attn_heads=gat_heads)([x_flat, a_flat])
+    x_spatial = tf.reshape(
+        x_spatial, [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads]
+    )
+
+    # Instantiate temporal RNN block
     encoder = tf.keras.layers.Conv1D(
         filters=2 * latent_dim,
         kernel_size=5,
@@ -54,7 +80,7 @@ def get_recurrent_encoder(
         activation="relu",
         kernel_initializer=he_uniform(),
         use_bias=False,
-    )(x)
+    )(x_spatial)
     encoder = tf.keras.layers.Masking(mask_value=0.0)(encoder)
     encoder = Bidirectional(
         GRU(
@@ -84,12 +110,15 @@ def get_recurrent_encoder(
         encoder
     )
 
-    return Model(x, encoder_output, name="recurrent_encoder")
+    return Model([x, a], encoder_output, name="recurrent_encoder")
 
 
 # noinspection PyCallingNonCallable
 def get_recurrent_decoder(
-    input_shape, latent_dim, gru_unroll=False, bidirectional_merge="concat"
+    input_shape: tuple,
+    latent_dim: int,
+    gru_unroll: bool = False,
+    bidirectional_merge: str = "concat",
 ):
     """Returns a recurrent neural decoder.
 
@@ -156,16 +185,18 @@ def get_recurrent_decoder(
 
 
 def get_TCN_encoder(
-    input_shape,
-    latent_dim,
-    conv_filters=64,
-    kernel_size=4,
-    conv_stacks=2,
-    conv_dilations=(1, 2, 4, 8),
-    padding="causal",
-    use_skip_connections=True,
-    dropout_rate=0,
-    activation="relu",
+    input_shape: tuple,
+    adj_shape: tuple,
+    latent_dim: int,
+    gat_heads: int = 8,
+    conv_filters: int = 32,
+    kernel_size: int = 4,
+    conv_stacks: int = 2,
+    conv_dilations: tuple = (1, 2, 4, 8),
+    padding: str = "causal",
+    use_skip_connections: bool = True,
+    dropout_rate: int = 0,
+    activation: str = "relu",
 ):
     """Returns a Temporal Convolutional Network (TCN) encoder.
 
@@ -175,6 +206,8 @@ def get_TCN_encoder(
 
     Args:
         input_shape: shape of the input data
+        adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
+        gat_heads (int): number of attention heads in the graph attention layers.
         latent_dim: dimensionality of the latent space
         conv_filters: number of filters in the TCN layers
         kernel_size: size of the convolutional kernels
@@ -189,7 +222,22 @@ def get_TCN_encoder(
         keras.Model: a keras model that can be trained to encode a sequence of motion tracking instances into a latent
         space using temporal convolutional networks.
     """
-    x = Input(input_shape)
+    # Define feature and adjacency inputs
+    x = Input(shape=input_shape)  # Node input features
+    a = Input(shape=adj_shape)
+
+    # Instanciate spatial GAT block
+    x_flat = tf.transpose(
+        tf.reshape(
+            tf.transpose(x), [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1]
+        )
+    )
+    a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+
+    x_spatial = GATConv(channels=2 * latent_dim, attn_heads=gat_heads)([x_flat, a_flat])
+    x_spatial = tf.reshape(
+        x_spatial, [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads]
+    )
 
     encoder = tcn.TCN(
         conv_filters,
@@ -199,33 +247,32 @@ def get_TCN_encoder(
         padding,
         use_skip_connections,
         dropout_rate,
-        return_sequences=True,
+        return_sequences=False,
         activation=activation,
         kernel_initializer="random_normal",
         use_batch_norm=True,
-    )(x)
+    )(x_spatial)
 
-    encoder = tf.keras.layers.Flatten()(encoder)
     encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = Dense(latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = tf.keras.layers.Dense(latent_dim)(encoder)
 
-    return Model(x, encoder, name="TCN_encoder")
+    return Model([x, a], encoder, name="TCN_encoder")
 
 
 def get_TCN_decoder(
-    input_shape,
-    latent_dim,
-    conv_filters=64,
-    kernel_size=4,
-    conv_stacks=2,
-    conv_dilations=(8, 4, 2, 1),
-    padding="causal",
-    use_skip_connections=True,
-    dropout_rate=0,
-    activation="relu",
+    input_shape: tuple,
+    latent_dim: int,
+    conv_filters: int = 64,
+    kernel_size: int = 4,
+    conv_stacks: int = 1,
+    conv_dilations: tuple = (8, 4, 2, 1),
+    padding: str = "causal",
+    use_skip_connections: bool = True,
+    dropout_rate: int = 0,
+    activation: str = "relu",
 ):
     """Returns a Temporal Convolutional Network (TCN) decoder.
 
@@ -286,9 +333,11 @@ def get_TCN_decoder(
 # noinspection PyCallingNonCallable
 def get_transformer_encoder(
     input_shape: tuple,
+    adj_shape: tuple,
     latent_dim: int,
-    num_layers: int = 2,
-    num_heads: int = 8,
+    gat_heads: int = 8,
+    num_layers: int = 4,
+    num_heads: int = 64,
     dff: int = 128,
     dropout_rate: float = 0.1,
 ):
@@ -300,13 +349,30 @@ def get_transformer_encoder(
 
     Args:
         input_shape (tuple): shape of the input data
+        adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
+        gat_heads (int): number of attention heads in the graph attention layers.
         latent_dim (int): dimensionality of the latent space
         num_layers (int): number of transformer layers to include
         num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
         dff (int): dimensionality of the token embeddings
         dropout_rate (float): dropout rate
     """
-    x = tf.keras.layers.Input(input_shape)
+    # Define feature and adjacency inputs
+    x = Input(shape=input_shape)  # Node input features
+    a = Input(shape=adj_shape)
+
+    # Instanciate spatial GAT block
+    x_flat = tf.transpose(
+        tf.reshape(
+            tf.transpose(x), [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1]
+        )
+    )
+    a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+
+    x_spatial = GATConv(channels=2 * latent_dim, attn_heads=gat_heads)([x_flat, a_flat])
+    x_spatial = tf.reshape(
+        x_spatial, [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads]
+    )
 
     transformer_embedding = deepof.unsupervised_utils.TransformerEncoder(
         num_layers=num_layers,
@@ -316,7 +382,7 @@ def get_transformer_encoder(
         dff=dff,
         maximum_position_encoding=input_shape[0],
         rate=dropout_rate,
-    )(x, training=False)
+    )(x_spatial, training=False)
 
     encoder = tf.reshape(transformer_embedding, [-1, input_shape[0] * input_shape[1]])
     encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(encoder)
@@ -325,7 +391,7 @@ def get_transformer_encoder(
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = tf.keras.layers.Dense(latent_dim)(encoder)
 
-    return tf.keras.models.Model(x, encoder, name="transformer_encoder")
+    return tf.keras.models.Model([x, a], encoder, name="transformer_encoder")
 
 
 def get_transformer_decoder(
@@ -510,6 +576,7 @@ class VectorQuantizer(tf.keras.models.Model):
 # noinspection PyCallingNonCallable
 def get_vqvae(
     input_shape: tuple,
+    adj_shape: tuple,
     latent_dim: int,
     n_components: int,
     beta: float = 1.0,
@@ -520,6 +587,7 @@ def get_vqvae(
 
     Args:
         input_shape (tuple): shape of the input to the encoder.
+        adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
         latent_dim (int): dimension of the latent space.
         n_components (int): number of embeddings in the embedding layer.
         beta (float): beta parameter of the VQ loss.
@@ -544,29 +612,34 @@ def get_vqvae(
 
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
-            input_shape=input_shape[1:], latent_dim=latent_dim
+            input_shape=input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
         )
         decoder = get_recurrent_decoder(
             input_shape=input_shape[1:], latent_dim=latent_dim
         )
 
     elif encoder_type == "TCN":
-        encoder = get_TCN_encoder(input_shape=input_shape[1:], latent_dim=latent_dim)
+        encoder = get_TCN_encoder(
+            input_shape=input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
+        )
         decoder = get_TCN_decoder(input_shape=input_shape[1:], latent_dim=latent_dim)
 
     elif encoder_type == "transformer":
-        encoder = get_transformer_encoder(input_shape[1:], latent_dim=latent_dim)
+        encoder = get_transformer_encoder(
+            input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
+        )
         decoder = get_transformer_decoder(input_shape[1:], latent_dim=latent_dim)
 
     # Connect encoder and quantizer
     inputs = tf.keras.layers.Input(input_shape[1:], name="encoder_input")
-    encoder_outputs = encoder(inputs)
+    a = tf.keras.layers.Input(adj_shape[1:], name="encoder_adjacency")
+    encoder_outputs = encoder([inputs, a])
     quantized_latents, soft_counts = vq_layer(encoder_outputs)
 
     # Connect full models
-    encoder = tf.keras.Model(inputs, encoder_outputs, name="encoder")
-    quantizer = tf.keras.Model(inputs, quantized_latents, name="quantizer")
-    soft_quantizer = tf.keras.Model(inputs, soft_counts, name="soft_quantizer")
+    encoder = tf.keras.Model([inputs, a], encoder_outputs, name="encoder")
+    quantizer = tf.keras.Model([inputs, a], quantized_latents, name="quantizer")
+    soft_quantizer = tf.keras.Model([inputs, a], soft_counts, name="soft_quantizer")
     vqvae = tf.keras.Model(
         quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
     )
@@ -582,6 +655,7 @@ class VQVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
+        adj_shape: tuple,
         latent_dim: int = 8,
         n_components: int = 15,
         beta: float = 1.0,
@@ -593,6 +667,7 @@ class VQVAE(tf.keras.models.Model):
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
+            adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
@@ -602,6 +677,7 @@ class VQVAE(tf.keras.models.Model):
         """
         super(VQVAE, self).__init__(**kwargs)
         self.seq_shape = input_shape
+        self.adj_shape = adj_shape
         self.latent_dim = latent_dim
         self.n_components = n_components
         self.beta = beta
@@ -617,6 +693,7 @@ class VQVAE(tf.keras.models.Model):
             self.vqvae,
         ) = get_vqvae(
             self.seq_shape,
+            self.adj_shape,
             self.latent_dim,
             self.n_components,
             self.beta,
@@ -675,16 +752,16 @@ class VQVAE(tf.keras.models.Model):
     def train_step(self, data):  # pragma: no cover
         """Performs a training step."""
         # Unpack data, repacking labels into a generator
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
             # Get outputs from the full model
-            encoding_reconstructions = self.vqvae(x, training=True)
+            encoding_reconstructions = self.vqvae([x, a], training=True)
             reconstructions = self.decoder(
-                [self.encoder(x, training=True), x], training=True
+                [self.encoder([x, a], training=True), x], training=True
             )
 
             # Get rid of the attention scores that the transformer decoder outputs
@@ -713,7 +790,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Compute populated clusters
         unique_indices = tf.unique(
-            tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
+            tf.reshape(tf.argmax(self.soft_quantizer([x, a]), axis=1), [-1])
         ).y
         populated_clusters = tf.shape(unique_indices)[0]
 
@@ -741,15 +818,15 @@ class VQVAE(tf.keras.models.Model):
     def test_step(self, data):  # pragma: no cover
         """Performs a test step."""
         # Unpack data, repacking labels into a generator
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
 
         # Get outputs from the full model
-        encoding_reconstructions = self.vqvae(x, training=False)
+        encoding_reconstructions = self.vqvae([x, a], training=False)
         reconstructions = self.decoder(
-            [self.encoder(x, training=False), x], training=False
+            [self.encoder([x, a], training=False), x], training=False
         )
 
         # Get rid of the attention scores that the transformer decoder outputs
@@ -771,7 +848,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Compute populated clusters
         unique_indices = tf.unique(
-            tf.reshape(tf.argmax(self.soft_quantizer(x), axis=1), [-1])
+            tf.reshape(tf.argmax(self.soft_quantizer([x, a]), axis=1), [-1])
         ).y
         populated_clusters = tf.shape(unique_indices)[0]
 
@@ -997,6 +1074,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 # noinspection PyCallingNonCallable
 def get_vade(
     input_shape: tuple,
+    adj_shape: tuple,
     latent_dim: int,
     n_components: int,
     batch_size: int = 64,
@@ -1010,7 +1088,8 @@ def get_vade(
     """Builds a Gaussian mixture variational autoencoder (VaDE) model, adapted to the DeepOF setting.
 
     Args:
-            input_shape (tuple): shape of the input data
+            input_shape (tuple): shape of the input data.
+            adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
             latent_dim (int): dimensionality of the latent space.
             n_components (int): number of components in the Gaussian mixture.
             batch_size (int): batch size for training.
@@ -1031,18 +1110,22 @@ def get_vade(
     """
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
-            input_shape=input_shape[1:], latent_dim=latent_dim
+            input_shape=input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
         )
         decoder = get_recurrent_decoder(
             input_shape=input_shape[1:], latent_dim=latent_dim
         )
 
     elif encoder_type == "TCN":
-        encoder = get_TCN_encoder(input_shape=input_shape[1:], latent_dim=latent_dim)
+        encoder = get_TCN_encoder(
+            input_shape=input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
+        )
         decoder = get_TCN_decoder(input_shape=input_shape[1:], latent_dim=latent_dim)
 
     elif encoder_type == "transformer":
-        encoder = get_transformer_encoder(input_shape[1:], latent_dim=latent_dim)
+        encoder = get_transformer_encoder(
+            input_shape[1:], adj_shape=adj_shape[1:], latent_dim=latent_dim
+        )
         decoder = get_transformer_decoder(input_shape[1:], latent_dim=latent_dim)
 
     latent_space = GaussianMixtureLatent(
@@ -1060,10 +1143,11 @@ def get_vade(
 
     # Connect encoder and latent space
     inputs = Input(input_shape[1:])
-    encoder_outputs = encoder(inputs)
+    a = Input(adj_shape[1:])
+    encoder_outputs = encoder([inputs, a])
     latent, categorical = latent_space(encoder_outputs)
-    embedding = tf.keras.Model(inputs, latent, name="encoder")
-    grouper = tf.keras.Model(inputs, categorical, name="grouper")
+    embedding = tf.keras.Model([inputs, a], latent, name="encoder")
+    grouper = tf.keras.Model([inputs, a], categorical, name="grouper")
 
     # Connect decoder
     vade_outputs = decoder([embedding.outputs, inputs])
@@ -1081,6 +1165,7 @@ class VaDE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
+        adj_shape: tuple,
         latent_dim: int = 8,
         n_components: int = 15,
         batch_size: int = 64,
@@ -1097,6 +1182,7 @@ class VaDE(tf.keras.models.Model):
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
+            adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
             batch_size (int): Batch size for training.
             latent_dim (int): Dimensionality of the latent space.
             kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
@@ -1112,6 +1198,7 @@ class VaDE(tf.keras.models.Model):
         """
         super(VaDE, self).__init__(**kwargs)
         self.seq_shape = input_shape
+        self.adj_shape = adj_shape
         self.batch_size = batch_size
         self.latent_dim = latent_dim
         self.kl_annealing_mode = kl_annealing_mode
@@ -1127,6 +1214,7 @@ class VaDE(tf.keras.models.Model):
         # Define VaDE model
         self.encoder, self.decoder, self.grouper, self.vade = get_vade(
             input_shape=self.seq_shape,
+            adj_shape=self.adj_shape,
             n_components=self.n_components,
             latent_dim=self.latent_dim,
             batch_size=self.batch_size,
@@ -1200,7 +1288,15 @@ class VaDE(tf.keras.models.Model):
         self.grouper.get_layer("gaussian_mixture_latent").pretrain.assign(switch)
 
     def pretrain(
-        self, data, embed_x, epochs=10, gmm_initialize=True, verbose=1, **kwargs
+        self,
+        data,
+        embed_x,
+        embed_a,
+        epochs=10,
+        samples=10000,
+        gmm_initialize=True,
+        verbose=1,
+        **kwargs,
     ):
         """Runs a GMM directed pretraining of the encoder, to minimize the likelihood of getting stuck in a local minimum."""
 
@@ -1219,13 +1315,17 @@ class VaDE(tf.keras.models.Model):
 
         if gmm_initialize:
 
+            # Get embedding samples
+            emb_idx = np.random.choice(range(embed_x.shape[0]), samples)
+
             # map to latent
-            z = self.encoder(embed_x)
+            z = self.encoder([embed_x[emb_idx], embed_a[emb_idx]])
             # fit GMM
             gmm = GaussianMixture(
                 n_components=self.n_components,
                 covariance_type="diag",
                 reg_covar=1e-04,
+                **kwargs,
             ).fit(z)
             # get GMM parameters
             mu = gmm.means_
@@ -1249,7 +1349,7 @@ class VaDE(tf.keras.models.Model):
     def train_step(self, data):  # pragma: no cover
         """Performs a training step."""
         # Unpack data, repacking labels into a generator
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
@@ -1257,7 +1357,7 @@ class VaDE(tf.keras.models.Model):
         with tf.GradientTape() as tape:
 
             # Get outputs from the full model
-            outputs = self.vade(x, training=True)
+            outputs = self.vade([x, a], training=True)
 
             # Get rid of the attention scores that the transformer decoder outputs
             if self.encoder_type == "transformer":
@@ -1279,7 +1379,7 @@ class VaDE(tf.keras.models.Model):
             # collapsing into a few clusters.
             if self.reg_cat_clusters:
 
-                soft_counts = self.grouper(x, training=True)
+                soft_counts = self.grouper([x, a], training=True)
                 soft_counts_regulrization = (
                     self.reg_cat_clusters
                     * deepof.unsupervised_utils.cluster_frequencies_regularizer(
@@ -1318,13 +1418,13 @@ class VaDE(tf.keras.models.Model):
     def test_step(self, data):  # pragma: no cover
         """Performs a test step."""
         # Unpack data, repacking labels into a generator
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [y]
         y = (labels for labels in y)
 
         # Get outputs from the full model
-        outputs = self.vade(x, training=False)
+        outputs = self.vade([x, a], training=False)
 
         # Get rid of the attention scores that the transformer decoder outputs
         if self.encoder_type == "transformer":
@@ -1342,7 +1442,7 @@ class VaDE(tf.keras.models.Model):
         # Add a regularization term to the soft_counts, to prevent the embedding layer from
         # collapsing into a few clusters.
         if self.reg_cat_clusters:
-            soft_counts = self.grouper(x, training=False)
+            soft_counts = self.grouper([x, a], training=False)
             soft_counts_regulrization = (
                 self.reg_cat_clusters
                 * deepof.unsupervised_utils.cluster_frequencies_regularizer(
@@ -1379,6 +1479,7 @@ class Contrastive(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
+        adj_shape: tuple,
         encoder_type: str = "TCN",
         latent_dim: int = 8,
         temperature: float = 0.1,
@@ -1392,6 +1493,7 @@ class Contrastive(tf.keras.models.Model):
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
+            adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
             encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
             latent_dim (int): Dimensionality of the latent space.
             temperature: float = 0.1,
@@ -1403,6 +1505,7 @@ class Contrastive(tf.keras.models.Model):
         """
         super(Contrastive, self).__init__(**kwargs)
         self.seq_shape = input_shape
+        self.adj_shape = adj_shape
         self.latent_dim = latent_dim
         self.window_length = self.seq_shape[1] // 2
         self.temperature = temperature
@@ -1416,17 +1519,23 @@ class Contrastive(tf.keras.models.Model):
         # Define Contrastive model
         if encoder_type == "recurrent":
             self.encoder = get_recurrent_encoder(
-                input_shape=(self.window_length, input_shape[-1]), latent_dim=latent_dim
+                input_shape=(self.window_length, input_shape[-1]),
+                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                latent_dim=latent_dim,
             )
 
         elif encoder_type == "TCN":
             self.encoder = get_TCN_encoder(
-                input_shape=(self.window_length, input_shape[-1]), latent_dim=latent_dim
+                input_shape=(self.window_length, input_shape[-1]),
+                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                latent_dim=latent_dim,
             )
 
         elif encoder_type == "transformer":
             self.encoder = get_transformer_encoder(
-                (self.window_length, input_shape[-1]), latent_dim=latent_dim
+                (self.window_length, input_shape[-1]),
+                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                latent_dim=latent_dim,
             )
 
         # Define metrics to track
@@ -1461,7 +1570,7 @@ class Contrastive(tf.keras.models.Model):
     def train_step(self, data):  # pragma: no cover
         """Performs a training step."""
         # Unpack data
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [
                 y
@@ -1477,10 +1586,11 @@ class Contrastive(tf.keras.models.Model):
                 return x, y
 
             pos, neg = ts_samples(x, self.window_length)
+            pos_a, neg_a = ts_samples(a, self.window_length)
 
             # Compute contrastive loss
-            enc_pos = self.encoder(pos, training=True)
-            enc_neg = self.encoder(neg, training=True)
+            enc_pos = self.encoder([pos, pos_a], training=True)
+            enc_neg = self.encoder([neg, neg_a], training=True)
 
             # normalize projection feature vectors
             enc_pos = tf.math.l2_normalize(enc_pos, axis=1)
@@ -1522,7 +1632,7 @@ class Contrastive(tf.keras.models.Model):
     def test_step(self, data):  # pragma: no cover
         """Performs a test step."""
         # Unpack data
-        x, y = data
+        x, a, y = data
         if not isinstance(y, tuple):
             y = [
                 y
@@ -1536,10 +1646,11 @@ class Contrastive(tf.keras.models.Model):
             return x, y
 
         pos, neg = ts_samples(x, self.window_length)
+        pos_a, neg_a = ts_samples(a, self.window_length)
 
         # Compute contrastive loss
-        enc_pos = self.encoder(pos, training=False)
-        enc_neg = self.encoder(neg, training=False)
+        enc_pos = self.encoder([pos, pos_a], training=False)
+        enc_neg = self.encoder([neg, neg_a], training=False)
 
         # normalize projection feature vectors
         enc_pos = tf.math.l2_normalize(enc_pos, axis=1)

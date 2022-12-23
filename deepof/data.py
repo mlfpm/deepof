@@ -25,6 +25,7 @@ from typing import Dict, List, Tuple
 from typing import Any, NewType, Union
 
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -376,7 +377,9 @@ class Project:
 
         # Update body part connectivity graph, taking detected or specified body parts into account
         model_dict = {
-            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(aid)
+            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(
+                aid, exclude_bodyparts=self.exclude_bodyparts
+            )
             for aid in self.animal_ids
         }
         self.connectivity = {
@@ -390,12 +393,6 @@ class Project:
                 for aid in self.animal_ids
                 for bp in self.exclude_bodyparts
             ]
-
-        if self.exclude_bodyparts != tuple([""]):
-            for aid in self.animal_ids:
-                for bp in self.exclude_bodyparts:
-                    if bp.startswith(aid):
-                        self.connectivity[aid].remove_node(bp)
 
         # Pass a time-based index, if specified in init
         if self.frame_rate is not None:
@@ -550,27 +547,25 @@ class Project:
         if verbose:
             print("Computing angles...")
 
-        # Add all three-element cliques on each mouse
-        cliques = []
+        # Add all three-element connected sequences on each mouse
+        bridges = []
         for i in self.animal_ids:
-            cliques += deepof.utils.nx.enumerate_all_cliques(self.connectivity[i])
-        cliques = [i for i in cliques if len(i) == 3]
+            bridges += deepof.utils.enumerate_all_bridges(self.connectivity[i])
+        bridges = [i for i in bridges if len(i) == 3]
 
         angle_dict = {}
         try:
             for key, tab in tab_dict.items():
 
                 dats = []
-                for clique in cliques:
+                for clique in bridges:
                     dat = pd.DataFrame(
-                        deepof.utils.angle_trio(
+                        deepof.utils.angle(
                             np.array(tab[clique]).reshape([3, tab.shape[0], 2])
-                        )
-                    ).T
+                        ).T
+                    )
 
-                    orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2]]
-                    dat.columns = [tuple(clique[i] for i in order) for order in orders]
-
+                    dat.columns = [tuple(clique)]
                     dats.append(dat)
 
                 dats = pd.concat(dats, axis=1)
@@ -678,6 +673,7 @@ class Project:
             arena=self.arena,
             arena_dims=self.arena_dims,
             distances=distances,
+            excluded_bodyparts=self.exclude_bodyparts,
             exp_conditions=self.exp_conditions,
             path=self.path,
             quality=quality,
@@ -721,6 +717,7 @@ class Coordinates:
         animal_ids: List = tuple([""]),
         areas: dict = None,
         distances: dict = None,
+        excluded_bodyparts: list = None,
         exp_conditions: dict = None,
     ):
         """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables.
@@ -740,6 +737,7 @@ class Coordinates:
             animal_ids (List): List containing the animal IDs of the experiment. See deepof.data.Project for more information.
             areas (dict): dictionary with areas to compute. By default, it includes head, torso, and back.
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
+            excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
 
         """
@@ -747,6 +745,7 @@ class Coordinates:
         self._arena = arena
         self._arena_params = arena_params
         self._arena_dims = arena_dims
+        self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._path = path
         self._quality = quality
@@ -801,7 +800,7 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with
             (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the
-            selected body part with the y-axis, for all time points (default).
+            selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
             propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through
@@ -862,11 +861,6 @@ class Coordinates:
                             axis=0,
                         )
                     )
-
-                # noinspection PyUnboundLocalVariable
-                tabs[key] = value.loc[
-                    :, [tab for tab in value.columns if center not in tab[0]]
-                ]
 
         if align:
 
@@ -958,6 +952,7 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
+        filter_on_graph: bool = True,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
@@ -966,6 +961,8 @@ class Coordinates:
         Args:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
+            filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations
+            are kept. Otherwise, all distances between bodyparts are returned.
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
             propagate_annotations (Dict): A dictionary of annotations to propagate.
 
@@ -998,6 +995,24 @@ class Coordinates:
                 for key, tab in tabs.items():
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+            if filter_on_graph:
+
+                for key, tab in tabs.items():
+                    tabs[key] = tab.loc[
+                        :,
+                        list(
+                            set(
+                                [
+                                    tuple(sorted(e))
+                                    for e in deepof.utils.connect_mouse_topview(
+                                        animal_ids=self._animal_ids
+                                    ).edges
+                                ]
+                            )
+                            & set(tab.columns)
+                        ),
+                    ]
 
             return TableDict(
                 tabs,
@@ -1164,6 +1179,120 @@ class Coordinates:
 
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def get_graph_dataset(
+        self,
+        animal_id: str = None,
+        center: str = False,
+        polar: bool = False,
+        align: str = None,
+        preprocess: bool = True,
+        **kwargs,
+    ) -> table_dict:
+        """Generates a dataset with all specified features.
+
+        Args:
+            animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal
+            graph.
+            center (str): Name of the body part to which the positions will be centered. If false,
+            raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
+            polar (bool) States whether the coordinates should be converted to polar values.
+            align (str): Selects the body part to which later processes will align the frames with
+            (see preprocess in table_dict documentation).
+            preprocess (bool): wether to preprocess the data to pass to autoencoders. If False, node features and
+            distance-weighted adjacency matrices on the raw data are returned.
+
+        Returns:
+            merged_features: A graph-based dataset.
+
+        """
+
+        # Get all relevant features
+        coords = self.get_coords(
+            selected_id=animal_id, center=center, align=align, polar=polar
+        )
+        speeds = self.get_coords(selected_id=animal_id, speed=1)
+        dists = self.get_distances(selected_id=animal_id)
+
+        # Get corresponding feature graph
+        graph = deepof.utils.connect_mouse_topview(
+            animal_ids=(self._animal_ids if animal_id is None else animal_id),
+            exclude_bodyparts=list(
+                set([deepof.utils.re.findall("_(.+)", bp)[0] for bp in self._excluded])
+            ),
+        )
+
+        # Merge and extract names
+        features = coords.merge(speeds, dists)
+        edge_feature_names = list(list(dists.values())[0].columns)
+        feature_names = pd.Index([i for i in list(features.values())[0].columns])
+        node_feature_names = (
+            [(i, "x") for i in list(graph.nodes())]
+            + [(i, "y") for i in list(graph.nodes())]
+            + list(graph.nodes())
+        )
+
+        # Sort indices to have always the same node order
+        node_sorting_indices = []
+        edge_sorting_indices = []
+        for n in node_feature_names:
+            for j, f in enumerate(feature_names):
+                if n == f:
+                    node_sorting_indices.append(j)
+
+        for e in [tuple(sorted(e)) for e in list(graph.edges)]:
+            for j, f in enumerate(edge_feature_names):
+                if e == f:
+                    edge_sorting_indices.append(j)
+
+        # Create graph datasets
+        if preprocess:
+            features = features.preprocess(**kwargs)
+            dataset = [
+                features[0][:, :, ~feature_names.isin(edge_feature_names)][
+                    :, :, node_sorting_indices
+                ],
+                deepof.utils.edges_to_weithed_adj(
+                    nx.adj_matrix(graph).todense(),
+                    features[0][:, :, feature_names.isin(edge_feature_names)][
+                        :, :, edge_sorting_indices
+                    ],
+                ),
+                features[1],
+            ]
+            try:
+                dataset += [
+                    features[2][:, :, ~feature_names.isin(edge_feature_names)][
+                        :, :, node_sorting_indices
+                    ],
+                    deepof.utils.edges_to_weithed_adj(
+                        nx.adj_matrix(graph).todense(),
+                        features[2][:, :, feature_names.isin(edge_feature_names)][
+                            :, :, edge_sorting_indices
+                        ],
+                    ),
+                    features[3],
+                ]
+            except IndexError:
+                dataset += [features[2], features[2], features[3]]
+
+        else:
+            features = np.concatenate(list(features.values()))
+
+            # Split node features (positions, speeds) from edge features (distances)
+            dataset = (
+                features[:, ~feature_names.isin(edge_feature_names)][
+                    :, node_sorting_indices
+                ].reshape([features.shape[0], len(graph.nodes()), -1], order="F"),
+                deepof.utils.edges_to_weithed_adj(
+                    nx.adj_matrix(graph).todense(),
+                    features[:, feature_names.isin(edge_feature_names)][
+                        :, edge_sorting_indices
+                    ],
+                ),
+            )
+
+        return tuple(dataset)
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
@@ -1715,13 +1844,13 @@ class TableDict(dict):
         self,
         automatic_changepoints=False,
         handle_ids: str = "concat",
-        window_size: int = 15,
+        window_size: int = 25,
         window_step: int = 1,
         scale: str = "standard",
         test_videos: int = 0,
         verbose: int = 0,
         shuffle: bool = False,
-        filter_low_variance: float = 1e-3,
+        filter_low_variance: bool = False,
         interpolate_normalized: int = 5,
         precomputed_breaks: dict = None,
     ) -> np.ndarray:

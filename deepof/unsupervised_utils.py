@@ -1258,7 +1258,7 @@ def autoencoder_fitting(
             strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     # Load data
-    X_train, y_train, X_val, y_val = preprocessed_object
+    X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
 
     # Make sure that batch_size is not larger than training set
     if batch_size > preprocessed_object[0].shape[0]:
@@ -1300,14 +1300,18 @@ def autoencoder_fitting(
 
     # Convert data to tf.data.Dataset objects
     train_dataset = (
-        tf.data.Dataset.from_tensor_slices((tf.cast(Xs, tf.float32), tuple(ys)))
+        tf.data.Dataset.from_tensor_slices(
+            (tf.cast(Xs, tf.float32), tf.cast(a_train, tf.float32), tuple(ys))
+        )
         .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .shuffle(buffer_size=X_train.shape[0])
         .with_options(options)
         .prefetch(tf.data.AUTOTUNE)
     )
     val_dataset = (
-        tf.data.Dataset.from_tensor_slices((tf.cast(Xvals, tf.float32), tuple(yvals)))
+        tf.data.Dataset.from_tensor_slices(
+            (tf.cast(Xvals, tf.float32), tf.cast(a_val, tf.float32), tuple(yvals))
+        )
         .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
         .with_options(options)
         .prefetch(tf.data.AUTOTUNE)
@@ -1319,6 +1323,7 @@ def autoencoder_fitting(
         if embedding_model == "VQVAE":
             ae_full_model = deepof.models.VQVAE(
                 input_shape=X_train.shape,
+                adj_shape=a_train.shape,
                 latent_dim=latent_dim,
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
@@ -1337,6 +1342,7 @@ def autoencoder_fitting(
         elif embedding_model == "VaDE":
             ae_full_model = deepof.models.VaDE(
                 input_shape=X_train.shape,
+                adj_shape=a_train.shape,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
                 kl_annealing_mode=kl_annealing_mode,
@@ -1353,9 +1359,10 @@ def autoencoder_fitting(
                 ae_full_model.vade,
             )
 
-        elif embedding_model == "contrastive":
+        elif embedding_model == "Contrastive":
             ae_full_model = deepof.models.Contrastive(
                 input_shape=X_train.shape,
+                adj_shape=a_train.shape,
                 latent_dim=latent_dim,
                 encoder_type=encoder_type,
                 temperature=temperature,
@@ -1393,6 +1400,7 @@ def autoencoder_fitting(
         ae_full_model.pretrain(
             train_dataset,
             embed_x=Xs,
+            embed_a=a_train,
             epochs=epochs,
             verbose=1,
         )
@@ -1410,7 +1418,7 @@ def autoencoder_fitting(
         os.makedirs(os.path.join(output_path, "trained_weights"))
 
     if save_weights:
-        ae.save_weights(
+        ae_full_model.save_weights(
             os.path.join(
                 "{}".format(output_path),
                 "trained_weights",

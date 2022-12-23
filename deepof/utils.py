@@ -37,44 +37,113 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-# CONNECTIVITY FOR DLC MODELS
+# CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 
-def connect_mouse_topview(animal_id=None) -> nx.Graph:
+def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx.Graph:
     """
 
     Creates a nx.Graph object with the connectivity of the bodyparts in the
     DLC topview model for a single mouse. Used later for angle computing, among others.
 
     Args:
-        animal_id (str): if more than one animal is tagged, specify the animal identyfier as a string.
+        animal_ids (str): if more than one animal is tagged, specify the animal identyfier as a string.
+        exclude_bodyparts (list): Remove the specified nodes from the graph.
 
     Returns:
         connectivity (nx.Graph)
 
     """
+    if animal_ids is None:
+        animal_ids = [""]
+    connectivities = []
 
-    connectivity = {
-        "Nose": ["Left_ear", "Right_ear", "Spine_1"],
-        "Left_ear": ["Right_ear", "Spine_1"],
-        "Right_ear": ["Spine_1"],
-        "Spine_1": ["Center", "Left_fhip", "Right_fhip"],
-        "Center": ["Left_fhip", "Right_fhip", "Spine_2", "Left_bhip", "Right_bhip"],
-        "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
-        "Tail_base": ["Tail_1", "Left_bhip", "Right_bhip"],
-        "Tail_1": ["Tail_2"],
-        "Tail_2": ["Tail_tip"],
-    }
-
-    connectivity = nx.Graph(connectivity)
-
-    if animal_id:
-        mapping = {
-            node: "{}_{}".format(animal_id, node) for node in connectivity.nodes()
+    for animal_id in animal_ids:
+        connectivity = {
+            "Nose": ["Left_ear", "Right_ear"],
+            "Spine_1": ["Center", "Left_ear", "Right_ear"],
+            "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
+            "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
+            "Tail_base": ["Tail_1"],
+            "Tail_1": ["Tail_2"],
+            "Tail_2": ["Tail_tip"],
         }
-        nx.relabel_nodes(connectivity, mapping, copy=False)
+        connectivity = nx.Graph(connectivity)
 
-    return connectivity
+        if animal_id:
+            mapping = {
+                node: "{}_{}".format(animal_id, node) for node in connectivity.nodes()
+            }
+            if exclude_bodyparts is not None:
+                exclude = ["{}_{}".format(animal_id, exc) for exc in exclude_bodyparts]
+            nx.relabel_nodes(connectivity, mapping, copy=False)
+        else:
+            exclude = exclude_bodyparts
+
+        if exclude_bodyparts is not None:
+            connectivity.remove_nodes_from(exclude)
+
+        connectivities.append(connectivity)
+
+    if len(connectivities) > 1:
+        pass
+
+    final_graph = connectivities[0]
+    for g in range(1, len(connectivities)):
+        final_graph = nx.compose(final_graph, connectivities[g])
+        final_graph.add_edge(
+            "{}_Nose".format(animal_ids[g - 1]), "{}_Nose".format(animal_ids[g])
+        )
+        final_graph.add_edge(
+            "{}_Tail_base".format(animal_ids[g - 1]),
+            "{}_Tail_base".format(animal_ids[g]),
+        )
+        final_graph.add_edge(
+            "{}_Nose".format(animal_ids[g]), "{}_Tail_base".format(animal_ids[g - 1])
+        )
+        final_graph.add_edge(
+            "{}_Nose".format(animal_ids[g - 1]), "{}_Tail_base".format(animal_ids[g])
+        )
+
+    return final_graph
+
+
+def edges_to_weithed_adj(adj: np.ndarray, edges: np.ndarray):
+    """Converts an edge feature matrix to a weighted adjacency matrix.
+
+    Args:
+        - adj (np.ndarray): binary adjacency matrix of the current graph.
+        - edges (np.ndarray): edge feature matrix. Last two axes should be of shape nodes x features.
+
+    """
+    adj = np.repeat(np.expand_dims(adj.astype(float), axis=0), edges.shape[0], axis=0)
+    if len(edges.shape) == 3:
+        adj = np.repeat(np.expand_dims(adj, axis=1), edges.shape[1], axis=1)
+
+    adj[np.where(adj)] = np.concatenate([edges, edges[:, ::-1]], axis=-2).flatten()
+
+    return adj
+
+
+def enumerate_all_bridges(G: nx.graph) -> list:
+    """Enumerates all 3-node connected sequences in the given graph.
+
+    Args:
+        - G (nx.graph): Animal connectivity graph.
+
+    Returns:
+        bridges (list): List with all 3-node connected sequences in the provided graph.
+
+    """
+    degrees = dict(nx.degree(G))
+    centers = [node for node in degrees.keys() if degrees[node] >= 2]
+
+    bridges = []
+    for center in centers:
+        for comb in list(combinations(list(G[center].keys()), 2)):
+            bridges.append([comb[0], center, comb[1]])
+
+    return bridges
 
 
 # QUALITY CONTROL AND PREPROCESSING #
@@ -222,20 +291,19 @@ def bpart_distance(
     return pd.concat(dists, axis=1)
 
 
-def angle(a: np.array, b: np.array, c: np.array) -> np.array:
+def angle(bpart_array: np.array) -> np.array:
     """
 
     Returns a numpy.ndarray with the angles between the provided instances.
 
     Args:
-        a (np.array): 2D positions over time for a body part.
-        b (np.array): 2D positions over time for a body part.
-        c (np.array): 2D positions over time for a body part.
+        bpart_array (numpy.array): 2D positions over time for a bodypart.
 
     Returns:
         ang (np.array): 1D angles between the three-point-instances.
 
     """
+    a, b, c = bpart_array
 
     ba = a - b
     bc = c - b
@@ -246,25 +314,6 @@ def angle(a: np.array, b: np.array, c: np.array) -> np.array:
     ang = np.arccos(cosine_angle)
 
     return ang
-
-
-def angle_trio(bpart_array: np.array) -> np.array:
-    """
-
-    Returns a numpy.ndarray with all three possible angles between the provided instances.
-
-    Args:
-        bpart_array (numpy.array): 2D positions over time for a bodypart.
-
-    Returns:
-        ang_trio (numpy.array): 2D all-three angles between the three-point-instances.
-
-    """
-
-    a, b, c = bpart_array
-    ang_trio = np.array([angle(a, b, c), angle(a, c, b), angle(b, a, c)])
-
-    return ang_trio
 
 
 def compute_areas(coords, animal_id=None):
@@ -306,7 +355,10 @@ def compute_areas(coords, animal_id=None):
         x = coords.xs(key="x", level=1)[bps]
         y = coords.xs(key="y", level=1)[bps]
 
-        areas.append(Polygon(zip(x, y)).area)
+        if np.isnan(x).any() or np.isnan(y).any():
+            areas.append(np.nan)
+        else:
+            areas.append(Polygon(zip(x, y)).area)
 
     return areas
 
