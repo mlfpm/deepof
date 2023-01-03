@@ -1260,12 +1260,9 @@ class Coordinates:
                 features[0][:, :, ~feature_names.isin(edge_feature_names)][
                     :, :, node_sorting_indices
                 ],
-                deepof.utils.edges_to_weithed_adj(
-                    nx.adj_matrix(graph).todense(),
-                    features[0][:, :, feature_names.isin(edge_feature_names)][
-                        :, :, edge_sorting_indices
-                    ],
-                ),
+                features[0][:, :, feature_names.isin(edge_feature_names)][
+                    :, :, edge_sorting_indices
+                ],
                 features[1],
             ]
             try:
@@ -1273,12 +1270,9 @@ class Coordinates:
                     features[2][:, :, ~feature_names.isin(edge_feature_names)][
                         :, :, node_sorting_indices
                     ],
-                    deepof.utils.edges_to_weithed_adj(
-                        nx.adj_matrix(graph).todense(),
-                        features[2][:, :, feature_names.isin(edge_feature_names)][
-                            :, :, edge_sorting_indices
-                        ],
-                    ),
+                    features[2][:, :, feature_names.isin(edge_feature_names)][
+                        :, :, edge_sorting_indices
+                    ],
                     features[3],
                 ]
             except IndexError:

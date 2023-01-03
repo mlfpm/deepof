@@ -466,7 +466,10 @@ def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
             cur_scaler = RobustScaler()
 
         try:
-            nodes = modality * len(graph.nodes())
+            try:
+                nodes = modality * len(graph.nodes())
+            except AttributeError:
+                nodes = feature_array.shape[1]
             normalized_array[
                 :, features_processed : features_processed + nodes
             ] = cur_scaler.fit_transform(

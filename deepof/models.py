@@ -13,7 +13,8 @@ import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
 from sklearn.mixture import GaussianMixture
-from spektral.layers import GATConv
+from spektral.layers import CensNetConv, GATConv
+from spektral.utils.convolution import gcn_filter, incidence_matrix, line_graph
 from tensorflow.keras import Input, Model
 from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
@@ -31,7 +32,8 @@ tfpl = tfp.layers
 # noinspection PyCallingNonCallable
 def get_recurrent_encoder(
     input_shape: tuple,
-    adj_shape: tuple,
+    edge_feature_shape: tuple,
+    adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
     gat_heads: int = 8,
@@ -45,7 +47,8 @@ def get_recurrent_encoder(
 
     Args:
         - input_shape (tuple): shape of the node features for the input data. Should be time x nodes x features.
-        - adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
+        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - latent_dim (int): dimension of the latent space.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
         as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
@@ -59,26 +62,37 @@ def get_recurrent_encoder(
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
-    a = Input(shape=adj_shape)
+    a = Input(shape=edge_feature_shape)
 
     if use_gnn:
 
-        # Instanciate spatial GAT block
+        # Instantiate spatial GAT block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1],
+                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
+                    ::-1
+                ],
             )
         )
-        a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
 
-        x_spatial = GATConv(
-            channels=2 * latent_dim, attn_heads=gat_heads, activation="relu"
-        )([x_flat, a_flat])
+        # Process adjacency matrix
+        gcn = gcn_filter(adjacency_matrix)
+        incidence = incidence_matrix(adjacency_matrix)
+        linegraph = line_graph(incidence)
+
+        x_spatial = CensNetConv(
+            node_channels=2 * latent_dim,
+            edge_channels=2 * latent_dim,
+            activation="relu",
+        )([x_flat, (gcn, linegraph, incidence), a_flat])
         x_spatial = tf.reshape(
             x_spatial,
-            [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads],
+            [-1, input_shape[0]]
+            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
         )
+
     else:
         x_spatial = x
 
@@ -197,7 +211,8 @@ def get_recurrent_decoder(
 
 def get_TCN_encoder(
     input_shape: tuple,
-    adj_shape: tuple,
+    edge_feature_shape: tuple,
+    adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
     gat_heads: int = 8,
@@ -218,8 +233,8 @@ def get_TCN_encoder(
 
     Args:
         - input_shape: shape of the input data
-        - adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
-        - gat_heads (int): number of attention heads in the graph attention layers.
+        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
         as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
         - latent_dim: dimensionality of the latent space
@@ -238,26 +253,37 @@ def get_TCN_encoder(
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
-    a = Input(shape=adj_shape)
+    a = Input(shape=edge_feature_shape)
 
     if use_gnn:
 
-        # Instanciate spatial GAT block
+        # Instantiate spatial GAT block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1],
+                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
+                    ::-1
+                ],
             )
         )
-        a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
 
-        x_spatial = GATConv(
-            channels=2 * latent_dim, attn_heads=gat_heads, activation="relu"
-        )([x_flat, a_flat])
+        # Process adjacency matrix
+        gcn = gcn_filter(adjacency_matrix)
+        incidence = incidence_matrix(adjacency_matrix)
+        linegraph = line_graph(incidence)
+
+        x_spatial = CensNetConv(
+            node_channels=2 * latent_dim,
+            edge_channels=2 * latent_dim,
+            activation="relu",
+        )([x_flat, (gcn, linegraph, incidence), a_flat])
         x_spatial = tf.reshape(
             x_spatial,
-            [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads],
+            [-1, input_shape[0]]
+            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
         )
+
     else:
         x_spatial = x
 
@@ -355,7 +381,8 @@ def get_TCN_decoder(
 # noinspection PyCallingNonCallable
 def get_transformer_encoder(
     input_shape: tuple,
-    adj_shape: tuple,
+    edge_feature_shape: tuple,
+    adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
     gat_heads: int = 8,
@@ -372,8 +399,8 @@ def get_transformer_encoder(
 
     Args:
         - input_shape (tuple): shape of the input data
-        - adj_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be nodes x nodes.
-        - gat_heads (int): number of attention heads in the graph attention layers.
+        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - latent_dim (int): dimensionality of the latent space
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
         as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
@@ -384,26 +411,37 @@ def get_transformer_encoder(
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
-    a = Input(shape=adj_shape)
+    a = Input(shape=edge_feature_shape)
 
     if use_gnn:
 
-        # Instanciate spatial GAT block
+        # Instantiate spatial GAT block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, adj_shape[-1], input_shape[-1] // adj_shape[-1]][::-1],
+                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
+                    ::-1
+                ],
             )
         )
-        a_flat = tf.reshape(a, [-1] + list(adj_shape[1:]))
+        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
 
-        x_spatial = GATConv(
-            channels=2 * latent_dim, attn_heads=gat_heads, activation="relu"
-        )([x_flat, a_flat])
+        # Process adjacency matrix
+        gcn = gcn_filter(adjacency_matrix)
+        incidence = incidence_matrix(adjacency_matrix)
+        linegraph = line_graph(incidence)
+
+        x_spatial = CensNetConv(
+            node_channels=2 * latent_dim,
+            edge_channels=2 * latent_dim,
+            activation="relu",
+        )([x_flat, (gcn, linegraph, incidence), a_flat])
         x_spatial = tf.reshape(
             x_spatial,
-            [-1, input_shape[0]] + [2 * adj_shape[-1] * latent_dim * gat_heads],
+            [-1, input_shape[0]]
+            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
         )
+
     else:
         x_spatial = x
 
@@ -649,7 +687,7 @@ def get_vqvae(
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
             input_shape=input_shape[1:],
-            adj_shape=adj_shape[1:],
+            edge_feature_shape=adj_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -1162,7 +1200,7 @@ def get_vade(
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
             input_shape=input_shape[1:],
-            adj_shape=adj_shape[1:],
+            edge_feature_shape=adj_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -1589,7 +1627,11 @@ class Contrastive(tf.keras.models.Model):
         if encoder_type == "recurrent":
             self.encoder = get_recurrent_encoder(
                 input_shape=(self.window_length, input_shape[-1]),
-                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                edge_feature_shape=(
+                    self.window_length,
+                    self.adj_shape[2],
+                    self.adj_shape[3],
+                ),
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
             )
