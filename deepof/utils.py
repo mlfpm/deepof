@@ -29,6 +29,7 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -433,6 +434,59 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
     return aligned_trajs
+
+
+def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
+    """Scales features in the provided array grouping by modality (coordinates, speeds, distances).
+
+    Args:
+        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
+        graph (nx.Graph): connectivity graph for the current animals.
+        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
+
+    Returns:
+        Scaled version of the input array, with features normalized by modality.
+        List of scalers per modality.
+
+    """
+
+    normalized_array = np.zeros(feature_array.shape)
+    features_processed = 0
+    scalers = []
+    for modality in [
+        2,
+        1,
+        1,
+    ]:  # number of body part sets to use for coords (x, y), speeds, and distances
+        if scale == "standard":
+            cur_scaler = StandardScaler()
+        elif scale == "minmax":
+            cur_scaler = MinMaxScaler()
+        else:
+            cur_scaler = RobustScaler()
+
+        try:
+            nodes = modality * len(graph.nodes())
+            normalized_array[
+                :, features_processed : features_processed + nodes
+            ] = cur_scaler.fit_transform(
+                np.expand_dims(
+                    feature_array[
+                        :, features_processed : features_processed + nodes
+                    ].flatten(),
+                    axis=-1,
+                )
+            ).reshape(
+                [feature_array.shape[0], nodes]
+            )
+
+            scalers.append(cur_scaler)
+            features_processed += nodes
+
+        except ValueError:
+            break
+
+    return normalized_array
 
 
 def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):

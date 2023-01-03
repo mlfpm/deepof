@@ -673,6 +673,7 @@ class Project:
             arena=self.arena,
             arena_dims=self.arena_dims,
             distances=distances,
+            connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
             exp_conditions=self.exp_conditions,
             path=self.path,
@@ -717,6 +718,7 @@ class Coordinates:
         animal_ids: List = tuple([""]),
         areas: dict = None,
         distances: dict = None,
+        connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
     ):
@@ -757,6 +759,7 @@ class Coordinates:
         self._angles = angles
         self._areas = areas
         self._distances = distances
+        self._connectivity = connectivity
 
     def __str__(self):  # pragma: no cover
         """Prints the object to stdout."""
@@ -942,6 +945,7 @@ class Coordinates:
             arena=self._arena,
             arena_dims=self._scales,
             center=center,
+            connectivity=self._connectivity,
             polar=polar,
             exp_conditions=self._exp_conditions,
             propagate_labels=propagate_labels,
@@ -1017,6 +1021,7 @@ class Coordinates:
             return TableDict(
                 tabs,
                 animal_ids=self._animal_ids,
+                connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -1079,6 +1084,7 @@ class Coordinates:
             return TableDict(
                 tabs,
                 animal_ids=self._animal_ids,
+                connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
                 propagate_labels=propagate_labels,
                 propagate_annotations=propagate_annotations,
@@ -1129,6 +1135,7 @@ class Coordinates:
             areas = TableDict(
                 tabs,
                 animal_ids=self._animal_ids,
+                connectivity=self._connectivity,
                 typ="areas",
                 exp_conditions=self._exp_conditions,
             )
@@ -1224,6 +1231,7 @@ class Coordinates:
 
         # Merge and extract names
         features = coords.merge(speeds, dists)
+        features._connectivity = graph
         edge_feature_names = list(list(dists.values())[0].columns)
         feature_names = pd.Index([i for i in list(features.values())[0].columns])
         node_feature_names = (
@@ -1385,6 +1393,7 @@ class Coordinates:
             animal_ids=self._animal_ids,
             arena=self._arena,
             arena_dims=self._arena_dims,
+            connectivity=self._connectivity,
             exp_conditions=self._exp_conditions,
             propagate_labels=propagate_labels,
         )
@@ -1502,6 +1511,7 @@ class TableDict(dict):
         arena_dims: np.array = None,
         animal_ids: List = tuple([""]),
         center: str = None,
+        connectivity: nx.Graph = None,
         polar: bool = None,
         exp_conditions: dict = None,
         propagate_labels: bool = False,
@@ -1529,6 +1539,7 @@ class TableDict(dict):
         super().__init__(tabs)
         self._type = typ
         self._center = center
+        self._connectivity = connectivity
         self._polar = polar
         self._arena = arena
         self._arena_dims = arena_dims
@@ -1554,6 +1565,7 @@ class TableDict(dict):
         return TableDict(
             {k: value for k, value in table.items() if k in keys},
             self._type,
+            connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
         )
@@ -1689,6 +1701,7 @@ class TableDict(dict):
         return TableDict(
             tabs,
             typ=self._type,
+            connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
         )
@@ -1722,6 +1735,7 @@ class TableDict(dict):
                 for key, val in merged_dict.items()
             },
             typ="merged",
+            connectivity=self._connectivity,
             propagate_labels=propagate_labels,
             propagate_annotations=self._propagate_annotations,
         )
@@ -1870,7 +1884,7 @@ class TableDict(dict):
             window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
             specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
             a true sliding window, and a value equal to to window_size splits the data into non-overlapping chunks.
-            scale (str): Data scaling method. Must be one of 'standard' (default; recommended) and 'minmax'.
+            scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
@@ -1915,16 +1929,13 @@ class TableDict(dict):
             if verbose:
                 print("Scaling data...")
 
+            if scale not in ["robust", "standard", "minmax"]:
+                raise ValueError(
+                    "Invalid scaler. Select one of standard, minmax or None"
+                )  # pragma: no cover
+
             # Scale each experiment independently, to control for animal size
             for key, tab in table_temp.items():
-                if scale == "standard":
-                    current_scaler = StandardScaler()
-                elif scale == "minmax":
-                    current_scaler = MinMaxScaler()
-                else:
-                    raise ValueError(
-                        "Invalid scaler. Select one of standard, minmax or None"
-                    )  # pragma: no cover
 
                 exp_temp = tab.to_numpy()
 
@@ -1936,16 +1947,14 @@ class TableDict(dict):
                         :, : -list(self._propagate_annotations.values())[0].shape[1]
                     ]
 
-                exp_flat = exp_temp.reshape(-1, exp_temp.shape[-1])
-                exp_flat = current_scaler.fit_transform(exp_flat)
-
-                if scale == "standard":
-                    assert np.all(np.nan_to_num(np.mean(exp_flat), nan=0) < 0.01)
-                    assert np.all(np.nan_to_num(np.std(exp_flat), nan=1) > 0.99)
+                # Scale each modality separately using a custom function
+                exp_temp = deepof.utils.scale_animal(
+                    exp_temp, self._connectivity, scale
+                )
 
                 current_tab = np.concatenate(
                     [
-                        exp_flat.reshape(exp_temp.shape),
+                        exp_temp,
                         tab.copy().to_numpy()[:, exp_temp.shape[1] :],
                     ],
                     axis=1,

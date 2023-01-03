@@ -1258,7 +1258,11 @@ def autoencoder_fitting(
             strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     # Load data
-    X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
+    try:
+        X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
+    except ValueError:
+        X_train, y_train, X_val, y_val = preprocessed_object
+        a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
 
     # Make sure that batch_size is not larger than training set
     if batch_size > preprocessed_object[0].shape[0]:
@@ -1325,6 +1329,7 @@ def autoencoder_fitting(
                 input_shape=X_train.shape,
                 adj_shape=a_train.shape,
                 latent_dim=latent_dim,
+                use_gnn=len(preprocessed_object) == 6,
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
                 encoder_type=encoder_type,
@@ -1345,6 +1350,7 @@ def autoencoder_fitting(
                 adj_shape=a_train.shape,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
+                use_gnn=len(preprocessed_object) == 6,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
                 montecarlo_kl=100,
@@ -1364,6 +1370,7 @@ def autoencoder_fitting(
                 input_shape=X_train.shape,
                 adj_shape=a_train.shape,
                 latent_dim=latent_dim,
+                use_gnn=len(preprocessed_object) == 6,
                 encoder_type=encoder_type,
                 temperature=temperature,
                 similarity_function=contrastive_similarity_function,
