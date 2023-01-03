@@ -1395,6 +1395,7 @@ class Coordinates:
     @staticmethod
     def deep_unsupervised_embedding(
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        adjacency_matrix: np.ndarray = None,
         embedding_model: str = "VQVAE",
         encoder_type: str = "recurrent",
         batch_size: int = 64,
@@ -1424,6 +1425,7 @@ class Coordinates:
 
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
+            adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
             embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), VaDE, or contrastive.
             encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
             batch_size (int): Batch size for training.
@@ -1453,7 +1455,7 @@ class Coordinates:
             as "one_device".
             kl_annealing_mode (str): Mode of the KL annealing. Must be one of "linear", or "sigmoid".
             kl_warmup (int): Number of epochs to warm up the KL annealing.
-            reg_cat_clusters (bool): whether to use the penalize uneven cluster membership in the latent space, by
+            reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
 
         Returns:
@@ -1461,6 +1463,7 @@ class Coordinates:
         """
         trained_models = deepof.unsupervised_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
+            adjacency_matrix=adjacency_matrix,
             embedding_model=embedding_model,
             encoder_type=encoder_type,
             batch_size=batch_size,

@@ -1180,6 +1180,7 @@ def log_hyperparameters():
 
 def autoencoder_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    adjacency_matrix: np.ndarray,
     embedding_model: str,
     encoder_type: str,
     batch_size: int,
@@ -1213,6 +1214,7 @@ def autoencoder_fitting(
 
     Args:
         preprocessed_object (tuple): Tuple containing the preprocessed data.
+        adjacency_matrix (np.ndarray): adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
         and contrastive.
         encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
@@ -1327,7 +1329,8 @@ def autoencoder_fitting(
         if embedding_model == "VQVAE":
             ae_full_model = deepof.models.VQVAE(
                 input_shape=X_train.shape,
-                adj_shape=a_train.shape,
+                edge_feature_shape=a_train.shape,
+                adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=len(preprocessed_object) == 6,
                 n_components=n_components,
@@ -1337,17 +1340,12 @@ def autoencoder_fitting(
             ae_full_model.optimizer = tf.keras.optimizers.Nadam(
                 learning_rate=1e-4, clipvalue=0.75
             )
-            encoder, decoder, quantizer, ae = (
-                ae_full_model.encoder,
-                ae_full_model.decoder,
-                ae_full_model.quantizer,
-                ae_full_model.vqvae,
-            )
 
         elif embedding_model == "VaDE":
             ae_full_model = deepof.models.VaDE(
                 input_shape=X_train.shape,
-                adj_shape=a_train.shape,
+                edge_feature_shape=a_train.shape,
+                adjacency_matrix=adjacency_matrix,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
                 use_gnn=len(preprocessed_object) == 6,
@@ -1358,17 +1356,12 @@ def autoencoder_fitting(
                 reg_cat_clusters=reg_cat_clusters,
                 encoder_type=encoder_type,
             )
-            encoder, decoder, grouper, ae = (
-                ae_full_model.encoder,
-                ae_full_model.decoder,
-                ae_full_model.grouper,
-                ae_full_model.vade,
-            )
 
         elif embedding_model == "Contrastive":
             ae_full_model = deepof.models.Contrastive(
                 input_shape=X_train.shape,
-                adj_shape=a_train.shape,
+                edge_feature_shape=a_train.shape,
+                adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=len(preprocessed_object) == 6,
                 encoder_type=encoder_type,
@@ -1408,7 +1401,7 @@ def autoencoder_fitting(
             train_dataset,
             embed_x=Xs,
             embed_a=a_train,
-            epochs=epochs,
+            epochs=np.minimum(10, epochs),
             verbose=1,
         )
         ae_full_model.optimizer._iterations.assign(0)

@@ -36,7 +36,6 @@ def get_recurrent_encoder(
     adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
-    gat_heads: int = 8,
     gru_unroll: bool = False,
     bidirectional_merge: str = "concat",
 ):
@@ -51,8 +50,7 @@ def get_recurrent_encoder(
         - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - latent_dim (int): dimension of the latent space.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
-        - gat_heads (int): number of attention heads in the graph attention layers.
+        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         - gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
         - bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
 
@@ -82,16 +80,23 @@ def get_recurrent_encoder(
         incidence = incidence_matrix(adjacency_matrix)
         linegraph = line_graph(incidence)
 
-        x_spatial = CensNetConv(
-            node_channels=2 * latent_dim,
-            edge_channels=2 * latent_dim,
+        x_nodes, x_edges = CensNetConv(
+            node_channels=latent_dim,
+            edge_channels=latent_dim,
             activation="relu",
         )([x_flat, (gcn, linegraph, incidence), a_flat])
-        x_spatial = tf.reshape(
-            x_spatial,
-            [-1, input_shape[0]]
-            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
+
+        x_nodes = tf.reshape(
+            x_nodes,
+            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
         )
+
+        x_edges = tf.reshape(
+            x_edges,
+            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+        )
+
+        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
         x_spatial = x
@@ -215,7 +220,6 @@ def get_TCN_encoder(
     adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
-    gat_heads: int = 8,
     conv_filters: int = 32,
     kernel_size: int = 4,
     conv_stacks: int = 2,
@@ -236,7 +240,7 @@ def get_TCN_encoder(
         - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
         - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         - latent_dim: dimensionality of the latent space
         - conv_filters: number of filters in the TCN layers
         - kernel_size: size of the convolutional kernels
@@ -273,16 +277,23 @@ def get_TCN_encoder(
         incidence = incidence_matrix(adjacency_matrix)
         linegraph = line_graph(incidence)
 
-        x_spatial = CensNetConv(
-            node_channels=2 * latent_dim,
-            edge_channels=2 * latent_dim,
+        x_nodes, x_edges = CensNetConv(
+            node_channels=latent_dim,
+            edge_channels=latent_dim,
             activation="relu",
         )([x_flat, (gcn, linegraph, incidence), a_flat])
-        x_spatial = tf.reshape(
-            x_spatial,
-            [-1, input_shape[0]]
-            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
+
+        x_nodes = tf.reshape(
+            x_nodes,
+            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
         )
+
+        x_edges = tf.reshape(
+            x_edges,
+            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+        )
+
+        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
         x_spatial = x
@@ -385,7 +396,6 @@ def get_transformer_encoder(
     adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool = True,
-    gat_heads: int = 8,
     num_layers: int = 4,
     num_heads: int = 64,
     dff: int = 128,
@@ -403,7 +413,7 @@ def get_transformer_encoder(
         - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - latent_dim (int): dimensionality of the latent space
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         - num_layers (int): number of transformer layers to include
         - num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
         - dff (int): dimensionality of the token embeddings
@@ -431,16 +441,23 @@ def get_transformer_encoder(
         incidence = incidence_matrix(adjacency_matrix)
         linegraph = line_graph(incidence)
 
-        x_spatial = CensNetConv(
-            node_channels=2 * latent_dim,
-            edge_channels=2 * latent_dim,
+        x_nodes, x_edges = CensNetConv(
+            node_channels=latent_dim,
+            edge_channels=latent_dim,
             activation="relu",
         )([x_flat, (gcn, linegraph, incidence), a_flat])
-        x_spatial = tf.reshape(
-            x_spatial,
-            [-1, input_shape[0]]
-            + [2 * edge_feature_shape[-1] * latent_dim * gat_heads],
+
+        x_nodes = tf.reshape(
+            x_nodes,
+            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
         )
+
+        x_edges = tf.reshape(
+            x_edges,
+            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+        )
+
+        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
         x_spatial = x
@@ -647,7 +664,8 @@ class VectorQuantizer(tf.keras.models.Model):
 # noinspection PyCallingNonCallable
 def get_vqvae(
     input_shape: tuple,
-    adj_shape: tuple,
+    edge_feature_shape: tuple,
+    adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool,
     n_components: int,
@@ -659,14 +677,15 @@ def get_vqvae(
 
     Args:
         - input_shape (tuple): shape of the input to the encoder.
-        - adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
+        - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+        - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
         - latent_dim (int): dimension of the latent space.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         - n_components (int): number of embeddings in the embedding layer.
         - beta (float): beta parameter of the VQ loss.
         - kmeans_loss (float): regularization parameter for the Gram matrix.
-        - encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
+        - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
 
     Returns:
         - encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -687,7 +706,8 @@ def get_vqvae(
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
             input_shape=input_shape[1:],
-            edge_feature_shape=adj_shape[1:],
+            edge_feature_shape=edge_feature_shape[1:],
+            adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -698,7 +718,8 @@ def get_vqvae(
     elif encoder_type == "TCN":
         encoder = get_TCN_encoder(
             input_shape=input_shape[1:],
-            adj_shape=adj_shape[1:],
+            edge_feature_shape=edge_feature_shape[1:],
+            adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -707,7 +728,8 @@ def get_vqvae(
     elif encoder_type == "transformer":
         encoder = get_transformer_encoder(
             input_shape[1:],
-            adj_shape=adj_shape[1:],
+            edge_feature_shape=edge_feature_shape[1:],
+            adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -715,7 +737,7 @@ def get_vqvae(
 
     # Connect encoder and quantizer
     inputs = tf.keras.layers.Input(input_shape[1:], name="encoder_input")
-    a = tf.keras.layers.Input(adj_shape[1:], name="encoder_adjacency")
+    a = tf.keras.layers.Input(edge_feature_shape[1:], name="encoder_edge_features")
     encoder_outputs = encoder([inputs, a])
     quantized_latents, soft_counts = vq_layer(encoder_outputs)
 
@@ -738,7 +760,8 @@ class VQVAE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        adj_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray = None,
         latent_dim: int = 8,
         n_components: int = 15,
         beta: float = 1.0,
@@ -751,7 +774,8 @@ class VQVAE(tf.keras.models.Model):
 
         Args:
             input_shape (tuple): Shape of the input to the full model.
-            adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
+            edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the embedding layer.
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
@@ -761,7 +785,8 @@ class VQVAE(tf.keras.models.Model):
         """
         super(VQVAE, self).__init__(**kwargs)
         self.seq_shape = input_shape
-        self.adj_shape = adj_shape
+        self.edge_feature_shape = edge_feature_shape
+        self.adjacency_matrix = adjacency_matrix
         self.latent_dim = latent_dim
         self.use_gnn = use_gnn
         self.n_components = n_components
@@ -778,7 +803,8 @@ class VQVAE(tf.keras.models.Model):
             self.vqvae,
         ) = get_vqvae(
             self.seq_shape,
-            self.adj_shape,
+            self.edge_feature_shape,
+            self.adjacency_matrix,
             self.latent_dim,
             self.use_gnn,
             self.n_components,
@@ -1160,7 +1186,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 # noinspection PyCallingNonCallable
 def get_vade(
     input_shape: tuple,
-    adj_shape: tuple,
+    edge_feature_shape: tuple,
+    adjacency_matrix: np.ndarray,
     latent_dim: int,
     use_gnn: bool,
     n_components: int,
@@ -1176,10 +1203,11 @@ def get_vade(
 
     Args:
             - input_shape (tuple): shape of the input data.
-            - adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
+            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
             - latent_dim (int): dimensionality of the latent space.
             - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
             - n_components (int): number of components in the Gaussian mixture.
             - batch_size (int): batch size for training.
             - kl_warmup: Number of iterations during which to warm up the KL divergence.
@@ -1200,7 +1228,8 @@ def get_vade(
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
             input_shape=input_shape[1:],
-            edge_feature_shape=adj_shape[1:],
+            adjacency_matrix=adjacency_matrix,
+            edge_feature_shape=edge_feature_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -1211,7 +1240,8 @@ def get_vade(
     elif encoder_type == "TCN":
         encoder = get_TCN_encoder(
             input_shape=input_shape[1:],
-            adj_shape=adj_shape[1:],
+            adjacency_matrix=adjacency_matrix,
+            edge_feature_shape=edge_feature_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -1220,7 +1250,8 @@ def get_vade(
     elif encoder_type == "transformer":
         encoder = get_transformer_encoder(
             input_shape[1:],
-            adj_shape=adj_shape[1:],
+            edge_feature_shape=edge_feature_shape[1:],
+            adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
         )
@@ -1241,7 +1272,7 @@ def get_vade(
 
     # Connect encoder and latent space
     inputs = Input(input_shape[1:])
-    a = Input(adj_shape[1:])
+    a = tf.keras.layers.Input(edge_feature_shape[1:], name="encoder_edge_features")
     encoder_outputs = encoder([inputs, a])
     latent, categorical = latent_space(encoder_outputs)
     embedding = tf.keras.Model([inputs, a], latent, name="encoder")
@@ -1263,7 +1294,8 @@ class VaDE(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        adj_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray = None,
         latent_dim: int = 8,
         use_gnn: bool = True,
         n_components: int = 15,
@@ -1281,11 +1313,12 @@ class VaDE(tf.keras.models.Model):
 
         Args:
             - input_shape (tuple): Shape of the input to the full model.
-            - adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
+            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
             - batch_size (int): Batch size for training.
             - latent_dim (int): Dimensionality of the latent space.
             - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
             - kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
             - kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
             - montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
@@ -1299,7 +1332,8 @@ class VaDE(tf.keras.models.Model):
         """
         super(VaDE, self).__init__(**kwargs)
         self.seq_shape = input_shape
-        self.adj_shape = adj_shape
+        self.edge_feature_shape = edge_feature_shape
+        self.adjacency_matrix = adjacency_matrix
         self.batch_size = batch_size
         self.latent_dim = latent_dim
         self.use_gnn = use_gnn
@@ -1316,7 +1350,8 @@ class VaDE(tf.keras.models.Model):
         # Define VaDE model
         self.encoder, self.decoder, self.grouper, self.vade = get_vade(
             input_shape=self.seq_shape,
-            adj_shape=self.adj_shape,
+            edge_feature_shape=self.edge_feature_shape,
+            adjacency_matrix=self.adjacency_matrix,
             n_components=self.n_components,
             latent_dim=self.latent_dim,
             use_gnn=use_gnn,
@@ -1582,7 +1617,8 @@ class Contrastive(tf.keras.models.Model):
     def __init__(
         self,
         input_shape: tuple,
-        adj_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray = None,
         encoder_type: str = "TCN",
         latent_dim: int = 8,
         use_gnn: bool = True,
@@ -1597,11 +1633,12 @@ class Contrastive(tf.keras.models.Model):
 
         Args:
             - input_shape (tuple): Shape of the input to the full model.
-            - adj_shape (tuple): shape of the adjacency matrix to use for graph representations.
-            - encoder_type (str): type of encoder to use. Cab be set to "recurrent" (default), "TCN", or "transformer".
+            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
             - latent_dim (int): Dimensionality of the latent space.
             - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge atritubes. If False, a regular 3D tensor is used as input.
+            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
             - temperature: float = 0.1,
             - similarity_function: str = "cosine",
             - loss_function: str = 'nce',
@@ -1611,7 +1648,8 @@ class Contrastive(tf.keras.models.Model):
         """
         super(Contrastive, self).__init__(**kwargs)
         self.seq_shape = input_shape
-        self.adj_shape = adj_shape
+        self.edge_feature_shape = edge_feature_shape
+        self.adjacency_matrix = adjacency_matrix
         self.latent_dim = latent_dim
         self.use_gnn = use_gnn
         self.window_length = self.seq_shape[1] // 2
@@ -1625,13 +1663,14 @@ class Contrastive(tf.keras.models.Model):
 
         # Define Contrastive model
         if encoder_type == "recurrent":
+
             self.encoder = get_recurrent_encoder(
                 input_shape=(self.window_length, input_shape[-1]),
                 edge_feature_shape=(
                     self.window_length,
-                    self.adj_shape[2],
-                    self.adj_shape[3],
+                    self.edge_feature_shape[2],
                 ),
+                adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
             )
@@ -1639,15 +1678,24 @@ class Contrastive(tf.keras.models.Model):
         elif encoder_type == "TCN":
             self.encoder = get_TCN_encoder(
                 input_shape=(self.window_length, input_shape[-1]),
-                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                edge_feature_shape=(
+                    self.window_length,
+                    self.edge_feature_shape[2],
+                ),
+                adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
             )
 
         elif encoder_type == "transformer":
+
             self.encoder = get_transformer_encoder(
                 (self.window_length, input_shape[-1]),
-                adj_shape=(self.window_length, self.adj_shape[2], self.adj_shape[3]),
+                edge_feature_shape=(
+                    self.window_length,
+                    self.edge_feature_shape[2],
+                ),
+                adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
             )
