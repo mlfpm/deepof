@@ -1206,7 +1206,7 @@ class Coordinates:
             polar (bool) States whether the coordinates should be converted to polar values.
             align (str): Selects the body part to which later processes will align the frames with
             (see preprocess in table_dict documentation).
-            preprocess (bool): wether to preprocess the data to pass to autoencoders. If False, node features and
+            preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and
             distance-weighted adjacency matrices on the raw data are returned.
 
         Returns:

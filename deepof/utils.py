@@ -449,15 +449,13 @@ def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
         List of scalers per modality.
 
     """
-
     normalized_array = np.zeros(feature_array.shape)
     features_processed = 0
     scalers = []
-    for modality in [
-        2,
-        1,
-        1,
-    ]:  # number of body part sets to use for coords (x, y), speeds, and distances
+
+    # number of body part sets to use for coords (x, y), speeds, and distances
+    while features_processed < feature_array.shape[-1]:
+
         if scale == "standard":
             cur_scaler = StandardScaler()
         elif scale == "minmax":
@@ -467,7 +465,10 @@ def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
 
         try:
             try:
-                nodes = modality * len(graph.nodes())
+                if features_processed < feature_array.shape[-1] - len(graph.edges):
+                    nodes = len(graph.nodes())
+                else:
+                    nodes = len(graph.edges())
             except AttributeError:
                 nodes = feature_array.shape[1]
             normalized_array[

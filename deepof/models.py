@@ -64,13 +64,15 @@ def get_recurrent_encoder(
 
     if use_gnn:
 
-        # Instantiate spatial GAT block
+        # Instantiate spatial graph block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
-                    ::-1
-                ],
+                [
+                    -1,
+                    adjacency_matrix.shape[-1],
+                    input_shape[-1] // adjacency_matrix.shape[-1],
+                ][::-1],
             )
         )
         a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
@@ -261,13 +263,15 @@ def get_TCN_encoder(
 
     if use_gnn:
 
-        # Instantiate spatial GAT block
+        # Instantiate spatial graph block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
-                    ::-1
-                ],
+                [
+                    -1,
+                    adjacency_matrix.shape[-1],
+                    input_shape[-1] // adjacency_matrix.shape[-1],
+                ][::-1],
             )
         )
         a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
@@ -425,13 +429,15 @@ def get_transformer_encoder(
 
     if use_gnn:
 
-        # Instantiate spatial GAT block
+        # Instantiate spatial graph block
         x_flat = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
-                [-1, edge_feature_shape[-1], input_shape[-1] // edge_feature_shape[-1]][
-                    ::-1
-                ],
+                [
+                    -1,
+                    adjacency_matrix.shape[-1],
+                    input_shape[-1] // adjacency_matrix.shape[-1],
+                ][::-1],
             )
         )
         a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
