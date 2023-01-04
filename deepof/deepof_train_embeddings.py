@@ -368,6 +368,7 @@ if __name__ == "__main__":
             elif input_type == "graph":
                 curr_prep, _, _ = project_coords.get_graph_dataset(
                     precomputed_tab_dict=to_preprocess.filter_videos([key]),
+                    animal_id=animal_to_preprocess,
                     window_size=window_size,
                     window_step=window_step,
                     automatic_changepoints=automatic_changepoints,
