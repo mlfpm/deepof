@@ -951,7 +951,7 @@ def full_outlier_mask(
     replaced by a boolean mask, where True indicates an outlier.
 
     Args:
-        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of a every body part
+        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of every body part
         likelihood (pd.DataFrame): Data frame with likelihood data per body part as extracted from deeplabcut
         likelihood_tolerance (float): Minimum tolerated likelihood, below which an outlier is called
         exclude (str): Body part to exclude from the analysis (to concatenate with bpart alignment)
@@ -1004,7 +1004,7 @@ def interpolate_outliers(
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
     Args:
-        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of a every body part.
+        experiment (pd.DataFrame): Data frame with time series representing the x, y positions of every body part.
         likelihood (pd.DataFrame): Data frame with likelihood data per body part as extracted from deeplabcut.
         likelihood_tolerance (float): Minimum tolerated likelihood, below which an outlier is called.
         exclude (str): Body part to exclude from the analysis (to concatenate with bpart alignment).
@@ -1020,6 +1020,7 @@ def interpolate_outliers(
 
     interpolated_exp = experiment.copy()
 
+    # Creates a mask marking all outliers
     mask = full_outlier_mask(
         experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode
     )

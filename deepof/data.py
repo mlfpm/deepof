@@ -86,9 +86,9 @@ class Project:
         exp_conditions: dict = None,
         frame_rate: int = None,
         interpolate_outliers: bool = True,
-        interpolation_limit: int = 2,
+        interpolation_limit: int = 5,
         interpolation_std: int = 3,
-        likelihood_tol: float = 0.85,
+        likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
         path: str = deepof.utils.os.path.join("."),
         smooth_alpha: float = 1,
@@ -463,14 +463,15 @@ class Project:
 
             for k, tab in tab_dict.items():
 
+                scaler = StandardScaler()
                 imputed = IterativeImputer(
                     skip_complete=True,
                     max_iter=250,
                     n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
-                ).fit_transform(tab)
+                ).fit_transform(scaler.fit_transform(tab))
                 imputed = pd.DataFrame(
-                    imputed,
+                    scaler.inverse_transform(imputed),
                     index=tab.index,
                     columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
                 )
