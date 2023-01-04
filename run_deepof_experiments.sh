@@ -2,14 +2,11 @@
 
 mkdir snakemake_logs
 
-module load anaconda/3/2021.05
 module load cuda/11.2
 module load nccl/2.9.9
 module load cudnn/8.2.1
 module load tensorrt/8.0.0
 module load gcc/10
-
-source activate deepof
 
 snakemake --snakefile deepof_experiments.smk --forceall --dag | dot -Tpdf > deepof_experiments_DAG.pdf
 snakemake --snakefile deepof_experiments.smk --forceall --rulegraph | dot -Tpdf > deepof_experiments_RULEGRAPH.pdf
