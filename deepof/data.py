@@ -1190,6 +1190,7 @@ class Coordinates:
     def get_graph_dataset(
         self,
         animal_id: str = None,
+        precomputed_tab_dict: table_dict = None,
         center: str = False,
         polar: bool = False,
         align: str = None,
@@ -1201,6 +1202,8 @@ class Coordinates:
         Args:
             animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal
             graph.
+            precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds
+            it on the spot.
             center (str): Name of the body part to which the positions will be centered. If false,
             raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
             polar (bool) States whether the coordinates should be converted to polar values.
@@ -1213,13 +1216,18 @@ class Coordinates:
             merged_features: A graph-based dataset.
 
         """
-
         # Get all relevant features
         coords = self.get_coords(
             selected_id=animal_id, center=center, align=align, polar=polar
         )
         speeds = self.get_coords(selected_id=animal_id, speed=1)
         dists = self.get_distances(selected_id=animal_id)
+
+        # Merge and extract names
+        tab_dict = coords.merge(speeds, dists)
+
+        if precomputed_tab_dict is not None:
+            tab_dict = precomputed_tab_dict
 
         # Get corresponding feature graph
         graph = deepof.utils.connect_mouse_topview(
@@ -1229,11 +1237,9 @@ class Coordinates:
             ),
         )
 
-        # Merge and extract names
-        features = coords.merge(speeds, dists)
-        features._connectivity = graph
+        tab_dict._connectivity = graph
         edge_feature_names = list(list(dists.values())[0].columns)
-        feature_names = pd.Index([i for i in list(features.values())[0].columns])
+        feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
         node_feature_names = (
             [(i, "x") for i in list(graph.nodes())]
             + [(i, "y") for i in list(graph.nodes())]
@@ -1255,46 +1261,46 @@ class Coordinates:
 
         # Create graph datasets
         if preprocess:
-            features = features.preprocess(**kwargs)
+            to_preprocess = tab_dict.preprocess(**kwargs)
             dataset = [
-                features[0][:, :, ~feature_names.isin(edge_feature_names)][
+                to_preprocess[0][:, :, ~feature_names.isin(edge_feature_names)][
                     :, :, node_sorting_indices
                 ],
-                features[0][:, :, feature_names.isin(edge_feature_names)][
+                to_preprocess[0][:, :, feature_names.isin(edge_feature_names)][
                     :, :, edge_sorting_indices
                 ],
-                features[1],
+                to_preprocess[1],
             ]
             try:
                 dataset += [
-                    features[2][:, :, ~feature_names.isin(edge_feature_names)][
+                    to_preprocess[2][:, :, ~feature_names.isin(edge_feature_names)][
                         :, :, node_sorting_indices
                     ],
-                    features[2][:, :, feature_names.isin(edge_feature_names)][
+                    to_preprocess[2][:, :, feature_names.isin(edge_feature_names)][
                         :, :, edge_sorting_indices
                     ],
-                    features[3],
+                    to_preprocess[3],
                 ]
             except IndexError:
-                dataset += [features[2], features[2], features[3]]
+                dataset += [to_preprocess[2], to_preprocess[2], to_preprocess[3]]
 
         else:
-            features = np.concatenate(list(features.values()))
+            to_preprocess = np.concatenate(list(to_preprocess.values()))
 
             # Split node features (positions, speeds) from edge features (distances)
             dataset = (
-                features[:, ~feature_names.isin(edge_feature_names)][
+                to_preprocess[:, ~feature_names.isin(edge_feature_names)][
                     :, node_sorting_indices
-                ].reshape([features.shape[0], len(graph.nodes()), -1], order="F"),
+                ].reshape([to_preprocess.shape[0], len(graph.nodes()), -1], order="F"),
                 deepof.utils.edges_to_weithed_adj(
                     nx.adj_matrix(graph).todense(),
-                    features[:, feature_names.isin(edge_feature_names)][
+                    to_preprocess[:, feature_names.isin(edge_feature_names)][
                         :, edge_sorting_indices
                     ],
                 ),
             )
 
-        return tuple(dataset)
+        return tuple(dataset), graph, tab_dict
 
     # noinspection PyDefaultArgument
     def supervised_annotation(

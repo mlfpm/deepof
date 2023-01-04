@@ -13,6 +13,7 @@ import argparse
 import os
 import pickle
 
+import networkx as nx
 import numpy as np
 
 import deepof.data
@@ -35,7 +36,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--animal-to-preprocess",
         "-idprep",
-        help="Id of the animal to preprocess if multiple animals are being tracked. None by default",
+        help="Id of the animal to preprocess if multiple animals are being tracked. None by default, which results in "
+        "all animals being processed.",
         type=str,
         default=None,
     )
@@ -53,41 +55,43 @@ if __name__ == "__main__":
         "Must be one of 'rbf', 'linear' or False (a sliding window is used instead).",
         choices=["False", "linear", "rbf"],
         nargs="?",
-        default="rbf",
+        default="False",
     )
     parser.add_argument(
         "--batch-size",
         "-bs",
         help="set training batch size. Defaults to 256",
         type=int,
-        default=256,
+        default=128,
     )
     parser.add_argument(
         "--n-components",
         "-k",
         help="set the number of components for the unsupervised model. Defaults to 5",
         type=int,
-        default=5,
+        default=15,
     )
     parser.add_argument(
         "--encoding-size",
         "-es",
         help="set the number of dimensions of the latent space. 16 by default",
         type=int,
-        default=16,
+        default=8,
     )
     parser.add_argument(
         "--embedding-model",
         "-embedding",
-        help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), VaDE, or Contrastive",
+        help="Algorithm to use to embed and cluster the time series. Must be one of: VQVAE (default), VaDE, "
+        "or Contrastive",
         nargs="?",
-        choices=["VQVAE", "VaDE", "contrastive"],
+        choices=["VQVAE", "VaDE", "Contrastive"],
         default="VQVAE",
     )
     parser.add_argument(
         "--encoder-type",
         "-encoder",
-        help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), TCN, or transformer",
+        help="Encoder architecture to use when embedding the time series. Must be one of: recurrent (default), "
+        "TCN, or transformer",
         nargs="?",
         choices=["recurrent", "TCN", "transformer"],
         default="recurrent",
@@ -95,7 +99,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--exclude-bodyparts",
         "-exc",
-        help="Excludes the indicated bodyparts from all analyses. It should consist of several values separated by commas",
+        help="Excludes the indicated bodyparts from all analyses. "
+        "It should consist of several values separated by commas.",
         type=str,
         default="",
     )
@@ -127,11 +132,11 @@ if __name__ == "__main__":
         "--input-type",
         "-d",
         help="Select an input type for the autoencoder hypermodels. "
-        "It must be one of coords, dists, angles, coords+dist, coords+angle, dists+angle or coords+dist+angle. "
-        "To any of these, '+speed' can be added at the end, which includes overall speed of each bodypart. "
-        "Defaults to coords.",
+        "It must be one of coords (features treated as independent and passed as a tensor) "
+        "and graph (default - animals represented as graphs, with coords and speeds per bodypart as node features, "
+        "and distances as edge features).",
         type=str,
-        default="coords",
+        default="graph",
     )
     parser.add_argument(
         "--output-path",
@@ -150,8 +155,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cat-kl-loss",
         "-catkl",
-        help="If > 0, adds a regularization term that minimizes the KL divergence between cluster assignment frequencies"
-        "and a uniform distribution",
+        help="If > 0, adds a regularization term that minimizes the KL divergence between cluster assignment "
+        "frequencies and a uniform distribution",
         type=float,
         default=0.0,
     )
@@ -176,19 +181,28 @@ if __name__ == "__main__":
         "-ws",
         help="Sets the sliding window size to be used when building both training and validation sets. Defaults to 15",
         type=int,
-        default=15,
+        default=25,
     )
     parser.add_argument(
         "--window-step",
         "-wt",
-        help="Sets the sliding window step to be used when building both training and validation sets. Defaults to 5",
+        help="Sets the sliding window step to be used when building both training and validation sets. "
+        "Defaults to 5",
         type=int,
         default=1,
     )
     parser.add_argument(
+        "--max-epochs",
+        "-epochs",
+        help="Sets the maximum number of epochs to train. It's usually cut short by early stopping.",
+        type=int,
+        default=150,
+    )
+    parser.add_argument(
         "--run",
         "-rid",
-        help="Sets the run ID of the experiment (for naming output files only). If 0 (default), uses a timestamp instead",
+        help="Sets the run ID of the experiment (for naming output files only). "
+        "If 0 (default), uses a timestamp instead",
         type=int,
         default=0,
     )
@@ -220,6 +234,7 @@ if __name__ == "__main__":
         val_num = args.val_num
         window_size = args.window_size
         window_step = args.window_step
+        max_epochs = args.max_epochs
         run = args.run
 
     except TypeError:
@@ -230,14 +245,9 @@ if __name__ == "__main__":
     if not train_path:
         raise ValueError("Set a valid data path for the training to run")
 
-    assert input_type.replace("+speed", "") in [
+    assert input_type in [
         "coords",
-        "dists",
-        "angles",
-        "coords+dist",
-        "coords+angle",
-        "dists+angle",
-        "coords+dist+angle",
+        "graph",
     ], "Invalid input type. Type python model_training.py -h for help."
 
     # Loads model hyperparameters and treatment conditions, if available
@@ -262,27 +272,21 @@ if __name__ == "__main__":
 
     project_coords = project_coords.run(verbose=True)
 
-    # Coordinates for training data
-    coords = project_coords.get_coords(
-        center="Center",
-        align="Spine_1",
-        align_inplace=True,
-        propagate_labels=False,
-        propagate_annotations=False,
-        selected_id=animal_to_preprocess,
-    )
-    speeds = project_coords.get_coords(speed=1, selected_id=animal_to_preprocess)
-    distances = project_coords.get_distances(selected_id=animal_to_preprocess)
-    angles = project_coords.get_angles(selected_id=animal_to_preprocess)
-    coords_distances = coords.merge(distances)
-    coords_angles = coords.merge(angles)
-    dists_angles = distances.merge(angles)
-    coords_dist_angles = coords.merge(distances, angles)
+    print("Preprocessing data...")
 
-    def batch_preprocess(tab_dict):
-        """Returns a preprocessed instance of the input table_dict object"""
+    if input_type == "coords":
 
-        return tab_dict.preprocess(
+        # Coordinates for training data
+        to_preprocess = project_coords.get_coords(
+            center="Center",
+            align="Spine_1",
+            align_inplace=True,
+            propagate_labels=False,
+            propagate_annotations=False,
+            selected_id=animal_to_preprocess,
+        )
+
+        preprocessed_object = to_preprocess.preprocess(
             window_size=window_size,
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,
@@ -291,34 +295,41 @@ if __name__ == "__main__":
             shuffle=True,
         )
 
-    input_dict_train = {
-        "coords": coords,
-        "dists": distances,
-        "angles": angles,
-        "coords+dist": coords_distances,
-        "coords+angle": coords_angles,
-        "dists+angle": dists_angles,
-        "coords+dist+angle": coords_dist_angles,
-    }
+        print("Training set shape:", preprocessed_object[0].shape)
+        print("Validation set shape:", preprocessed_object[2].shape)
 
-    to_preprocess = input_dict_train[input_type.replace("+speed", "")]
-    if "speed" in input_type:
-        to_preprocess = to_preprocess.merge(speeds)
+    elif input_type == "graph":
 
-    print("Preprocessing data...")
-    X_train, y_train, X_val, y_val = batch_preprocess(to_preprocess)
-    # Get training and validation sets
+        # Get graph dataset
+        preprocessed_object, G, to_preprocess = project_coords.get_graph_dataset(
+            animal_id=animal_to_preprocess,
+            center="Center",
+            align="Spine_1",
+            preprocess=True,
+            window_size=window_size,
+            window_step=window_step,
+            automatic_changepoints=automatic_changepoints,
+            test_videos=val_num,
+            scale="standard",
+            shuffle=True,
+        )
+        adjacency_matrix = nx.adjacency_matrix(G).todense()
 
-    print("Training set shape:", X_train.shape)
-    print("Validation set shape:", X_val.shape)
+        print("Training node set shape:", preprocessed_object[0].shape)
+        print("Training edge set shape:", preprocessed_object[1].shape)
+        print("Validation node set shape:", preprocessed_object[3].shape)
+        print("Validation edge set shape:", preprocessed_object[4].shape)
+
     print("Done!")
 
     # Proceed with training mode. Fit autoencoder with the same parameters,
     # as many times as specified by runs
     if not tune:
 
+        # noinspection PyUnboundLocalVariable
         trained_models = project_coords.deep_unsupervised_embedding(
-            (X_train, y_train, X_val, y_val),
+            preprocessed_object,
+            adjacency_matrix=(None if input_type == "coords" else adjacency_matrix),
             batch_size=batch_size,
             latent_dim=encoding_size,
             embedding_model=embedding_model,
@@ -331,6 +342,7 @@ if __name__ == "__main__":
             # Parameters that control the training process
             kmeans_loss=kmeans_loss,
             reg_cat_clusters=cat_kl_loss,
+            epochs=max_epochs,
             run=run,
         )
 
@@ -342,47 +354,63 @@ if __name__ == "__main__":
         for key in to_preprocess.keys():
 
             # Get preprocessed data for current video
-            curr_prep = to_preprocess.filter_videos([key]).preprocess(
-                window_size=window_size,
-                window_step=window_step,
-                automatic_changepoints=automatic_changepoints,
-                scale="standard",
-                test_videos=0,
-                shuffle=False,
-            )[0]
+            if input_type == "coords":
+                curr_prep = to_preprocess.filter_videos([key]).preprocess(
+                    window_size=window_size,
+                    window_step=window_step,
+                    automatic_changepoints=automatic_changepoints,
+                    scale="standard",
+                    test_videos=0,
+                    shuffle=False,
+                )[0]
+                curr_adj = np.zeros(curr_prep.shape)
+
+            elif input_type == "graph":
+                curr_prep, _, _ = project_coords.get_graph_dataset(
+                    precomputed_tab_dict=to_preprocess.filter_videos([key]),
+                    window_size=window_size,
+                    window_step=window_step,
+                    automatic_changepoints=automatic_changepoints,
+                    scale="standard",
+                    test_videos=0,
+                    shuffle=False,
+                )
+                curr_adj = curr_prep[1]
+                curr_prep = curr_prep[0]
 
             # Get breakpoints per video
             deep_breaks_per_video[key] = np.all(curr_prep != 0, axis=2).sum(axis=1)
 
             # Get current model weights
-            curr_weights = trained_models[3].get_weights()
+            curr_weights = trained_models.get_weights()
 
             # Load weights into a newly created model, built with the current input shape
             if embedding_model == "VQVAE":
-                ae_models = deepof.models.VQVAE(
+                curr_ae = deepof.models.VQVAE(
                     input_shape=curr_prep.shape,
+                    edge_feature_shape=curr_adj.shape,
+                    adjacency_matrix=(
+                        None if input_type == "coords" else adjacency_matrix
+                    ),
+                    use_gnn=(input_type == "graph"),
                     encoder_type=encoder_type,
                     latent_dim=encoding_size,
                     n_components=n_components,
                 )
-                curr_deep_encoder, curr_deep_grouper, curr_ae = (
-                    ae_models.encoder,
-                    ae_models.soft_quantizer,
-                    ae_models.vqvae,
-                )
 
             elif embedding_model == "VaDE":
-                ae_models = deepof.models.VaDE(
+                curr_ae = deepof.models.VaDE(
                     input_shape=curr_prep.shape,
+                    edge_feature_shape=curr_adj.shape,
+                    adjacency_matrix=(
+                        None if input_type == "coords" else adjacency_matrix
+                    ),
+                    use_gnn=(input_type == "graph"),
                     encoder_type=encoder_type,
                     batch_size=batch_size,
                     latent_dim=encoding_size,
                     n_components=n_components,
-                )
-                curr_deep_encoder, curr_deep_grouper, curr_ae = (
-                    ae_models.encoder,
-                    ae_models.grouper,
-                    ae_models.vade,
+                    reg_cat_clusters=cat_kl_loss,
                 )
 
             elif embedding_model == "Contrastive":
@@ -393,12 +421,11 @@ if __name__ == "__main__":
 
             # Embed current video in the autoencoder and add to the dictionary
             # noinspection PyUnboundLocalVariable
-            mean_encodings = curr_deep_encoder(curr_prep)
-            deep_encodings_per_video[key] = mean_encodings
+            deep_encodings_per_video[key] = curr_ae.encoder([curr_prep, curr_adj])
 
             # Obtain groupings for current video and add to the dictionary
             # noinspection PyUnboundLocalVariable
-            deep_assignments_per_video[key] = curr_deep_grouper(curr_prep)
+            deep_assignments_per_video[key] = curr_ae.grouper([curr_prep, curr_adj])
 
         with open(
             os.path.join(

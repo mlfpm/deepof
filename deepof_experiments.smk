@@ -13,13 +13,13 @@ Plot rule graph: snakemake --snakefile deepof_experiments.smk --forceall --ruleg
 
 outpath = "/u/lucasmir/Projects/DLC/DeepOF/deepof/"
 
-automatic_changepoints = [False, "rbf", "linear"]
-animal_to_preprocess = ["B"]
-kmeans_loss = [0.0, 1.0]
-encodings = [16]
-cluster_numbers = [12] #list(range(5, 26, 1))
-input_types = ["coords"]
-run = [1]
+automatic_changepoints = [False] #, "rbf", "linear"]
+animal_to_preprocess = ["B", None]
+kmeans_loss = [0.0]
+encodings = [8]
+cluster_numbers = [25] #list(range(5, 26, 1))
+input_types = ["graph"]#, "coords"]
+run = range(3)
 embedding_model = ["VQVAE", "VaDE"]
 encoder_model = ["recurrent", "TCN", "transformer"]
 
@@ -49,20 +49,20 @@ rule train_models:
         trained_models=outpath
         + "train_models/deepof_unsupervised_{embedding_model}_encoder_{encoder}_encodings_input={input_type}_k={k}_latdim={latdim}_changepoints_{automatic_changepoints}_kmeans_loss={kmeans_loss}_run={run}.pkl",
     shell:
-        "pipenv run python -m deepof.deepof_train_embeddings "
+        "python deepof/deepof_train_embeddings.py "
         "--train-path {input.data_path} "
         "--embedding-model {wildcards.embedding_model} "
         "--encoder-type {wildcards.encoder} "
         "--automatic-changepoints {wildcards.automatic_changepoints} "
         "--val-num 5 "
         "--animal-id B,W "
-        "--animal-to-preprocess B "
+        "--animal-to-preprocess {wildcards.animal_to_preprocess} "
         "--exclude-bodyparts Tail_1,Tail_2,Tail_tip "
         "--n-components {wildcards.k} "
         "--input-type {wildcards.input_type} "
         "--kmeans-loss {wildcards.kmeans_loss} "
         "--encoding-size {wildcards.latdim} "
-        "--batch-size 256 "
+        "--batch-size 128 "
         "--window-size 25 "
         "--window-step 1 "
         "--run {wildcards.run} "

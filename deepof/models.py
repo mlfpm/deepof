@@ -697,7 +697,7 @@ def get_vqvae(
         - encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
         Outputs a vector of shape (latent_dim,).
         - decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-        - quantizer (tf.keras.Model): connected embedder layer of the VQ-VAE model.
+        - grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model.
         Outputs cluster indices of shape (batch_size,).
         - vqvae (tf.keras.Model): complete VQ VAE model.
     """
@@ -749,13 +749,13 @@ def get_vqvae(
 
     # Connect full models
     encoder = tf.keras.Model([inputs, a], encoder_outputs, name="encoder")
-    quantizer = tf.keras.Model([inputs, a], quantized_latents, name="quantizer")
-    soft_quantizer = tf.keras.Model([inputs, a], soft_counts, name="soft_quantizer")
+    grouper = tf.keras.Model([inputs, a], quantized_latents, name="grouper")
+    soft_grouper = tf.keras.Model([inputs, a], soft_counts, name="soft_grouper")
     vqvae = tf.keras.Model(
-        quantizer.inputs, decoder([quantizer.outputs, inputs]), name="VQ-VAE"
+        grouper.inputs, decoder([grouper.outputs, inputs]), name="VQ-VAE"
     )
 
-    models = [encoder, decoder, quantizer, soft_quantizer, vqvae]
+    models = [encoder, decoder, grouper, soft_grouper, vqvae]
 
     return models
 
@@ -804,8 +804,8 @@ class VQVAE(tf.keras.models.Model):
         (
             self.encoder,
             self.decoder,
-            self.quantizer,
-            self.soft_quantizer,
+            self.grouper,
+            self.soft_grouper,
             self.vqvae,
         ) = get_vqvae(
             self.seq_shape,
@@ -908,7 +908,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Compute populated clusters
         unique_indices = tf.unique(
-            tf.reshape(tf.argmax(self.soft_quantizer([x, a]), axis=1), [-1])
+            tf.reshape(tf.argmax(self.soft_grouper([x, a]), axis=1), [-1])
         ).y
         populated_clusters = tf.shape(unique_indices)[0]
 
@@ -966,7 +966,7 @@ class VQVAE(tf.keras.models.Model):
 
         # Compute populated clusters
         unique_indices = tf.unique(
-            tf.reshape(tf.argmax(self.soft_quantizer([x, a]), axis=1), [-1])
+            tf.reshape(tf.argmax(self.soft_grouper([x, a]), axis=1), [-1])
         ).y
         populated_clusters = tf.shape(unique_indices)[0]
 
