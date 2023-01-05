@@ -57,17 +57,19 @@ table_dict = NewType("deepof_table_dict", Any)
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
-def load(project_name: str) -> coordinates:
+def load_project(project_path: str) -> coordinates:
     """Loads a pre-saved pickled Coordinates object.
 
     Args:
-        project_name (str): name of the file to load.
+        project_path (str): name of the file to load.
 
     Returns:
         Pre-run coordinates object.
 
     """
-    with open(project_name, "rb") as handle:
+    with open(
+        os.path.join(project_path, "Coordinates", "deepof_coordinates.pkl"), "rb"
+    ) as handle:
         return pickle.load(handle)
 
 
