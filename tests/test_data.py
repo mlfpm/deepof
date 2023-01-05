@@ -34,15 +34,15 @@ def test_project_init(table_type, arena_type):
     if arena_type == "foo":
         with pytest.raises(NotImplementedError):
             prun = deepof.data.Project(
-                path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+                project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
                 arena=arena_type,
                 video_scale=380,
                 video_format=".mp4",
                 table_format=table_type,
-            ).run()
+            ).create()
     else:
         prun = deepof.data.Project(
-            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+            project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena=arena_type,
             video_scale=380,
             video_format=".mp4",
@@ -58,7 +58,7 @@ def test_project_init(table_type, arena_type):
 def test_project_properties():
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -89,7 +89,7 @@ def test_get_distances(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -117,7 +117,7 @@ def test_get_angles(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -142,7 +142,7 @@ def test_run(nodes, ego):
     ego = [False, "Center", "Nose"][ego]
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -151,7 +151,7 @@ def test_run(nodes, ego):
 
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.run(verbose=True)
+    prun = prun.create(verbose=True)
 
     assert isinstance(prun, deepof.data.Coordinates)
 
@@ -159,13 +159,13 @@ def test_run(nodes, ego):
 def test_get_supervised_annotation():
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         arena="circular-autodetect",
         video_scale=380,
         animal_ids=["B", "W"],
         video_format=".mp4",
         table_format=".h5",
-    ).run()
+    ).create()
 
     prun = prun.supervised_annotation()
 
@@ -194,7 +194,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         animal_ids = [""]
 
     prun = deepof.data.Project(
-        path=os.path.join(
+        project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
@@ -210,7 +210,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler):
         prun.distances = nodes
         prun.ego = ego
 
-    prun = prun.run(verbose=False)
+    prun = prun.create(verbose=False)
 
     center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))

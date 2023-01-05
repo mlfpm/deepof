@@ -12,10 +12,8 @@ usage: python -m examples.model_training -h
 import argparse
 import os
 import pickle
-
 import networkx as nx
 import numpy as np
-
 import deepof.data
 import deepof.unsupervised_utils
 import deepof.utils
@@ -264,13 +262,13 @@ if __name__ == "__main__":
         enable_iterative_imputation=True,
         exclude_bodyparts=exclude_bodyparts,
         exp_conditions=treatment_dict,
-        path=train_path,
+        project_path=train_path,
         smooth_alpha=smooth_alpha,
         table_format="autodetect",
         video_format=".mp4",
     )
 
-    project_coords = project_coords.run(verbose=True)
+    project_coords = project_coords.create(verbose=True)
 
     print("Preprocessing data...")
 

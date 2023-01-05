@@ -8,10 +8,6 @@
 # encoding: utf-8
 # module deepof
 
-import numpy as np
-import tcn
-import tensorflow as tf
-import tensorflow_probability as tfp
 from sklearn.mixture import GaussianMixture
 from spektral.layers import CensNetConv, GATConv
 from spektral.utils.convolution import gcn_filter, incidence_matrix, line_graph
@@ -20,6 +16,10 @@ from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 from tensorflow.keras.optimizers import Nadam
+import numpy as np
+import tcn
+import tensorflow as tf
+import tensorflow_probability as tfp
 
 import deepof.unsupervised_utils
 from deepof import unsupervised_utils

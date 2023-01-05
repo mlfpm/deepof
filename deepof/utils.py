@@ -8,22 +8,9 @@ Functions and general utilities for the deepof package.
 
 """
 
-import argparse
-import multiprocessing
-import os
 from copy import deepcopy
-from itertools import combinations, product
-from typing import Tuple, Any, List, Union, NewType
-
-import cv2
-import math
-import networkx as nx
-import numpy as np
-import pandas as pd
-import regex as re
-import ruptures as rpt
-import tensorflow as tf
 from dask_image.imread import imread
+from itertools import combinations, product
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
@@ -31,6 +18,18 @@ from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
+from typing import Tuple, Any, List, Union, NewType
+import argparse
+import cv2
+import math
+import multiprocessing
+import networkx as nx
+import numpy as np
+import os
+import pandas as pd
+import regex as re
+import ruptures as rpt
+import tensorflow as tf
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)

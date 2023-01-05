@@ -25,13 +25,13 @@ import deepof.visuals
 def test_plot_heatmap(bparts):
     prun = (
         deepof.data.Project(
-            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+            project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular-autodetect",
             video_scale=tuple([380]),
             video_format=".mp4",
             table_format=".h5",
         )
-        .run()
+        .create()
         .get_coords()
     )
 

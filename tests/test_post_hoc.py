@@ -233,7 +233,7 @@ def test_compute_transition_matrix_per_condition(
 def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
 
     prun = deepof.data.Project(
-        path=os.path.join(
+        project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
@@ -243,7 +243,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).run()
+    ).create()
 
     # get breaks
     breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
@@ -292,7 +292,7 @@ def test_chunk_summary_statistics():
 )
 def test_annotate_time_chunks(mode, sampler):
     prun = deepof.data.Project(
-        path=os.path.join(
+        project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
         arena="circular-autodetect",
@@ -301,7 +301,7 @@ def test_annotate_time_chunks(mode, sampler):
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).run()
+    ).create()
 
     # get breaks and soft_counts
     breaks = {}

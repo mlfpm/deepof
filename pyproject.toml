@@ -48,6 +48,7 @@ imblearn = "^0.0"
 hmmlearn = "^0.2.8"
 lxml = "^4.9.1"
 spektral = {git = "https://github.com/lucasmiranda42/spektral"}
+imageio-ffmpeg = "^0.4.7"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

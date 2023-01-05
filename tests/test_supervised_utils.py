@@ -105,13 +105,13 @@ def test_climb_wall(center, axes, angle, tol):
 
     prun = (
         deepof.data.Project(
-            path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+            project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
             arena="circular-autodetect",
             video_scale=int(arena[2]),
             video_format=".mp4",
             table_format=".h5",
         )
-        .run(verbose=True)
+        .create(verbose=True)
         .get_coords()
     )
 
@@ -143,13 +143,13 @@ def test_climb_wall(center, axes, angle, tol):
 def test_single_animal_traits(animal_id):
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         arena="circular-autodetect",
         animal_ids=["B", "W"],
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
-    ).run(verbose=True)
+    ).create(verbose=True)
 
     pos_dframe = prun.get_coords(
         center="Center", align="Spine_1", selected_id=animal_id
@@ -294,13 +294,13 @@ def test_rule_based_tagging(multi_animal, video_output):
     )
 
     prun = deepof.data.Project(
-        path=path,
+        project_path=path,
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),
-    ).run(verbose=True)
+    ).create(verbose=True)
 
     hardcoded_tags = prun.supervised_annotation(
         video_output=video_output, frame_limit=50, debug=True

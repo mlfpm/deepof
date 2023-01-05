@@ -8,22 +8,20 @@ Utility functions for both training autoencoder models in deepof.models and tuni
 
 """
 
-import json
-import os
 from datetime import date, datetime
 from functools import partial
-from typing import Tuple, Union, Any, List
-
-import matplotlib.pyplot as plt
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
-import tensorflow.keras.backend as K
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
-
-import deepof.models
+from typing import Tuple, Union, Any, List
 import deepof.hypermodels
+import deepof.models
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import tensorflow as tf
+import tensorflow.keras.backend as K
+import tensorflow_probability as tfp
 
 tfb = tfp.bijectors
 tfd = tfp.distributions

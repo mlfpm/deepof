@@ -14,22 +14,7 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # module deepof
 
 
-import copy
-import datetime
-import os
-import pickle
-import warnings
 from collections import defaultdict
-from time import time
-from typing import Dict, List, Tuple
-from typing import Any, NewType, Union
-
-import matplotlib.pyplot as plt
-import networkx as nx
-import numpy as np
-import pandas as pd
-import tensorflow as tf
-import umap
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from shapely.geometry import Polygon
@@ -39,7 +24,23 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+from time import time
 from tqdm import tqdm
+from typing import Any, NewType, Union
+from typing import Dict, List, Tuple
+import copy
+import datetime
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import os
+import pandas as pd
+import pickle
+import pims
+import shutil
+import tensorflow as tf
+import umap
+import warnings
 
 import deepof.unsupervised_utils
 import deepof.models
@@ -84,13 +85,15 @@ class Project:
         enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
-        frame_rate: int = None,
         interpolate_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
-        path: str = deepof.utils.os.path.join("."),
+        project_name: str = "deepof_project",
+        project_path: str = deepof.utils.os.path.join("."),
+        video_path: str = None,
+        table_path: str = None,
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
@@ -105,15 +108,18 @@ class Project:
             Recommended, but slow.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
-            frame_rate (int): frame rate of the videos. If not specified, it will be inferred from the video files.
-            are uneven across videos.
             interpolate_outliers (bool): whether to interpolate missing data.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
             model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the
             documentation).
-            path (str): path to the folder containing the DLC output data.
+            project_name (str): name of the current project.
+            project_path (str): path to the folder containing the DLC output data.
+            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your
+            project path.
+            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your
+            project path.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
             video_format (str): video format. Defaults to '.mp4'.
@@ -121,9 +127,10 @@ class Project:
 
         """
         # Set working paths
-        self.path = path
-        self.video_path = os.path.join(self.path, "Videos")
-        self.table_path = os.path.join(self.path, "Tables")
+        self.project_path = project_path
+        self.project_name = project_name
+        self.video_path = video_path
+        self.table_path = table_path
         self.trained_path = resource_filename(__name__, "trained_models")
 
         # Detect files to load from disk
@@ -171,7 +178,7 @@ class Project:
         self.likelihood_tolerance = likelihood_tol
         self.model = model
         self.smooth_alpha = smooth_alpha
-        self.frame_rate = frame_rate
+        self.frame_rate = None
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -195,6 +202,79 @@ class Project:
                 ("s" if len(set(self.exp_conditions.values())) > 1 else ""),
             )
         return "deepof analysis of {} videos".format(len(self.videos))
+
+    def set_up_project_directory(self):
+        """Creates a project directory where to save all produced results."""
+
+        # Create a project directory, as well as subfolders for videos and tables
+        project_path = os.path.join(self.project_path, self.project_name)
+
+        if (
+            len(
+                [
+                    i
+                    for i in os.listdir(self.video_path)
+                    if i.endswith(self.video_format)
+                ]
+            )
+            == 0
+        ):
+            raise FileNotFoundError(
+                "There are no compatible videos in the specified directory."
+            )
+        if (
+            len(
+                [
+                    i
+                    for i in os.listdir(self.table_path)
+                    if i.endswith(self.table_format)
+                ]
+            )
+            == 0
+        ):
+            raise FileNotFoundError(
+                "There are no compatible tracks in the specified directory."
+            )
+
+        if not os.path.exists(project_path):
+            os.makedirs(project_path)
+            os.makedirs(os.path.join(self.project_path, self.project_name, "Videos"))
+            os.makedirs(os.path.join(self.project_path, self.project_name, "Tables"))
+            os.makedirs(
+                os.path.join(self.project_path, self.project_name, "Coordinates")
+            )
+
+            # Copy videos and tables to the new directories
+            for vid in os.listdir(self.video_path):
+                if vid.endswith(self.video_format):
+                    shutil.copy2(
+                        os.path.join(self.video_path, vid),
+                        os.path.join(
+                            self.project_path, self.project_name, "Videos", vid
+                        ),
+                    )
+
+            for tab in os.listdir(self.table_path):
+                if tab.endswith(self.table_format):
+                    shutil.copy2(
+                        os.path.join(self.table_path, tab),
+                        os.path.join(
+                            self.project_path, self.project_name, "Tables", tab
+                        ),
+                    )
+
+            # Re-set video and table directories to the newly created paths
+            self.video_path = os.path.join(
+                self.project_path, self.project_name, "Videos"
+            )
+            self.table_path = os.path.join(
+                self.project_path, self.project_name, "Tables"
+            )
+
+        else:
+            raise OSError(
+                "Project already exists. Delete it or specify a different name."
+            )
 
     @property
     def distances(self):
@@ -233,7 +313,7 @@ class Project:
 
             for video_path in self.videos:
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
-                    os.path.join(self.path, "Videos", video_path), self.arena
+                    os.path.join(self.project_path, "Videos", video_path), self.arena
                 )
                 cur_scales = [
                     *np.mean(arena_corners, axis=0).astype(int),
@@ -466,7 +546,7 @@ class Project:
                 scaler = StandardScaler()
                 imputed = IterativeImputer(
                     skip_complete=True,
-                    max_iter=250,
+                    max_iter=self.enable_iterative_imputation,
                     n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
                     tol=1e-1,
                 ).fit_transform(scaler.fit_transform(tab))
@@ -630,7 +710,7 @@ class Project:
 
         return areas_dict
 
-    def run(self, verbose: bool = True) -> coordinates:
+    def create(self, verbose: bool = True) -> coordinates:
         """Generates a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
@@ -640,6 +720,17 @@ class Project:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
 
         """
+
+        print("Setting up project directories...")
+        self.set_up_project_directory()
+        self.frame_rate = int(
+            np.round(
+                pims.ImageIOReader(
+                    os.path.join(self.video_path, self.videos[0])
+                ).frame_rate
+            )
+        )
+
         tables, quality = self.load_tables(verbose)
         if self.exp_conditions is not None:
             assert (
@@ -664,10 +755,9 @@ class Project:
         if self.areas:
             areas = self.get_areas(tables, verbose)
 
-        if verbose:
-            print("Done!")
-
-        return Coordinates(
+        coords = Coordinates(
+            project_path=self.project_path,
+            project_name=self.project_name,
             angles=angles,
             animal_ids=self.animal_ids,
             areas=areas,
@@ -676,8 +766,9 @@ class Project:
             distances=distances,
             connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
+            frame_rate=self.frame_rate,
             exp_conditions=self.exp_conditions,
-            path=self.path,
+            path=self.project_path,
             quality=quality,
             scales=self.scales,
             arena_params=self.arena_params,
@@ -686,6 +777,22 @@ class Project:
             videos=self.videos,
             video_resolution=self.video_resolution,
         )
+
+        # Save created coordinates to the project directory
+        coords.save(
+            filename=os.path.join(
+                self.project_path,
+                self.project_name,
+                "Coordinates",
+                "deepof_coordinates",
+            ),
+            timestamp=False,
+        )
+
+        if verbose:
+            print("Done!")
+
+        return coords
 
     @distances.setter
     def distances(self, value):
@@ -705,11 +812,14 @@ class Coordinates:
 
     def __init__(
         self,
+        project_path: str,
+        project_name: str,
         arena: str,
         arena_dims: np.array,
         path: str,
         quality: dict,
         scales: np.ndarray,
+        frame_rate: int,
         arena_params: List,
         tables: dict,
         trained_model_path: str,
@@ -726,11 +836,14 @@ class Coordinates:
         """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables.
 
         Args:
+            project_name (str): name of the current project.
+            project_path (str): path to the folder containing the DLC output data.
             arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
             arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
             scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
+            frame_rate (int): frame rate of the processed videos.
             arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
@@ -744,12 +857,15 @@ class Coordinates:
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
 
         """
+        self._project_path = project_path
+        self._project_name = project_name
         self._animal_ids = animal_ids
         self._arena = arena
         self._arena_params = arena_params
         self._arena_dims = arena_dims
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
+        self._frame_rate = frame_rate
         self._path = path
         self._quality = quality
         self._scales = scales

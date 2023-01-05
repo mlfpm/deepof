@@ -75,11 +75,11 @@ def test_autoencoder_fitting(embedding_model, encoder_type, embedding, k):
     preprocessed_data = (X_train, y_train, X_train, y_train)
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
-    ).run()
+    ).create()
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,

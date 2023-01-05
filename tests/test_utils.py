@@ -351,13 +351,13 @@ def test_smooth_mult_trajectory(alpha, series):
 def test_interpolate_outliers(mode):
 
     prun = deepof.data.Project(
-        path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).run()
+    ).create()
     coords = prun.get_coords()
     lkhood = prun.get_quality()
     coords_name = list(coords.keys())[0]
