@@ -1411,6 +1411,14 @@ def autoencoder_fitting(
         callbacks=callbacks_,
         verbose=1,
     )
+    if embedding_model == "VaDE":
+        ae_full_model.pretrain(
+            train_dataset,
+            embed_x=Xs,
+            embed_a=a_train,
+            epochs=0,
+            verbose=1,
+        )
 
     if not os.path.exists(os.path.join(output_path, "trained_weights")):
         os.makedirs(os.path.join(output_path, "trained_weights"))

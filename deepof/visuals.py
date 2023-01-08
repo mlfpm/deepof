@@ -5,16 +5,23 @@
 
 from itertools import cycle
 from matplotlib.animation import FuncAnimation, FFMpegWriter
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.patches import Ellipse
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from typing import Any, List, NewType, Union
-
+import calendar
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pandas as pd
 import seaborn as sns
+import tensorflow as tf
+import time
+import umap
 import warnings
+
+import deepof.post_hoc
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -252,7 +259,313 @@ def plot_heatmaps(
         return heatmaps
 
 
+def plot_gantt(
+    coordinates: project,
+    experiment_id: str,
+    soft_counts: table_dict = None,
+    supervised_annotations: table_dict = None,
+    save: bool = False,
+):
+    """Returns a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation,
+    and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        experiment_id (str): Name of the experiment to display.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per video.
+        new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """  # TODO: extend to supervised annotations, and add time below
+    # Determine plot type
+    if soft_counts is None and supervised_annotations is not None:
+        plot_type = "supervised"
+    elif soft_counts is not None and supervised_annotations is None:
+        plot_type = "unsupervised"
+    else:
+        plot_type = "mixed"
+
+    hard_counts = soft_counts[experiment_id].numpy().argmax(axis=1)
+    gantt = np.zeros([hard_counts.max(), hard_counts.shape[0]])
+    colors = np.repeat(
+        sns.color_palette("tab20").as_hex(), np.ceil(gantt.shape[0] / 20)
+    )
+
+    for cluster, color in zip(range(hard_counts.max()), colors):
+        gantt[cluster] = hard_counts == cluster
+        gantt_cp = gantt.copy()
+        gantt_cp[[i for i in range(hard_counts.max()) if i != cluster]] = np.nan
+        plt.axhline(y=cluster, color="k", linewidth=0.5)
+
+        sns.heatmap(
+            gantt_cp,
+            cbar=False,
+            cmap=LinearSegmentedColormap.from_list("deepof", ["white", color], N=2),
+        )
+
+    plt.xticks([])
+    plt.yticks(
+        np.array(range(hard_counts.max())) + 0.5,
+        range(hard_counts.max()),
+        rotation=0,
+        fontsize=10,
+    )
+
+    plt.axhline(y=0, color="k", linewidth=1)
+    plt.axhline(y=gantt.shape[0], color="k", linewidth=2)
+    plt.axvline(x=0, color="k", linewidth=1)
+    plt.axvline(x=gantt.shape[1], color="k", linewidth=2)
+
+    plt.xlabel("Time", fontsize=10)
+    plt.ylabel("Cluster", fontsize=10)
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_gantt{}_type={}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    plot_type,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    title = "deepOF - Gantt chart of {} behaviors - {}".format(plot_type, experiment_id)
+    plt.title(title, fontsize=8)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_embeddings(
+    coordinates: project,
+    embeddings: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict = None,
+    # Quality selection parameters
+    min_confidence: float = 0.3,
+    # Time selection parameters
+    bin_size: int = None,
+    bin_index: int = 0,
+    # Visualization design and data parameters
+    aggregate_experiments: str = False,
+    samples: int = 10000,
+    show_aggregated_density: bool = True,
+    colour_by: str = "cluster",
+    show_break_size_as_radius: bool = False,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Returns a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation,
+    and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
+        bin_size (int): bin size for time filtering.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time_on_cluster, mean, or median) or not (default).
+        samples (int): Number of samples to take from the time embeddings. None leads to plotting all time points, which
+        may hurt performance.
+        show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
+        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
+        show_break_size_as_radius (bool): Only usable when embeddings come from a model using changepoint detection. If True,
+        the size of each chunk is depicted as the radius of each dot.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+        new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+    # Get experimental conditions per video
+    concat_hue = list(coordinates.get_exp_conditions.values())
+
+    # Restrict embeddings, soft_counts and breaks to the selected time bin
+    if bin_size is not None:
+        embeddings, soft_counts, breaks = deepof.post_hoc.select_time_bin(
+            embeddings,
+            soft_counts,
+            breaks,
+            coordinates._frame_rate * bin_size,
+            bin_index,
+        )
+
+    # Keep only those experiments for which we have an experimental condition assigned
+    embeddings = {
+        key: val
+        for key, val in embeddings.items()
+        if key in coordinates.get_exp_conditions.keys()
+    }
+    soft_counts = {
+        key: val
+        for key, val in soft_counts.items()
+        if key in coordinates.get_exp_conditions.keys()
+    }
+    breaks = {
+        key: val
+        for key, val in breaks.items()
+        if key in coordinates.get_exp_conditions.keys()
+    }
+
+    # Plot unravelled temporal embeddings
+    if not aggregate_experiments:
+
+        # Concatenate experiments and align experimental conditions
+        concat_embeddings = tf.concat(list(embeddings.values()), 0).numpy()
+
+        # Concatenate breaks
+        concat_breaks = tf.concat(list(breaks.values()), 0).numpy()
+
+        # Get cluster assignments from soft counts
+        cluster_assignments = np.argmax(
+            tf.concat(list(soft_counts.values()), 0).numpy(), axis=1
+        )
+
+        # Compute confidence in assigned clusters
+        confidence = np.concatenate(
+            [np.max(val, axis=1) for val in soft_counts.values()]
+        )
+
+        break_lens = tf.concat([len(i) for i in list(breaks.values())], 0).numpy()
+
+        # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
+        # value to see a more global picture
+
+        concat_embeddings = LinearDiscriminantAnalysis(
+            n_components=concat_embeddings.shape[1]
+        ).fit_transform(concat_embeddings, cluster_assignments)
+        reduced_embeddings = umap.UMAP(
+            min_dist=0.99, n_components=2, n_neighbors=250
+        ).fit_transform(
+            concat_embeddings,
+        )
+
+        # Generate unifier dataset using the reduced embeddings, experimental conditions
+        # and the corresponding break lengths and cluster assignments
+        embedding_dataset = pd.DataFrame(
+            {
+                "UMAP-1": reduced_embeddings[:, 0],
+                "UMAP-2": reduced_embeddings[:, 1],
+                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),
+                "breaks": concat_breaks,
+                "confidence": confidence,
+                "cluster": cluster_assignments,
+                "experimental condition": np.repeat(concat_hue, break_lens),
+            }
+        )
+
+        if samples is not None:
+            embedding_dataset = embedding_dataset.sample(samples)
+
+        # Filter values with low confidence
+        embedding_dataset = embedding_dataset.loc[
+            embedding_dataset.confidence > min_confidence
+        ]
+        embedding_dataset.sort_values("cluster", inplace=True)
+
+    else:
+
+        # Aggregate experiments by time on cluster
+        if aggregate_experiments == "time on cluster":
+            aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
+                soft_counts, breaks, reduce_dim=True
+            )
+
+        else:
+            aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
+                embeddings, agg=aggregate_experiments, reduce_dim=True
+            )
+
+        aggregated_embeddings = aggregated_embeddings.loc[
+            coordinates.get_exp_conditions.keys(), :
+        ]
+
+        # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
+        embedding_dataset = pd.DataFrame(
+            {
+                "PCA-1": aggregated_embeddings[0],
+                "PCA-2": aggregated_embeddings[1],
+                "experimental condition": concat_hue,
+            }
+        )
+        embedding_dataset.index = coordinates.get_exp_conditions.keys()
+        embedding_dataset.sort_values("experimental condition", inplace=True)
+
+    # Plot selected embeddings using the specified settings
+    sns.scatterplot(
+        embedding_dataset,
+        x="{}-1".format("PCA" if aggregate_experiments else "UMAP"),
+        y="{}-2".format("PCA" if aggregate_experiments else "UMAP"),
+        ax=ax,
+        hue=(
+            "experimental condition"
+            if aggregate_experiments or colour_by == "exp_contition"
+            else colour_by
+        ),
+        size=(
+            "breaks"
+            if show_break_size_as_radius and not aggregate_experiments
+            else None
+        ),
+        s=(50 if not aggregate_experiments else 100),
+        edgecolor="black",
+        palette=(
+            None
+            if aggregate_experiments or colour_by == "exp_condition"
+            else sns.color_palette("tab20").as_hex()[: len(set(cluster_assignments))]
+        ),
+    )
+
+    if aggregate_experiments and show_aggregated_density:
+        sns.kdeplot(
+            embedding_dataset,
+            x="PCA-1",
+            y="PCA-2",
+            hue="experimental condition",
+            zorder=0,
+            ax=ax,
+        )
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_embeddings{}_colour={}_agg={}_min_conf={}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    colour_by,
+                    aggregate_experiments,
+                    min_confidence,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    if not aggregate_experiments:
+        if ax is None:
+            plt.legend("", frameon=False)
+        else:
+            ax.get_legend().remove()
+
+    title = "deepOF - unsupervised {}embedding".format(
+        ("aggregated " if aggregate_experiments else "")
+    )
+    if ax is not None:
+        ax.set_title(title, fontsize=15)
+
+    else:
+        plt.title(title, fontsize=15)
+        plt.tight_layout()
+        plt.show()
+
+
+def _scatter_embeddings(
     embeddings: np.ndarray,
     cluster_assignments: np.ndarray = None,
     ax: Any = None,
@@ -361,8 +674,18 @@ def animate_skeleton(
         np.abs(data.loc[:, (slice("x"), ["y"])].max().mean()),
     )
 
+    # Filter embeddings and assignments
+    if isinstance(embedding, dict):
+        embedding = umap.UMAP(n_components=2).fit_transform(
+            embedding[experiment_id].numpy()
+        )
+    if isinstance(cluster_assignments, dict):
+        cluster_assignments = cluster_assignments[experiment_id].numpy().argmax(axis=1)
+
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
+
+        data = data[: embedding.shape[0]]
 
         if isinstance(embedding, np.ndarray):
             assert (
@@ -449,7 +772,7 @@ def animate_skeleton(
     if embedding is not None:
         ax1 = fig.add_subplot(121)
 
-        plot_embeddings(concat_embedding, cluster_assignments, ax1, show=False)
+        _scatter_embeddings(concat_embedding, cluster_assignments, ax1, show=False)
 
         # Plot current position
         umap_scatter = {}

@@ -245,6 +245,7 @@ class Project:
             os.makedirs(
                 os.path.join(self.project_path, self.project_name, "Coordinates")
             )
+            os.makedirs(os.path.join(self.project_path, self.project_name, "Figures"))
 
             # Copy videos and tables to the new directories
             for vid in os.listdir(self.video_path):

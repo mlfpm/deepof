@@ -8,10 +8,6 @@ Data structures and functions for analyzing supervised and unsupervised model re
 
 """
 
-import numpy as np
-import ot
-import pandas as pd
-import tqdm
 from collections import Counter, defaultdict
 from itertools import product
 from joblib import delayed, Parallel
@@ -19,19 +15,29 @@ from multiprocessing import cpu_count
 from scipy import stats
 from seglearn import feature_functions
 from seglearn.transform import FeatureRep
-from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from typing import Any, List, NewType, Union
+import numpy as np
+import ot
+import pandas as pd
+import tqdm
 
 import deepof.data
 
+# DEFINE CUSTOM ANNOTATED TYPES #
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
+
 
 def get_time_on_cluster(
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict,
     normalize: bool = True,
     reduce_dim: bool = False,
 ):
@@ -89,7 +95,7 @@ def get_time_on_cluster(
 
 
 def get_aggregated_embedding(
-    embedding: deepof.data.table_dict, reduce_dim: bool = False, agg: str = "mean"
+    embedding: table_dict, reduce_dim: bool = False, agg: str = "mean"
 ):
     """
 
@@ -134,9 +140,9 @@ def get_aggregated_embedding(
 
 
 def select_time_bin(
-    embedding: deepof.data.table_dict,
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
+    embedding: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict,
     bin_size: int = 0,
     bin_index: int = 0,
     precomputed: np.ndarray = None,
@@ -197,9 +203,9 @@ def select_time_bin(
 
 
 def condition_distance_binning(
-    embedding: deepof.data.table_dict,
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
+    embedding: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict,
     exp_conditions: dict,
     start_bin: int = None,
     end_bin: int = None,
@@ -295,9 +301,9 @@ def condition_distance_binning(
 
 
 def separation_between_conditions(
-    cur_embedding: deepof.data.table_dict,
-    cur_soft_counts: deepof.data.table_dict,
-    cur_breaks: deepof.data.table_dict,
+    cur_embedding: table_dict,
+    cur_soft_counts: table_dict,
+    cur_breaks: table_dict,
     exp_conditions: dict,
     agg: str,
     metric: str,
@@ -374,9 +380,9 @@ def separation_between_conditions(
 
 
 def cluster_enrichment_across_conditions(
-    embedding: deepof.data.table_dict,
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
+    embedding: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict,
     exp_conditions: dict,
     bin_size: int = None,
     bin_index: int = None,
@@ -457,9 +463,9 @@ def get_transitions(state_sequence: list, n_states: int):
 
 
 def compute_transition_matrix_per_condition(
-    embedding: deepof.data.table_dict,
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
+    embedding: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict,
     exp_conditions: dict,
     bin_size: int = None,
     bin_index: int = None,
@@ -568,7 +574,7 @@ def compute_steady_state(
 
 
 def align_deepof_kinematics_with_unsupervised_labels(
-    deepof_project: deepof.data.project,
+    deepof_project: project,
     kin_derivative: int = 1,
     include_distances: bool = True,
     include_angles: bool = True,
@@ -698,10 +704,10 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
 
 
 def annotate_time_chunks(
-    deepof_project: deepof.data.project,
-    soft_counts: deepof.data.table_dict,
-    breaks: deepof.data.table_dict,
-    supervised_annotations: deepof.data.table_dict = None,
+    deepof_project: project,
+    soft_counts: table_dict,
+    breaks: table_dict,
+    supervised_annotations: table_dict = None,
     animal_id: str = None,
     kin_derivative: int = 1,
     include_distances: bool = True,
@@ -715,7 +721,7 @@ def annotate_time_chunks(
     of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
 
     Args:
-        deepof_project: deepof.data.Project object.
+        deepof_project: Project object.
         soft_counts: matrix with soft cluster assignments produced by the unsupervised pipeline.
         breaks: the breaks for each condition.
         supervised_annotations: set of supervised annotations produced by the supervised pipeline withing deepof.

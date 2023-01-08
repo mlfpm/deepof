@@ -378,7 +378,7 @@ if __name__ == "__main__":
                 curr_prep = curr_prep[0]
 
             # Get breakpoints per video
-            deep_breaks_per_video[key] = np.all(curr_prep != 0, axis=2).sum(axis=1)
+            deep_breaks_per_video[key] = (~np.all(curr_prep == 0, axis=2)).sum(axis=1)
 
             # Get current model weights
             curr_weights = trained_models.get_weights()
