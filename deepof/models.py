@@ -21,8 +21,7 @@ import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-import deepof.unsupervised_utils
-from deepof import unsupervised_utils
+import deepof.model_utils
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -63,81 +62,76 @@ def get_recurrent_encoder(
     a = Input(shape=edge_feature_shape)
 
     if use_gnn:
-
-        # Instantiate spatial graph block
-        x_flat = tf.transpose(
+        x_reshaped = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
                 [
                     -1,
                     adjacency_matrix.shape[-1],
+                    x.shape[1],
                     input_shape[-1] // adjacency_matrix.shape[-1],
                 ][::-1],
             )
         )
-        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
+        a_reshaped = tf.transpose(
+            tf.reshape(
+                tf.transpose(a),
+                [
+                    -1,
+                    edge_feature_shape[-1],
+                    a.shape[1],
+                    1,
+                ][::-1],
+            )
+        )
 
-        # Process adjacency matrix
-        gcn = gcn_filter(adjacency_matrix)
-        incidence = incidence_matrix(adjacency_matrix)
-        linegraph = line_graph(incidence)
+    else:
+        x_reshaped = tf.expand_dims(x, axis=1)
 
-        x_nodes, x_edges = CensNetConv(
+    # Instantiate temporal RNN block
+    encoder = deepof.model_utils.get_recurrent_block(
+        x_reshaped, latent_dim, gru_unroll, bidirectional_merge
+    )(x_reshaped)
+
+    # Instantiate spatial graph block
+    if use_gnn:
+
+        # Embed edge features too
+        a_encoder = deepof.model_utils.get_recurrent_block(
+            a_reshaped, latent_dim, gru_unroll, bidirectional_merge
+        )(a_reshaped)
+
+        spatial_block = CensNetConv(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
-        )([x_flat, (gcn, linegraph, incidence), a_flat])
+        )
+
+        # Process adjacency matrix
+        laplacian, edge_laplacian, incidence = spatial_block.preprocess(
+            adjacency_matrix
+        )
+
+        # Get and concatenate node and edge embeddings
+        x_nodes, x_edges = spatial_block(
+            [encoder, (laplacian, edge_laplacian, incidence), a_encoder], mask=None
+        )
 
         x_nodes = tf.reshape(
             x_nodes,
-            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
+            [-1, adjacency_matrix.shape[-1] * latent_dim],
         )
 
         x_edges = tf.reshape(
             x_edges,
-            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+            [-1, edge_feature_shape[-1] * latent_dim],
         )
 
-        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
+        encoder = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
-        x_spatial = x
+        encoder = tf.squeeze(encoder, axis=1)
 
-    # Instantiate temporal RNN block
-    encoder = tf.keras.layers.Conv1D(
-        filters=2 * latent_dim,
-        kernel_size=5,
-        strides=1,  # Increased strides yield shorter sequences
-        padding="same",
-        activation="relu",
-        kernel_initializer=he_uniform(),
-        use_bias=False,
-    )(x_spatial)
-    encoder = tf.keras.layers.Masking(mask_value=0.0)(encoder)
-    encoder = Bidirectional(
-        GRU(
-            2 * latent_dim,
-            activation="tanh",
-            recurrent_activation="sigmoid",
-            return_sequences=True,
-            unroll=gru_unroll,
-            use_bias=True,
-        ),
-        merge_mode=bidirectional_merge,
-    )(encoder)
-    encoder = LayerNormalization()(encoder)
-    encoder = Bidirectional(
-        GRU(
-            latent_dim,
-            activation="tanh",
-            recurrent_activation="sigmoid",
-            return_sequences=False,
-            unroll=gru_unroll,
-            use_bias=True,
-        ),
-        merge_mode=bidirectional_merge,
-    )(encoder)
-    encoder = LayerNormalization()(encoder)
     encoder_output = tf.keras.layers.Dense(latent_dim, kernel_initializer="he_uniform")(
         encoder
     )
@@ -209,7 +203,7 @@ def get_recurrent_decoder(
     )(generator)
     generator = LayerNormalization()(generator)
 
-    x_decoded = deepof.unsupervised_utils.ProbabilisticDecoder(input_shape)(
+    x_decoded = deepof.model_utils.ProbabilisticDecoder(input_shape)(
         [generator, validity_mask]
     )
 
@@ -468,7 +462,7 @@ def get_transformer_encoder(
     else:
         x_spatial = x
 
-    transformer_embedding = deepof.unsupervised_utils.TransformerEncoder(
+    transformer_embedding = deepof.model_utils.TransformerEncoder(
         num_layers=num_layers,
         seq_dim=input_shape[-1],
         key_dim=input_shape[-1],

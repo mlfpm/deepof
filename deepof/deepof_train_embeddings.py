@@ -15,7 +15,7 @@ import pickle
 import networkx as nx
 import numpy as np
 import deepof.data
-import deepof.unsupervised_utils
+import deepof.model_utils
 import deepof.utils
 
 if __name__ == "__main__":
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     ], "Invalid input type. Type python model_training.py -h for help."
 
     # Loads model hyperparameters and treatment conditions, if available
-    treatment_dict = deepof.unsupervised_utils.load_treatments(train_path)
+    treatment_dict = deepof.model_utils.load_treatments(train_path)
 
     # Logs hyperparameters  if specified on the --logparam CLI argument
     logparam = {"encoding": encoding_size, "k": n_components}
@@ -459,7 +459,7 @@ if __name__ == "__main__":
             run_ID,
             tensorboard_callback,
             reduce_lr_callback,
-        ) = deepof.unsupervised_utils.get_callbacks(
+        ) = deepof.model_utils.get_callbacks(
             input_type=input_type,
             cp=False,
             logparam=logparam,
@@ -468,7 +468,7 @@ if __name__ == "__main__":
             run=run,
         )
 
-        best_hyperparameters, best_model = deepof.unsupervised_utils.tune_search(
+        best_hyperparameters, best_model = deepof.model_utils.tune_search(
             data=[X_train, y_train, X_val, y_val],
             batch_size=batch_size,
             encoding_size=encoding_size,
@@ -479,7 +479,7 @@ if __name__ == "__main__":
             callbacks=[
                 tensorboard_callback,
                 reduce_lr_callback,
-                deepof.unsupervised_utils.CustomStopper(
+                deepof.model_utils.CustomStopper(
                     monitor="val_loss",
                     patience=5,
                     restore_best_weights=True,

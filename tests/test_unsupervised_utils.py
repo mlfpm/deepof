@@ -18,7 +18,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import deepof.data
-import deepof.unsupervised_utils
+import deepof.model_utils
 
 
 def test_load_treatments():

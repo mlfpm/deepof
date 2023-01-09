@@ -12,6 +12,13 @@ from datetime import date, datetime
 from functools import partial
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
+from tensorflow.keras.initializers import he_uniform
+from tensorflow.keras.layers import (
+    Bidirectional,
+    GRU,
+    LayerNormalization,
+    TimeDistributed,
+)
 from typing import Tuple, Union, Any, List
 import deepof.hypermodels
 import deepof.models
@@ -411,6 +418,65 @@ def get_angles(pos: int, i: int, d_model: int):
 
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
     return pos * angle_rates
+
+
+def get_recurrent_block(
+    x: tf.Tensor, latent_dim: int, gru_unroll: bool, bidirectional_merge: str
+):
+    """Builds a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.
+
+    Args:
+        x (tf.Tensor): Input tensor.
+        latent_dim (int): Number of dimensions of the output tensor.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
+        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+
+    Returns:
+        tf.keras.models.Model object with the specified architecture.
+
+    """
+    encoder = TimeDistributed(
+        tf.keras.layers.Conv1D(
+            filters=2 * latent_dim,
+            kernel_size=5,
+            strides=1,  # Increased strides yield shorter sequences
+            padding="same",
+            activation="relu",
+            kernel_initializer=he_uniform(),
+            use_bias=False,
+        )
+    )(x)
+    encoder = tf.keras.layers.Masking(mask_value=0.0)(encoder)
+    encoder = TimeDistributed(
+        Bidirectional(
+            GRU(
+                2 * latent_dim,
+                activation="tanh",
+                recurrent_activation="sigmoid",
+                return_sequences=True,
+                unroll=gru_unroll,
+                use_bias=True,
+            ),
+            merge_mode=bidirectional_merge,
+        )
+    )(encoder)
+    encoder = LayerNormalization()(encoder)
+    encoder = TimeDistributed(
+        Bidirectional(
+            GRU(
+                latent_dim,
+                activation="tanh",
+                recurrent_activation="sigmoid",
+                return_sequences=False,
+                unroll=gru_unroll,
+                use_bias=True,
+            ),
+            merge_mode=bidirectional_merge,
+        )
+    )(encoder)
+    encoder = LayerNormalization()(encoder)
+
+    return tf.keras.models.Model(x, encoder)
 
 
 def positional_encoding(position: int, d_model: int):

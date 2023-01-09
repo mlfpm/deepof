@@ -288,8 +288,8 @@ def plot_gantt(
 
     hard_counts = soft_counts[experiment_id].numpy().argmax(axis=1)
     gantt = np.zeros([hard_counts.max(), hard_counts.shape[0]])
-    colors = np.repeat(
-        sns.color_palette("tab20").as_hex(), np.ceil(gantt.shape[0] / 20)
+    colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()), int(np.ceil(gantt.shape[0] / 20))
     )
 
     for cluster, color in zip(range(hard_counts.max()), colors):
@@ -346,7 +346,7 @@ def plot_embeddings(
     soft_counts: table_dict,
     breaks: table_dict = None,
     # Quality selection parameters
-    min_confidence: float = 0.3,
+    min_confidence: float = 0.0,
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
@@ -437,11 +437,11 @@ def plot_embeddings(
         # value to see a more global picture
 
         concat_embeddings = LinearDiscriminantAnalysis(
-            n_components=concat_embeddings.shape[1]
+            n_components=np.min(
+                [concat_embeddings.shape[1], len(set(cluster_assignments)) - 1]
+            ),
         ).fit_transform(concat_embeddings, cluster_assignments)
-        reduced_embeddings = umap.UMAP(
-            min_dist=0.99, n_components=2, n_neighbors=250
-        ).fit_transform(
+        reduced_embeddings = umap.UMAP(min_dist=0.99, n_components=2,).fit_transform(
             concat_embeddings,
         )
 
@@ -493,6 +493,7 @@ def plot_embeddings(
                 "experimental condition": concat_hue,
             }
         )
+
         embedding_dataset.index = coordinates.get_exp_conditions.keys()
         embedding_dataset.sort_values("experimental condition", inplace=True)
 
@@ -901,7 +902,7 @@ def animate_skeleton(
         fig,
         func=animation_frame,
         frames=np.minimum(data.shape[0], frame_limit),
-        interval=50,
+        interval=2000 // coordinates._frame_rate,
     )
 
     ax2.set_title(

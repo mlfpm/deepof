@@ -42,9 +42,9 @@ import tensorflow as tf
 import umap
 import warnings
 
-import deepof.unsupervised_utils
+import deepof.model_utils
 import deepof.models
-import deepof.supervised_utils
+import deepof.annotation_utils
 import deepof.utils
 import deepof.visuals
 
@@ -1461,7 +1461,7 @@ class Coordinates:
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
-            supervised_tags = deepof.supervised_utils.supervised_tagging(
+            supervised_tags = deepof.annotation_utils.supervised_tagging(
                 self,
                 raw_coords=raw_coords,
                 coords=coords,
@@ -1483,7 +1483,7 @@ class Coordinates:
 
             def output_video(idx):
                 """Outputs a single annotated video. Enclosed in a function to enable parallelization."""
-                deepof.supervised_utils.annotate_video(
+                deepof.annotation_utils.annotate_video(
                     self,
                     tag_dict=tag_dict[idx],
                     vid_index=list(self._tables.keys()).index(idx),
@@ -1587,7 +1587,7 @@ class Coordinates:
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
-        trained_models = deepof.unsupervised_utils.autoencoder_fitting(
+        trained_models = deepof.model_utils.autoencoder_fitting(
             preprocessed_object=preprocessed_object,
             adjacency_matrix=adjacency_matrix,
             embedding_model=embedding_model,

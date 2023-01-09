@@ -21,7 +21,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 
 import deepof.data
-import deepof.supervised_utils
+import deepof.annotation_utils
 
 
 @settings(deadline=None)
@@ -77,7 +77,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
         names=["bodyparts", "coords"],
     )
     pos_dframe.columns = idx
-    close_contact = deepof.supervised_utils.close_double_contact(
+    close_contact = deepof.annotation_utils.close_double_contact(
         pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
     )
     assert close_contact.dtype == bool
@@ -115,7 +115,7 @@ def test_climb_wall(center, axes, angle, tol):
         .get_coords()
     )
 
-    climb1 = deepof.supervised_utils.climb_wall(
+    climb1 = deepof.annotation_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
     )
     climb2 = deepof.supervised_utils.climb_wall(
@@ -167,7 +167,7 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         dig_clf = pickle.load(handle)
 
-    huddling = deepof.supervised_utils.huddle(
+    huddling = deepof.annotation_utils.huddle(
         pos_dframe, speed_dframe, huddle_estimator=huddle_clf
     )
     digging = deepof.supervised_utils.dig(
@@ -274,7 +274,7 @@ def test_get_hparameters():
 def test_frame_corners(w, h):
     assert len(deepof.supervised_utils.frame_corners(w, h)) == 4
     assert (
-        deepof.supervised_utils.frame_corners(w, h, {"downright": "test"})["downright"]
+        deepof.annotation_utils.frame_corners(w, h, {"downright": "test"})["downright"]
         == "test"
     )
 
