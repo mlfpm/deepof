@@ -45,7 +45,8 @@ def get_recurrent_encoder(
 
     Args:
         - input_shape (tuple): shape of the node features for the input data. Should be time x nodes x features.
-        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers.
+        Should be time x edges x features.
         - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
         - latent_dim (int): dimension of the latent space.
         - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
@@ -256,59 +257,98 @@ def get_TCN_encoder(
     a = Input(shape=edge_feature_shape)
 
     if use_gnn:
-
-        # Instantiate spatial graph block
-        x_flat = tf.transpose(
+        x_reshaped = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
                 [
                     -1,
                     adjacency_matrix.shape[-1],
+                    x.shape[1],
                     input_shape[-1] // adjacency_matrix.shape[-1],
                 ][::-1],
             )
         )
-        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
+        a_reshaped = tf.transpose(
+            tf.reshape(
+                tf.transpose(a),
+                [
+                    -1,
+                    edge_feature_shape[-1],
+                    a.shape[1],
+                    1,
+                ][::-1],
+            )
+        )
 
-        # Process adjacency matrix
-        gcn = gcn_filter(adjacency_matrix)
-        incidence = incidence_matrix(adjacency_matrix)
-        linegraph = line_graph(incidence)
+    else:
+        x_reshaped = tf.expand_dims(x, axis=1)
 
-        x_nodes, x_edges = CensNetConv(
+    encoder = TimeDistributed(
+        tcn.TCN(
+            conv_filters,
+            kernel_size,
+            conv_stacks,
+            conv_dilations,
+            padding,
+            use_skip_connections,
+            dropout_rate,
+            return_sequences=False,
+            activation=activation,
+            kernel_initializer="random_normal",
+            use_batch_norm=True,
+        )
+    )(x_reshaped)
+
+    # Instantiate spatial graph block
+    if use_gnn:
+
+        # Embed edge features too
+        a_encoder = TimeDistributed(
+            tcn.TCN(
+                conv_filters,
+                kernel_size,
+                conv_stacks,
+                conv_dilations,
+                padding,
+                use_skip_connections,
+                dropout_rate,
+                return_sequences=False,
+                activation=activation,
+                kernel_initializer="random_normal",
+                use_batch_norm=True,
+            )
+        )(a_reshaped)
+
+        spatial_block = CensNetConv(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
-        )([x_flat, (gcn, linegraph, incidence), a_flat])
+        )
+
+        # Process adjacency matrix
+        laplacian, edge_laplacian, incidence = spatial_block.preprocess(
+            adjacency_matrix
+        )
+
+        # Get and concatenate node and edge embeddings
+        x_nodes, x_edges = spatial_block(
+            [encoder, (laplacian, edge_laplacian, incidence), a_encoder], mask=None
+        )
 
         x_nodes = tf.reshape(
             x_nodes,
-            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
+            [-1, adjacency_matrix.shape[-1] * latent_dim],
         )
 
         x_edges = tf.reshape(
             x_edges,
-            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+            [-1, edge_feature_shape[-1] * latent_dim],
         )
 
-        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
+        encoder = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
-        x_spatial = x
-
-    encoder = tcn.TCN(
-        conv_filters,
-        kernel_size,
-        conv_stacks,
-        conv_dilations,
-        padding,
-        use_skip_connections,
-        dropout_rate,
-        return_sequences=False,
-        activation=activation,
-        kernel_initializer="random_normal",
-        use_batch_norm=True,
-    )(x_spatial)
+        encoder = tf.squeeze(encoder, axis=1)
 
     encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)
@@ -380,7 +420,7 @@ def get_TCN_decoder(
         use_batch_norm=True,
     )(generator)
 
-    x_decoded = deepof.unsupervised_utils.ProbabilisticDecoder(input_shape)(
+    x_decoded = deepof.model_utils.ProbabilisticDecoder(input_shape)(
         [generator, validity_mask]
     )
 
@@ -512,12 +552,9 @@ def get_transformer_decoder(
     generator = tf.keras.layers.RepeatVector(input_shape[0])(generator)
 
     # Get masks for generated output
-    _, look_ahead_mask, padding_mask = deepof.unsupervised_utils.create_masks(generator)
+    _, look_ahead_mask, padding_mask = deepof.model_utils.create_masks(generator)
 
-    (
-        transformer_embedding,
-        attention_weights,
-    ) = deepof.unsupervised_utils.TransformerDecoder(
+    (transformer_embedding, attention_weights,) = deepof.model_utils.TransformerDecoder(
         num_layers=num_layers,
         seq_dim=input_shape[-1],
         key_dim=input_shape[-1],
@@ -533,7 +570,7 @@ def get_transformer_decoder(
         padding_mask=padding_mask,
     )
 
-    x_decoded = deepof.unsupervised_utils.ProbabilisticDecoder(input_shape)(
+    x_decoded = deepof.model_utils.ProbabilisticDecoder(input_shape)(
         [transformer_embedding, validity_mask]
     )
 
@@ -593,7 +630,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         # Add a disentangling penalty to the embeddings
         if self.kmeans:
-            kmeans_loss = unsupervised_utils.compute_kmeans_loss(
+            kmeans_loss = deepof.model_utils.compute_kmeans_loss(
                 x, weight=self.kmeans, batch_size=input_shape[0]
             )
             self.add_loss(kmeans_loss)
@@ -1069,7 +1106,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             activity_regularizer=tf.keras.regularizers.l2(0.1),
         )
 
-        self.cluster_control_layer = unsupervised_utils.ClusterControl(
+        self.cluster_control_layer = deepof.model_utils.ClusterControl(
             batch_size=self.batch_size,
             n_components=self.n_components,
             encoding_dim=self.latent_dim,
@@ -1174,7 +1211,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             z = self.cluster_control_layer([z, z_cat])
 
         if self.kmeans:
-            kmeans_loss = unsupervised_utils.compute_kmeans_loss(
+            kmeans_loss = deepof.model_utils.compute_kmeans_loss(
                 z, weight=self.kmeans, batch_size=self.batch_size
             )
             self.add_loss(kmeans_loss)
@@ -1213,7 +1250,7 @@ def get_vade(
             - kl_warmup: Number of iterations during which to warm up the KL divergence.
             - kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
             - mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
-            - kmeans_loss (float): weight of the Gram matrix loss as described in deepof.unsupervised_utils.compute_kmeans_loss.
+            - kmeans_loss (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.
             - reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
 
@@ -1520,7 +1557,7 @@ class VaDE(tf.keras.models.Model):
                 soft_counts = self.grouper([x, a], training=True)
                 soft_counts_regulrization = (
                     self.reg_cat_clusters
-                    * deepof.unsupervised_utils.cluster_frequencies_regularizer(
+                    * deepof.model_utils.cluster_frequencies_regularizer(
                         soft_counts=soft_counts, k=self.n_components
                     )
                 )
@@ -1583,7 +1620,7 @@ class VaDE(tf.keras.models.Model):
             soft_counts = self.grouper([x, a], training=False)
             soft_counts_regulrization = (
                 self.reg_cat_clusters
-                * deepof.unsupervised_utils.cluster_frequencies_regularizer(
+                * deepof.model_utils.cluster_frequencies_regularizer(
                     soft_counts=soft_counts, k=self.n_components
                 )
             )
@@ -1763,7 +1800,7 @@ class Contrastive(tf.keras.models.Model):
                 contrastive_loss,
                 mean_sim,
                 neg_sim,
-            ) = unsupervised_utils.select_contrastive_loss(
+            ) = model_utils.select_contrastive_loss(
                 enc_pos,
                 enc_neg,
                 similarity=self.similarity_function,
@@ -1819,11 +1856,7 @@ class Contrastive(tf.keras.models.Model):
         enc_neg = tf.math.l2_normalize(enc_neg, axis=1)
 
         # loss, mean_sim = ls.dcl_loss_fn(zis, zjs, temperature, lfn)
-        (
-            contrastive_loss,
-            mean_sim,
-            neg_sim,
-        ) = unsupervised_utils.select_contrastive_loss(
+        (contrastive_loss, mean_sim, neg_sim,) = model_utils.select_contrastive_loss(
             enc_pos,
             enc_neg,
             similarity=self.similarity_function,

@@ -675,13 +675,21 @@ def animate_skeleton(
         np.abs(data.loc[:, (slice("x"), ["y"])].max().mean()),
     )
 
-    # Filter embeddings and assignments
-    if isinstance(embedding, dict):
-        embedding = umap.UMAP(n_components=2).fit_transform(
-            embedding[experiment_id].numpy()
-        )
+    # Filter assignments and embeddings
     if isinstance(cluster_assignments, dict):
         cluster_assignments = cluster_assignments[experiment_id].numpy().argmax(axis=1)
+
+    if isinstance(embedding, dict):
+
+        embedding = embedding[experiment_id].numpy()
+        embedding = LinearDiscriminantAnalysis(
+            n_components=np.min(
+                [embedding.shape[1], len(set(cluster_assignments)) - 1]
+            ),
+        ).fit_transform(embedding, cluster_assignments)
+        embedding = umap.UMAP(min_dist=0.99, n_components=2,).fit_transform(
+            embedding,
+        )
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
