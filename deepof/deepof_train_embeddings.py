@@ -197,6 +197,13 @@ if __name__ == "__main__":
         default=150,
     )
     parser.add_argument(
+        "--load-project",
+        "-load",
+        help="If provided, loads an existing project instead of creating a new one. Use to avoid recomputing.",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
         "--run",
         "-rid",
         help="Sets the run ID of the experiment (for naming output files only). "
@@ -233,6 +240,7 @@ if __name__ == "__main__":
         window_size = args.window_size
         window_step = args.window_step
         max_epochs = args.max_epochs
+        load_project = args.load_project
         run = args.run
 
     except TypeError:
@@ -254,21 +262,28 @@ if __name__ == "__main__":
     # Logs hyperparameters  if specified on the --logparam CLI argument
     logparam = {"encoding": encoding_size, "k": n_components}
 
-    # noinspection PyTypeChecker
-    project_coords = deepof.data.Project(
-        animal_ids=animal_ids.split(","),
-        arena="circular-autodetect",
-        video_scale=arena_dims,
-        enable_iterative_imputation=True,
-        exclude_bodyparts=exclude_bodyparts,
-        exp_conditions=treatment_dict,
-        project_path=train_path,
-        smooth_alpha=smooth_alpha,
-        table_format="autodetect",
-        video_format=".mp4",
-    )
+    if load_project is None:
+        # noinspection PyTypeChecker
+        project_coords = deepof.data.Project(
+            animal_ids=animal_ids.split(","),
+            arena="circular-autodetect",
+            video_scale=arena_dims,
+            enable_iterative_imputation=True,
+            exclude_bodyparts=exclude_bodyparts,
+            exp_conditions=treatment_dict,
+            project_path=train_path,
+            video_path=os.path.join(train_path, "Videos"),
+            table_path=os.path.join(train_path, "Tables"),
+            project_name="deepof_experiments",
+            smooth_alpha=smooth_alpha,
+            table_format="autodetect",
+            video_format=".mp4",
+        )
 
-    project_coords = project_coords.create(verbose=True)
+        project_coords = project_coords.create(verbose=True)
+
+    else:
+        project_coords = deepof.data.load_project(load_project)
 
     print("Preprocessing data...")
 

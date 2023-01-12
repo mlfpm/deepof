@@ -462,55 +462,94 @@ def get_transformer_encoder(
     a = Input(shape=edge_feature_shape)
 
     if use_gnn:
-
-        # Instantiate spatial graph block
-        x_flat = tf.transpose(
+        x_reshaped = tf.transpose(
             tf.reshape(
                 tf.transpose(x),
                 [
                     -1,
                     adjacency_matrix.shape[-1],
+                    x.shape[1],
                     input_shape[-1] // adjacency_matrix.shape[-1],
                 ][::-1],
             )
         )
-        a_flat = tf.expand_dims(tf.reshape(a, [-1, edge_feature_shape[-1]]), axis=-1)
+        a_reshaped = tf.transpose(
+            tf.reshape(
+                tf.transpose(a),
+                [
+                    -1,
+                    edge_feature_shape[-1],
+                    a.shape[1],
+                    1,
+                ][::-1],
+            )
+        )
 
-        # Process adjacency matrix
-        gcn = gcn_filter(adjacency_matrix)
-        incidence = incidence_matrix(adjacency_matrix)
-        linegraph = line_graph(incidence)
+    else:
+        x_reshaped = tf.expand_dims(x, axis=1)
 
-        x_nodes, x_edges = CensNetConv(
+    transformer_embedding = TimeDistributed(
+        deepof.model_utils.TransformerEncoder(
+            num_layers=num_layers,
+            seq_dim=input_shape[-1],
+            key_dim=input_shape[-1],
+            num_heads=num_heads,
+            dff=dff,
+            maximum_position_encoding=input_shape[0],
+            rate=dropout_rate,
+        )
+    )(x_reshaped, training=False)
+
+    if use_gnn:
+
+        # Embed edge features too
+        transformer_a_embedding = TimeDistributed(
+            deepof.model_utils.TransformerEncoder(
+                num_layers=num_layers,
+                seq_dim=input_shape[-1],
+                key_dim=input_shape[-1],
+                num_heads=num_heads,
+                dff=dff,
+                maximum_position_encoding=input_shape[0],
+                rate=dropout_rate,
+            )
+        )(a_reshaped, training=False)
+
+        spatial_block = CensNetConv(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
-        )([x_flat, (gcn, linegraph, incidence), a_flat])
+        )
+
+        # Process adjacency matrix
+        laplacian, edge_laplacian, incidence = spatial_block.preprocess(
+            adjacency_matrix
+        )
+
+        # Get and concatenate node and edge embeddings
+        x_nodes, x_edges = spatial_block(
+            [
+                transformer_embedding,
+                (laplacian, edge_laplacian, incidence),
+                transformer_a_embedding,
+            ],
+            mask=None,
+        )
 
         x_nodes = tf.reshape(
             x_nodes,
-            [-1, input_shape[0]] + [adjacency_matrix.shape[-1] * latent_dim],
+            [-1, adjacency_matrix.shape[-1] * latent_dim],
         )
 
         x_edges = tf.reshape(
             x_edges,
-            [-1, input_shape[0]] + [edge_feature_shape[-1] * latent_dim],
+            [-1, edge_feature_shape[-1] * latent_dim],
         )
 
-        x_spatial = tf.concat([x_nodes, x_edges], axis=-1)
+        transformer_embedding = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
-        x_spatial = x
-
-    transformer_embedding = deepof.model_utils.TransformerEncoder(
-        num_layers=num_layers,
-        seq_dim=input_shape[-1],
-        key_dim=input_shape[-1],
-        num_heads=num_heads,
-        dff=dff,
-        maximum_position_encoding=input_shape[0],
-        rate=dropout_rate,
-    )(x_spatial, training=False)
+        transformer_embedding = tf.squeeze(encoder, axis=1)
 
     encoder = tf.reshape(transformer_embedding, [-1, input_shape[0] * input_shape[1]])
     encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(encoder)
