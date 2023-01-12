@@ -10,6 +10,8 @@ usage: python -m examples.model_training -h
 """
 
 import argparse
+import calendar
+import time
 import os
 import pickle
 import networkx as nx
@@ -213,6 +215,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    current_GMT = time.gmtime()
+    time_stamp = calendar.timegm(current_GMT)
 
     try:
         animal_ids = args.animal_ids
@@ -274,7 +278,7 @@ if __name__ == "__main__":
             project_path=train_path,
             video_path=os.path.join(train_path, "Videos"),
             table_path=os.path.join(train_path, "Tables"),
-            project_name="deepof_experiments",
+            project_name="deepof_experiments_{}".format(time_stamp),
             smooth_alpha=smooth_alpha,
             table_format="autodetect",
             video_format=".mp4",
