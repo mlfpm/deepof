@@ -272,7 +272,7 @@ if __name__ == "__main__":
             animal_ids=animal_ids.split(","),
             arena="circular-autodetect",
             video_scale=arena_dims,
-            enable_iterative_imputation=True,
+            enable_iterative_imputation=250,
             exclude_bodyparts=exclude_bodyparts,
             exp_conditions=treatment_dict,
             project_path=train_path,
