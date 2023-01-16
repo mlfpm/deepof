@@ -2067,27 +2067,11 @@ class TableDict(dict):
             # Scale each experiment independently, to control for animal size
             for key, tab in table_temp.items():
 
-                exp_temp = tab.to_numpy()
-
-                if self._propagate_labels:
-                    exp_temp = exp_temp[:, :-1]
-
-                if self._propagate_annotations:
-                    exp_temp = exp_temp[
-                        :, : -list(self._propagate_annotations.values())[0].shape[1]
-                    ]
-
-                # Scale each modality separately using a custom function
-                exp_temp = deepof.utils.scale_animal(
-                    exp_temp, self._connectivity, scale
-                )
-
-                current_tab = np.concatenate(
-                    [
-                        exp_temp,
-                        tab.copy().to_numpy()[:, exp_temp.shape[1] :],
-                    ],
-                    axis=1,
+                current_tab = deepof.utils.scale_table(
+                    coordinates=self,
+                    feature_array=tab,
+                    scale=scale,
+                    global_scaler=None,
                 )
 
                 table_temp[key] = pd.DataFrame(
@@ -2109,24 +2093,11 @@ class TableDict(dict):
 
             for key, tab in table_temp.items():
 
-                exp_temp = tab.to_numpy()
-
-                if self._propagate_labels:
-                    exp_temp = exp_temp[:, :-1]
-
-                if self._propagate_annotations:
-                    exp_temp = exp_temp[
-                        :, : -list(self._propagate_annotations.values())[0].shape[1]
-                    ]
-
-                exp_temp = global_scaler.transform(exp_temp)
-
-                current_tab = np.concatenate(
-                    [
-                        exp_temp,
-                        tab.copy().to_numpy()[:, exp_temp.shape[1] :],
-                    ],
-                    axis=1,
+                current_tab = deepof.utils.scale_table(
+                    coordinates=self,
+                    feature_array=tab,
+                    scale=scale,
+                    global_scaler=global_scaler,
                 )
 
                 table_temp[key] = pd.DataFrame(
@@ -2356,8 +2327,6 @@ if __name__ == "__main__":
 # TODO: Fix issues and add supervised parameters (time in zone, etc).
 # TODO: Make rules universal. Measures shouldn't be necessary.
 # TODO: Label more data for supervised model training using SimBA, and integrate SimBA models
-# TODO: Digging and huddling could now be examples of SimBA trained and loaded models.
-# TODO: Think about it, but we could add three pipelines: rule based, SimBA supervised, and unsupervised embeddings
 
 # Visualization
 # TODO: Finish visualization pipeline (Projections and time-wise analyses)

@@ -303,7 +303,7 @@ if __name__ == "__main__":
             selected_id=animal_to_preprocess,
         )
 
-        preprocessed_object = to_preprocess.preprocess(
+        preprocessed_object, global_scaler = to_preprocess.preprocess(
             window_size=window_size,
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,
@@ -318,7 +318,12 @@ if __name__ == "__main__":
     elif input_type == "graph":
 
         # Get graph dataset
-        preprocessed_object, G, to_preprocess = project_coords.get_graph_dataset(
+        (
+            preprocessed_object,
+            G,
+            to_preprocess,
+            global_scaler,
+        ) = project_coords.get_graph_dataset(
             animal_id=animal_to_preprocess,
             center="Center",
             align="Spine_1",
@@ -376,6 +381,7 @@ if __name__ == "__main__":
                     window_size=window_size,
                     window_step=window_step,
                     automatic_changepoints=automatic_changepoints,
+                    pretrained_scaler=global_scaler,
                     scale="standard",
                     test_videos=0,
                     shuffle=False,
@@ -389,6 +395,7 @@ if __name__ == "__main__":
                     window_size=window_size,
                     window_step=window_step,
                     automatic_changepoints=automatic_changepoints,
+                    pretrained_scaler=global_scaler,
                     scale="standard",
                     test_videos=0,
                     shuffle=False,

@@ -435,6 +435,49 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     return aligned_trajs
 
 
+def scale_table(
+    coordinates: coordinates,
+    feature_array: np.ndarray,
+    scale: str,
+    global_scaler: Any = None,
+):
+    """Scales features in a table controlling for both individual body size and interanimal variability.
+
+    Args:
+        coordinates (coordinates): a deepof coordinates object.
+        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
+        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
+        global_scaler (Any): global scaler, fit in the whole dataset.
+
+    """
+    exp_temp = feature_array.to_numpy()
+
+    if coordinates._propagate_labels:
+        exp_temp = exp_temp[:, :-1]
+
+    if coordinates._propagate_annotations:
+        exp_temp = exp_temp[
+            :, : -list(coordinates._propagate_annotations.values())[0].shape[1]
+        ]
+
+    if global_scaler is None:
+        # Scale each modality separately using a custom function
+        exp_temp = scale_animal(exp_temp, coordinates._connectivity, scale)
+    else:
+        # Scale all experiments together, to control for differential stats
+        exp_temp = global_scaler.transform(exp_temp)
+
+    current_tab = np.concatenate(
+        [
+            exp_temp,
+            feature_array.copy().to_numpy()[:, feature_array.shape[1] :],
+        ],
+        axis=1,
+    )
+
+    return current_tab
+
+
 def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
     """Scales features in the provided array grouping by modality (coordinates, speeds, distances).
 
