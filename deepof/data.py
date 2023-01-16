@@ -23,7 +23,12 @@ from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+from sklearn.preprocessing import (
+    MinMaxScaler,
+    StandardScaler,
+    RobustScaler,
+    LabelEncoder,
+)
 from time import time
 from tqdm import tqdm
 from typing import Any, NewType, Union
@@ -1381,7 +1386,7 @@ class Coordinates:
 
         # Create graph datasets
         if preprocess:
-            to_preprocess = tab_dict.preprocess(**kwargs)
+            to_preprocess, global_scaler = tab_dict.preprocess(**kwargs)
             dataset = [
                 to_preprocess[0][:, :, ~feature_names.isin(edge_feature_names)][
                     :, :, node_sorting_indices
@@ -1420,7 +1425,7 @@ class Coordinates:
                 ),
             )
 
-        return tuple(dataset), graph, tab_dict
+        return tuple(dataset), graph, tab_dict, global_scaler
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
@@ -1984,6 +1989,7 @@ class TableDict(dict):
         window_size: int = 25,
         window_step: int = 1,
         scale: str = "standard",
+        pretrained_scaler: Any = None,
         test_videos: int = 0,
         verbose: int = 0,
         shuffle: bool = False,
@@ -2006,8 +2012,9 @@ class TableDict(dict):
             specifies the size of the sliding window to pass through the data to generate training instances.
             window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
             specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
-            a true sliding window, and a value equal to to window_size splits the data into non-overlapping chunks.
+            a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
             scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
+            pretrained_scaler (Any): Pre-fit global scaler, trained on the whole dataset. Useful to process single videos.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
@@ -2074,6 +2081,45 @@ class TableDict(dict):
                 exp_temp = deepof.utils.scale_animal(
                     exp_temp, self._connectivity, scale
                 )
+
+                current_tab = np.concatenate(
+                    [
+                        exp_temp,
+                        tab.copy().to_numpy()[:, exp_temp.shape[1] :],
+                    ],
+                    axis=1,
+                )
+
+                table_temp[key] = pd.DataFrame(
+                    current_tab, columns=tab.columns, index=tab.index
+                )
+
+            # Scale all experiments together, to control for differential stats
+            if scale == "standard":
+                global_scaler = StandardScaler()
+            elif scale == "minmax":
+                global_scaler = MinMaxScaler()
+            else:
+                global_scaler = RobustScaler()
+
+            if pretrained_scaler is None:
+                global_scaler.fit(np.concatenate(list(table_temp.values())))
+            else:
+                global_scaler = pretrained_scaler
+
+            for key, tab in table_temp.items():
+
+                exp_temp = tab.to_numpy()
+
+                if self._propagate_labels:
+                    exp_temp = exp_temp[:, :-1]
+
+                if self._propagate_annotations:
+                    exp_temp = exp_temp[
+                        :, : -list(self._propagate_annotations.values())[0].shape[1]
+                    ]
+
+                exp_temp = global_scaler.transform(exp_temp)
 
                 current_tab = np.concatenate(
                     [
@@ -2299,7 +2345,7 @@ class TableDict(dict):
                 np.concatenate(X_test_split)
             )
 
-        return X_train, y_train, X_test, y_test
+        return (X_train, y_train, X_test, y_test), global_scaler
 
 
 if __name__ == "__main__":
