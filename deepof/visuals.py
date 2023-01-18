@@ -340,8 +340,90 @@ def plot_gantt(
     plt.show()
 
 
+def plot_cluster_enrichment(
+    coordinates: coordinates,
+    embeddings: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict = None,
+    add_stats: bool = True,
+    # Quality selection parameters
+    min_confidence: float = 0.0,
+    # Time selection parameters
+    bin_size: int = None,
+    bin_index: int = 0,
+    # Visualization parameters
+    normalize=False,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Violin plots per cluster per condition.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
+        bin_size (int): bin size for time filtering.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        add_stats (bool): whether to add stats to the plots. Defaults to True.
+        may hurt performance.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+        new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+        normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
+
+    """
+    # Get cluster enrichment across conditions for the desired settings
+    enrichment = deepof.post_hoc.cluster_enrichment_across_conditions(
+        embedding=embeddings,
+        soft_counts=soft_counts,
+        breaks=breaks,
+        exp_conditions=coordinates.get_exp_conditions,
+        bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
+        bin_index=bin_index,
+        normalize=normalize,
+    )
+
+    if add_stats:
+        pass
+
+    # Plot a barchart grouped per experimental conditions
+    sns.barplot(
+        enrichment.groupby(["cluster", "exp condition"]).mean().reset_index(),
+        x="cluster",
+        y="time on cluster",
+        hue="exp condition",
+    )
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_enrichment{}_min_conf={}_bin_size={}_bin_index={}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    min_confidence,
+                    bin_size,
+                    bin_index,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    title = "deepOF - cluster enrichment"
+
+    if ax is None:
+        plt.title(title, fontsize=15)
+    else:
+        ax.set_title(title, fontsize=15)
+        plt.tight_layout()
+        plt.show()
+
+
 def plot_embeddings(
-    coordinates: project,
+    coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
     breaks: table_dict = None,
@@ -363,7 +445,7 @@ def plot_embeddings(
     and changepoint detection size visualization.
 
     Args:
-        coordinates (project): deepOF project where the data is stored.
+        coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
@@ -384,6 +466,8 @@ def plot_embeddings(
     """
     # Get experimental conditions per video
     concat_hue = list(coordinates.get_exp_conditions.values())
+
+    print(coordinates._frame_rate * bin_size)
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
     if bin_size is not None:
