@@ -21,10 +21,10 @@ shap = "^0.41.0"
 networkx = "^2.8.7"
 dask-image = "^2022.9.0"
 seglearn = "^1.2.5"
-tensorflow-macos = {version = "2.9.0", platform = "darwin"}
+tensorflow-macos = "2.11"
 tensorflow = [
-    {version = "2.9.0", platform = "linux"},
-    {version = "2.9.0", platform = "win64"},
+    {version = "2.11.0", platform = "linux"},
+    {version = "2.11.0", platform = "win64"},
 ]
 keras-tcn-macos = {version = "^1.0", platform = "darwin"}
 keras-tcn = [
@@ -33,7 +33,6 @@ keras-tcn = [
 ]
 tensorflow-probability = "0.17.0"
 tifffile = "^2022.8.12"
-tables = "^3.7.0"
 ipykernel = "^6.16.0"
 plotly = "^5.10.0"
 statsmodels = "^0.13.2"
@@ -48,6 +47,8 @@ hmmlearn = "^0.2.8"
 lxml = "^4.9.1"
 spektral = {git = "https://github.com/lucasmiranda42/spektral"}
 imageio-ffmpeg = "^0.4.7"
+statannotations = "^0.5.0"
+joblib = "^1.2.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

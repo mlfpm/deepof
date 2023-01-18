@@ -299,7 +299,7 @@ def plot_gantt(
         plt.axhline(y=cluster, color="k", linewidth=0.5)
 
         sns.heatmap(
-            gantt_cp,
+            data=gantt_cp,
             cbar=False,
             cmap=LinearSegmentedColormap.from_list("deepof", ["white", color], N=2),
         )
@@ -389,8 +389,8 @@ def plot_cluster_enrichment(
         pass
 
     # Plot a barchart grouped per experimental conditions
-    sns.barplot(
-        enrichment.groupby(["cluster", "exp condition"]).mean().reset_index(),
+    sns.violinplot(
+        data=enrichment.groupby(["cluster", "exp condition"]).mean().reset_index(),
         x="cluster",
         y="time on cluster",
         hue="exp condition",
@@ -467,8 +467,6 @@ def plot_embeddings(
     # Get experimental conditions per video
     concat_hue = list(coordinates.get_exp_conditions.values())
 
-    print(coordinates._frame_rate * bin_size)
-
     # Restrict embeddings, soft_counts and breaks to the selected time bin
     if bin_size is not None:
         embeddings, soft_counts, breaks = deepof.post_hoc.select_time_bin(
@@ -515,7 +513,7 @@ def plot_embeddings(
             [np.max(val, axis=1) for val in soft_counts.values()]
         )
 
-        break_lens = tf.concat([len(i) for i in list(breaks.values())], 0).numpy()
+        break_lens = tf.stack([len(i) for i in list(breaks.values())], 0).numpy()
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
@@ -583,7 +581,7 @@ def plot_embeddings(
 
     # Plot selected embeddings using the specified settings
     sns.scatterplot(
-        embedding_dataset,
+        data=embedding_dataset,
         x="{}-1".format("PCA" if aggregate_experiments else "UMAP"),
         y="{}-2".format("PCA" if aggregate_experiments else "UMAP"),
         ax=ax,
@@ -608,7 +606,7 @@ def plot_embeddings(
 
     if aggregate_experiments and show_aggregated_density:
         sns.kdeplot(
-            embedding_dataset,
+            data=embedding_dataset,
             x="PCA-1",
             y="PCA-2",
             hue="experimental condition",

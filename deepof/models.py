@@ -499,6 +499,14 @@ def get_transformer_encoder(
             rate=dropout_rate,
         )
     )(x_reshaped, training=False)
+    transformer_embedding = tf.reshape(
+        transformer_embedding,
+        [
+            -1,
+            (adjacency_matrix.shape[0] if x_reshaped.shape[1] != 1 else 1),
+            input_shape[0] * input_shape[1],
+        ],
+    )
 
     if use_gnn:
 
@@ -514,6 +522,11 @@ def get_transformer_encoder(
                 rate=dropout_rate,
             )
         )(a_reshaped, training=False)
+
+        transformer_a_embedding = tf.reshape(
+            transformer_a_embedding,
+            [-1, adjacency_matrix.shape[0], input_shape[0] * input_shape[1]],
+        )
 
         spatial_block = CensNetConv(
             node_channels=latent_dim,
@@ -549,10 +562,11 @@ def get_transformer_encoder(
         transformer_embedding = tf.concat([x_nodes, x_edges], axis=-1)
 
     else:
-        transformer_embedding = tf.squeeze(encoder, axis=1)
+        transformer_embedding = tf.squeeze(transformer_embedding, axis=1)
 
-    encoder = tf.reshape(transformer_embedding, [-1, input_shape[0] * input_shape[1]])
-    encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(encoder)
+    encoder = tf.keras.layers.Dense(2 * latent_dim, activation="relu")(
+        transformer_embedding
+    )
     encoder = tf.keras.layers.BatchNormalization()(encoder)
     encoder = tf.keras.layers.Dense(latent_dim, activation="relu")(encoder)
     encoder = tf.keras.layers.BatchNormalization()(encoder)

@@ -598,10 +598,10 @@ class Project:
             i in list(tab_dict.values())[0].columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
-        #scales = self.scales[:, 2:]
+        scales = self.scales[:, 2:]
 
         distance_dict = {
-            key: deepof.utils.bpart_distance(tab, 1, 1)
+            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
             for i, (key, tab) in enumerate(tab_dict.items())
         }
 
@@ -908,7 +908,7 @@ class Coordinates:
 
     def get_coords(
         self,
-        center: str = None,
+        center: str = False,
         polar: bool = False,
         speed: int = 0,
         align: str = False,
