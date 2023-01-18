@@ -54,7 +54,7 @@ def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx
         connectivity (nx.Graph)
 
     """
-    if not isinstance(animal_ids, list):
+    if animal_ids is None or not isinstance(animal_ids, list):
         animal_ids = list(animal_ids)
     connectivities = []
 
