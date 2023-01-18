@@ -464,9 +464,6 @@ class Project:
             tab_dict[key] = tab_copy.reset_index(drop=True)
 
         # Update body part connectivity graph, taking detected or specified body parts into account
-        print(self.animal_ids)
-        print(self.exclude_bodyparts)
-
         model_dict = {
             "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(
                 aid, exclude_bodyparts=self.exclude_bodyparts
