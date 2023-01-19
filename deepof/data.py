@@ -42,6 +42,7 @@ import os
 import pandas as pd
 import pickle
 import pims
+import re
 import shutil
 import tensorflow as tf
 import umap
@@ -444,7 +445,9 @@ class Project:
 
         # Check in the files come from a multi-animal DLC project
         if "individuals" in list(tab_dict.values())[0].index:
-            self.animal_ids = list(tab_dict.values())[0].loc["individuals", :].unique()
+            self.animal_ids = list(
+                list(tab_dict.values())[0].loc["individuals", :].unique()
+            )
 
             for key, tab in tab_dict.items():
                 # Adapt each table to work with the downstream pipeline
@@ -1357,8 +1360,23 @@ class Coordinates:
         # Get corresponding feature graph
         graph = deepof.utils.connect_mouse_topview(
             animal_ids=(self._animal_ids if animal_id is None else animal_id),
-            exclude_bodyparts=list(
-                set([deepof.utils.re.findall("_(.+)", bp)[0] for bp in self._excluded])
+            exclude_bodyparts=(
+                list(
+                    set(
+                        [
+                            re.sub(
+                                r"|".join(
+                                    map(re.escape, [i + "_" for i in self._animal_ids])
+                                ),
+                                "",
+                                bp,
+                            )
+                            for bp in self._excluded
+                        ]
+                    )
+                )
+                if (self._animal_ids is not None and self._animal_ids[0])
+                else self._excluded
             ),
         )
 

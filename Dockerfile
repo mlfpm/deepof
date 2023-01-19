@@ -1,4 +1,4 @@
-FROM python:3.9.14 as python-base
+FROM --platform=linux/amd64 python:3.9.14 as python-base
 WORKDIR /
 COPY poetry.lock* .
 COPY pyproject.toml* .

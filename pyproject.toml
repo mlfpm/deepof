@@ -49,6 +49,8 @@ spektral = {git = "https://github.com/lucasmiranda42/spektral"}
 imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
+h5py = "^3.7.0"
+tables = "^3.8.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
