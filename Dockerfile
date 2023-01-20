@@ -1,10 +1,9 @@
 FROM --platform=linux/amd64 python:3.9.14 as python-base
 WORKDIR /
-COPY poetry.lock* .
 COPY pyproject.toml* .
 RUN apt-get clean \
  && apt-get update \
- && apt-get upgrade \
+ && apt-get -y upgrade \
  && apt-get --allow-releaseinfo-change update \
  && apt-get install -y gcc \
  && apt-get install -y --no-install-recommends libgl1-mesa-dev \
@@ -16,6 +15,7 @@ RUN apt-get clean \
  && pipx ensurepath \
  && export PATH="$PATH:$HOME/.local/bin" \
  && poetry config virtualenvs.create false \
+ && poetry lock \
  && poetry install
 ENV PATH="./root/.local/pipx/venvs/poetry/bin:$PATH"
 CMD [ "/bin/bash" ]

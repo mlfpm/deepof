@@ -21,7 +21,7 @@ shap = "^0.41.0"
 networkx = "^2.8.7"
 dask-image = "^2022.9.0"
 seglearn = "^1.2.5"
-tensorflow-macos = "2.11"
+tensorflow-macos = {version = "2.11.0", platform = "darwin"}
 tensorflow = [
     {version = "2.11.0", platform = "linux"},
     {version = "2.11.0", platform = "win64"},
