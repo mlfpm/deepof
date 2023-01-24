@@ -467,6 +467,7 @@ def compute_transition_matrix_per_condition(
     soft_counts: table_dict,
     breaks: table_dict,
     exp_conditions: dict,
+    silence_diagonal: bool = False,
     bin_size: int = None,
     bin_index: int = None,
     aggregate: str = True,
@@ -485,6 +486,7 @@ def compute_transition_matrix_per_condition(
         conditions, and the values are the breaks for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
+        silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
         aggregate (str): Whether to aggregate the embeddings across time.
@@ -510,6 +512,11 @@ def compute_transition_matrix_per_condition(
     transitions = {
         key: get_transitions(value, n_states) for key, value in hard_counts.items()
     }
+
+    if silence_diagonal:
+        for key, val in transitions.items():
+            np.fill_diagonal(val, 0)
+            transitions[key] = val
 
     # Aggregate based on experimental condition if specified
     if aggregate:

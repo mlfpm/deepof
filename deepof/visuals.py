@@ -3,15 +3,18 @@
 # encoding: utf-8
 # module deepof
 
-from itertools import cycle
+from itertools import cycle, product, combinations
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.patches import Ellipse
+from scipy.cluster.hierarchy import linkage, dendrogram
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from statannotations.Annotator import Annotator
 from typing import Any, List, NewType, Union
 import calendar
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import os
 import pandas as pd
@@ -160,7 +163,17 @@ def heatmap(
         x.set_title(f"{bp} - {title}", fontsize=10)
 
     if save:  # pragma: no cover
-        plt.savefig(save)
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_heatmaps{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
 
     return ax
 
@@ -345,14 +358,15 @@ def plot_cluster_enrichment(
     embeddings: table_dict,
     soft_counts: table_dict,
     breaks: table_dict = None,
-    add_stats: bool = True,
+    add_stats: str = "Mann-Whitney",
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
     # Visualization parameters
-    normalize=False,
+    normalize: bool = False,
+    verbose: bool = False,
     ax: Any = None,
     save: bool = False,
 ):
@@ -368,6 +382,7 @@ def plot_cluster_enrichment(
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         add_stats (bool): whether to add stats to the plots. Defaults to True.
         may hurt performance.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
         new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -385,16 +400,50 @@ def plot_cluster_enrichment(
         normalize=normalize,
     )
 
-    if add_stats:
-        pass
+    enrichment["cluster"] = enrichment["cluster"].astype(str)
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
     # Plot a barchart grouped per experimental conditions
     sns.violinplot(
-        data=enrichment.groupby(["cluster", "exp condition"]).mean().reset_index(),
+        data=enrichment,
         x="cluster",
         y="time on cluster",
         hue="exp condition",
+        ax=ax,
     )
+
+    if add_stats:
+        pairs = list(
+            product(
+                set(np.concatenate(list(soft_counts.values())).argmax(axis=1)),
+                set(coordinates.get_exp_conditions.values()),
+            )
+        )
+        pairs = [
+            list(map(tuple, p))
+            for p in np.array(pairs)
+            .reshape([-1, 2, len(set(coordinates.get_exp_conditions.values()))])
+            .tolist()
+        ]
+
+        annotator = Annotator(
+            ax,
+            pairs=pairs,
+            data=enrichment,
+            x="cluster",
+            y="time on cluster",
+            hue="exp condition",
+        )
+        annotator.configure(
+            test=add_stats,
+            text_format="star",
+            loc="inside",
+            comparisons_correction="fdr_bh",
+            verbose=verbose,
+        )
+        annotator.apply_and_annotate()
 
     if save:
         plt.savefig(
@@ -420,6 +469,229 @@ def plot_cluster_enrichment(
         ax.set_title(title, fontsize=15)
         plt.tight_layout()
         plt.show()
+
+
+def plot_transitions(
+    coordinates: coordinates,
+    embeddings: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict = None,
+    # Time selection parameters
+    bin_size: int = None,
+    bin_index: int = 0,
+    # Visualization parameters
+    visualization="networks",
+    silence_diagonal=False,
+    cluster: bool = True,
+    save: bool = False,
+):
+    """Computes and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        bin_size (int): bin size for time filtering.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        new figure will be created.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        silence_diagonal (bool): If True, diagonals are set to zero.
+        cluster (bool): If True (default) rows and columns on heatmaps are hierarchically clustered.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+    grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
+        embeddings,
+        soft_counts,
+        breaks,
+        coordinates.get_exp_conditions,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        silence_diagonal=silence_diagonal,
+        aggregate=True,
+        normalize=True,
+    )
+
+    # Use seaborn to plot heatmaps across both conditions
+    fig, axes = plt.subplots(
+        1, len(set(coordinates.get_exp_conditions.values())), figsize=(16, 8)
+    )
+
+    if visualization == "networks":
+
+        for exp_condition, ax in zip(
+            set(coordinates.get_exp_conditions.values()), axes
+        ):
+
+            G = nx.DiGraph(grouped_transitions[exp_condition])
+            weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
+
+            pos = nx.circular_layout(G, scale=1, center=None, dim=2)
+            nx.draw(
+                G,
+                ax=ax,
+                arrows=True,
+                with_labels=True,
+                node_size=500,
+                node_color=[plt.cm.tab20(i) for i in range(len(G.nodes))],
+                font_size=18,
+                font_weight="bold",
+                width=weights,
+                alpha=0.6,
+                pos=pos,
+            )
+            ax.set_title(exp_condition)
+
+    elif visualization == "heatmaps":
+
+        for exp_condition, ax in zip(
+            set(coordinates.get_exp_conditions.values()), axes
+        ):
+
+            if cluster:
+                clustered_transitions = grouped_transitions[exp_condition]
+                # Cluster rows and columns and reorder
+                row_link = linkage(
+                    clustered_transitions, method="average", metric="euclidean"
+                )  # computing the linkage
+                row_order = dendrogram(row_link, no_plot=True)["leaves"]
+                col_link = linkage(
+                    clustered_transitions.T, method="average", metric="euclidean"
+                )  # computing the linkage
+                col_order = dendrogram(col_link, no_plot=True)["leaves"]
+                clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
+                    row_order, col_order
+                ]
+
+            sns.heatmap(
+                clustered_transitions,
+                cmap="coolwarm",
+                vmin=0,
+                vmax=0.35,
+                ax=ax,
+            )
+            ax.set_title(exp_condition)
+
+    plt.tight_layout()
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_transitions{}_viz={}_bin_size={}_bin_index={}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    visualization,
+                    bin_size,
+                    bin_index,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    plt.show()
+
+
+def plot_stationary_entropy(
+    coordinates: coordinates,
+    embeddings: table_dict,
+    soft_counts: table_dict,
+    breaks: table_dict = None,
+    add_stats: str = "Mann-Whitney",
+    # Time selection parameters
+    bin_size: int = None,
+    bin_index: int = 0,
+    # Visualization parameters
+    verbose: bool = False,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Computes and plots transition stationary distribution entropy per condition.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        add_stats (bool): whether to add stats to the plots. Defaults to True.
+        bin_size (int): bin size for time filtering.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
+        new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+    # Get ungrouped entropy scores for the full videos
+    ungrouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
+        embeddings,
+        soft_counts,
+        breaks,
+        coordinates.get_exp_conditions,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        aggregate=False,
+        normalize=True,
+    )
+    ungrouped_entropy_scores = deepof.post_hoc.compute_steady_state(
+        ungrouped_transitions, return_entropy=True, n_iters=10000
+    )
+
+    ungrouped_entropy_scores = pd.DataFrame(ungrouped_entropy_scores, index=[0]).melt(
+        value_name="entropy"
+    )
+    ungrouped_entropy_scores["exp condition"] = ungrouped_entropy_scores.variable.map(
+        coordinates.get_exp_conditions
+    )
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+
+    # Draw violin/strip plots with full-video entropy
+    sns.violinplot(
+        data=ungrouped_entropy_scores,
+        y="exp condition",
+        x="entropy",
+        ax=ax,
+    )
+    plt.ylabel("experimental condition")
+
+    if add_stats:
+        pairs = list(combinations(set(coordinates.get_exp_conditions.values()), 2))
+
+        annotator = Annotator(
+            ax,
+            pairs=pairs,
+            data=ungrouped_entropy_scores,
+            x="entropy",
+            y="exp condition",
+            orient="h",
+        )
+        annotator.configure(
+            test=add_stats,
+            text_format="star",
+            loc="inside",
+            comparisons_correction="fdr_bh",
+            verbose=verbose,
+        )
+        annotator.apply_and_annotate()
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_entropy{}_bin_size={}_bin_index={}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    bin_size,
+                    bin_index,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    plt.show()
 
 
 def plot_embeddings(
