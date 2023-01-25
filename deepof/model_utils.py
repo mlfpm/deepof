@@ -1270,7 +1270,6 @@ def autoencoder_fitting(
     beta: float,
     tau: float,
     run: int = 0,
-    strategy: tf.distribute.Strategy = "one_device",
 ):
     """
 
@@ -1296,7 +1295,6 @@ def autoencoder_fitting(
         save_weights (bool): Whether to save the weights of the autoencoder after training.
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
         run (int): Run number to use for logging.
-        strategy (tf.distribute.Strategy): Distribution strategy to use for training.
 
         # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
@@ -1315,77 +1313,84 @@ def autoencoder_fitting(
         List of trained models corresponding to the selected model class. The full trained model is last.
 
     """
-
-    # Check if a GPU is available and if not, fall back to CPU
-    if strategy == "one_device":
-        if len(tf.config.list_physical_devices("GPU")) > 0:
-            strategy = tf.distribute.OneDeviceStrategy("gpu")
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("cpu")
-
-    # Load data
-    try:
-        X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
-    except ValueError:
-        X_train, y_train, X_val, y_val = preprocessed_object
-        a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
-
-    # Make sure that batch_size is not larger than training set
-    if batch_size > preprocessed_object[0].shape[0]:
-        batch_size = preprocessed_object[0].shape[0]
-
-    # Set options for tf.data.Datasets
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = (
-        tf.data.experimental.AutoShardPolicy.DATA
-    )
-
-    # Defines hyperparameters to log on tensorboard (useful for keeping track of different models)
-    logparam = {
-        "latent_dim": latent_dim,
-        "n_components": n_components,
-        "kmeans_weight": kmeans_loss,
-    }
-
-    # Load callbacks
-    run_ID, *cbacks = get_callbacks(
-        embedding_model=embedding_model,
-        encoder_type=encoder_type,
-        kmeans_loss=kmeans_loss,
-        input_type=input_type,
-        cp=save_checkpoints,
-        logparam=logparam,
-        outpath=output_path,
-        run=run,
-    )
-    if not log_history:
-        cbacks = cbacks[1:]
-
-    Xs, ys = X_train, [X_train]
-    Xvals, yvals = X_val, [X_val]
-
-    # Cast to float32
-    ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
-    yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
-
-    # Convert data to tf.data.Dataset objects
-    train_dataset = (
-        tf.data.Dataset.from_tensor_slices(
-            (tf.cast(Xs, tf.float32), tf.cast(a_train, tf.float32), tuple(ys))
+    # Select strategy based on available hardware
+    if len(tf.config.list_physical_devices("GPU")) > 1:
+        print("Mirroring across multiple devices...")
+        strategy = tf.distribute.MirroredStrategy(
+            [dev.name for dev in tf.config.list_physical_devices("GPU")]
         )
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .shuffle(buffer_size=X_train.shape[0])
-        .with_options(options)
-        .prefetch(tf.data.AUTOTUNE)
-    )
-    val_dataset = (
-        tf.data.Dataset.from_tensor_slices(
-            (tf.cast(Xvals, tf.float32), tf.cast(a_val, tf.float32), tuple(yvals))
+    elif len(tf.config.list_physical_devices("GPU")) == 1:
+        print("Training on GPU...")
+        strategy = tf.distribute.OneDeviceStrategy("gpu")
+    else:
+        print("Training on CPU...")
+        strategy = tf.distribute.OneDeviceStrategy("cpu")
+
+    with tf.device("CPU"):
+
+        # Load data
+        try:
+            X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
+        except ValueError:
+            X_train, y_train, X_val, y_val = preprocessed_object
+            a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
+
+        # Make sure that batch_size is not larger than training set
+        if batch_size > preprocessed_object[0].shape[0]:
+            batch_size = preprocessed_object[0].shape[0]
+
+        # Set options for tf.data.Datasets
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.DATA
         )
-        .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-        .with_options(options)
-        .prefetch(tf.data.AUTOTUNE)
-    )
+
+        # Defines hyperparameters to log on tensorboard (useful for keeping track of different models)
+        logparam = {
+            "latent_dim": latent_dim,
+            "n_components": n_components,
+            "kmeans_weight": kmeans_loss,
+        }
+
+        # Load callbacks
+        run_ID, *cbacks = get_callbacks(
+            embedding_model=embedding_model,
+            encoder_type=encoder_type,
+            kmeans_loss=kmeans_loss,
+            input_type=input_type,
+            cp=save_checkpoints,
+            logparam=logparam,
+            outpath=output_path,
+            run=run,
+        )
+        if not log_history:
+            cbacks = cbacks[1:]
+
+        Xs, ys = X_train, [X_train]
+        Xvals, yvals = X_val, [X_val]
+
+        # Cast to float32
+        ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
+        yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
+
+        # Convert data to tf.data.Dataset objects
+        train_dataset = (
+            tf.data.Dataset.from_tensor_slices(
+                (tf.cast(Xs, tf.float32), tf.cast(a_train, tf.float32), tuple(ys))
+            )
+            .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+            .shuffle(buffer_size=X_train.shape[0])
+            .with_options(options)
+            .prefetch(tf.data.AUTOTUNE)
+        )
+        val_dataset = (
+            tf.data.Dataset.from_tensor_slices(
+                (tf.cast(Xvals, tf.float32), tf.cast(a_val, tf.float32), tuple(yvals))
+            )
+            .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
+            .with_options(options)
+            .prefetch(tf.data.AUTOTUNE)
+        )
 
     # Build model
     with strategy.scope():

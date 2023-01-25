@@ -1438,13 +1438,10 @@ def rolling_speed(
     """
 
     original_shape = dframe.shape
-    if center:
-        body_parts = [bp for bp in dframe.columns.levels[0] if center not in bp]
-    else:
-        try:
-            body_parts = dframe.columns.levels[0]
-        except AttributeError:
-            body_parts = dframe.columns
+    try:
+        body_parts = dframe.columns.levels[0]
+    except AttributeError:
+        body_parts = dframe.columns
 
     speeds = pd.DataFrame
 

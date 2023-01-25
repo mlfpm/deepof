@@ -715,6 +715,8 @@ def annotate_time_chunks(
     soft_counts: table_dict,
     breaks: table_dict,
     supervised_annotations: table_dict = None,
+    window_size: int = 25,
+    window_step: int = 1,
     animal_id: str = None,
     kin_derivative: int = 1,
     include_distances: bool = True,
@@ -772,10 +774,12 @@ def annotate_time_chunks(
         scale=False,
         test_videos=0,
         shuffle=False,
+        window_size=window_size,
+        window_step=window_step,
         filter_low_variance=False,
         interpolate_normalized=False,
         precomputed_breaks=breaks,
-    )[0]
+    )[0][0]
 
     # Aggregate summary statistics per chunk, by either taking the average or running ts-fresh
     if aggregate == "mean":
@@ -827,9 +831,14 @@ def chunk_cv_splitter(
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
+
     if qual_filter is not None:
         cv_indices = cv_indices[qual_filter]
 
     cv_splitter = GroupKFold(n_splits=n_folds).split(chunk_stats, groups=cv_indices)
 
     return list(cv_splitter)
+
+
+def shap_cluster_interpretation():
+    pass

@@ -1565,7 +1565,6 @@ class Coordinates:
         save_weights: bool = True,
         input_type: str = False,
         run: int = 0,
-        strategy: tf.distribute.Strategy = "one_device",
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
         reg_cat_clusters: float = 0.0,
@@ -1599,9 +1598,6 @@ class Coordinates:
             input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict
             for more details.
             run (int): Run number for the model. Used to save the model and log files. Optional.
-            strategy (tf.distribute.Strategy): Distributed strategy for TensorFloe to use. Must be one of "one_device",
-            or "mirrored_strategy" (capable of handling more than one GPU, ideal for big experiments). If unsure, leave
-            as "one_device".
             kl_annealing_mode (str): Mode of the KL annealing. Must be one of "linear", or "sigmoid".
             kl_warmup (int): Number of epochs to warm up the KL annealing.
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
@@ -1633,7 +1629,6 @@ class Coordinates:
             save_weights=save_weights,
             input_type=input_type,
             run=run,
-            strategy=strategy,
             kl_annealing_mode=kl_annealing_mode,
             kl_warmup=kl_warmup,
             reg_cat_clusters=reg_cat_clusters,
@@ -2121,6 +2116,9 @@ class TableDict(dict):
                 table_temp[key] = pd.DataFrame(
                     current_tab, columns=tab.columns, index=tab.index
                 )
+
+        else:
+            global_scaler = None
 
         if scale == "standard" and interpolate_normalized:
 
