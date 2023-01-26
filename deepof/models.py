@@ -1543,21 +1543,22 @@ class VaDE(tf.keras.models.Model):
 
         if gmm_initialize:
 
-            # Get embedding samples
-            emb_idx = np.random.choice(range(embed_x.shape[0]), samples)
+            with tf.device("CPU"):
+                # Get embedding samples
+                emb_idx = np.random.choice(range(embed_x.shape[0]), samples)
 
-            # map to latent
-            z = self.encoder([embed_x[emb_idx], embed_a[emb_idx]])
-            # fit GMM
-            gmm = GaussianMixture(
-                n_components=self.n_components,
-                covariance_type="diag",
-                reg_covar=1e-04,
-                **kwargs,
-            ).fit(z)
-            # get GMM parameters
-            mu = gmm.means_
-            sigma2 = gmm.covariances_
+                # map to latent
+                z = self.encoder([embed_x[emb_idx], embed_a[emb_idx]])
+                # fit GMM
+                gmm = GaussianMixture(
+                    n_components=self.n_components,
+                    covariance_type="diag",
+                    reg_covar=1e-04,
+                    **kwargs,
+                ).fit(z)
+                # get GMM parameters
+                mu = gmm.means_
+                sigma2 = gmm.covariances_
 
             # initialize mixture components
             self.grouper.get_layer("gaussian_mixture_latent").c_mu.assign(

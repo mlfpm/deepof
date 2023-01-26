@@ -377,9 +377,9 @@ if __name__ == "__main__":
 
             # Get preprocessed data for current video
             if input_type == "coords":
-                curr_prep = to_preprocess.filter_videos([key]).preprocess(
+                curr_prep, _ = to_preprocess.filter_videos([key]).preprocess(
                     window_size=window_size,
-                    window_step=window_step,
+                    window_step=1,
                     automatic_changepoints=automatic_changepoints,
                     pretrained_scaler=global_scaler,
                     scale="standard",
@@ -389,11 +389,11 @@ if __name__ == "__main__":
                 curr_adj = np.zeros(curr_prep.shape)
 
             elif input_type == "graph":
-                curr_prep, _, _ = project_coords.get_graph_dataset(
+                curr_prep, _, _, _ = project_coords.get_graph_dataset(
                     precomputed_tab_dict=to_preprocess.filter_videos([key]),
                     animal_id=animal_to_preprocess,
                     window_size=window_size,
-                    window_step=window_step,
+                    window_step=1,
                     automatic_changepoints=automatic_changepoints,
                     pretrained_scaler=global_scaler,
                     scale="standard",

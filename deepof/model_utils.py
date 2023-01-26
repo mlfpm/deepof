@@ -1315,15 +1315,12 @@ def autoencoder_fitting(
     """
     # Select strategy based on available hardware
     if len(tf.config.list_physical_devices("GPU")) > 1:
-        print("Mirroring across multiple devices...")
         strategy = tf.distribute.MirroredStrategy(
             [dev.name for dev in tf.config.list_physical_devices("GPU")]
         )
     elif len(tf.config.list_physical_devices("GPU")) == 1:
-        print("Training on GPU...")
         strategy = tf.distribute.OneDeviceStrategy("gpu")
     else:
-        print("Training on CPU...")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     with tf.device("CPU"):
@@ -1446,11 +1443,6 @@ def autoencoder_fitting(
                 "Invalid embedding model. Select one of 'VQVAE', 'VaDE', and 'Contrastive'"
             )
 
-    if pretrained:
-        # If pretrained models are specified, load weights and return
-        ae_full_model.load_weights(pretrained)
-        return ae_full_model
-
     callbacks_ = cbacks + [
         CustomStopper(
             monitor="val_total_loss",
@@ -1465,23 +1457,30 @@ def autoencoder_fitting(
         optimizer=ae_full_model.optimizer,
         run_eagerly=False,
     )
+
     if embedding_model == "VaDE":
         ae_full_model.pretrain(
             train_dataset,
             embed_x=Xs,
             embed_a=a_train,
-            epochs=np.minimum(10, epochs),
+            epochs=(np.minimum(10, epochs) if not pretrained else 0),
             verbose=1,
         )
         ae_full_model.optimizer._iterations.assign(0)
 
     ae_full_model.fit(
         x=train_dataset,
-        epochs=epochs,
+        epochs=(epochs if not pretrained else 0),
         validation_data=val_dataset,
         callbacks=callbacks_,
         verbose=1,
     )
+
+    if pretrained:
+        # If pretrained models are specified, load weights and return
+        ae_full_model.build([X_train.shape, a_train.shape])
+        ae_full_model.load_weights(pretrained)
+        return ae_full_model
 
     if not os.path.exists(os.path.join(output_path, "trained_weights")):
         os.makedirs(os.path.join(output_path, "trained_weights"))

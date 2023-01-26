@@ -830,11 +830,7 @@ def rupture_per_experiment(
         if i in rupture_indices:
             current_size = tab.shape[0]
             current_train, current_breaks = rolling_window(
-                (
-                    to_rupture[cumulative_shape : cumulative_shape + current_size]
-                    if automatic_changepoints
-                    else to_rupture
-                ),
+                to_rupture[cumulative_shape : cumulative_shape + current_size],
                 window_size,
                 window_step,
                 automatic_changepoints,
@@ -844,7 +840,8 @@ def rupture_per_experiment(
             # to avoid skipping breakpoints between experiments
             if current_breaks is not None:
                 current_breaks = np.array(current_breaks) + cumulative_shape
-                cumulative_shape += current_size
+
+            cumulative_shape += current_size
 
             try:  # pragma: no cover
                 # To concatenate the current ruptures with the ones obtained
@@ -870,8 +867,7 @@ def rupture_per_experiment(
                     )
 
                 # Once that's taken care of, concatenate ruptures alongside axis 0
-                if automatic_changepoints:
-                    ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
+                ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
                 if current_breaks is not None:
                     break_indices = np.concatenate([break_indices, current_breaks])
             except (ValueError, AttributeError):

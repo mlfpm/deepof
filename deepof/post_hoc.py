@@ -16,6 +16,7 @@ from scipy import stats
 from seglearn import feature_functions
 from seglearn.transform import FeatureRep
 from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
@@ -26,6 +27,7 @@ import numpy as np
 import ot
 import pandas as pd
 import tqdm
+import umap
 
 import deepof.data
 
@@ -580,6 +582,21 @@ def compute_steady_state(
     return steady_states
 
 
+def compute_UMAP(embeddings, cluster_assignments):
+
+    lda = LinearDiscriminantAnalysis(
+        n_components=np.min([embeddings.shape[1], len(set(cluster_assignments)) - 1]),
+    )
+    concat_embeddings = lda.fit_transform(embeddings, cluster_assignments)
+
+    red = umap.UMAP(
+        min_dist=0.99,
+        n_components=2,
+    ).fit(concat_embeddings)
+
+    return lda, red
+
+
 def align_deepof_kinematics_with_unsupervised_labels(
     deepof_project: project,
     kin_derivative: int = 1,
@@ -734,6 +751,11 @@ def annotate_time_chunks(
         soft_counts: matrix with soft cluster assignments produced by the unsupervised pipeline.
         breaks: the breaks for each condition.
         supervised_annotations: set of supervised annotations produced by the supervised pipeline withing deepof.
+        window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
+        specifies the size of the sliding window to pass through the data to generate training instances.
+        window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
+        specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
+        a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
         animal_id: The animal ID to use, in case of multi-animal projects.
         kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
         include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
@@ -778,10 +800,11 @@ def annotate_time_chunks(
         window_step=window_step,
         filter_low_variance=False,
         interpolate_normalized=False,
+        automatic_changepoints=False,
         precomputed_breaks=breaks,
     )[0][0]
 
-    # Aggregate summary statistics per chunk, by either taking the average or running ts-fresh
+    # Aggregate summary statistics per chunk, by either taking the average or running seglearn
     if aggregate == "mean":
         comprehensive_features[comprehensive_features.sum(axis=2) == 0] = np.nan
         comprehensive_features = np.nanmean(comprehensive_features, axis=1)
@@ -833,6 +856,7 @@ def chunk_cv_splitter(
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
 
     if qual_filter is not None:
+        chunk_stats = chunk_stats[qual_filter]
         cv_indices = cv_indices[qual_filter]
 
     cv_splitter = GroupKFold(n_splits=n_folds).split(chunk_stats, groups=cv_indices)

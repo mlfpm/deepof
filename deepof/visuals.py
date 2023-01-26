@@ -556,12 +556,8 @@ def plot_transitions(
                     clustered_transitions, method="average", metric="euclidean"
                 )  # computing the linkage
                 row_order = dendrogram(row_link, no_plot=True)["leaves"]
-                col_link = linkage(
-                    clustered_transitions.T, method="average", metric="euclidean"
-                )  # computing the linkage
-                col_order = dendrogram(col_link, no_plot=True)["leaves"]
                 clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
-                    row_order, col_order
+                    row_order, row_order
                 ]
 
             sns.heatmap(
@@ -787,17 +783,20 @@ def plot_embeddings(
 
         break_lens = tf.stack([len(i) for i in list(breaks.values())], 0).numpy()
 
+        if samples is not None:
+            sample_ids = np.random.choice(
+                range(concat_embeddings.shape[0]), samples, replace=False
+            )
+            concat_embeddings = concat_embeddings[sample_ids]
+            cluster_assignments = cluster_assignments[sample_ids]
+            confidence = confidence[sample_ids]
+            concat_breaks = concat_breaks[sample_ids]
+
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
-
-        concat_embeddings = LinearDiscriminantAnalysis(
-            n_components=np.min(
-                [concat_embeddings.shape[1], len(set(cluster_assignments)) - 1]
-            ),
-        ).fit_transform(concat_embeddings, cluster_assignments)
-        reduced_embeddings = umap.UMAP(min_dist=0.99, n_components=2,).fit_transform(
-            concat_embeddings,
-        )
+        reduced_embeddings = deepof.post_hoc.compute_UMAP(
+            concat_embeddings, cluster_assignments
+        )[1].transform(concat_embeddings)
 
         # Generate unifier dataset using the reduced embeddings, experimental conditions
         # and the corresponding break lengths and cluster assignments
@@ -812,9 +811,6 @@ def plot_embeddings(
                 "experimental condition": np.repeat(concat_hue, break_lens),
             }
         )
-
-        if samples is not None:
-            embedding_dataset = embedding_dataset.sample(samples)
 
         # Filter values with low confidence
         embedding_dataset = embedding_dataset.loc[
@@ -1035,15 +1031,9 @@ def animate_skeleton(
 
     if isinstance(embedding, dict):
 
-        embedding = embedding[experiment_id].numpy()
-        embedding = LinearDiscriminantAnalysis(
-            n_components=np.min(
-                [embedding.shape[1], len(set(cluster_assignments)) - 1]
-            ),
-        ).fit_transform(embedding, cluster_assignments)
-        embedding = umap.UMAP(min_dist=0.99, n_components=2,).fit_transform(
-            embedding,
-        )
+        embedding = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)[
+            1
+        ].transform(concat_embeddings)
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
