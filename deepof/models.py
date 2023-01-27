@@ -915,16 +915,16 @@ class VQVAE(tf.keras.models.Model):
         self.cluster_population = tf.keras.metrics.Mean(
             name="number_of_populated_clusters"
         )
-        self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+        self.val_total_loss_tracker = tf.keras.metrics.Mean(name="val_total_loss")
         self.val_encoding_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="encoding_reconstruction_loss"
+            name="val_encoding_reconstruction_loss"
         )
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
+            name="val_reconstruction_loss"
         )
-        self.val_vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
+        self.val_vq_loss_tracker = tf.keras.metrics.Mean(name="val_vq_loss")
         self.val_cluster_population = tf.keras.metrics.Mean(
-            name="number_of_populated_clusters"
+            name="val_number_of_populated_clusters"
         )
 
     @tf.function
@@ -1014,7 +1014,10 @@ class VQVAE(tf.keras.models.Model):
             "number_of_populated_clusters": self.cluster_population.result(),
         }
 
-        return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
+        return {
+            **log_dict,
+            **{met.name: met.result() for met in self.vqvae.metrics},
+        }
 
     @tf.function
     def test_step(self, data):  # pragma: no cover
@@ -1072,7 +1075,10 @@ class VQVAE(tf.keras.models.Model):
             "number_of_populated_clusters": self.val_cluster_population.result(),
         }
 
-        return {**log_dict, **{met.name: met.result() for met in self.vqvae.metrics}}
+        return {
+            **log_dict,
+            **{met.name: met.result() for met in self.vqvae.metrics},
+        }
 
 
 class GaussianMixtureLatent(tf.keras.models.Model):
@@ -1462,13 +1468,13 @@ class VaDE(tf.keras.models.Model):
 
         # Track all loss function components
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
-        self.val_total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+        self.val_total_loss_tracker = tf.keras.metrics.Mean(name="val_total_loss")
 
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
+            name="val_reconstruction_loss"
         )
 
         if self.reg_cat_clusters:
@@ -1476,7 +1482,7 @@ class VaDE(tf.keras.models.Model):
                 name="cat_cluster_loss"
             )
             self.val_cat_cluster_loss_tracker = tf.keras.metrics.Mean(
-                name="cat_cluster_loss"
+                name="val_cat_cluster_loss"
             )
 
     @property
@@ -1488,7 +1494,6 @@ class VaDE(tf.keras.models.Model):
             self.reconstruction_loss_tracker,
             self.val_reconstruction_loss_tracker,
         ]
-        metrics += self.vade.metrics
 
         if self.reg_cat_clusters:
             metrics += [
@@ -1854,7 +1859,7 @@ class Contrastive(tf.keras.models.Model):
                 contrastive_loss,
                 mean_sim,
                 neg_sim,
-            ) = model_utils.select_contrastive_loss(
+            ) = deepof.model_utils.select_contrastive_loss(
                 enc_pos,
                 enc_neg,
                 similarity=self.similarity_function,
@@ -1910,7 +1915,11 @@ class Contrastive(tf.keras.models.Model):
         enc_neg = tf.math.l2_normalize(enc_neg, axis=1)
 
         # loss, mean_sim = ls.dcl_loss_fn(zis, zjs, temperature, lfn)
-        (contrastive_loss, mean_sim, neg_sim,) = model_utils.select_contrastive_loss(
+        (
+            contrastive_loss,
+            mean_sim,
+            neg_sim,
+        ) = deepof.model_utils.select_contrastive_loss(
             enc_pos,
             enc_neg,
             similarity=self.similarity_function,

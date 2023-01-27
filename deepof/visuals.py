@@ -857,11 +857,11 @@ def plot_embeddings(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),  # TODO
+                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),
                 "breaks": concat_breaks,
                 "confidence": confidence,
                 "cluster": cluster_assignments,
-                "experimental condition": np.repeat(concat_hue, break_lens),  # TODO
+                "experimental condition": np.repeat(concat_hue, break_lens),
             }
         )
 
