@@ -299,7 +299,7 @@ def plot_gantt(
     else:
         plot_type = "mixed"
 
-    hard_counts = soft_counts[experiment_id].numpy().argmax(axis=1)
+    hard_counts = soft_counts[experiment_id].argmax(axis=1)
     gantt = np.zeros([hard_counts.max(), hard_counts.shape[0]])
     colors = np.tile(
         list(sns.color_palette("tab20").as_hex()), int(np.ceil(gantt.shape[0] / 20))
@@ -365,6 +365,7 @@ def plot_cluster_enrichment(
     bin_size: int = None,
     bin_index: int = 0,
     # Visualization parameters
+    exp_condition: str = None,
     normalize: bool = False,
     verbose: bool = False,
     ax: Any = None,
@@ -377,6 +378,8 @@ def plot_cluster_enrichment(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
+        available is used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
@@ -389,12 +392,24 @@ def plot_cluster_enrichment(
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
     """
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if exp_condition is None:
+        exp_conditions = {
+            key: val.iloc[:, 0].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+    else:
+        exp_conditions = {
+            key: val.loc[:, exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.cluster_enrichment_across_conditions(
         embedding=embeddings,
         soft_counts=soft_counts,
         breaks=breaks,
-        exp_conditions=coordinates.get_exp_conditions,
+        exp_conditions=exp_conditions,
         bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
         bin_index=bin_index,
         normalize=normalize,
@@ -418,13 +433,13 @@ def plot_cluster_enrichment(
         pairs = list(
             product(
                 set(np.concatenate(list(soft_counts.values())).argmax(axis=1)),
-                set(coordinates.get_exp_conditions.values()),
+                set(exp_conditions.values()),
             )
         )
         pairs = [
             list(map(tuple, p))
             for p in np.array(pairs)
-            .reshape([-1, 2, len(set(coordinates.get_exp_conditions.values()))])
+            .reshape([-1, 2, len(set(exp_conditions.values()))])
             .tolist()
         ]
 
@@ -480,6 +495,7 @@ def plot_transitions(
     bin_size: int = None,
     bin_index: int = 0,
     # Visualization parameters
+    exp_condition: str = None,
     visualization="networks",
     silence_diagonal=False,
     cluster: bool = True,
@@ -492,6 +508,8 @@ def plot_transitions(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
+        available is used.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         new figure will be created.
@@ -501,11 +519,23 @@ def plot_transitions(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if exp_condition is None:
+        exp_conditions = {
+            key: val.iloc[:, 0].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+    else:
+        exp_conditions = {
+            key: val.loc[:, exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+
     grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
         embeddings,
         soft_counts,
         breaks,
-        coordinates.get_exp_conditions,
+        exp_conditions,
         bin_size=bin_size,
         bin_index=bin_index,
         silence_diagonal=silence_diagonal,
@@ -514,15 +544,11 @@ def plot_transitions(
     )
 
     # Use seaborn to plot heatmaps across both conditions
-    fig, axes = plt.subplots(
-        1, len(set(coordinates.get_exp_conditions.values())), figsize=(16, 8)
-    )
+    fig, axes = plt.subplots(1, len(set(exp_conditions.values())), figsize=(16, 8))
 
     if visualization == "networks":
 
-        for exp_condition, ax in zip(
-            set(coordinates.get_exp_conditions.values()), axes
-        ):
+        for exp_condition, ax in zip(set(exp_conditions.values()), axes):
 
             G = nx.DiGraph(grouped_transitions[exp_condition])
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
@@ -545,9 +571,7 @@ def plot_transitions(
 
     elif visualization == "heatmaps":
 
-        for exp_condition, ax in zip(
-            set(coordinates.get_exp_conditions.values()), axes
-        ):
+        for exp_condition, ax in zip(set(exp_conditions.values()), axes):
 
             if cluster:
                 clustered_transitions = grouped_transitions[exp_condition]
@@ -599,6 +623,7 @@ def plot_stationary_entropy(
     bin_size: int = None,
     bin_index: int = 0,
     # Visualization parameters
+    exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
     save: bool = False,
@@ -610,6 +635,8 @@ def plot_stationary_entropy(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
+        available is used.
         add_stats (bool): whether to add stats to the plots. Defaults to True.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
@@ -619,12 +646,24 @@ def plot_stationary_entropy(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if exp_condition is None:
+        exp_conditions = {
+            key: val.iloc[:, 0].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+    else:
+        exp_conditions = {
+            key: val.loc[:, exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+
     # Get ungrouped entropy scores for the full videos
     ungrouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
         embeddings,
         soft_counts,
         breaks,
-        coordinates.get_exp_conditions,
+        exp_conditions,
         bin_size=bin_size,
         bin_index=bin_index,
         aggregate=False,
@@ -638,7 +677,7 @@ def plot_stationary_entropy(
         value_name="entropy"
     )
     ungrouped_entropy_scores["exp condition"] = ungrouped_entropy_scores.variable.map(
-        coordinates.get_exp_conditions
+        exp_conditions
     )
     if ax is None:
         fig, ax = plt.subplots(1, 1)
@@ -653,7 +692,7 @@ def plot_stationary_entropy(
     plt.ylabel("experimental condition")
 
     if add_stats:
-        pairs = list(combinations(set(coordinates.get_exp_conditions.values()), 2))
+        pairs = list(combinations(set(exp_conditions.values()), 2))
 
         annotator = Annotator(
             ax,
@@ -701,8 +740,9 @@ def plot_embeddings(
     bin_size: int = None,
     bin_index: int = 0,
     # Visualization design and data parameters
+    exp_condition: str = None,
     aggregate_experiments: str = False,
-    samples: int = 10000,
+    samples: int = 500,
     show_aggregated_density: bool = True,
     colour_by: str = "cluster",
     show_break_size_as_radius: bool = False,
@@ -717,11 +757,13 @@ def plot_embeddings(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
+        available is used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
-        aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time_on_cluster, mean, or median) or not (default).
-        samples (int): Number of samples to take from the time embeddings. None leads to plotting all time points, which
+        aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
+        samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which
         may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
@@ -733,7 +775,13 @@ def plot_embeddings(
 
     """
     # Get experimental conditions per video
-    concat_hue = list(coordinates.get_exp_conditions.values())
+    if exp_condition is None:
+        exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
+
+    concat_hue = [
+        i[exp_condition].values[0]
+        for i in list(coordinates.get_exp_conditions.values())
+    ]
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
     if bin_size is not None:
@@ -765,15 +813,27 @@ def plot_embeddings(
     # Plot unravelled temporal embeddings
     if not aggregate_experiments:
 
+        if samples is not None:
+
+            # Sample per animal, to avoid alignment issues
+            for key in embeddings.keys():
+
+                sample_ids = np.random.choice(
+                    range(embeddings[key].shape[0]), samples, replace=False
+                )
+                embeddings[key] = embeddings[key][sample_ids]
+                soft_counts[key] = soft_counts[key][sample_ids]
+                breaks[key] = breaks[key][sample_ids]
+
         # Concatenate experiments and align experimental conditions
-        concat_embeddings = tf.concat(list(embeddings.values()), 0).numpy()
+        concat_embeddings = np.concatenate(list(embeddings.values()), 0)
 
         # Concatenate breaks
-        concat_breaks = tf.concat(list(breaks.values()), 0).numpy()
+        concat_breaks = tf.concat(list(breaks.values()), 0)
 
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
-            tf.concat(list(soft_counts.values()), 0).numpy(), axis=1
+            np.concatenate(list(soft_counts.values()), 0), axis=1
         )
 
         # Compute confidence in assigned clusters
@@ -781,34 +841,27 @@ def plot_embeddings(
             [np.max(val, axis=1) for val in soft_counts.values()]
         )
 
-        break_lens = tf.stack([len(i) for i in list(breaks.values())], 0).numpy()
-
-        if samples is not None:
-            sample_ids = np.random.choice(
-                range(concat_embeddings.shape[0]), samples, replace=False
-            )
-            concat_embeddings = concat_embeddings[sample_ids]
-            cluster_assignments = cluster_assignments[sample_ids]
-            confidence = confidence[sample_ids]
-            concat_breaks = concat_breaks[sample_ids]
+        break_lens = tf.stack([len(i) for i in list(breaks.values())], 0)
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
-        reduced_embeddings = deepof.post_hoc.compute_UMAP(
-            concat_embeddings, cluster_assignments
-        )[1].transform(concat_embeddings)
+        reducers = deepof.post_hoc.compute_UMAP(concat_embeddings, cluster_assignments)
+        reduced_embeddings = reducers[1].transform(
+            reducers[0].transform(concat_embeddings)
+        )
 
         # Generate unifier dataset using the reduced embeddings, experimental conditions
         # and the corresponding break lengths and cluster assignments
+
         embedding_dataset = pd.DataFrame(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),
+                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),  # TODO
                 "breaks": concat_breaks,
                 "confidence": confidence,
                 "cluster": cluster_assignments,
-                "experimental condition": np.repeat(concat_hue, break_lens),
+                "experimental condition": np.repeat(concat_hue, break_lens),  # TODO
             }
         )
 
@@ -965,7 +1018,7 @@ def _scatter_embeddings(
 def animate_skeleton(
     coordinates: coordinates,
     experiment_id: str,
-    animal_id: list = None,
+    animal_id: list = "",
     center: str = "arena",
     align: str = None,
     frame_limit: int = None,
@@ -1006,7 +1059,7 @@ def animate_skeleton(
     data = coordinates.get_coords(center=center, align=align)
 
     # Filter requested animals
-    if experiment_id is not None:
+    if animal_id:
         data = data.filter_id(animal_id)
 
     # Select requested experiment and frames
@@ -1027,13 +1080,14 @@ def animate_skeleton(
 
     # Filter assignments and embeddings
     if isinstance(cluster_assignments, dict):
-        cluster_assignments = cluster_assignments[experiment_id].numpy().argmax(axis=1)
+        cluster_assignments = cluster_assignments[experiment_id].argmax(axis=1)
 
     if isinstance(embedding, dict):
 
+        embedding = embedding[experiment_id]
         embedding = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)[
             1
-        ].transform(concat_embeddings)
+        ].transform(embedding)
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
@@ -1081,9 +1135,10 @@ def animate_skeleton(
 
             data = data.loc[cluster_assignments == selected_cluster, :]
 
-    def get_polygon_coords(data, animal_id=None):
+    def get_polygon_coords(data, animal_id=""):
         """Generates polygons to animate for the indicated animal in the provided dataframe."""
-        if animal_id is not None:
+
+        if animal_id:
             animal_id += "_"
 
         head = np.concatenate(
@@ -1158,8 +1213,9 @@ def animate_skeleton(
     hue = None
     cmap = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
 
-    if animal_id is None:
+    if animal_id and coordinates._animal_ids[0]:
         animal_ids = coordinates._animal_ids
+
     else:
         animal_ids = [animal_id]
 
