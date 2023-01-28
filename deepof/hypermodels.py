@@ -8,14 +8,20 @@ keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof
 
 """
 
-import tensorflow_probability as tfp
 from keras_tuner import HyperModel
+from typing import Any, List, NewType
+import tensorflow_probability as tfp
 
 import deepof.model_utils
 import deepof.models
 
 tfd = tfp.distributions
 tfpl = tfp.layers
+
+# DEFINE CUSTOM ANNOTATED TYPES #
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 class VQVAE(HyperModel):

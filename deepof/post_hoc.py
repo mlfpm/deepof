@@ -119,14 +119,11 @@ def get_aggregated_embedding(
     # aggregate the provided embeddings and cast to a dataframe
     if agg == "mean":
         embedding = pd.DataFrame(
-            {key: np.nanmean(value.numpy(), axis=0) for key, value in embedding.items()}
+            {key: np.nanmean(value, axis=0) for key, value in embedding.items()}
         ).T
     elif agg == "median":
         embedding = pd.DataFrame(
-            {
-                key: np.nanmedian(value.numpy(), axis=0)
-                for key, value in embedding.items()
-            }
+            {key: np.nanmedian(value, axis=0) for key, value in embedding.items()}
         ).T
 
     if reduce_dim:

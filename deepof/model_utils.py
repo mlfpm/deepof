@@ -19,7 +19,7 @@ from tensorflow.keras.layers import (
     LayerNormalization,
     TimeDistributed,
 )
-from typing import Tuple, Union, Any, List
+from typing import Tuple, Union, Any, List, NewType
 import deepof.hypermodels
 import deepof.models
 import json
@@ -29,6 +29,7 @@ import os
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
+import tqdm
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -37,6 +38,11 @@ tfpl = tfp.layers
 # Ignore warning with no downstream effect
 tf.get_logger().setLevel("ERROR")
 tf.autograph.set_verbosity(0)
+
+# DEFINE CUSTOM ANNOTATED TYPES #
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 ### CONTRASTIVE LEARNING UTILITIES
 def select_contrastive_loss(
@@ -1476,6 +1482,15 @@ def autoencoder_fitting(
         verbose=1,
     )
 
+    if embedding_model == "VaDE":
+        ae_full_model.pretrain(
+            train_dataset,
+            embed_x=Xs,
+            embed_a=a_train,
+            epochs=0,
+            verbose=1,
+        )
+
     if pretrained:
         # If pretrained models are specified, load weights and return
         ae_full_model.build([X_train.shape, a_train.shape])
@@ -1547,6 +1562,60 @@ def autoencoder_fitting(
                     raise NotImplementedError
 
     return ae_full_model
+
+
+def embedding_per_video(
+    coordinates: coordinates,
+    to_preprocess: table_dict,
+    model: tf.keras.models.Model,
+    scale: str = "standard",
+    animal_id: str = None,
+    ruptures: bool = False,
+    global_scaler: Any = None,
+):
+    """Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
+
+    Args:
+        coordinates (coordinates): deepof.Coordinates object for the project at hand.
+        to_preprocess (table_dict): dictionary with (merged) features to process.
+        scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False.
+        Use the same that was used when training the original model.
+        animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
+        ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks
+        per experiment) or not (an all-ones vector per experiment is returned).
+        global_scaler (Any): trained global scaler produced when processing the original dataset.
+        model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+
+    Returns:
+        embeddings (table_dict): embeddings per experiment.
+        soft_counts (table_dict): soft_counts per experiment.
+        breaks (table_dict): breaks per experiment.
+
+    """
+    embeddings = {}
+    soft_counts = {}
+    breaks = {}
+
+    for key in tqdm.tqdm(coordinates.get_exp_conditions.keys()):
+
+        processed_exp, _, _, _ = coordinates.get_graph_dataset(
+            animal_id=animal_id,
+            precomputed_tab_dict=to_preprocess.filter_videos([key]),
+            preprocess=True,
+            scale=scale,
+            window_size=model.layers[0].input_shape[0][1],
+            shuffle=False,
+            pretrained_scaler=global_scaler,
+        )
+
+        embeddings[key] = model.encoder([processed_exp[0], processed_exp[1]]).numpy()
+        soft_counts[key] = model.grouper([processed_exp[0], processed_exp[1]]).numpy()
+        if ruptures:
+            breaks[key] = (~np.all(processed_exp[0] == 0, axis=2)).sum(axis=1)
+        else:
+            breaks[key] = np.ones(soft_counts[key].shape[0]).astype(int)
+
+    return embeddings, soft_counts, breaks
 
 
 def tune_search(

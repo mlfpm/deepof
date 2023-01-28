@@ -16,6 +16,7 @@ from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 from tensorflow.keras.optimizers import Nadam
+from typing import Any, List, NewType
 import numpy as np
 import tcn
 import tensorflow as tf
@@ -26,6 +27,11 @@ import deepof.model_utils
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers
+
+# DEFINE CUSTOM ANNOTATED TYPES #
+project = NewType("deepof_project", Any)
+coordinates = NewType("deepof_coordinates", Any)
+table_dict = NewType("deepof_table_dict", Any)
 
 
 # noinspection PyCallingNonCallable

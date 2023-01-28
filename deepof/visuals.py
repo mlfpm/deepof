@@ -26,7 +26,6 @@ import warnings
 
 import deepof.post_hoc
 
-
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
