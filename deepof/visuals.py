@@ -299,12 +299,12 @@ def plot_gantt(
         plot_type = "mixed"
 
     hard_counts = soft_counts[experiment_id].argmax(axis=1)
-    gantt = np.zeros([hard_counts.max(), hard_counts.shape[0]])
+    gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
     colors = np.tile(
         list(sns.color_palette("tab20").as_hex()), int(np.ceil(gantt.shape[0] / 20))
     )
 
-    for cluster, color in zip(range(hard_counts.max()), colors):
+    for cluster, color in zip(range(hard_counts.max() + 1), colors):
         gantt[cluster] = hard_counts == cluster
         gantt_cp = gantt.copy()
         gantt_cp[[i for i in range(hard_counts.max()) if i != cluster]] = np.nan
@@ -318,8 +318,8 @@ def plot_gantt(
 
     plt.xticks([])
     plt.yticks(
-        np.array(range(hard_counts.max())) + 0.5,
-        range(hard_counts.max()),
+        np.array(range(hard_counts.max() + 1)) + 0.5,
+        range(hard_counts.max() + 1),
         rotation=0,
         fontsize=10,
     )
@@ -999,7 +999,9 @@ def _scatter_embeddings(
         embeddings[:, 0],
         embeddings[:, 1],
         c=(cluster_assignments if cluster_assignments is not None else None),
-        cmap=("tab10" if cluster_assignments is not None else None),
+        cmap=("tab20" if cluster_assignments is not None else None),
+        edgecolor="black",
+        linewidths=0.25,
     )
 
     plt.tight_layout()
@@ -1084,9 +1086,8 @@ def animate_skeleton(
     if isinstance(embedding, dict):
 
         embedding = embedding[experiment_id]
-        embedding = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)[
-            1
-        ].transform(embedding)
+        reducers = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)
+        embedding = reducers[1].transform(reducers[0].transform(embedding))
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:

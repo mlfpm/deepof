@@ -1638,7 +1638,9 @@ class Coordinates:
         return trained_models
 
 
-class TableDict(dict):
+class TableDict(
+    dict
+):  # TODO: Add frame_rate to be able to default preprocessing window-sizes
     """Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
 
     Includes methods for generating training and testing datasets for the supervised and unsupervised models.

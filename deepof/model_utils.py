@@ -1604,6 +1604,7 @@ def embedding_per_video(
             preprocess=True,
             scale=scale,
             window_size=model.layers[0].input_shape[0][1],
+            window_step=1,
             shuffle=False,
             pretrained_scaler=global_scaler,
         )

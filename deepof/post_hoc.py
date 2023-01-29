@@ -729,14 +729,16 @@ def annotate_time_chunks(
     soft_counts: table_dict,
     breaks: table_dict,
     supervised_annotations: table_dict = None,
-    window_size: int = 25,
+    window_size: int = None,
     window_step: int = 1,
     animal_id: str = None,
+    samples: int = 10000,
+    min_confidence: float = 0.0,
     kin_derivative: int = 1,
     include_distances: bool = True,
     include_angles: bool = True,
     include_areas: bool = True,
-    aggregate: str = "seglearn",
+    aggregate: str = "mean",
 ):
     """
 
@@ -749,11 +751,15 @@ def annotate_time_chunks(
         breaks: the breaks for each condition.
         supervised_annotations: set of supervised annotations produced by the supervised pipeline withing deepof.
         window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
-        specifies the size of the sliding window to pass through the data to generate training instances.
+        specifies the size of the sliding window to pass through the data to generate training instances. None defaults
+        to video frame-rate.
         window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
         specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
         a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
-        animal_id: The animal ID to use, in case of multi-animal projects.
+        animal_id (str): The animal ID to use, in case of multi-animal projects.
+        samples (int): Time chunks samples to take to reduce computational time. Defaults to the minimum between
+        10000 and the number of available chunks.
+        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
         include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
         include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
@@ -793,13 +799,53 @@ def annotate_time_chunks(
         scale=False,
         test_videos=0,
         shuffle=False,
-        window_size=window_size,
+        window_size=(
+            window_size if window_size is not None else deepof_project._frame_rate
+        ),
         window_step=window_step,
         filter_low_variance=False,
         interpolate_normalized=False,
         automatic_changepoints=False,
         precomputed_breaks=breaks,
     )[0][0]
+
+    def sample_from_breaks(breaks, idcs):
+
+        # Sample from breaks, keeping each animal's identity
+        cumulative_breaks = 0
+        subset_breaks = {}
+        for key in breaks.keys():
+            subset_breaks[key] = breaks[key][
+                idcs[
+                    (idcs >= cumulative_breaks)
+                    & (idcs < cumulative_breaks + breaks[key].shape[0])
+                ]
+                - cumulative_breaks
+            ]
+            cumulative_breaks += breaks[key].shape[0]
+
+        return subset_breaks
+
+    # Filter instances with less confidence that specified
+    qual_filter = (
+        np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
+        > min_confidence
+    )
+    comprehensive_features = comprehensive_features[qual_filter]
+    hard_counts = hard_counts[qual_filter].reset_index(drop=True)
+    breaks = sample_from_breaks(breaks, np.where(qual_filter)[0])
+
+    # Sample X and y matrices to increase computational efficiency
+    if samples is not None:
+        samples = np.minimum(samples, comprehensive_features.shape[0])
+
+        random_idcs = np.random.choice(
+            range(comprehensive_features.shape[0]), samples, replace=False
+        )
+
+        comprehensive_features = comprehensive_features[random_idcs]
+        hard_counts = hard_counts[random_idcs]
+        breaks = sample_from_breaks(breaks, random_idcs)
 
     # Aggregate summary statistics per chunk, by either taking the average or running seglearn
     if aggregate == "mean":
@@ -816,14 +862,13 @@ def annotate_time_chunks(
             comprehensive_features, feature_names
         )
 
-    return comprehensive_features, hard_counts
+    return comprehensive_features, hard_counts, breaks
 
 
 def chunk_cv_splitter(
-    chunk_stats: np.ndarray,
-    breaks: np.ndarray,
-    n_folds: int = 10,
-    qual_filter: np.ndarray = None,
+    chunk_stats: pd.DataFrame,
+    breaks: dict,
+    n_folds: int = None,
 ):
     """
 
@@ -833,10 +878,9 @@ def chunk_cv_splitter(
     training and testing sets.
 
     Args:
-        chunk_stats: matrix with statistics per chunk, sorted by experiment
-        breaks: dictionary containing ruprures per video
-        n_folds: number of cross-validation folds to compute
-        qual_filter: quality filter to use for the cross-validation. If None, no filter is used.
+        chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment
+        breaks (dict): dictionary containing ruprures per video
+        n_folds (int): number of cross-validation folds to compute
 
     Returns:
         list containing a training and testing set per CV fold.
@@ -851,14 +895,79 @@ def chunk_cv_splitter(
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
-
-    if qual_filter is not None:
-        chunk_stats = chunk_stats[qual_filter]
-        cv_indices = cv_indices[qual_filter]
-
-    cv_splitter = GroupKFold(n_splits=n_folds).split(chunk_stats, groups=cv_indices)
+    cv_splitter = GroupKFold(
+        n_splits=(n_folds if n_folds is not None else n_experiments)
+    ).split(chunk_stats, groups=cv_indices)
 
     return list(cv_splitter)
+
+
+def train_supervised_cluster_detectors(
+    chunk_stats: pd.DataFrame,
+    hard_counts: np.ndarray,
+    sampled_breaks: dict,
+    n_folds: int = None,
+    verbose: int = 1,
+):
+    """
+
+    Args:
+        chunk_stats (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
+        hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
+        sampled_breaks (dict): sequence length of each chunk per experiment.
+        n_folds (int): number of folds for cross validation. If None (default) leave-one-experiment-out CV is used.
+        verbose (int): verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).
+
+    Returns:
+
+    """
+
+    groups = chunk_cv_splitter(chunk_stats, sampled_breaks, n_folds=n_folds)
+
+    # Cross-validate GBM training across videos
+    cluster_clf = Pipeline(
+        [
+            ("normalization", StandardScaler()),
+            ("oversampling", SMOTE()),
+            ("classifier", CatBoostClassifier(verbose=(verbose > 2))),
+        ]
+    )
+
+    if verbose:
+        print("Training cross-validated models for performance estimation...")
+    cluster_gbm_performance = cross_validate(
+        cluster_clf,
+        chunk_stats.values,
+        hard_counts.values,
+        scoring=[
+            "roc_auc_ovo_weighted",
+            "roc_auc_ovr_weighted",
+        ],
+        cv=groups,
+        return_train_score=True,
+        return_estimator=True,
+        n_jobs=-1,
+        verbose=(verbose > 1),
+    )
+
+    # Train full classifier for explainability testing
+    full_cluster_clf = Pipeline(
+        [
+            ("normalization", StandardScaler()),
+            ("oversampling", SMOTE()),
+            ("classifier", CatBoostClassifier(verbose=(verbose > 2))),
+        ]
+    )
+    if verbose:
+        print("Training on full dataset for feature importance estimation...")
+    full_cluster_clf.fit(
+        chunk_stats.values,
+        hard_counts.values,
+    )
+
+    if verbose:
+        print("Done!")
+    return full_cluster_clf, cluster_gbm_performance, groups
 
 
 def shap_cluster_interpretation():
