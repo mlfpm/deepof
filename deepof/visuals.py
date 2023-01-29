@@ -3,15 +3,18 @@
 # encoding: utf-8
 # module deepof
 
+from collections import defaultdict
 from itertools import cycle, product, combinations
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.patches import Ellipse
 from scipy.cluster.hierarchy import linkage, dendrogram
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from statannotations.Annotator import Annotator
 from typing import Any, List, NewType, Union
 import calendar
+import copy
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -19,6 +22,7 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
+import shap
 import tensorflow as tf
 import time
 import umap
@@ -1332,3 +1336,167 @@ def animate_skeleton(
         animation.save(save, writer=writevideo)
 
     return animation.to_html5_video()
+
+
+def plot_cluster_detection_performance(
+    coordinates: coordinates,
+    chunk_stats: pd.DataFrame,
+    cluster_gbm_performance: dict,
+    hard_counts: np.ndarray,
+    groups: list,
+    save: bool = False,
+    visualization: str = "confusion_matrix",
+):
+    """Plots either a confusion matrix or a bar chart with balanced accuracy for cluster detection cross validated models.
+    Designed to be run after deepof.post_hoc.train_supervised_cluster_detectors (see documentation for details).
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        chunk_stats (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
+        cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
+        hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
+        groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
+        save:
+        visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
+
+    """
+    n_clusters = len(np.unique(hard_counts))
+    confusion_matrices = []
+
+    for clf, fold in zip(cluster_gbm_performance["estimator"], groups):
+        cm = confusion_matrix(
+            hard_counts.values[fold[1]],
+            clf.predict(chunk_stats.values[fold[1]]),
+            labels=np.unique(hard_counts),
+        )
+
+        confusion_matrices.append(cm)
+
+    cluster_names = ["cluster {}".format(i) for i in range(10)]
+
+    if visualization == "confusion_matrix":
+
+        cm = np.stack(confusion_matrices).sum(axis=0)
+        cm = cm / cm.sum(axis=1)[:, np.newaxis]
+        cm = pd.DataFrame(cm, index=cluster_names, columns=cluster_names)
+
+        # Cluster rows and columns and reorder to put closer similar clusters
+        row_link = linkage(
+            cm, method="average", metric="euclidean"
+        )  # computing the linkage
+        row_order = dendrogram(row_link, no_plot=True)["leaves"]
+        cm = cm.iloc[row_order, row_order]
+
+        plt.title("Confusion matrix for multiclass state prediction")
+        sns.heatmap(cm, annot=True, cmap="Blues")
+
+        plt.yticks(rotation=0)
+
+    elif visualization == "balanced_accuracy":
+
+        def compute_balanced_accuracy(cm, cluster_index):
+            """
+
+            Computes balanced accuracy for a specific cluster given a confusion matrix
+
+            Formula: ((( TP / (TP+FN) + (TN/(TN+FP))) / 2
+
+            """
+
+            TP = cm[cluster_index, cluster_index]
+            FP = cm[:, cluster_index].sum() - TP
+            FN = cm[cluster_index, :].sum() - TP
+            TN = cm.sum() - TP - FP - FN
+
+            return ((TP / (TP + FN)) + (TN / (TN + FP))) / 2
+
+        dataset = defaultdict(list)
+
+        for cluster in range(n_clusters):
+            for cm in confusion_matrices:
+                ba = compute_balanced_accuracy(cm, cluster)
+                dataset[cluster].append(ba)
+
+        dataset = pd.DataFrame(dataset)
+
+        plt.title("Supervised cluster mapping performance")
+
+        sns.barplot(data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3])
+        plt.axhline(1 / n_clusters, linestyle="--", color="black")
+
+        plt.xlabel("Cluster")
+        plt.ylabel("Balanced accuracy")
+
+        plt.ylim(0, 1)
+
+    else:
+        raise ValueError(
+            "Invalid plot selected. Visualization should be one of 'confusion_matrix' or 'balanced_accuracy'. See documentation for details."
+        )
+
+    plt.tight_layout()
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_supervised_cluster_detection_type={}{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    visualization,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+    plt.show()
+
+
+def plot_shap_swarm_per_cluster(
+    coordinates: coordinates,
+    data_to_explain: pd.DataFrame,
+    shap_values: list,
+    cluster: Union[str, int] = "all",
+    max_display: int = 10,
+    save: str = False,
+):
+    """
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        data_to_explain (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
+        shap_values (list): shap_values per cluster.
+        cluster: cluster to plot. If "all" (default) global feature importance
+        across all clusters is depicted in a bar chart.
+        max_display (int): maximum number of features to display.
+        save (str): if provided, saves the figure to the specified file.
+
+    """
+    shap_vals = copy.deepcopy(shap_values)
+
+    if cluster != "all":
+        shap_vals = shap_vals[cluster]
+
+    shap.summary_plot(
+        shap_vals,
+        data_to_explain,
+        max_display=max_display,
+        show=False,
+        feature_names=data_to_explain.columns,
+    )
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_supervised_cluster_detection_SHAP{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    visualization,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    plt.show()

@@ -8,7 +8,9 @@ Data structures and functions for analyzing supervised and unsupervised model re
 
 """
 
+from catboost import CatBoostClassifier
 from collections import Counter, defaultdict
+from imblearn.over_sampling import SMOTE
 from itertools import product
 from joblib import delayed, Parallel
 from multiprocessing import cpu_count
@@ -19,13 +21,14 @@ from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold
-from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GroupKFold, cross_validate
+from imblearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from typing import Any, List, NewType, Union
 import numpy as np
 import ot
 import pandas as pd
+import shap
 import tqdm
 import umap
 
@@ -878,9 +881,9 @@ def chunk_cv_splitter(
     training and testing sets.
 
     Args:
-        chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment
-        breaks (dict): dictionary containing ruprures per video
-        n_folds (int): number of cross-validation folds to compute
+        chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
+        breaks (dict): dictionary containing ruprures per video.
+        n_folds (int): number of cross-validation folds to compute.
 
     Returns:
         list containing a training and testing set per CV fold.
@@ -919,6 +922,10 @@ def train_supervised_cluster_detectors(
         verbose (int): verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).
 
     Returns:
+        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats
+        to cluster assignments. Useful to run the SHAP explainability pipeline.
+        cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
+        groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
 
     """
 
@@ -970,5 +977,37 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
-def shap_cluster_interpretation():
-    pass
+def explain_clusters(
+    chunk_stats: pd.DataFrame,
+    hard_counts: np.ndarray,
+    full_cluster_clf: Pipeline,
+    samples: int = 10000,
+):
+    """Computes SHAP feature importance for models mapping chunk_stats to cluster assignments.
+
+    Args:
+        chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
+        np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
+        hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
+        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats
+        to cluster assignments.
+        samples (int): number of samples to draw from the original chunk_stats dataset.
+
+    Returns:
+        shap_values (list): shap_values per cluster.
+        explainer (shap.explainers._kernel.Kernel): trained SHAP KernelExplainer.
+
+    """
+
+    # Get SHAP values for the given model
+    n_clusters = len(np.unique(hard_counts))
+    explainer = shap.KernelExplainer(
+        full_cluster_clf.predict_proba,
+        data=shap.kmeans(chunk_stats, n_clusters),
+        normalize=False,
+    )
+    if samples is not None and samples < chunk_stats.shape[0]:
+        chunk_stats = chunk_stats.sample(samples)
+    shap_values = explainer.shap_values(chunk_stats, nsamples=samples, n_jobs=-1)
+
+    return shap_values, explainer, chunk_stats
