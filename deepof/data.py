@@ -193,22 +193,10 @@ class Project:
 
     def __str__(self):  # pragma: no cover
         """Prints the object to stdout."""
-        if self.exp_conditions:
-            return "deepof analysis of {} videos across {} condition{}".format(
-                len(self.videos),
-                len(set(self.exp_conditions.values())),
-                ("s" if len(set(self.exp_conditions.values())) > 1 else ""),
-            )
         return "deepof analysis of {} videos".format(len(self.videos))
 
     def __repr__(self):  # pragma: no cover
         """Prints the object to stdout."""
-        if self.exp_conditions:
-            return "deepof analysis of {} videos across {} condition{}".format(
-                len(self.videos),
-                len(set(self.exp_conditions.values())),
-                ("s" if len(set(self.exp_conditions.values())) > 1 else ""),
-            )
         return "deepof analysis of {} videos".format(len(self.videos))
 
     def set_up_project_directory(self):
@@ -891,22 +879,10 @@ class Coordinates:
 
     def __str__(self):  # pragma: no cover
         """Prints the object to stdout."""
-        if self._exp_conditions:
-            return "deepof coordinates of {} videos across {} condition{}".format(
-                len(self._videos),
-                len(set(self._exp_conditions.values())),
-                ("s" if len(set(self._exp_conditions.values())) > 1 else ""),
-            )
         return "deepof analysis of {} videos".format(len(self._videos))
 
     def __repr__(self):  # pragma: no cover
         """Prints the object to stdout."""
-        if self._exp_conditions:
-            return "deepof coordinates of {} videos across {} condition{}".format(
-                len(self._videos),
-                len(set(self._exp_conditions.values())),
-                ("s" if len(set(self._exp_conditions.values())) > 1 else ""),
-            )
         return "deepof analysis of {} videos".format(len(self._videos))
 
     def get_coords(

@@ -15,12 +15,14 @@ from statannotations.Annotator import Annotator
 from typing import Any, List, NewType, Union
 import calendar
 import copy
+import cv2
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import os
 import pandas as pd
+import re
 import seaborn as sns
 import shap
 import tensorflow as tf
@@ -1459,6 +1461,7 @@ def plot_shap_swarm_per_cluster(
     cluster: Union[str, int] = "all",
     max_display: int = 10,
     save: str = False,
+    show: bool = True,
 ):
     """
 
@@ -1470,6 +1473,7 @@ def plot_shap_swarm_per_cluster(
         across all clusters is depicted in a bar chart.
         max_display (int): maximum number of features to display.
         save (str): if provided, saves the figure to the specified file.
+        show (bool): if True, shows the figure.
 
     """
     shap_vals = copy.deepcopy(shap_values)
@@ -1499,4 +1503,302 @@ def plot_shap_swarm_per_cluster(
             )
         )
 
-    plt.show()
+    if show:
+        plt.show()
+
+
+def output_cluster_video(
+    cap: Any, out: Any, frame_mask: list, v_width: int, v_height: int, path: str
+):
+    """Outputs a video with the frames corresponding to the cluster.
+
+    Args:
+        cap: video capture object
+        out: video writer object
+        frame_mask: list of booleans indicating whether a frame should be written
+        v_width: video width
+        v_height: video height
+        path: path to the video file
+
+    """
+    i = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret == False:
+            break
+
+        try:
+            if frame_mask[i]:
+
+                res_frame = cv2.resize(frame, [v_width, v_height])
+                re_path = re.findall(".+/(.+)DLC", path)[0]
+
+                if path is not None:
+                    cv2.putText(
+                        res_frame,
+                        re_path,
+                        (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                        cv2.FONT_HERSHEY_DUPLEX,
+                        0.75,
+                        (255, 255, 255),
+                        2,
+                    )
+
+                out.write(res_frame)
+
+            i += 1
+        except IndexError:
+            ret = False
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def output_videos_per_cluster(
+    video_paths: list,
+    breaks: list,
+    soft_counts: list,
+    frame_rate: int = 25,
+    single_output_resolution: tuple = None,
+    confidence_threshold: float = 0.0,
+    out_path: str = ".",
+):
+    """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
+
+    Args:
+        video_paths: list of paths to the videos
+        breaks: list of breaks between videos
+        soft_counts: list of soft counts per video
+        frame_rate: frame rate of the videos
+        single_output_resolution: if single_output is provided, this is the resolution of the output video.
+        confidence_threshold: minimum confidence threshold for a frame to be considered part of a cluster.
+        out_path: path to the output directory.
+
+    """
+    # Iterate over all clusters, and output a masked video for each
+    for cluster_id in range(soft_counts[0].shape[1]):
+
+        out = cv2.VideoWriter(
+            os.path.join(
+                out_path,
+                "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
+                    cluster_id, confidence_threshold, calendar.timegm(time.gmtime())
+                ),
+            ),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            frame_rate,
+            single_output_resolution,
+        )
+
+        for i, path in enumerate(video_paths):
+
+            # Get hard counts and confidence estimates per cluster
+            hard_counts = np.argmax(soft_counts[i], axis=1)
+            confidence = np.max(soft_counts[i], axis=1)
+
+            # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+            cap = cv2.VideoCapture(path)
+            v_width, v_height = single_output_resolution
+
+            # Compute confidence mask
+            confidence_mask = (hard_counts == cluster_id) & (
+                confidence >= confidence_threshold
+            )
+
+            # Extend confidence mask using the corresponding breaks, to select and output all relevant video frames
+            frame_mask = np.repeat(confidence_mask, breaks[i])
+
+            output_cluster_video(
+                cap,
+                out,
+                frame_mask,
+                v_width,
+                v_height,
+                path,
+            )
+
+
+def output_unsupervised_annotated_video(
+    video_path: str,
+    breaks: list,
+    soft_counts: np.ndarray,
+    frame_rate: int = 25,
+    cluster_names: dict = {},
+    out_path: str = ".",
+):
+    """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
+
+    Args:
+        video_path: full path to the video
+        breaks: dictionary with break lengths for each video
+        soft_counts: soft cluster assignments for a specific video
+        frame_rate: frame rate of the video
+        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+        out_path: out_path: path to the output directory.
+
+    """
+    # Get cluster assignment per frame
+    hard_counts = np.argmax(soft_counts, axis=1)
+    assignments_per_frame = np.repeat(hard_counts, breaks)
+
+    # Name clusters, and update names using the provided dictionary
+    cluster_labels = {i: str(i) for i in set(hard_counts)}
+    cluster_labels.update(cluster_names)
+
+    # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+    cap = cv2.VideoCapture(video_path)
+
+    # Get width and height of current video
+    v_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    v_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    video_out = os.path.join(
+        out_path,
+        video_path[:-4].split("/")[-1]
+        + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
+    )
+
+    out = cv2.VideoWriter(
+        video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
+    )
+
+    i = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret == False:
+            break
+
+        try:
+            cv2.putText(
+                frame,
+                "Cluster {}".format(cluster_labels[assignments_per_frame[i]]),
+                (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                cv2.FONT_HERSHEY_DUPLEX,
+                0.75,
+                (255, 255, 255),
+                2,
+            )
+            out.write(frame)
+
+            i += 1
+
+        except IndexError:
+            ret = False
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def output_supervised_annotated_video():
+    """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
+
+    Args:
+
+    """
+    pass
+
+
+def export_annotated_video(
+    coordinates: coordinates,
+    soft_counts: dict = None,
+    breaks: dict = None,
+    experiment_id: str = None,
+    exp_conditions: list = [],
+    min_confidence: float = 0.0,
+    cluster_names: dict = {},
+):
+    """Generic function to export annotated videos from both supervised and unsupervised pipelines.
+
+    Args:
+        coordinates: coordinates object for the current project. Used to get video paths.
+        soft_counts: dictionary with soft_counts per experiment.
+        breaks: dictionary with break lengths for each video.
+        experiment_id: if provided, data coming from a particular experiment is used. If not, all experiments are exported.
+        exp_conditions: if provided, data coming from a particular condition is used. If not, all conditions are exported. If a list
+        is provided, the intersection of all conditions (i.e. male, stressed) is used.
+        min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
+        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+
+    """
+    # Create output directory if it doesn't exist
+    proj_path = os.path.join(coordinates._project_path, coordinates._project_name)
+    out_path = os.path.join(proj_path, "Out_videos")
+    if not os.path.exists(out_path):
+        os.mkdir(out_path)
+
+    def filter_experimental_conditions(
+        coordinates: coordinates, videos: list, conditions: list
+    ):
+        """Returns a list of videos that match the provided experimental conditions."""
+
+        filtered_videos = videos
+
+        for condition in conditions:
+
+            filtered_videos = [
+                video
+                for video in filtered_videos
+                if condition
+                in np.array(
+                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]]
+                )
+            ]
+
+        return filtered_videos
+
+    # Unsupervised annotation output
+    if soft_counts is not None:
+        if experiment_id is not None:
+            # If experiment_id is provided, only output a video for that experiment
+            deepof.visuals.output_unsupervised_annotated_video(
+                os.path.join(
+                    proj_path,
+                    "Videos",
+                    [
+                        video
+                        for video in coordinates.get_videos()
+                        if experiment_id in video
+                    ][0],
+                ),
+                breaks[experiment_id],
+                soft_counts[experiment_id],
+                frame_rate=coordinates._frame_rate,
+                cluster_names=cluster_names,
+                out_path=out_path,
+            )
+        else:
+            # If experiment_id is not provided, output a video per cluster for each experiment
+            filtered_videos = filter_experimental_conditions(
+                coordinates, coordinates.get_videos(), exp_conditions
+            )
+
+            deepof.visuals.output_videos_per_cluster(
+                [
+                    os.path.join(
+                        proj_path,
+                        "Videos",
+                        video,
+                    )
+                    for video in filtered_videos
+                ],
+                [
+                    val
+                    for key, val in breaks.items()
+                    if key
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                ],
+                [
+                    val
+                    for key, val in soft_counts.items()
+                    if key
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                ],
+                frame_rate=coordinates._frame_rate,
+                single_output_resolution=(500, 500),
+                confidence_threshold=min_confidence,
+                out_path=out_path,
+            )
+
+    # Supervised annotation output
+    else:
+        raise NotImplementedError

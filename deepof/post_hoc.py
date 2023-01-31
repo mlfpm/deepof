@@ -212,7 +212,7 @@ def condition_distance_binning(
     start_bin: int = None,
     end_bin: int = None,
     step_bin: int = None,
-    scan_mode: str = "growing-window",
+    scan_mode: str = "growing_window",
     precomputed_bins: np.ndarray = None,
     agg: str = "mean",
     metric: str = "auc",
