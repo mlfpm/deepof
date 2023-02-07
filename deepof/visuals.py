@@ -283,6 +283,7 @@ def plot_gantt(
     experiment_id: str,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    additional_checkpoints: pd.DataFrame = None,
     save: bool = False,
 ):
     """Returns a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation,
@@ -294,6 +295,7 @@ def plot_gantt(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video.
         new figure will be created.
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """  # TODO: extend to supervised annotations, and add time below
@@ -307,15 +309,24 @@ def plot_gantt(
 
     hard_counts = soft_counts[experiment_id].argmax(axis=1)
     gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
+
+    # If available, add additional checkpoints to the Gantt matrix
+    if additional_checkpoints is not None:
+        additional_checkpoints = additional_checkpoints.iloc[:, :gantt.shape[1]]
+        gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
+
     colors = np.tile(
         list(sns.color_palette("tab20").as_hex()), int(np.ceil(gantt.shape[0] / 20))
     )
 
+    # Iterate over unsupervised clusters and plot
+    rows = 0
     for cluster, color in zip(range(hard_counts.max() + 1), colors):
         gantt[cluster] = hard_counts == cluster
         gantt_cp = gantt.copy()
-        gantt_cp[[i for i in range(hard_counts.max()) if i != cluster]] = np.nan
+        gantt_cp[[i for i in range(gantt.shape[0]) if i != cluster]] = np.nan
         plt.axhline(y=cluster, color="k", linewidth=0.5)
+        rows += 1
 
         sns.heatmap(
             data=gantt_cp,
@@ -323,10 +334,31 @@ def plot_gantt(
             cmap=LinearSegmentedColormap.from_list("deepof", ["white", color], N=2),
         )
 
+    # Iterate over additional checkpoints and plot
+    if additional_checkpoints is not None:
+        for checkpoint in range(additional_checkpoints.shape[0]):
+            gantt_cp = gantt.copy()
+            gantt_cp[[i for i in range(gantt.shape[0]) if i != rows + checkpoint]] = np.nan
+            plt.axhline(y=rows+checkpoint, color="k", linewidth=0.5)
+
+            sns.heatmap(
+                data=gantt_cp,
+                cbar=False,
+                cmap=LinearSegmentedColormap.from_list("deepof", ["white", "black"], N=2),
+            )
+
     plt.xticks([])
     plt.yticks(
-        np.array(range(hard_counts.max() + 1)) + 0.5,
-        range(hard_counts.max() + 1),
+        np.array(range(gantt.shape[0])) + 0.5,
+        # Concatenate cluster IDs and checkpoint names if they exist
+        np.concatenate(
+            [
+                np.arange(hard_counts.max() + 1),
+                np.array(additional_checkpoints.index)
+                if additional_checkpoints is not None
+                else [],
+            ]
+        ),
         rotation=0,
         fontsize=10,
     )
@@ -370,6 +402,7 @@ def plot_cluster_enrichment(
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
+    precomputed: np.ndarray = None,
     # Visualization parameters
     exp_condition: str = None,
     normalize: bool = False,
@@ -389,6 +422,7 @@ def plot_cluster_enrichment(
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        precomputed (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         add_stats (bool): whether to add stats to the plots. Defaults to True.
         may hurt performance.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
@@ -418,6 +452,7 @@ def plot_cluster_enrichment(
         exp_conditions=exp_conditions,
         bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
         bin_index=bin_index,
+        precomputed=precomputed,
         normalize=normalize,
     )
 
