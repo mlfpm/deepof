@@ -22,14 +22,16 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold, cross_validate
+from sklearn.neighbors import KernelDensity
 from imblearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from tensorflow_probability import distributions as tfd
 from typing import Any, List, NewType, Union
 import numpy as np
 import ot
 import pandas as pd
+import scipy
 import shap
-import tqdm
 import umap
 
 import deepof.data
@@ -296,7 +298,7 @@ def condition_distance_binning(
         bin_range = pd.Series(precomputed_bins).unique()
 
     exp_condition_distance_array = Parallel(n_jobs=n_jobs)(
-        delayed(embedding_distance)(bin_index) for bin_index in tqdm.tqdm(bin_range)
+        delayed(embedding_distance)(bin_index) for bin_index in bin_range
     )
 
     return np.array(exp_condition_distance_array)
@@ -352,14 +354,14 @@ def separation_between_conditions(
             aggregated_embeddings.index.map(exp_conditions)
         )
 
-        current_clf = LogisticRegression(penalty="none")
+        current_clf = LogisticRegression(penalty=None)
         current_clf.fit(aggregated_embeddings, y)
 
         current_distance = roc_auc_score(
             y, current_clf.predict_proba(aggregated_embeddings)[:, 1]
         )
 
-    elif metric == "wasserstein":
+    else:
 
         aggregated_embeddings["exp_condition"] = aggregated_embeddings.index.map(
             exp_conditions
@@ -373,10 +375,16 @@ def separation_between_conditions(
             for cond in set(exp_conditions.values())
         ]
 
-        # Compute Wasserstein distance between conditions in the current bin
-        current_distance = ot.sliced_wasserstein_distance(
-            *arrays_to_compare, n_projections=10000
-        )
+        if metric == "wasserstein":
+            # Compute Wasserstein distance between conditions in the current bin
+            arrays_to_compare = [
+                KernelDensity().fit(arr).sample(100, random_state=0)
+                for arr in arrays_to_compare
+            ]
+
+            current_distance = ot.sliced_wasserstein_distance(
+                *arrays_to_compare, n_projections=10000
+            )
 
     return current_distance
 

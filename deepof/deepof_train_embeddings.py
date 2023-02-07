@@ -270,7 +270,7 @@ if __name__ == "__main__":
         # noinspection PyTypeChecker
         project_coords = deepof.data.Project(
             animal_ids=animal_ids.split(","),
-            arena=False,
+            arena="circular-autodetect",
             video_scale=arena_dims,
             enable_iterative_imputation=250,
             exclude_bodyparts=exclude_bodyparts,

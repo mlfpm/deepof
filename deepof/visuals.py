@@ -9,6 +9,7 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.patches import Ellipse
 from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.signal import savgol_filter
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from statannotations.Annotator import Annotator
@@ -558,7 +559,7 @@ def plot_transitions(
             G = nx.DiGraph(grouped_transitions[exp_condition])
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
 
-            pos = nx.circular_layout(G, scale=1, center=None, dim=2)
+            pos = nx.spring_layout(G, scale=1, center=None, dim=2)
             nx.draw(
                 G,
                 ax=ax,
@@ -1025,7 +1026,7 @@ def _scatter_embeddings(
 def animate_skeleton(
     coordinates: coordinates,
     experiment_id: str,
-    animal_id: list = "",
+    animal_id: list = None,
     center: str = "arena",
     align: str = None,
     frame_limit: int = None,
@@ -1219,7 +1220,7 @@ def animate_skeleton(
     hue = None
     cmap = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
 
-    if animal_id and coordinates._animal_ids[0]:
+    if not animal_id and coordinates._animal_ids[0]:
         animal_ids = coordinates._animal_ids
 
     else:
@@ -1802,3 +1803,113 @@ def export_annotated_video(
     # Supervised annotation output
     else:
         raise NotImplementedError
+
+
+def plot_distance_between_conditions(
+        # Model selection parameters
+        coordinates,
+        embedding,
+        soft_counts,
+        breaks,
+        exp_condition,
+        embedding_aggregation_method="median",
+        distance_metric="wasserstein",
+        n_jobs=-1,
+):
+    """Plots the distance between conditions across a growing time window. Finds an optimal separation binning based on the
+    distance between conditions, and plots the distance between conditions across all non-overlapping bins. Useful, for example,
+    to measure habituation across time.
+
+    Args:
+        coordinates: coordinates object for the current project. Used to get video paths.
+        embedding: embedding object for the current project. Used to get video paths.
+        soft_counts: dictionary with soft_counts per experiment.
+        breaks: dictionary with break lengths for each video.
+        exp_condition: experimental condition to use for the distance calculation.
+        embedding_aggregation_method: method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
+        distance_metric: distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
+        n_jobs: number of jobs to use for the distance calculation.
+    """
+    # Get distance between distributions across the growing window
+    distance_array = deepof.post_hoc.condition_distance_binning(
+        embedding,
+        soft_counts,
+        breaks,
+        {key: val[exp_condition].values[0] for key, val in coordinates.get_exp_conditions.items()},
+        10 * coordinates._frame_rate,
+        np.min([val.shape[0] for val in soft_counts.values()]),
+        coordinates._frame_rate,
+        agg=embedding_aggregation_method,
+        metric=distance_metric,
+        n_jobs=n_jobs,
+    )
+
+    optimal_bin = np.argmax(savgol_filter(distance_array, 10, 2)) + 10
+    print("Found an optimal_bin at {} seconds".format(optimal_bin))
+
+    distance_per_bin = deepof.post_hoc.condition_distance_binning(
+        embedding,
+        soft_counts,
+        breaks,
+        {key: val[exp_condition].values[0] for key, val in coordinates.get_exp_conditions.items()},
+        10 * coordinates._frame_rate,
+        np.min([val.shape[0] for val in soft_counts.values()]),
+        optimal_bin * coordinates._frame_rate,
+        agg=embedding_aggregation_method,
+        scan_mode="per-bin",
+        metric=distance_metric,
+        n_jobs=n_jobs,
+    )
+
+    # Concatenate both arrays and create a px compatible data frame
+    distance_df = pd.DataFrame(
+        {
+            exp_condition: distance_array,
+            "Time": np.linspace(10, 600, len(distance_array)),
+        }
+    ).melt(
+        id_vars=["Time"],
+        value_name=distance_metric,
+        var_name="experimental setting",
+    )
+
+    bin_distance_df = pd.DataFrame(
+        {
+            exp_condition: distance_per_bin,
+            "Time": np.linspace(
+                optimal_bin, 600, len(distance_per_bin)
+            ),
+        }
+    ).melt(
+        id_vars=["Time"],
+        value_name=distance_metric,
+        var_name="experimental setting",
+    )
+
+    # Plot the obtained distance array
+    sns.lineplot(
+        data=distance_df,
+        x="Time",
+        y=distance_metric,
+        color="#d6dbd2",
+    )
+    sns.lineplot(
+        data=bin_distance_df,
+        x="Time",
+        y=distance_metric,
+        color="#0b7189",
+        zorder=100,
+    )
+    sns.scatterplot(
+        data=bin_distance_df,
+        x="Time",
+        y=distance_metric,
+        color="#0b7189",
+        s=200,
+        linewidth=1,
+        zorder=100,
+    )
+
+    plt.title("deepOF - distance between conditions")
+    plt.xlim(0, 610)
+    plt.tight_layout()
