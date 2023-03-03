@@ -312,7 +312,7 @@ def plot_gantt(
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
-        additional_checkpoints = additional_checkpoints.iloc[:, :gantt.shape[1]]
+        additional_checkpoints = additional_checkpoints.iloc[:, : gantt.shape[1]]
         gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     colors = np.tile(
@@ -338,13 +338,17 @@ def plot_gantt(
     if additional_checkpoints is not None:
         for checkpoint in range(additional_checkpoints.shape[0]):
             gantt_cp = gantt.copy()
-            gantt_cp[[i for i in range(gantt.shape[0]) if i != rows + checkpoint]] = np.nan
-            plt.axhline(y=rows+checkpoint, color="k", linewidth=0.5)
+            gantt_cp[
+                [i for i in range(gantt.shape[0]) if i != rows + checkpoint]
+            ] = np.nan
+            plt.axhline(y=rows + checkpoint, color="k", linewidth=0.5)
 
             sns.heatmap(
                 data=gantt_cp,
                 cbar=False,
-                cmap=LinearSegmentedColormap.from_list("deepof", ["white", "black"], N=2),
+                cmap=LinearSegmentedColormap.from_list(
+                    "deepof", ["white", "black"], N=2
+                ),
             )
 
     plt.xticks([])
@@ -519,7 +523,7 @@ def plot_cluster_enrichment(
 
     title = "deepOF - cluster enrichment"
 
-    if ax is None:
+    if ax is not None:
         plt.title(title, fontsize=15)
     else:
         ax.set_title(title, fontsize=15)
@@ -782,6 +786,7 @@ def plot_embeddings(
     bin_index: int = 0,
     # Visualization design and data parameters
     exp_condition: str = None,
+    use_keys: list = None,
     aggregate_experiments: str = False,
     samples: int = 500,
     show_aggregated_density: bool = True,
@@ -800,6 +805,7 @@ def plot_embeddings(
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
         available is used.
+        use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
@@ -823,6 +829,16 @@ def plot_embeddings(
         i[exp_condition].values[0]
         for i in list(coordinates.get_exp_conditions.values())
     ]
+
+    if use_keys is not None:
+        embeddings = {key: embeddings[key] for key in use_keys}
+        soft_counts = {key: soft_counts[key] for key in use_keys}
+        breaks = {key: breaks[key] for key in use_keys}
+        concat_hue = [
+            j
+            for i, j in zip(list(coordinates.get_exp_conditions.keys()), concat_hue)
+            if i in use_keys
+        ]
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
     if bin_size is not None:
@@ -926,7 +942,7 @@ def plot_embeddings(
             )
 
         aggregated_embeddings = aggregated_embeddings.loc[
-            coordinates.get_exp_conditions.keys(), :
+            (coordinates.get_exp_conditions.keys() if use_keys is None else use_keys), :
         ]
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -938,7 +954,9 @@ def plot_embeddings(
             }
         )
 
-        embedding_dataset.index = coordinates.get_exp_conditions.keys()
+        embedding_dataset.index = (
+            coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
+        )
         embedding_dataset.sort_values("experimental condition", inplace=True)
 
     # Plot selected embeddings using the specified settings
@@ -960,9 +978,7 @@ def plot_embeddings(
         s=(50 if not aggregate_experiments else 100),
         edgecolor="black",
         palette=(
-            None
-            if aggregate_experiments or colour_by == "exp_condition"
-            else sns.color_palette("tab20").as_hex()[: len(set(cluster_assignments))]
+            None if aggregate_experiments or colour_by == "exp_condition" else "tab20"
         ),
     )
 
@@ -1182,6 +1198,9 @@ def animate_skeleton(
 
         if animal_id:
             animal_id += "_"
+
+        elif animal_id is None:
+            animal_id = ""
 
         head = np.concatenate(
             [
@@ -1567,7 +1586,7 @@ def output_cluster_video(
             if frame_mask[i]:
 
                 res_frame = cv2.resize(frame, [v_width, v_height])
-                re_path = re.findall(".+/(.+)DLC", path)[0]
+                re_path = re.findall(".+/(.+).mp4", path)[0]
 
                 if path is not None:
                     cv2.putText(
@@ -1739,7 +1758,7 @@ def export_annotated_video(
     soft_counts: dict = None,
     breaks: dict = None,
     experiment_id: str = None,
-    exp_conditions: list = [],
+    exp_conditions: dict = {},
     min_confidence: float = 0.0,
     cluster_names: dict = {},
 ):
@@ -1750,8 +1769,8 @@ def export_annotated_video(
         soft_counts: dictionary with soft_counts per experiment.
         breaks: dictionary with break lengths for each video.
         experiment_id: if provided, data coming from a particular experiment is used. If not, all experiments are exported.
-        exp_conditions: if provided, data coming from a particular condition is used. If not, all conditions are exported. If a list
-        is provided, the intersection of all conditions (i.e. male, stressed) is used.
+        exp_conditions: if provided, data coming from a particular condition is used. If not, all conditions are exported.
+        If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -1769,14 +1788,16 @@ def export_annotated_video(
 
         filtered_videos = videos
 
-        for condition in conditions:
+        for condition, state in conditions.items():
 
             filtered_videos = [
                 video
                 for video in filtered_videos
-                if condition
-                in np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]]
+                if state
+                == np.array(
+                    coordinates.get_exp_conditions[re.findall("(.+).mp4", video)[0]][
+                        condition
+                    ]
                 )
             ]
 
@@ -1821,13 +1842,13 @@ def export_annotated_video(
                     val
                     for key, val in breaks.items()
                     if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
                 ],
                 [
                     val
                     for key, val in soft_counts.items()
                     if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
                 ],
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
@@ -1841,15 +1862,15 @@ def export_annotated_video(
 
 
 def plot_distance_between_conditions(
-        # Model selection parameters
-        coordinates,
-        embedding,
-        soft_counts,
-        breaks,
-        exp_condition,
-        embedding_aggregation_method="median",
-        distance_metric="wasserstein",
-        n_jobs=-1,
+    # Model selection parameters
+    coordinates,
+    embedding,
+    soft_counts,
+    breaks,
+    exp_condition,
+    embedding_aggregation_method="median",
+    distance_metric="wasserstein",
+    n_jobs=-1,
 ):
     """Plots the distance between conditions across a growing time window. Finds an optimal separation binning based on the
     distance between conditions, and plots the distance between conditions across all non-overlapping bins. Useful, for example,
@@ -1870,7 +1891,10 @@ def plot_distance_between_conditions(
         embedding,
         soft_counts,
         breaks,
-        {key: val[exp_condition].values[0] for key, val in coordinates.get_exp_conditions.items()},
+        {
+            key: val[exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        },
         10 * coordinates._frame_rate,
         np.min([val.shape[0] for val in soft_counts.values()]),
         coordinates._frame_rate,
@@ -1886,7 +1910,10 @@ def plot_distance_between_conditions(
         embedding,
         soft_counts,
         breaks,
-        {key: val[exp_condition].values[0] for key, val in coordinates.get_exp_conditions.items()},
+        {
+            key: val[exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        },
         10 * coordinates._frame_rate,
         np.min([val.shape[0] for val in soft_counts.values()]),
         optimal_bin * coordinates._frame_rate,
@@ -1900,7 +1927,12 @@ def plot_distance_between_conditions(
     distance_df = pd.DataFrame(
         {
             exp_condition: distance_array,
-            "Time": np.linspace(10, 600, len(distance_array)),
+            "Time": np.linspace(
+                10,
+                np.min([val.shape[0] for val in soft_counts.values()]),
+                len(distance_array),
+            )
+            / coordinates._frame_rate,
         }
     ).melt(
         id_vars=["Time"],
@@ -1911,8 +1943,14 @@ def plot_distance_between_conditions(
     bin_distance_df = pd.DataFrame(
         {
             exp_condition: distance_per_bin,
-            "Time": np.linspace(
-                optimal_bin, 600, len(distance_per_bin)
+            "Time": np.concatenate(
+                [
+                    optimal_bin * np.arange(1, len(distance_per_bin)),
+                    [
+                        np.min([val.shape[0] for val in soft_counts.values()])
+                        / coordinates._frame_rate
+                    ],
+                ]
             ),
         }
     ).melt(
@@ -1946,5 +1984,289 @@ def plot_distance_between_conditions(
     )
 
     plt.title("deepOF - distance between conditions")
-    plt.xlim(0, 610)
+    plt.xlim(0, len(distance_per_bin) + 10)
     plt.tight_layout()
+
+
+def tag_annotated_frames(
+    frame,
+    font,
+    frame_speeds,
+    animal_ids,
+    corners,
+    tag_dict,
+    fnum,
+    undercond,
+    hparams,
+    arena,
+    arena_type,
+    debug,
+    coords,
+):
+    """Helper function for annotate_video. Annotates a given frame with on-screen information
+    about the recognised patterns"""
+
+    arena, w, h = arena
+
+    def write_on_frame(text, pos, col=(255, 255, 255)):
+        """Partial closure over cv2.putText to avoid code repetition"""
+        return cv2.putText(frame, text, pos, font, 0.75, col, 2)
+
+    def conditional_flag():
+        """Returns a tag depending on a condition"""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return left_flag
+        return right_flag
+
+    def conditional_pos():
+        """Returns a position depending on a condition"""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return corners["downleft"]
+        return corners["downright"]
+
+    def conditional_col(cond=None):
+        """Returns a colour depending on a condition"""
+        if cond is None:
+            cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
+        if cond:
+            return 150, 255, 150
+        return 150, 150, 255
+
+    # Keep track of space usage in the output video
+    # The flags are set to False as soon as the lower
+    # corners are occupied with text
+    left_flag, right_flag = True, True
+
+    if debug:
+
+        if arena_type.startswith("circular"):
+            # Print arena for debugging
+            cv2.ellipse(
+                img=frame,
+                center=arena[0],
+                axes=arena[1],
+                angle=arena[2],
+                startAngle=0,
+                endAngle=360,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        elif arena_type.startswith("polygonal"):
+
+            # Draw polygon
+            cv2.polylines(
+                img=frame,
+                pts=[np.array(arena, dtype=np.int32)],
+                isClosed=True,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        # Print body parts for debuging
+        for bpart in coords.columns.levels[0]:
+            if not np.isnan(coords[bpart]["x"][fnum]):
+                cv2.circle(
+                    frame,
+                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
+                    radius=3,
+                    color=(
+                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
+                    ),
+                    thickness=-1,
+                )
+        # Print frame number
+        write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
+
+    if len(animal_ids) > 1:
+
+        if tag_dict["nose2nose"][fnum]:
+            write_on_frame("Nose-Nose", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
+            write_on_frame("nose2body", corners["downleft"])
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
+            write_on_frame("nose2body", corners["downright"])
+            right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
+            write_on_frame("Nose-Tail", corners["downleft"])
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
+            write_on_frame("Nose-Tail", corners["downright"])
+            right_flag = False
+
+        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
+            write_on_frame("Side-side", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
+            write_on_frame("Side-Rside", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+    zipped_pos = list(
+        zip(
+            animal_ids,
+            [corners["downleft"], corners["downright"]],
+            [corners["upleft"], corners["upright"]],
+            [left_flag, right_flag],
+        )
+    )
+
+    for _id, down_pos, up_pos, flag in zipped_pos:
+
+        if flag:
+
+            if tag_dict[_id + undercond + "climbing"][fnum]:
+                write_on_frame("climbing", down_pos)
+            # elif tag_dict[_id + undercond + "huddle"][fnum]:
+            #     write_on_frame("huddling", down_pos)
+            elif tag_dict[_id + undercond + "sniffing"][fnum]:
+                write_on_frame("sniffing", down_pos)
+
+        # Define the condition controlling the colour of the speed display
+        if len(animal_ids) > 1:
+            colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
+        else:
+            colcond = hparams["huddle_speed"] < frame_speeds
+
+        write_on_frame(
+            str(
+                np.round(
+                    (frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2
+                )
+            )
+            + " mmpf",
+            up_pos,
+            conditional_col(cond=colcond),
+        )
+
+
+# noinspection PyProtectedMember,PyDefaultArgument
+def annotate_video(
+    coordinates: coordinates,
+    tag_dict: pd.DataFrame,
+    vid_index: int,
+    frame_limit: int = np.inf,
+    debug: bool = False,
+    params: dict = {},
+) -> True:
+    """Renders a version of the input video with all supervised taggings in place.
+
+    Parameters:
+        - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
+        - debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in
+        the output video
+        - vid_index: for internal usage only; index of the video to tag in coordinates._videos
+        - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
+        - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
+        that the supervised pose estimation utilizes.
+
+    Returns:
+        True
+
+    """
+
+    # Extract useful information from coordinates object
+    tracks = list(coordinates._tables.keys())
+    videos = coordinates._videos
+    path = os.path.join(coordinates._project_path, coordinates._project_name, "Videos")
+
+    params = deepof.annotation_utils.get_hparameters(params)
+    animal_ids = coordinates._animal_ids
+    undercond = "_" if len(animal_ids) > 1 else ""
+
+    try:
+        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
+    except IndexError:
+        vid_name = tracks[vid_index]
+
+    arena_params = coordinates._arena_params[vid_index]
+    h, w = coordinates._video_resolution[vid_index]
+    corners = deepof.annotation_utils.frame_corners(h, w)
+
+    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    # Keep track of the frame number, to align with the tracking data
+    fnum = 0
+    writer = None
+    frame_speeds = (
+        {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
+    )
+
+    # Loop over the frames in the video
+    while cap.isOpened() and fnum < frame_limit:
+
+        ret, frame = cap.read()
+        # if frame is read correctly ret is True
+        if not ret:  # pragma: no cover
+            print("Can't receive frame (stream end?). Exiting ...")
+            break
+
+        font = cv2.FONT_HERSHEY_DUPLEX
+
+        # Capture speeds
+        try:
+            if (
+                list(frame_speeds.values())[0] == -np.inf
+                or fnum % params["speed_pause"] == 0
+            ):
+                for _id in animal_ids:
+                    frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
+        except AttributeError:
+            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
+                frame_speeds = tag_dict["speed"][fnum]
+
+        # Display all annotations in the output video
+        tag_annotated_frames(
+            frame,
+            font,
+            frame_speeds,
+            animal_ids,
+            corners,
+            tag_dict,
+            fnum,
+            undercond,
+            params,
+            (arena_params, h, w),
+            coordinates._arena,
+            debug,
+            coordinates.get_coords(center=False)[vid_name],
+        )
+
+        if writer is None:
+            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
+            # Define the FPS. Also frame size is passed.
+            writer = cv2.VideoWriter()
+            writer.open(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Out_videos",
+                    vid_name + "_supervised_tagged.avi",
+                ),
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                coordinates._frame_rate,
+                (frame.shape[1], frame.shape[0]),
+                True,
+            )
+
+        writer.write(frame)
+        fnum += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return True

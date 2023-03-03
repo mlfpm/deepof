@@ -1282,6 +1282,7 @@ def autoencoder_fitting(
     Trains the specified autoencoder on the preprocessed data.
 
     Args:
+        coordinates (np.ndarray): Coordinates of the data.
         preprocessed_object (tuple): Tuple containing the preprocessed data.
         adjacency_matrix (np.ndarray): adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,

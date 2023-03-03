@@ -259,6 +259,7 @@ def condition_distance_binning(
     def embedding_distance(bin_index):
 
         if scan_mode == "per-bin":
+
             cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
                 embedding, soft_counts, breaks, step_bin, bin_index
             )
@@ -291,7 +292,7 @@ def condition_distance_binning(
         )
 
     if scan_mode == "per-bin":
-        bin_range = range((end_bin // step_bin))
+        bin_range = range(end_bin // step_bin + 1)
     elif scan_mode == "growing_window":
         bin_range = range(start_bin, end_bin, step_bin)
     else:
@@ -423,7 +424,6 @@ def cluster_enrichment_across_conditions(
         A long format dataframe with the population of each cluster across conditions.
 
     """
-
     # Select time bin and filter all relevant objects
     if precomputed is not None:
         embedding, soft_counts, breaks = select_time_bin(

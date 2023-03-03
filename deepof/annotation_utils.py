@@ -324,10 +324,7 @@ def dig(
     """
 
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    X_dig = pd.concat([pos_dframe, speed_dframe], axis=1).to_numpy()
-    y_dig = dig_estimator.predict(X_dig)
-
-    return y_dig
+    pass
 
 
 def look_around(
@@ -464,10 +461,8 @@ def get_hparameters(hparams: dict = {}) -> dict:
         "side_contact_tol": 80,
         "follow_frames": 10,
         "follow_tol": 5,
-        "huddle_forward": 15,
         "huddle_speed": 2,
         "nose_likelihood": 0.85,
-        "fps": 24,
     }
 
     for k, v in hparams.items():
@@ -572,10 +567,12 @@ def supervised_tagging(
     raw_coords = raw_coords[vid_name].reset_index(drop=True)
     coords = coords[vid_name].reset_index(drop=True)
     dists = dists[vid_name].reset_index(drop=True)
+
     # angs = angs[vid_name].reset_index(drop=True)
     speeds = speeds[vid_name].reset_index(drop=True)
     likelihoods = coord_object.get_quality()[vid_name].reset_index(drop=True)
-    arena_abs = coord_object.get_arenas[1][0]
+    arena_abs = coord_object._scales[vid_index][-1]
+    arena_rel = coord_object._scales[vid_index][-2]
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -614,7 +611,7 @@ def supervised_tagging(
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
                 arena_abs,
-                arena_params[1][1],
+                arena_rel,
             )
         )
 
@@ -632,7 +629,7 @@ def supervised_tagging(
                 params["side_contact_tol"],
                 rev=rev,
                 arena_abs=arena_abs,
-                arena_rel=arena_params[1][1],
+                arena_rel=arena_rel,
             )
         )
 
@@ -710,44 +707,25 @@ def supervised_tagging(
                 animal_id=_id,
             )
         )
-        tag_dict[_id + undercond + "huddle"] = huddle(
-            coords.loc[  # Filter coordinates to keep only the current animal
-                :,
-                [
-                    col
-                    for col in coords.columns
-                    if col in deepof.utils.filter_columns(coords.columns, _id)
-                ],
-            ],
-            speeds.loc[  # Filter speeds to keep only the current animal
-                :,
-                [
-                    col
-                    for col in speeds.columns
-                    if col in deepof.utils.filter_columns(speeds.columns, _id)
-                ],
-            ],
-            huddle_estimator,
-        )
-        tag_dict[_id + undercond + "dig"] = dig(
-            coords.loc[  # Filter coordinates to keep only the current animal
-                :,
-                [
-                    col
-                    for col in coords.columns
-                    if col in deepof.utils.filter_columns(coords.columns, _id)
-                ],
-            ],
-            speeds.loc[  # Filter speeds to keep only the current animal
-                :,
-                [
-                    col
-                    for col in speeds.columns
-                    if col in deepof.utils.filter_columns(speeds.columns, _id)
-                ],
-            ],
-            dig_estimator,
-        )
+        # tag_dict[_id + undercond + "huddle"] = huddle(
+        #     coords.loc[  # Filter coordinates to keep only the current animal
+        #         :,
+        #         [
+        #             col
+        #             for col in coords.columns
+        #             if col in deepof.utils.filter_columns(coords.columns, _id)
+        #         ],
+        #     ],
+        #     speeds.loc[  # Filter speeds to keep only the current animal
+        #         :,
+        #         [
+        #             col
+        #             for col in speeds.columns
+        #             if col in deepof.utils.filter_columns(speeds.columns, _id)
+        #         ],
+        #     ],
+        #     huddle_estimator,
+        # )
         tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
             look_around(
                 speeds,
@@ -766,291 +744,6 @@ def supervised_tagging(
     return tag_df
 
 
-def tag_annotated_frames(
-    frame,
-    font,
-    frame_speeds,
-    animal_ids,
-    corners,
-    tag_dict,
-    fnum,
-    undercond,
-    hparams,
-    arena,
-    arena_type,
-    debug,
-    coords,
-):
-    """Helper function for annotate_video. Annotates a given frame with on-screen information
-    about the recognised patterns"""
-
-    arena, w, h = arena
-
-    def write_on_frame(text, pos, col=(255, 255, 255)):
-        """Partial closure over cv2.putText to avoid code repetition"""
-        return cv2.putText(frame, text, pos, font, 0.75, col, 2)
-
-    def conditional_flag():
-        """Returns a tag depending on a condition"""
-        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-            return left_flag
-        return right_flag
-
-    def conditional_pos():
-        """Returns a position depending on a condition"""
-        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-            return corners["downleft"]
-        return corners["downright"]
-
-    def conditional_col(cond=None):
-        """Returns a colour depending on a condition"""
-        if cond is None:
-            cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-        if cond:
-            return 150, 255, 150
-        return 150, 150, 255
-
-    # Keep track of space usage in the output video
-    # The flags are set to False as soon as the lower
-    # corners are occupied with text
-    left_flag, right_flag = True, True
-
-    if debug:
-
-        if arena_type.startswith("circular"):
-            # Print arena for debugging
-            cv2.ellipse(
-                img=frame,
-                center=arena[0],
-                axes=arena[1],
-                angle=arena[2],
-                startAngle=0,
-                endAngle=360,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-        elif arena_type.startswith("polygonal"):
-
-            # Draw polygon
-            cv2.polylines(
-                img=frame,
-                pts=[np.array(arena, dtype=np.int32)],
-                isClosed=True,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-        # Print body parts for debuging
-        for bpart in coords.columns.levels[0]:
-            if not np.isnan(coords[bpart]["x"][fnum]):
-                cv2.circle(
-                    frame,
-                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
-                    radius=3,
-                    color=(
-                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
-                    ),
-                    thickness=-1,
-                )
-        # Print frame number
-        write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
-
-    if len(animal_ids) > 1:
-
-        if tag_dict["nose2nose"][fnum]:
-            write_on_frame("Nose-Nose", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
-            write_on_frame("nose2body", corners["downleft"])
-            left_flag = False
-
-        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
-            write_on_frame("nose2body", corners["downright"])
-            right_flag = False
-
-        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
-            write_on_frame("Nose-Tail", corners["downleft"])
-            left_flag = False
-
-        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
-            write_on_frame("Nose-Tail", corners["downright"])
-            right_flag = False
-
-        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
-            write_on_frame("Side-side", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
-            write_on_frame("Side-Rside", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-    zipped_pos = list(
-        zip(
-            animal_ids,
-            [corners["downleft"], corners["downright"]],
-            [corners["upleft"], corners["upright"]],
-            [left_flag, right_flag],
-        )
-    )
-
-    for _id, down_pos, up_pos, flag in zipped_pos:
-
-        if flag:
-
-            if tag_dict[_id + undercond + "climbing"][fnum]:
-                write_on_frame("climbing", down_pos)
-            elif tag_dict[_id + undercond + "huddle"][fnum]:
-                write_on_frame("huddling", down_pos)
-            elif tag_dict[_id + undercond + "sniffing"][fnum]:
-                write_on_frame("sniffing", down_pos)
-            elif tag_dict[_id + undercond + "dig"][fnum]:
-                write_on_frame("digging", down_pos)
-
-        # Define the condition controlling the colour of the speed display
-        if len(animal_ids) > 1:
-            colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
-        else:
-            colcond = hparams["huddle_speed"] < frame_speeds
-
-        write_on_frame(
-            str(
-                np.round(
-                    (frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2
-                )
-            )
-            + " mmpf",
-            up_pos,
-            conditional_col(cond=colcond),
-        )
-
-
-# noinspection PyProtectedMember,PyDefaultArgument
-def annotate_video(
-    coordinates: coordinates,
-    tag_dict: pd.DataFrame,
-    vid_index: int,
-    frame_limit: int = np.inf,
-    debug: bool = False,
-    params: dict = {},
-) -> True:
-    """Renders a version of the input video with all supervised taggings in place.
-
-    Parameters:
-        - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
-        - debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in
-        the output video
-        - vid_index: for internal usage only; index of the video to tag in coordinates._videos
-        - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
-        - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
-        that the supervised pose estimation utilizes.
-
-    Returns:
-        True
-
-    """
-
-    # Extract useful information from coordinates object
-    tracks = list(coordinates._tables.keys())
-    videos = coordinates._videos
-    path = os.path.join(coordinates._path, "Videos")
-
-    params = get_hparameters(params)
-    animal_ids = coordinates._animal_ids
-    undercond = "_" if len(animal_ids) > 1 else ""
-
-    try:
-        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
-    except IndexError:
-        vid_name = tracks[vid_index]
-
-    arena_params = coordinates._arena_params[vid_index]
-    h, w = coordinates._video_resolution[vid_index]
-    corners = frame_corners(h, w)
-
-    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
-    # Keep track of the frame number, to align with the tracking data
-    fnum = 0
-    writer = None
-    frame_speeds = (
-        {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
-    )
-
-    # Loop over the frames in the video
-    while cap.isOpened() and fnum < frame_limit:
-
-        ret, frame = cap.read()
-        # if frame is read correctly ret is True
-        if not ret:  # pragma: no cover
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
-
-        font = cv2.FONT_HERSHEY_DUPLEX
-
-        # Capture speeds
-        try:
-            if (
-                list(frame_speeds.values())[0] == -np.inf
-                or fnum % params["speed_pause"] == 0
-            ):
-                for _id in animal_ids:
-                    frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
-        except AttributeError:
-            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
-                frame_speeds = tag_dict["speed"][fnum]
-
-        # Display all annotations in the output video
-        tag_annotated_frames(
-            frame,
-            font,
-            frame_speeds,
-            animal_ids,
-            corners,
-            tag_dict,
-            fnum,
-            undercond,
-            params,
-            (arena_params, h, w),
-            coordinates._arena,
-            debug,
-            coordinates.get_coords(center=False)[vid_name],
-        )
-
-        if writer is None:
-            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
-            # Define the FPS. Also frame size is passed.
-            writer = cv2.VideoWriter()
-            writer.open(
-                vid_name + "_tagged.avi",
-                cv2.VideoWriter_fourcc(*"MJPG"),
-                params["fps"],
-                (frame.shape[1], frame.shape[0]),
-                True,
-            )
-
-        writer.write(frame)
-        fnum += 1
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-    return True
-
-
 if __name__ == "__main__":
     # Ignore warnings with no downstream effect
     warnings.filterwarnings("ignore", message="All-NaN slice encountered")
-
-# TODO:
-#    - Scale CD1 features to match those of black6
-#    - Use scaled features (not standard, but scaled using some notion of animal size)

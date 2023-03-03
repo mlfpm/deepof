@@ -35,6 +35,7 @@ from typing import Any, NewType, Union
 from typing import Dict, List, Tuple
 import copy
 import datetime
+import math
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -131,7 +132,7 @@ class Project:
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
             video_format (str): video format. Defaults to '.mp4'.
-            video_scale (int): diameter of the arena in mm (so far, only round arenas are supported).
+            video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
 
         """
         # Set working paths
@@ -306,17 +307,25 @@ class Project:
         arena_params = []
         video_resolution = []
 
+        def get_first_length(arena_corners):
+            return math.dist(arena_corners[0], arena_corners[1])
+
         if self.arena in ["polygonal-manual", "circular-manual"]:
 
-            for video_path in self.videos:
+            for i, video_path in enumerate(self.videos):
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
-                    os.path.join(self.project_path, "Videos", video_path), self.arena
+                    os.path.join(self.project_path, "Videos", video_path),
+                    self.arena,
+                    i,
+                    self.videos,
                 )
+
                 cur_scales = [
                     *np.mean(arena_corners, axis=0).astype(int),
-                    Polygon(arena_corners).length,
+                    get_first_length(arena_corners),
                     self.arena_dims,
                 ]
+
                 cur_arena_params = arena_corners
 
                 if self.arena == "circular-manual":
@@ -1482,7 +1491,7 @@ class Coordinates:
 
             def output_video(idx):
                 """Outputs a single annotated video. Enclosed in a function to enable parallelization."""
-                deepof.annotation_utils.annotate_video(
+                deepof.visuals.annotate_video(
                     self,
                     tag_dict=tag_dict[idx],
                     vid_index=list(self._tables.keys()).index(idx),
@@ -1535,7 +1544,7 @@ class Coordinates:
         contrastive_loss_function: str = "nce",
         beta: float = 0.1,
         tau: float = 0.1,
-        output_path: str = "unsupervised_trained_models",
+        output_path: str = "",
         pretrained: str = False,
         save_checkpoints: bool = False,
         save_weights: bool = True,
@@ -1599,7 +1608,7 @@ class Coordinates:
             contrastive_loss_function=contrastive_loss_function,
             beta=beta,
             tau=tau,
-            output_path=output_path,
+            output_path=os.path.join(self._project_path, output_path, "Trained_models"),
             pretrained=pretrained,
             save_checkpoints=save_checkpoints,
             save_weights=save_weights,

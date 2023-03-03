@@ -1214,7 +1214,9 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
-def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: no cover
+def retrieve_corners_from_image(
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list
+):  # pragma: no cover
     """
 
     Opens a window and waits for the user to click on all corners of the polygonal arena.
@@ -1223,6 +1225,8 @@ def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: 
     Args:
         frame (np.ndarray): Frame to display.
         arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        cur_vid (int): Index of the current video in the list of videos.
+        videos (list): List of videos to be processed.
 
     Returns:
 
@@ -1246,11 +1250,15 @@ def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: 
         frame_copy = frame.copy()
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
+                cur_vid, len(videos)
+            ),
             frame_copy,
         )
         cv2.setMouseCallback(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
+                cur_vid, len(videos)
+            ),
             click_on_corners,
         )
 
@@ -1290,7 +1298,9 @@ def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: 
             )
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete)",
+            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
+                cur_vid, len(videos)
+            ),
             frame_copy,
         )
 
@@ -1298,11 +1308,12 @@ def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: 
         if cv2.waitKey(1) & 0xFF == ord("d"):
             corners = corners[:-1]
 
-        # Exit is user presses q
-        elif cv2.waitKey(1) & 0xFF == ord("q"):
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)
-            break
+        # Exit is user presses 'q'
+        if len(corners) > 2:
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                for i in range(1, 5):
+                    cv2.waitKey(1)
+                break
 
     cv2.destroyAllWindows()
     cv2.waitKey(1)
@@ -1312,7 +1323,7 @@ def retrieve_corners_from_image(frame: np.ndarray, arena_type: str):  # pragma: 
 
 
 def extract_polygonal_arena_coordinates(
-    video_path: str, arena_type: str
+    video_path: str, arena_type: str, video_index: int, videos: list
 ):  # pragma: no cover
     """
 
@@ -1322,6 +1333,8 @@ def extract_polygonal_arena_coordinates(
     Args:
         video_path: Path to the video file.
         arena_type: Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        video_index: Index of the current video in the list of videos.
+        videos: List of videos to be processed.
 
     Returns:
         np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
@@ -1335,7 +1348,10 @@ def extract_polygonal_arena_coordinates(
 
     # Get and return the corners of the arena
     arena_corners = retrieve_corners_from_image(
-        current_video[current_frame].compute(), arena_type
+        current_video[current_frame].compute(),
+        arena_type,
+        video_index,
+        videos,
     )
     return arena_corners, current_video.shape[2], current_video.shape[1]
 

@@ -1389,6 +1389,76 @@ def get_vade(
     return embedding, decoder, grouper, vade
 
 
+class Classifier(tf.keras.Model):
+    """Classifier for supervised pose motif elucidation."""
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray = None,
+        use_gnn: bool = True,
+        batch_size: int = 64,
+        encoder_type: str = "recurrent",
+        **kwargs,
+    ):
+
+        """Initializes a classifier model.
+
+        Args:
+            - input_shape (tuple): shape of the input data.
+            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
+            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+            - batch_size (int): batch size for training.
+            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+        """
+
+        super().__init__(**kwargs)
+
+        if encoder_type == "recurrent":
+            self.encoder = get_recurrent_encoder(
+                input_shape=input_shape[1:],
+                adjacency_matrix=adjacency_matrix,
+                edge_feature_shape=edge_feature_shape[1:],
+                latent_dim=1,
+                use_gnn=use_gnn,
+            )
+        elif encoder_type == "TCN":
+            self.encoder = get_TCN_encoder(
+                input_shape=input_shape[1:],
+                adjacency_matrix=adjacency_matrix,
+                edge_feature_shape=edge_feature_shape[1:],
+                latent_dim=1,
+                use_gnn=use_gnn,
+            )
+        elif encoder_type == "transformer":
+            self.encoder = get_transformer_encoder(
+                input_shape[1:],
+                edge_feature_shape=edge_feature_shape[1:],
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=1,
+                use_gnn=use_gnn,
+            )
+
+        self.dense = tf.keras.layers.Dense(1, activation="sigmoid")
+
+    def call(self, inputs, training=None, mask=None):
+        """Forward pass of the classifier.
+
+        Args:
+            - inputs (tf.Tensor): input data.
+            - training (bool): whether the model is in training mode.
+            - mask (tf.Tensor): mask for the input data.
+        """
+
+        x = self.encoder(inputs)
+        x = self.dense(x)
+
+        return x
+
+
 # noinspection PyDefaultArgument,PyCallingNonCallable
 class VaDE(tf.keras.models.Model):
     """Gaussian Mixture Variational Autoencoder for pose motif elucidation."""
