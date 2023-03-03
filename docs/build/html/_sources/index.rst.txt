@@ -158,10 +158,10 @@ Full API reference
 
 * `deepof.data (main data-wrangling module) <deepof.data.html>`_
 * `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
-* `deepof.supervised_utils (deep supervised model training auxiliary functions) <deepof.supervised_utils.html>`_
-* `deepof.unsupervised_utils (deep unsupervised models' auxiliary functions) <deepof.unsupervised_utils.html>`_
 * `deepof.models (deep unsupervised models) <deepof.models.html>`_
 * `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
+* `deepof.annotation_utils (deep rule-based annotation auxiliary functions) <deepof.annotation_utils.html>`_
+* `deepof.model_utils (deep machine learning models' auxiliary functions) <deepof.model_utils.html>`_
 * `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
 * `deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
 

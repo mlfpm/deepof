@@ -57,8 +57,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>deepof</li>
+      <li><a href="index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">deepof</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/modules.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -99,6 +99,7 @@
 <li class="toctree-l1"><a class="reference internal" href="deepof.html">deepof package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="deepof.html#submodules">Submodules</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="deepof.data.html">deepof.data module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.load_project"><code class="docutils literal notranslate"><span class="pre">load_project()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Project"><code class="docutils literal notranslate"><span class="pre">Project</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Coordinates"><code class="docutils literal notranslate"><span class="pre">Coordinates</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.TableDict"><code class="docutils literal notranslate"><span class="pre">TableDict</span></code></a></li>
@@ -121,8 +122,9 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_vqvae"><code class="docutils literal notranslate"><span class="pre">get_vqvae()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.GaussianMixtureLatent"><code class="docutils literal notranslate"><span class="pre">GaussianMixtureLatent</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_gmvae"><code class="docutils literal notranslate"><span class="pre">get_gmvae()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.GMVAE"><code class="docutils literal notranslate"><span class="pre">GMVAE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.get_vade"><code class="docutils literal notranslate"><span class="pre">get_vade()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.Classifier"><code class="docutils literal notranslate"><span class="pre">Classifier</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.VaDE"><code class="docutils literal notranslate"><span class="pre">VaDE</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.models.html#deepof.models.Contrastive"><code class="docutils literal notranslate"><span class="pre">Contrastive</span></code></a></li>
 </ul>
 </li>
@@ -136,68 +138,21 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.get_transitions"><code class="docutils literal notranslate"><span class="pre">get_transitions()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.compute_transition_matrix_per_condition"><code class="docutils literal notranslate"><span class="pre">compute_transition_matrix_per_condition()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.compute_steady_state"><code class="docutils literal notranslate"><span class="pre">compute_steady_state()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.compute_UMAP"><code class="docutils literal notranslate"><span class="pre">compute_UMAP()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels"><code class="docutils literal notranslate"><span class="pre">align_deepof_kinematics_with_unsupervised_labels()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.chunk_summary_statistics"><code class="docutils literal notranslate"><span class="pre">chunk_summary_statistics()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.annotate_time_chunks"><code class="docutils literal notranslate"><span class="pre">annotate_time_chunks()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.chunk_cv_splitter"><code class="docutils literal notranslate"><span class="pre">chunk_cv_splitter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.train_supervised_cluster_detectors"><code class="docutils literal notranslate"><span class="pre">train_supervised_cluster_detectors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.post_hoc.html#deepof.post_hoc.explain_clusters"><code class="docutils literal notranslate"><span class="pre">explain_clusters()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.close_single_contact"><code class="docutils literal notranslate"><span class="pre">close_single_contact()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.close_double_contact"><code class="docutils literal notranslate"><span class="pre">close_double_contact()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.outside_ellipse"><code class="docutils literal notranslate"><span class="pre">outside_ellipse()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.climb_wall"><code class="docutils literal notranslate"><span class="pre">climb_wall()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.sniff_object"><code class="docutils literal notranslate"><span class="pre">sniff_object()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.huddle"><code class="docutils literal notranslate"><span class="pre">huddle()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.dig"><code class="docutils literal notranslate"><span class="pre">dig()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.look_around"><code class="docutils literal notranslate"><span class="pre">look_around()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.following_path"><code class="docutils literal notranslate"><span class="pre">following_path()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.max_behaviour"><code class="docutils literal notranslate"><span class="pre">max_behaviour()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.get_hparameters"><code class="docutils literal notranslate"><span class="pre">get_hparameters()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.frame_corners"><code class="docutils literal notranslate"><span class="pre">frame_corners()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.supervised_tagging"><code class="docutils literal notranslate"><span class="pre">supervised_tagging()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.tag_annotated_frames"><code class="docutils literal notranslate"><span class="pre">tag_annotated_frames()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.supervised_utils.html#deepof.supervised_utils.annotate_video"><code class="docutils literal notranslate"><span class="pre">annotate_video()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.select_contrastive_loss"><code class="docutils literal notranslate"><span class="pre">select_contrastive_loss()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.nce_loss_fn"><code class="docutils literal notranslate"><span class="pre">nce_loss_fn()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.dcl_loss_fn"><code class="docutils literal notranslate"><span class="pre">dcl_loss_fn()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.fc_loss_fn"><code class="docutils literal notranslate"><span class="pre">fc_loss_fn()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.hard_loss_fn"><code class="docutils literal notranslate"><span class="pre">hard_loss_fn()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.load_treatments"><code class="docutils literal notranslate"><span class="pre">load_treatments()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.compute_kmeans_loss"><code class="docutils literal notranslate"><span class="pre">compute_kmeans_loss()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.get_k_nearest_neighbors"><code class="docutils literal notranslate"><span class="pre">get_k_nearest_neighbors()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.compute_shannon_entropy"><code class="docutils literal notranslate"><span class="pre">compute_shannon_entropy()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.get_neighbourhood_entropy"><code class="docutils literal notranslate"><span class="pre">get_neighbourhood_entropy()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.plot_lr_vs_loss"><code class="docutils literal notranslate"><span class="pre">plot_lr_vs_loss()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.get_angles"><code class="docutils literal notranslate"><span class="pre">get_angles()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.positional_encoding"><code class="docutils literal notranslate"><span class="pre">positional_encoding()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.create_padding_mask"><code class="docutils literal notranslate"><span class="pre">create_padding_mask()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.create_look_ahead_mask"><code class="docutils literal notranslate"><span class="pre">create_look_ahead_mask()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.create_masks"><code class="docutils literal notranslate"><span class="pre">create_masks()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.find_learning_rate"><code class="docutils literal notranslate"><span class="pre">find_learning_rate()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.get_hard_counts"><code class="docutils literal notranslate"><span class="pre">get_hard_counts()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.cluster_frequencies_regularizer"><code class="docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.get_callbacks"><code class="docutils literal notranslate"><span class="pre">get_callbacks()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.CustomStopper"><code class="docutils literal notranslate"><span class="pre">CustomStopper</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.ExponentialLearningRate"><code class="docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.ProbabilisticDecoder"><code class="docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.ClusterControl"><code class="docutils literal notranslate"><span class="pre">ClusterControl</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.KLDivergenceLayer"><code class="docutils literal notranslate"><span class="pre">KLDivergenceLayer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.TransformerEncoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.TransformerDecoderLayer"><code class="docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.TransformerEncoder"><code class="docutils literal notranslate"><span class="pre">TransformerEncoder</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.TransformerDecoder"><code class="docutils literal notranslate"><span class="pre">TransformerDecoder</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.log_hyperparameters"><code class="docutils literal notranslate"><span class="pre">log_hyperparameters()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.autoencoder_fitting"><code class="docutils literal notranslate"><span class="pre">autoencoder_fitting()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.unsupervised_utils.html#deepof.unsupervised_utils.tune_search"><code class="docutils literal notranslate"><span class="pre">tune_search()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.supervised_utils.html">deepof.supervised_utils module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.utils.html">deepof.utils module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.connect_mouse_topview"><code class="docutils literal notranslate"><span class="pre">connect_mouse_topview()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.edges_to_weithed_adj"><code class="docutils literal notranslate"><span class="pre">edges_to_weithed_adj()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.enumerate_all_bridges"><code class="docutils literal notranslate"><span class="pre">enumerate_all_bridges()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.str2bool"><code class="docutils literal notranslate"><span class="pre">str2bool()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.likelihood_qc"><code class="docutils literal notranslate"><span class="pre">likelihood_qc()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.bp2polar"><code class="docutils literal notranslate"><span class="pre">bp2polar()</span></code></a></li>
@@ -205,10 +160,11 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.compute_dist"><code class="docutils literal notranslate"><span class="pre">compute_dist()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.bpart_distance"><code class="docutils literal notranslate"><span class="pre">bpart_distance()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.angle"><code class="docutils literal notranslate"><span class="pre">angle()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.angle_trio"><code class="docutils literal notranslate"><span class="pre">angle_trio()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.compute_areas"><code class="docutils literal notranslate"><span class="pre">compute_areas()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.align_trajectories"><code class="docutils literal notranslate"><span class="pre">align_trajectories()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.scale_table"><code class="docutils literal notranslate"><span class="pre">scale_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.scale_animal"><code class="docutils literal notranslate"><span class="pre">scale_animal()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.kleinberg"><code class="docutils literal notranslate"><span class="pre">kleinberg()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.smooth_boolean_array"><code class="docutils literal notranslate"><span class="pre">smooth_boolean_array()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.split_with_breakpoints"><code class="docutils literal notranslate"><span class="pre">split_with_breakpoints()</span></code></a></li>
@@ -232,9 +188,25 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.visuals.html">deepof.visuals module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_heatmap"><code class="docutils literal notranslate"><span class="pre">plot_heatmap()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_projection"><code class="docutils literal notranslate"><span class="pre">plot_projection()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_unsupervised_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_unsupervised_embeddings()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_arena"><code class="docutils literal notranslate"><span class="pre">plot_arena()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.heatmap"><code class="docutils literal notranslate"><span class="pre">heatmap()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_heatmaps"><code class="docutils literal notranslate"><span class="pre">plot_heatmaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_gantt"><code class="docutils literal notranslate"><span class="pre">plot_gantt()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_cluster_enrichment"><code class="docutils literal notranslate"><span class="pre">plot_cluster_enrichment()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_transitions"><code class="docutils literal notranslate"><span class="pre">plot_transitions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_stationary_entropy"><code class="docutils literal notranslate"><span class="pre">plot_stationary_entropy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_embeddings()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.animate_skeleton"><code class="docutils literal notranslate"><span class="pre">animate_skeleton()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_cluster_detection_performance"><code class="docutils literal notranslate"><span class="pre">plot_cluster_detection_performance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_shap_swarm_per_cluster"><code class="docutils literal notranslate"><span class="pre">plot_shap_swarm_per_cluster()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.output_cluster_video"><code class="docutils literal notranslate"><span class="pre">output_cluster_video()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.output_videos_per_cluster"><code class="docutils literal notranslate"><span class="pre">output_videos_per_cluster()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.output_unsupervised_annotated_video"><code class="docutils literal notranslate"><span class="pre">output_unsupervised_annotated_video()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.output_supervised_annotated_video"><code class="docutils literal notranslate"><span class="pre">output_supervised_annotated_video()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.export_annotated_video"><code class="docutils literal notranslate"><span class="pre">export_annotated_video()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.plot_distance_between_conditions"><code class="docutils literal notranslate"><span class="pre">plot_distance_between_conditions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.tag_annotated_frames"><code class="docutils literal notranslate"><span class="pre">tag_annotated_frames()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.visuals.html#deepof.visuals.annotate_video"><code class="docutils literal notranslate"><span class="pre">annotate_video()</span></code></a></li>
 </ul>
 </li>
 </ul>

@@ -65,8 +65,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-      <li>Welcome to DeepOF!</li>
+      <li><a href="#" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Welcome to DeepOF!</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -115,15 +115,15 @@ compare user-defined experimental groups.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h2>
 <p>The easiest way to install DeepOF is to use <a class="reference external" href="https://pypi.org/project/deepof/">pip</a>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install deepof
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>deepof
 </pre></div>
 </div>
 <p>Alternatively, you can download our pre-built <a class="reference external" href="https://hub.docker.com/repository/docker/lucasmiranda42/deepof">Docker image</a>,
 which contains all compatible dependencies:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># download the latest available image</span>
-docker pull lucasmiranda42/deepof:latest
+docker<span class="w"> </span>pull<span class="w"> </span>lucasmiranda42/deepof:latest
 <span class="c1"># run the image in interactive mode, enabling you to open python and import deepof</span>
-docker run -it lucasmiranda42/deepof
+docker<span class="w"> </span>run<span class="w"> </span>-it<span class="w"> </span>lucasmiranda42/deepof
 </pre></div>
 </div>
 </section>
@@ -143,8 +143,8 @@ working with (either you original data or the labeled ones obtained from DLC); t
 tables you got from DeepLabCut, either in .h5 or .csv format. If you don’t want to use DLC yourself, don’t worry:
 a compatible pre-trained model for mice will be released soon!</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>my_project
-├── Videos -&gt; all tagged videos
-├── Tables -&gt; all tracking tables <span class="o">(</span>.h5 or .csv<span class="o">)</span>
+├──<span class="w"> </span>Videos<span class="w"> </span>-&gt;<span class="w"> </span>all<span class="w"> </span>tagged<span class="w"> </span>videos
+├──<span class="w"> </span>Tables<span class="w"> </span>-&gt;<span class="w"> </span>all<span class="w"> </span>tracking<span class="w"> </span>tables<span class="w"> </span><span class="o">(</span>.h5<span class="w"> </span>or<span class="w"> </span>.csv<span class="o">)</span>
 </pre></div>
 </div>
 <p>IMPORTANT: You should make sure that the tables and videos correspond to the same experiments. While the names should
@@ -215,10 +215,10 @@ you get a generative model for free).</p>
 <ul class="simple">
 <li><p><a class="reference external" href="deepof.data.html">deepof.data (main data-wrangling module)</a></p></li>
 <li><p><a class="reference external" href="deepof.utils.html">deepof.utils (data-wrangling auxiliary functions)</a></p></li>
-<li><p><a class="reference external" href="deepof.supervised_utils.html">deepof.supervised_utils (deep supervised model training auxiliary functions)</a></p></li>
-<li><p><a class="reference external" href="deepof.unsupervised_utils.html">deepof.unsupervised_utils (deep unsupervised models’ auxiliary functions)</a></p></li>
 <li><p><a class="reference external" href="deepof.models.html">deepof.models (deep unsupervised models)</a></p></li>
 <li><p><a class="reference external" href="deepof.hypermodels.html">deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning)</a></p></li>
+<li><p><a class="reference external" href="deepof.annotation_utils.html">deepof.annotation_utils (deep rule-based annotation auxiliary functions)</a></p></li>
+<li><p><a class="reference external" href="deepof.model_utils.html">deepof.model_utils (deep machine learning models’ auxiliary functions)</a></p></li>
 <li><p><a class="reference external" href="deepof.visuals.html">deepof.visuals (auxiliary visualization functions)</a></p></li>
 <li><p><a class="reference external" href="deepof.post_hoc.html">deepof.post_hoc (auxiliary annotation analysis functions)</a></p></li>
 </ul>
