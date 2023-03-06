@@ -13,7 +13,7 @@
 .. |Version| image:: https://img.shields.io/badge/release-v0.1.6-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
-   :target: https://pypi.org/project/deepof/
+   :target: https://mlfpm.eu/
 .. |Black| image:: https://img.shields.io/badge/code%20style-black-black
    :target: https://github.com/psf/black
 
