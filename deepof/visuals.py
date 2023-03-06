@@ -1984,7 +1984,7 @@ def plot_distance_between_conditions(
     )
 
     plt.title("deepOF - distance between conditions")
-    plt.xlim(0, len(distance_per_bin) + 10)
+    plt.xlim(0, len(distance_array) + 10)
     plt.tight_layout()
 
 
