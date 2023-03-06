@@ -126,54 +126,46 @@ docker<span class="w"> </span>pull<span class="w"> </span>lucasmiranda42/deepof:
 docker<span class="w"> </span>run<span class="w"> </span>-it<span class="w"> </span>lucasmiranda42/deepof
 </pre></div>
 </div>
+<p>Or use <a class="reference external" href="https://python-poetry.org/">poetry</a>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># after installing poetry and clonning the DeepOF repository, just run</span>
+poetry<span class="w"> </span>install<span class="w"> </span><span class="c1"># from the main directory</span>
+</pre></div>
+</div>
 </section>
 <section id="what-you-need">
 <h2>What you need<a class="headerlink" href="#what-you-need" title="Permalink to this heading"></a></h2>
 <p>DeepOF relies heavily on DeepLabCut’s output. Thorough tutorials on how to get started with DLC for pose estimation can be found <a class="reference external" href="https://www.mousemotorlab.org/deeplabcut">here</a>.
-Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Currently, DeepOF requires videos to be filmed from a top-view perspective, and follow a set of labels
+Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow a set of labels
 equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing <strong>C57Bl6</strong> and <strong>CD1</strong> mice can be downloaded from <a class="reference external" href="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models">our repository</a>.</p>
 <a class="reference internal image-reference" href="_images/deepof_DLC_tagging.png"><img alt="DeepOF label scheme" class="align-center" src="_images/deepof_DLC_tagging.png" style="width: 400px;" /></a>
-<p><strong>NOTE</strong>: Some DeepOF functions (such as climbing detection) currently require the user to film their animals in a round arena. This is scheduled to be
-updated in future releases.</p>
 </section>
 <section id="basic-usage">
 <h2>Basic usage<a class="headerlink" href="#basic-usage" title="Permalink to this heading"></a></h2>
-<p>To start, create a folder for your project with at least two subdirectories inside, called ‘Videos’ and ‘Tables’. The former should contain the videos you’re
-working with (either you original data or the labeled ones obtained from DLC); the latter should have all the tracking
-tables you got from DeepLabCut, either in .h5 or .csv format. If you don’t want to use DLC yourself, don’t worry:
-a compatible pre-trained model for mice will be released soon!</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>my_project
-├──<span class="w"> </span>Videos<span class="w"> </span>-&gt;<span class="w"> </span>all<span class="w"> </span>tagged<span class="w"> </span>videos
-├──<span class="w"> </span>Tables<span class="w"> </span>-&gt;<span class="w"> </span>all<span class="w"> </span>tracking<span class="w"> </span>tables<span class="w"> </span><span class="o">(</span>.h5<span class="w"> </span>or<span class="w"> </span>.csv<span class="o">)</span>
-</pre></div>
-</div>
-<p>IMPORTANT: You should make sure that the tables and videos correspond to the same experiments. While the names should
-be compatible, this is handled by DLC by default.</p>
 <p>The main module with which you’ll interact is called <code class="docutils literal notranslate"><span class="pre">`deepof.data`</span></code>. Let’s import it and create a project:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.data</span>
-<span class="n">my_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;./my_project&quot;</span><span class="p">,</span>
-                                 <span class="n">arena_dims</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>        <span class="c1"># diameter of the arena in milimeters</span>
-                                 <span class="n">arena_type</span><span class="o">=</span><span class="s2">&quot;circular&quot;</span><span class="p">,</span> <span class="c1"># type of the filmed arena (optional). So far, only &quot;circular&quot; is valid</span>
-                                 <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>        <span class="c1"># smoothing coefficient (optional)</span>
-                                 <span class="n">frame_rate</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>         <span class="c1"># frame rate of the videos in Hz (optional)</span>
+<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
+   <span class="n">project_path</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="c1"># Path where to create project files</span>
+   <span class="n">video_path</span><span class="o">=</span><span class="s2">&quot;/path/to/videos&quot;</span><span class="p">,</span> <span class="c1"># Path to DLC tracked videos</span>
+   <span class="n">table_path</span><span class="o">=</span><span class="s2">&quot;/path/to/tables&quot;</span><span class="p">,</span> <span class="c1"># Path to DLC output</span>
+   <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;my_deepof_project&quot;</span><span class="p">,</span> <span class="c1"># Name of the current project</span>
+   <span class="n">exp_conditions</span><span class="o">=</span><span class="p">{</span><span class="n">exp_ID</span><span class="p">:</span> <span class="n">exp_condition</span><span class="p">}</span> <span class="c1"># Dictionary containing one or more experimental conditions per provided video</span>
+ <span class="p">)</span>
 </pre></div>
 </div>
-<p>This command will create a <code class="docutils literal notranslate"><span class="pre">`deepof.data.Project`</span></code> object storing all the necessary information to start. The <code class="docutils literal notranslate"><span class="pre">`smooth_alpha`</span></code>
-parameter will control how much smoothing will be applied to your trajectories, using an exponentially weighted average.
-Values close to 0 apply a stronger smoothing, and values close to 1 a very light one. In practice, we recommend values
-between 0.95 and 0.99 if your trajectories are not too noisy. There are other things you can do here, but let’s stick to
-the basics for now.</p>
-<p>One you have this, you can run you project using the <code class="docutils literal notranslate"><span class="pre">`.run()`</span></code> method, which will do quite a lot of computing under
-the hood (load your data, smooth your trajectories, compute distances and angles). The returned object belongs to the
-<code class="docutils literal notranslate"><span class="pre">`deepof.data.Coordinates`</span></code> class.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<p>This command will create a <code class="docutils literal notranslate"><span class="pre">`deepof.data.Project`</span></code> object storing all the necessary information to start. There are
+many parameters that we can set here, but let’s stick to the basics for now.</p>
+<p>One you have this, you can run you project using the <code class="docutils literal notranslate"><span class="pre">`.create()`</span></code> method, which will do quite a lot of computing under
+the hood (load your data, smooth your trajectories, compute distances, angles, and areas between body parts, and save all
+results to disk). The returned object belongs to the <code class="docutils literal notranslate"><span class="pre">`deepof.data.Coordinates`</span></code> class.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Once you have this, you can do several things! But let’s first explore how the results of those computations I mentioned
-are stored. To extract trajectories, distances and/or angles, you can respectively type:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project_coords</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">polar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Nose&quot;</span><span class="p">,</span> <span class="n">align_inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<p>Once you have this, you can do several things! But let’s first explore how the results of those computations mentioned
+are stored. To extract trajectories, distances, angles and/or areas, you can respectively type:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">my_project_coords</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="s2">&quot;Center&quot;</span><span class="p">,</span> <span class="n">polar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Nose&quot;</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="n">my_project_dists</span>  <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_distances</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="n">my_project_angles</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_angles</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">my_project_areas</span> <span class="o">=</span> <span class="n">my_project</span><span class="o">.</span><span class="n">get_areas</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Here, the data are stored as <code class="docutils literal notranslate"><span class="pre">`deepof.data.table_dict`</span></code> instances. These are very similar to python dictionaries
@@ -185,7 +177,7 @@ indicates the derivation level to apply (0 is position-based, 1 speed, 2 acceler
 <code class="docutils literal notranslate"><span class="pre">`align`</span></code> and <code class="docutils literal notranslate"><span class="pre">`align-inplace`</span></code>, they take care of aligning the animal position to the y Cartesian axis: if we
 center the data to “Center” and set <code class="docutils literal notranslate"><span class="pre">`align=&quot;Nose&quot;,</span> <span class="pre">align_inplace=True`</span></code>, all frames in the video will be aligned in a
 way that will keep the Center-Nose axis fixed. This is useful to constrain the set of movements that one can extract
-with out unsupervised methods.</p>
+with our unsupervised methods.</p>
 <p>As mentioned above, the two main analyses that you can run are supervised and unsupervised. They are executed by
 the <code class="docutils literal notranslate"><span class="pre">`.supervised_annotation()`</span></code> method, and the <code class="docutils literal notranslate"><span class="pre">`.deep_unsupervised_embedding()`</span></code> methods of the <code class="docutils literal notranslate"><span class="pre">`deepof.data.Coordinates`</span></code>
 class, respectively.</p>
@@ -194,12 +186,10 @@ class, respectively.</p>
 </pre></div>
 </div>
 <p>The former returns a <code class="docutils literal notranslate"><span class="pre">`deepof.data.TableDict`</span></code> object, with a pandas.DataFrame per experiment containing a series of
-annotations. The latter is a bit more complicated: it returns an array containing the encoding of the data per animal,
-another one with motif membership per time point (probabilities of the animal doing whatever is represented by each of
-the clusters at any given time), an abstract distribution (a multivariate Gaussian mixture) representing the extracted
-components, and a decoder you can use to generate samples from each of the extracted components (yeah,
-you get a generative model for free).</p>
-<p>That’s it for this (very basic) introduction. Check out the tutorials below for more advanced examples!</p>
+annotations. The latter is a bit more complicated: it returns a series of objects that depend on the model selected (we
+offer three flavours of deep clustering models), and allow for further analysis comparing cluster expression and dynamics.</p>
+<p>That’s it for this (very basic) introduction. Check out the tutorials too see both pipelines in action, and the full API
+reference for details!</p>
 </section>
 </section>
 <section id="tutorials">

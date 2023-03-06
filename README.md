@@ -25,43 +25,37 @@ compare user-defined experimental groups.
 
 The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof/>`_:
 
-.. code:: bash
-
+```bash
    pip install deepof
+```
 
 Alternatively, you can download our pre-built `Docker image <https://hub.docker.com/repository/docker/lucasmiranda42/deepof>`_,
 which contains all compatible dependencies:
 
-.. code:: bash
-
+```bash
    # download the latest available image
    docker pull lucasmiranda42/deepof:latest
    # run the image in interactive mode, enabling you to open python and import deepof
    docker run -it lucasmiranda42/deepof
+```
 
 Or use `poetry <https://python-poetry.org/>`_:
 
-.. code:: bash
-
+```bash
    # after installing poetry and clonning the DeepOF repository, just run
    poetry install # from the main directory
+```
 
 ##### Before we delve in:
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
-Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow a set of labels
-equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
-
-.. image:: _static/deepof_DLC_tagging.png
-   :width: 400
-   :align: center
-   :alt: DeepOF label scheme
+Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow our recommended
+set of labels (which can be found in the full documentation page). A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
 
 ##### Basic usage:
 
 The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project:
 
-.. code:: python
-
+```python
    import deepof.data
    my_deepof_project = deepof.data.Project(
       project_path=".", # Path where to create project files
@@ -70,6 +64,7 @@ The main module with which you'll interact is called ```deepof.data```. Let's im
       project_name="my_deepof_project", # Name of the current project
       exp_conditions={exp_ID: exp_condition} # Dictionary containing one or more experimental conditions per provided video
     )
+```
 
 This command will create a ```deepof.data.Project``` object storing all the necessary information to start. There are
 many parameters that we can set here, but let's stick to the basics for now.
@@ -78,19 +73,19 @@ One you have this, you can run you project using the ```.create()``` method, whi
 the hood (load your data, smooth your trajectories, compute distances, angles, and areas between body parts, and save all
 results to disk). The returned object belongs to the ```deepof.data.Coordinates``` class.
 
-.. code:: python
-
+```python
    my_project = my_project.create(verbose=True)
+```
 
 Once you have this, you can do several things! But let's first explore how the results of those computations mentioned
 are stored. To extract trajectories, distances, angles and/or areas, you can respectively type:
 
-.. code:: python
-
+```python
    my_project_coords = my_project.get_coords(center="Center", polar=False, align="Nose", speed=0)
    my_project_dists  = my_project.get_distances(speed=0)
    my_project_angles = my_project.get_angles(speed=0)
    my_project_areas = my_project.get_areas(speed=0)
+```
 
 Here, the data are stored as ```deepof.data.table_dict``` instances. These are very similar to python dictionaries
 with experiment IDs as keys and pandas.DataFrame objects as values, with a few extra methods for convenience. Peeping
@@ -107,10 +102,10 @@ As mentioned above, the two main analyses that you can run are supervised and un
 the ```.supervised_annotation()``` method, and the ```.deep_unsupervised_embedding()``` methods of the ```deepof.data.Coordinates```
 class, respectively.
 
-.. code:: python
-
+```python
    supervised_annot = my_project.supervised_annotation()
    gmvae_embedding  = my_project.deep_unsupervised_embedding()
+```
 
 The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame per experiment containing a series of
 annotations. The latter is a bit more complicated: it returns a series of objects that depend on the model selected (we 
