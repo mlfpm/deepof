@@ -23,13 +23,13 @@ compare user-defined experimental groups.
 ### How do I start?
 ##### Installation:
 
-The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof/>`_:
+The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof):
 
 ```bash
    pip install deepof
 ```
 
-Alternatively, you can download our pre-built `Docker image <https://hub.docker.com/repository/docker/lucasmiranda42/deepof>`_,
+Alternatively, you can download our pre-built [Docker image](https://hub.docker.com/repository/docker/lucasmiranda42/deepof),
 which contains all compatible dependencies:
 
 ```bash
@@ -39,7 +39,7 @@ which contains all compatible dependencies:
    docker run -it lucasmiranda42/deepof
 ```
 
-Or use `poetry <https://python-poetry.org/>`_:
+Or use [poetry](https://python-poetry.org/):
 
 ```bash
    # after installing poetry and clonning the DeepOF repository, just run
@@ -47,9 +47,9 @@ Or use `poetry <https://python-poetry.org/>`_:
 ```
 
 ##### Before we delve in:
-DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
+DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found [here](https://www.mousemotorlab.org/deeplabcut).
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow our recommended
-set of labels (which can be found in the full documentation page). A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
+set of labels (which can be found in the full documentation page). A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from [our repository](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models).
 
 ##### Basic usage:
 
@@ -111,7 +111,7 @@ The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame
 annotations. The latter is a bit more complicated: it returns a series of objects that depend on the model selected (we 
 offer three flavours of deep clustering models), and allow for further analysis comparing cluster expression and dynamics.
 
-That's it for this (very basic) introduction. Check out the tutorials `full documentation <https://deepof.readthedocs.io/en/latest/index.html>`_ for details!
+That's it for this (very basic) introduction. Check out the tutorials [full documentation](https://deepof.readthedocs.io/en/latest/index.html) for details!
 
 ---
 
