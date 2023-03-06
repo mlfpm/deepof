@@ -5,10 +5,10 @@ RUN apt-get clean \
  && apt-get update \
  && apt-get -y upgrade \
  && apt-get --allow-releaseinfo-change update \
- && apt-get install -y gcc \
+ && apt-get install -y --no-install-recommends gcc \
  && apt-get install -y --no-install-recommends libgl1-mesa-dev \
  && apt-get install -y --no-install-recommends libdatrie-dev \
- && apt-get install -y ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir pipx \
  && pipx install poetry==1.2.1 \
