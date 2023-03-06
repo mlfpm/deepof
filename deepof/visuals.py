@@ -1795,7 +1795,7 @@ def export_annotated_video(
                 for video in filtered_videos
                 if state
                 == np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+).mp4", video)[0]][
+                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
                         condition
                     ]
                 )
@@ -1842,13 +1842,13 @@ def export_annotated_video(
                     val
                     for key, val in breaks.items()
                     if key
-                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
                 ],
                 [
                     val
                     for key, val in soft_counts.items()
                     if key
-                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
                 ],
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
