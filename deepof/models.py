@@ -1,7 +1,8 @@
 """deep autoencoder models for unsupervised pose detection.
 
 - VQ-VAE: a variational autoencoder with a vector quantization latent-space (https://arxiv.org/abs/1711.00937).
-- GM-VAE: a variational autoencoder with a Gaussian mixture latent-space.
+- VaDE: a variational autoencoder with a Gaussian mixture latent-space.
+- Contrastive: an embedding model consisting of a single encoder, trained using a contrastive loss.
 
 """
 # @author lucasmiranda42
@@ -1398,7 +1399,8 @@ class Classifier(tf.keras.Model):
         edge_feature_shape: tuple,
         adjacency_matrix: np.ndarray = None,
         use_gnn: bool = True,
-        batch_size: int = 64,
+        batch_size: int = 2048,
+        bias_initializer: float = 0.0,
         encoder_type: str = "recurrent",
         **kwargs,
     ):
@@ -1413,6 +1415,7 @@ class Classifier(tf.keras.Model):
             as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
             - batch_size (int): batch size for training.
             - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            - bias_initializer (float): value to initialize the bias of the last layer to (default: 0.0).
         """
 
         super().__init__(**kwargs)
@@ -1442,7 +1445,15 @@ class Classifier(tf.keras.Model):
                 use_gnn=use_gnn,
             )
 
-        self.dense = tf.keras.layers.Dense(1, activation="sigmoid")
+        self.dense = tf.keras.layers.Dense(16, activation="relu", name="classifier")
+        self.dropout = tf.keras.layers.Dropout(0.5)
+        self.bias_initializer = tf.keras.initializers.Constant(bias_initializer)
+        self.clf = tf.keras.layers.Dense(
+            1,
+            activation="sigmoid",
+            name="classifier",
+            bias_initializer=self.bias_initializer,
+        )
 
     def call(self, inputs, training=None, mask=None):
         """Forward pass of the classifier.
@@ -1455,6 +1466,8 @@ class Classifier(tf.keras.Model):
 
         x = self.encoder(inputs)
         x = self.dense(x)
+        x = self.dropout(x, training=training)
+        x = self.clf(x)
 
         return x
 

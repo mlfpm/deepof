@@ -466,12 +466,26 @@ def plot_cluster_enrichment(
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
     # Plot a barchart grouped per experimental conditions
-    sns.violinplot(
+    sns.barplot(
         data=enrichment,
         x="cluster",
         y="time on cluster",
         hue="exp condition",
         ax=ax,
+    )
+    sns.stripplot(
+        data=enrichment,
+        x="cluster",
+        y="time on cluster",
+        hue="exp condition",
+        color="black",
+        ax=ax,
+        dodge=True,
+    )
+
+    handles, labels = ax.get_legend_handles_labels()
+    plt.legend(
+        handles[2:], labels[2:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
     )
 
     if add_stats:
@@ -495,6 +509,7 @@ def plot_cluster_enrichment(
             x="cluster",
             y="time on cluster",
             hue="exp condition",
+            hide_non_significant=True,
         )
         annotator.configure(
             test=add_stats,
@@ -1081,6 +1096,7 @@ def animate_skeleton(
     center: str = "arena",
     align: str = None,
     frame_limit: int = None,
+    min_confidence: float = 0.0,
     cluster_assignments: np.ndarray = None,
     embedding: Union[List, np.ndarray] = None,
     selected_cluster: np.ndarray = None,
@@ -1100,6 +1116,7 @@ def animate_skeleton(
         align (str): Selects the body part to which later processes will align the frames with
         (see preprocess in table_dict documentation).
         frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        min_confidence (float): Minimum confidence threshold to consider a cluster assignment bout.
         cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
         If provided together with selected_cluster, only instances of the specified component are returned.
         Defaults to None.
@@ -1140,6 +1157,7 @@ def animate_skeleton(
     # Filter assignments and embeddings
     if isinstance(cluster_assignments, dict):
         cluster_assignments = cluster_assignments[experiment_id].argmax(axis=1)
+        confidence_indices = cluster_assignments >= min_confidence
 
     if isinstance(embedding, dict):
 
@@ -1150,7 +1168,7 @@ def animate_skeleton(
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
 
-        data = data[: embedding.shape[0]]
+        data = data[-embedding.shape[0] :]
 
         if isinstance(embedding, np.ndarray):
             assert (
@@ -1563,7 +1581,13 @@ def plot_shap_swarm_per_cluster(
 
 
 def output_cluster_video(
-    cap: Any, out: Any, frame_mask: list, v_width: int, v_height: int, path: str
+    cap: Any,
+    out: Any,
+    frame_mask: list,
+    v_width: int,
+    v_height: int,
+    path: str,
+    frame_limit: int = np.inf,
 ):
     """Outputs a video with the frames corresponding to the cluster.
 
@@ -1574,10 +1598,12 @@ def output_cluster_video(
         v_width: video width
         v_height: video height
         path: path to the video file
+        frame_limit: maximum number of frames to render
 
     """
     i = 0
-    while cap.isOpened():
+    j = 0
+    while cap.isOpened() and j < frame_limit:
         ret, frame = cap.read()
         if ret == False:
             break
@@ -1586,7 +1612,7 @@ def output_cluster_video(
             if frame_mask[i]:
 
                 res_frame = cv2.resize(frame, [v_width, v_height])
-                re_path = re.findall(".+/(.+).mp4", path)[0]
+                re_path = re.findall(".+/(.+)DLC", path)[0]
 
                 if path is not None:
                     cv2.putText(
@@ -1600,6 +1626,7 @@ def output_cluster_video(
                     )
 
                 out.write(res_frame)
+                j += 1
 
             i += 1
         except IndexError:
@@ -1614,6 +1641,7 @@ def output_videos_per_cluster(
     breaks: list,
     soft_counts: list,
     frame_rate: int = 25,
+    frame_limit_per_video: int = np.inf,
     single_output_resolution: tuple = None,
     confidence_threshold: float = 0.0,
     out_path: str = ".",
@@ -1625,6 +1653,7 @@ def output_videos_per_cluster(
         breaks: list of breaks between videos
         soft_counts: list of soft counts per video
         frame_rate: frame rate of the videos
+        frame_limit_per_video: number of frames to render per video.
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         confidence_threshold: minimum confidence threshold for a frame to be considered part of a cluster.
         out_path: path to the output directory.
@@ -1670,6 +1699,7 @@ def output_videos_per_cluster(
                 v_width,
                 v_height,
                 path,
+                frame_limit_per_video,
             )
 
 
@@ -1678,6 +1708,7 @@ def output_unsupervised_annotated_video(
     breaks: list,
     soft_counts: np.ndarray,
     frame_rate: int = 25,
+    frame_limit: int = np.inf,
     cluster_names: dict = {},
     out_path: str = ".",
 ):
@@ -1688,6 +1719,7 @@ def output_unsupervised_annotated_video(
         breaks: dictionary with break lengths for each video
         soft_counts: soft cluster assignments for a specific video
         frame_rate: frame rate of the video
+        frame_limit: maximum number of frames to output.
         cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
         out_path: out_path: path to the output directory.
 
@@ -1718,7 +1750,7 @@ def output_unsupervised_annotated_video(
     )
 
     i = 0
-    while cap.isOpened():
+    while cap.isOpened() and i < frame_limit:
         ret, frame = cap.read()
         if ret == False:
             break
@@ -1745,7 +1777,7 @@ def output_unsupervised_annotated_video(
 
 
 def output_supervised_annotated_video():
-    """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
+    """Given a video, and supervised assignments per frame, outputs a video with the frames annotated.
 
     Args:
 
@@ -1758,6 +1790,7 @@ def export_annotated_video(
     soft_counts: dict = None,
     breaks: dict = None,
     experiment_id: str = None,
+    frame_limit_per_video: int = np.inf,
     exp_conditions: dict = {},
     min_confidence: float = 0.0,
     cluster_names: dict = {},
@@ -1769,6 +1802,7 @@ def export_annotated_video(
         soft_counts: dictionary with soft_counts per experiment.
         breaks: dictionary with break lengths for each video.
         experiment_id: if provided, data coming from a particular experiment is used. If not, all experiments are exported.
+        frame_limit_per_video: number of frames to render per video. If None, all frames are included for all videos.
         exp_conditions: if provided, data coming from a particular condition is used. If not, all conditions are exported.
         If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
@@ -1822,6 +1856,7 @@ def export_annotated_video(
                 frame_rate=coordinates._frame_rate,
                 cluster_names=cluster_names,
                 out_path=out_path,
+                frame_limit=frame_limit_per_video,
             )
         else:
             # If experiment_id is not provided, output a video per cluster for each experiment
@@ -1852,6 +1887,7 @@ def export_annotated_video(
                 ],
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
+                frame_limit_per_video=frame_limit_per_video,
                 confidence_threshold=min_confidence,
                 out_path=out_path,
             )

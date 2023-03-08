@@ -483,7 +483,7 @@ def scale_table(
 
 
 def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
-    """Scales features in the provided array grouping by modality (coordinates, speeds, distances).
+    """Scales features in the provided array.
 
     Args:
         feature_array (np.ndarray): array to scale. Should be shape (instances x features).
@@ -495,46 +495,18 @@ def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
         List of scalers per modality.
 
     """
-    normalized_array = np.zeros(feature_array.shape)
-    features_processed = 0
     scalers = []
 
     # number of body part sets to use for coords (x, y), speeds, and distances
-    while features_processed < feature_array.shape[-1]:
+    if scale == "standard":
+        cur_scaler = StandardScaler()
+    elif scale == "minmax":
+        cur_scaler = MinMaxScaler()
+    else:
+        cur_scaler = RobustScaler()
 
-        if scale == "standard":
-            cur_scaler = StandardScaler()
-        elif scale == "minmax":
-            cur_scaler = MinMaxScaler()
-        else:
-            cur_scaler = RobustScaler()
-
-        try:
-            try:
-                if features_processed < feature_array.shape[-1] - len(graph.edges):
-                    nodes = len(graph.nodes())
-                else:
-                    nodes = len(graph.edges())
-            except AttributeError:
-                nodes = feature_array.shape[1]
-            normalized_array[
-                :, features_processed : features_processed + nodes
-            ] = cur_scaler.fit_transform(
-                np.expand_dims(
-                    feature_array[
-                        :, features_processed : features_processed + nodes
-                    ].flatten(),
-                    axis=-1,
-                )
-            ).reshape(
-                [feature_array.shape[0], nodes]
-            )
-
-            scalers.append(cur_scaler)
-            features_processed += nodes
-
-        except ValueError:
-            break
+    normalized_array = cur_scaler.fit_transform(feature_array)
+    scalers.append(cur_scaler)
 
     return normalized_array
 

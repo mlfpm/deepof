@@ -1269,6 +1269,7 @@ def autoencoder_fitting(
     kl_annealing_mode: str,
     kl_warmup: int,
     reg_cat_clusters: float,
+    recluster: bool,
     # Contrastive Model specific parameters
     temperature: float,
     contrastive_similarity_function: str,
@@ -1308,6 +1309,7 @@ def autoencoder_fitting(
         kl_warmup (int): Number of epochs during which KL is annealed.
         reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
         minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+        recluster (bool): Whether to recluster the data after each training using a Gaussian Mixture Model.
 
         # Contrastive Model specific parameters
         temperature (float): temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.
@@ -1483,7 +1485,7 @@ def autoencoder_fitting(
         verbose=1,
     )
 
-    if embedding_model == "VaDE":
+    if embedding_model == "VaDE" and recluster == True:
         ae_full_model.pretrain(
             train_dataset,
             embed_x=Xs,

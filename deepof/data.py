@@ -1015,11 +1015,11 @@ class Coordinates:
                     all_columns += columns
 
                     if align_inplace and not polar:
-                        partial_aligned = pd.DataFrame(
-                            deepof.utils.align_trajectories(
-                                np.array(partial_aligned), mode="all"
-                            )
+                        partial_aligned = deepof.utils.align_trajectories(
+                            np.array(partial_aligned), mode="all"
                         )
+                        partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
+                        partial_aligned = pd.DataFrame(partial_aligned)
                         aligned_coordinates = pd.concat(
                             [aligned_coordinates, partial_aligned], axis=1
                         )
@@ -1526,8 +1526,8 @@ class Coordinates:
             propagate_labels=propagate_labels,
         )
 
-    @staticmethod
     def deep_unsupervised_embedding(
+        self,
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         adjacency_matrix: np.ndarray = None,
         embedding_model: str = "VQVAE",
@@ -1553,6 +1553,7 @@ class Coordinates:
         kl_annealing_mode: str = "linear",
         kl_warmup: int = 15,
         reg_cat_clusters: float = 0.0,
+        recluster: bool = False,
     ) -> Tuple:
         """Annotates coordinates using a deep unsupervised autoencoder.
 
@@ -1587,6 +1588,7 @@ class Coordinates:
             kl_warmup (int): Number of epochs to warm up the KL annealing.
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+            recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
 
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
@@ -1617,6 +1619,7 @@ class Coordinates:
             kl_annealing_mode=kl_annealing_mode,
             kl_warmup=kl_warmup,
             reg_cat_clusters=reg_cat_clusters,
+            recluster=recluster,
         )
 
         # returns a list of trained tensorflow models
@@ -1994,7 +1997,7 @@ class TableDict(
         verbose: int = 0,
         shuffle: bool = False,
         filter_low_variance: bool = False,
-        interpolate_normalized: int = 5,
+        interpolate_normalized: int = 10,
         precomputed_breaks: dict = None,
     ) -> np.ndarray:
         """Main method for preprocessing the loaded dataset before feeding to unsupervised embedding models.
@@ -2136,16 +2139,10 @@ class TableDict(
                         )
                     ] = np.nan
 
-                cur_tab = (
+                to_interpolate[key] = (
                     pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
                     .apply(lambda x: pd.to_numeric(x, errors="ignore"))
                     .interpolate(limit_direction="both")
-                )
-
-                to_interpolate[key] = pd.DataFrame(
-                    StandardScaler().fit_transform(cur_tab.values),
-                    index=cur_tab.index,
-                    columns=cur_tab.columns,
                 )
 
             table_temp = to_interpolate

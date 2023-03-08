@@ -2382,7 +2382,7 @@ tqdm = "*"
 type = "git"
 url = "https://github.com/lucasmiranda42/spektral"
 reference = "HEAD"
-resolved_reference = "afd0f5137650c2081a8c3831b3cd392e875d0fd8"
+resolved_reference = "efe2cf1034cbf4d4ecdac3e8c08dc7b197b04540"
 
 [[package]]
 name = "Sphinx"
