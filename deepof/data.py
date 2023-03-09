@@ -1554,6 +1554,7 @@ class Coordinates:
         kl_warmup: int = 15,
         reg_cat_clusters: float = 0.0,
         recluster: bool = False,
+        **kwargs,
     ) -> Tuple:
         """Annotates coordinates using a deep unsupervised autoencoder.
 
@@ -1589,6 +1590,7 @@ class Coordinates:
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
+            **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
@@ -1620,6 +1622,7 @@ class Coordinates:
             kl_warmup=kl_warmup,
             reg_cat_clusters=reg_cat_clusters,
             recluster=recluster,
+            **kwargs,
         )
 
         # returns a list of trained tensorflow models

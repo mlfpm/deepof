@@ -26,6 +26,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from spektral.layers import CensNetConv
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
@@ -1277,6 +1278,7 @@ def autoencoder_fitting(
     beta: float,
     tau: float,
     run: int = 0,
+    **kwargs,
 ):
     """
 
@@ -1473,7 +1475,7 @@ def autoencoder_fitting(
             embed_x=Xs,
             embed_a=a_train,
             epochs=(np.minimum(10, epochs) if not pretrained else 0),
-            verbose=1,
+            **kwargs,
         )
         ae_full_model.optimizer._iterations.assign(0)
 
@@ -1482,16 +1484,12 @@ def autoencoder_fitting(
         epochs=(epochs if not pretrained else 0),
         validation_data=val_dataset,
         callbacks=callbacks_,
-        verbose=1,
+        **kwargs,
     )
 
     if embedding_model == "VaDE" and recluster == True:
         ae_full_model.pretrain(
-            train_dataset,
-            embed_x=Xs,
-            embed_a=a_train,
-            epochs=0,
-            verbose=1,
+            train_dataset, embed_x=Xs, embed_a=a_train, epochs=0, **kwargs
         )
 
     if pretrained:
@@ -1601,16 +1599,27 @@ def embedding_per_video(
 
     for key in tqdm.tqdm(coordinates.get_exp_conditions.keys()):
 
-        processed_exp, _, _, _ = coordinates.get_graph_dataset(
-            animal_id=animal_id,
-            precomputed_tab_dict=to_preprocess.filter_videos([key]),
-            preprocess=True,
-            scale=scale,
-            window_size=model.layers[0].input_shape[0][1],
-            window_step=1,
-            shuffle=False,
-            pretrained_scaler=global_scaler,
-        )
+        if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
+            processed_exp, _, _, _ = coordinates.get_graph_dataset(
+                animal_id=animal_id,
+                precomputed_tab_dict=to_preprocess.filter_videos([key]),
+                preprocess=True,
+                scale=scale,
+                window_size=model.layers[0].input_shape[0][1],
+                window_step=1,
+                shuffle=False,
+                pretrained_scaler=global_scaler,
+            )
+
+        else:
+
+            processed_exp, _ = to_preprocess.filter_videos([key]).preprocess(
+                scale=scale,
+                window_size=model.layers[0].input_shape[0][1],
+                window_step=1,
+                shuffle=False,
+                pretrained_scaler=global_scaler,
+            )
 
         embeddings[key] = model.encoder([processed_exp[0], processed_exp[1]]).numpy()
         soft_counts[key] = model.grouper([processed_exp[0], processed_exp[1]]).numpy()

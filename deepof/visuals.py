@@ -1097,6 +1097,7 @@ def animate_skeleton(
     align: str = None,
     frame_limit: int = None,
     min_confidence: float = 0.0,
+    min_bout_duration: int = None,
     cluster_assignments: np.ndarray = None,
     embedding: Union[List, np.ndarray] = None,
     selected_cluster: np.ndarray = None,
@@ -1116,7 +1117,8 @@ def animate_skeleton(
         align (str): Selects the body part to which later processes will align the frames with
         (see preprocess in table_dict documentation).
         frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
-        min_confidence (float): Minimum confidence threshold to consider a cluster assignment bout.
+        min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
+        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
         If provided together with selected_cluster, only instances of the specified component are returned.
         Defaults to None.
@@ -1156,8 +1158,19 @@ def animate_skeleton(
 
     # Filter assignments and embeddings
     if isinstance(cluster_assignments, dict):
+        cluster_confidence = cluster_assignments[experiment_id].max(axis=1)
         cluster_assignments = cluster_assignments[experiment_id].argmax(axis=1)
-        confidence_indices = cluster_assignments >= min_confidence
+        confidence_indices = np.ones(cluster_assignments.shape[0], dtype=bool)
+
+        # Compute bout lengths, and filter out bouts shorter than min_bout_duration
+        full_confidence_indices = deepof.utils.filter_short_bouts(
+            cluster_assignments,
+            cluster_confidence,
+            confidence_indices,
+            min_confidence,
+            min_bout_duration,
+        )
+        confidence_indices = full_confidence_indices.copy()
 
     if isinstance(embedding, dict):
 
@@ -1168,7 +1181,12 @@ def animate_skeleton(
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
 
-        data = data[-embedding.shape[0] :]
+        # Center sliding window instances
+        try:
+            win_size = data.shape[0] - embedding.shape[0]
+        except AttributeError:
+            win_size = data.shape[0] - embedding[0].shape[1]
+        data = data[win_size // 2 : -win_size // 2]
 
         if isinstance(embedding, np.ndarray):
             assert (
@@ -1190,8 +1208,10 @@ def animate_skeleton(
             concat_embedding = np.concatenate(embedding)
 
         if selected_cluster is not None:
-
             cluster_embedding = [embedding[0][cluster_assignments == selected_cluster]]
+            confidence_indices = confidence_indices[
+                cluster_assignments == selected_cluster
+            ]
 
         else:
             cluster_embedding = embedding
@@ -1210,6 +1230,10 @@ def animate_skeleton(
             ), "selected cluster should be in the clusters provided"
 
             data = data.loc[cluster_assignments == selected_cluster, :]
+            data = data.loc[confidence_indices, :]
+            cluster_embedding = [cluster_embedding[0][confidence_indices]]
+            concat_embedding = concat_embedding[full_confidence_indices]
+            cluster_assignments = cluster_assignments[full_confidence_indices]
 
     def get_polygon_coords(data, animal_id=""):
         """Generates polygons to animate for the indicated animal in the provided dataframe."""
@@ -1612,7 +1636,7 @@ def output_cluster_video(
             if frame_mask[i]:
 
                 res_frame = cv2.resize(frame, [v_width, v_height])
-                re_path = re.findall(".+/(.+)DLC", path)[0]
+                re_path = re.findall(".+/(.+).mp4", path)[0]
 
                 if path is not None:
                     cv2.putText(
@@ -1643,7 +1667,9 @@ def output_videos_per_cluster(
     frame_rate: int = 25,
     frame_limit_per_video: int = np.inf,
     single_output_resolution: tuple = None,
-    confidence_threshold: float = 0.0,
+    window_length: int = None,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
     out_path: str = ".",
 ):
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
@@ -1655,7 +1681,9 @@ def output_videos_per_cluster(
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
-        confidence_threshold: minimum confidence threshold for a frame to be considered part of a cluster.
+        window_length: window length used to compute the soft counts.
+        min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
+        min_bout_duration: minimum duration of a bout to be considered.
         out_path: path to the output directory.
 
     """
@@ -1666,7 +1694,7 @@ def output_videos_per_cluster(
             os.path.join(
                 out_path,
                 "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
-                    cluster_id, confidence_threshold, calendar.timegm(time.gmtime())
+                    cluster_id, min_confidence, calendar.timegm(time.gmtime())
                 ),
             ),
             cv2.VideoWriter_fourcc(*"mp4v"),
@@ -1679,18 +1707,28 @@ def output_videos_per_cluster(
             # Get hard counts and confidence estimates per cluster
             hard_counts = np.argmax(soft_counts[i], axis=1)
             confidence = np.max(soft_counts[i], axis=1)
+            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
             # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
             cap = cv2.VideoCapture(path)
             v_width, v_height = single_output_resolution
 
-            # Compute confidence mask
-            confidence_mask = (hard_counts == cluster_id) & (
-                confidence >= confidence_threshold
+            # Compute confidence mask, filtering out also bouts that are too short
+            confidence_indices = deepof.utils.filter_short_bouts(
+                hard_counts,
+                confidence,
+                confidence_indices,
+                min_confidence,
+                min_bout_duration,
             )
+            confidence_mask = (hard_counts == cluster_id) & confidence_indices
 
             # Extend confidence mask using the corresponding breaks, to select and output all relevant video frames
+            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
             frame_mask = np.repeat(confidence_mask, breaks[i])
+            frame_mask = np.concatenate(
+                (np.zeros(window_length, dtype=bool), frame_mask)
+            )
 
             output_cluster_video(
                 cap,
@@ -1709,6 +1747,7 @@ def output_unsupervised_annotated_video(
     soft_counts: np.ndarray,
     frame_rate: int = 25,
     frame_limit: int = np.inf,
+    window_length: int = None,
     cluster_names: dict = {},
     out_path: str = ".",
 ):
@@ -1720,6 +1759,7 @@ def output_unsupervised_annotated_video(
         soft_counts: soft cluster assignments for a specific video
         frame_rate: frame rate of the video
         frame_limit: maximum number of frames to output.
+        window_length: window length used to compute the soft counts.
         cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
         out_path: out_path: path to the output directory.
 
@@ -1749,28 +1789,32 @@ def output_unsupervised_annotated_video(
         video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
     )
 
-    i = 0
+    i, j = 0, 0
     while cap.isOpened() and i < frame_limit:
-        ret, frame = cap.read()
-        if ret == False:
-            break
+        if j >= window_length:
+            j += 1
 
-        try:
-            cv2.putText(
-                frame,
-                "Cluster {}".format(cluster_labels[assignments_per_frame[i]]),
-                (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                cv2.FONT_HERSHEY_DUPLEX,
-                0.75,
-                (255, 255, 255),
-                2,
-            )
-            out.write(frame)
+        else:
+            ret, frame = cap.read()
+            if ret == False:
+                break
 
-            i += 1
+            try:
+                cv2.putText(
+                    frame,
+                    "Cluster {}".format(cluster_labels[assignments_per_frame[i]]),
+                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.75,
+                    (255, 255, 255),
+                    2,
+                )
+                out.write(frame)
 
-        except IndexError:
-            ret = False
+                i += 1
+
+            except IndexError:
+                ret = False
 
     cap.release()
     cv2.destroyAllWindows()
@@ -1790,23 +1834,25 @@ def export_annotated_video(
     soft_counts: dict = None,
     breaks: dict = None,
     experiment_id: str = None,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
     frame_limit_per_video: int = np.inf,
     exp_conditions: dict = {},
-    min_confidence: float = 0.0,
     cluster_names: dict = {},
 ):
     """Generic function to export annotated videos from both supervised and unsupervised pipelines.
 
     Args:
-        coordinates: coordinates object for the current project. Used to get video paths.
-        soft_counts: dictionary with soft_counts per experiment.
-        breaks: dictionary with break lengths for each video.
-        experiment_id: if provided, data coming from a particular experiment is used. If not, all experiments are exported.
-        frame_limit_per_video: number of frames to render per video. If None, all frames are included for all videos.
-        exp_conditions: if provided, data coming from a particular condition is used. If not, all conditions are exported.
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        soft_counts (dict): dictionary with soft_counts per experiment.
+        breaks (dict): dictionary with break lengths for each video.r
+        experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
+        min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
+        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
+        frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
+        exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported.
         If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
-        min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
-        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+        cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
     # Create output directory if it doesn't exist
@@ -1814,6 +1860,14 @@ def export_annotated_video(
     out_path = os.path.join(proj_path, "Out_videos")
     if not os.path.exists(out_path):
         os.mkdir(out_path)
+
+    # Compute sliding window lenth, to determine the frame/annotation offset
+    first_key = list(coordinates.get_quality().keys())[0]
+    window_length = (
+        coordinates.get_quality()[first_key].shape[0]
+        - soft_counts[first_key].shape[0]
+        + 1
+    )
 
     def filter_experimental_conditions(
         coordinates: coordinates, videos: list, conditions: list
@@ -1829,7 +1883,7 @@ def export_annotated_video(
                 for video in filtered_videos
                 if state
                 == np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
+                    coordinates.get_exp_conditions[re.findall("(.+).mp4", video)[0]][
                         condition
                     ]
                 )
@@ -1854,6 +1908,7 @@ def export_annotated_video(
                 breaks[experiment_id],
                 soft_counts[experiment_id],
                 frame_rate=coordinates._frame_rate,
+                window_length=window_length,
                 cluster_names=cluster_names,
                 out_path=out_path,
                 frame_limit=frame_limit_per_video,
@@ -1877,18 +1932,20 @@ def export_annotated_video(
                     val
                     for key, val in breaks.items()
                     if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
                 ],
                 [
                     val
                     for key, val in soft_counts.items()
                     if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
                 ],
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
+                window_length=window_length // 2,
                 frame_limit_per_video=frame_limit_per_video,
-                confidence_threshold=min_confidence,
+                min_confidence=min_confidence,
+                min_bout_duration=min_bout_duration,
                 out_path=out_path,
             )
 
@@ -2226,7 +2283,7 @@ def annotate_video(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
-        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
+        vid_name = re.findall("(.*).mp4", tracks[vid_index])[0]
     except IndexError:
         vid_name = tracks[vid_index]
 

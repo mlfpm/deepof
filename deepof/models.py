@@ -1617,7 +1617,6 @@ class VaDE(tf.keras.models.Model):
         epochs=10,
         samples=10000,
         gmm_initialize=True,
-        verbose=1,
         **kwargs,
     ):
         """Runs a GMM directed pretraining of the encoder, to minimize the likelihood of getting stuck in a local minimum."""
@@ -1629,7 +1628,7 @@ class VaDE(tf.keras.models.Model):
         self.fit(
             data,
             epochs=epochs,
-            verbose=verbose,
+            **kwargs,
         )
 
         # Turn off pretrain mode

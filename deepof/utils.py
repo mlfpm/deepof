@@ -1460,6 +1460,56 @@ def rolling_speed(
     return speeds.fillna(0.0)
 
 
+def filter_short_bouts(
+    cluster_assignments: np.ndarray,
+    cluster_confidence: np.ndarray,
+    confidence_indices: np.ndarray,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
+):
+    """Filters out cluster assignment bouts shorter than min_bout_duration.
+
+    Args:
+        cluster_assignments (np.ndarray): Array of cluster assignments.
+        cluster_confidence (np.ndarray): Array of cluster confidence values.
+        confidence_indices (np.ndarray): Array of confidence indices.
+        min_confidence (float): Minimum confidence value.
+        min_bout_duration (int): Minimum bout duration in frames.
+
+    Returns:
+        np.ndarray: Mask of confidence indices to keep.
+
+    """
+    # Compute bout lengths, and filter out bouts shorter than min_bout_duration
+    bout_lengths = np.diff(
+        np.where(
+            np.diff(np.concatenate([[np.inf], cluster_assignments, [np.inf]])) != 0
+        )[0]
+    )
+
+    if min_bout_duration is None:
+        min_bout_duration = np.mean(bout_lengths)
+
+    confidence_indices[
+        np.repeat(bout_lengths, bout_lengths) < min_bout_duration
+    ] = False
+
+    # Compute average confidence per bout
+    cum_bout_lengths = np.concatenate([[0], np.cumsum(bout_lengths)])
+    bout_average_confidence = np.array(
+        [
+            cluster_confidence[confidence_indices][
+                cum_bout_lengths[i] : cum_bout_lengths[i + 1]
+            ].mean()
+            for i in range(len(bout_lengths))
+        ]
+    )
+
+    return (np.repeat(bout_average_confidence, bout_lengths) >= min_confidence) & (
+        confidence_indices
+    )
+
+
 # MACHINE LEARNING FUNCTIONS #
 
 
