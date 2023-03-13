@@ -44,6 +44,7 @@ def get_recurrent_encoder(
     use_gnn: bool = True,
     gru_unroll: bool = False,
     bidirectional_merge: str = "concat",
+    interaction_reg: float = 0,
 ):
     """Returns a deep recurrent neural encoder.
 
@@ -113,6 +114,7 @@ def get_recurrent_encoder(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
+            node_regularizer=tf.keras.regularizers.l1(interaction_reg),
         )
 
         # Process adjacency matrix

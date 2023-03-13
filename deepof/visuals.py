@@ -1,9 +1,11 @@
 """General plotting functions for the deepof package."""
+import collections
+
 # @author lucasmiranda42
 # encoding: utf-8
 # module deepof
 
-from collections import defaultdict
+from collections import defaultdict, Sequence
 from itertools import cycle, product, combinations
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
@@ -409,6 +411,7 @@ def plot_cluster_enrichment(
     precomputed: np.ndarray = None,
     # Visualization parameters
     exp_condition: str = None,
+    exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
     ax: Any = None,
@@ -423,6 +426,8 @@ def plot_cluster_enrichment(
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
         available is used.
+        exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order
+        is determined by the order of the keys in the table dict.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
@@ -430,8 +435,7 @@ def plot_cluster_enrichment(
         add_stats (bool): whether to add stats to the plots. Defaults to True.
         may hurt performance.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-        new figure will be created.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
@@ -460,6 +464,12 @@ def plot_cluster_enrichment(
         normalize=normalize,
     )
 
+    if exp_condition_order is not None:
+        enrichment["exp condition"] = pd.Categorical(
+            enrichment["exp condition"], exp_condition_order
+        )
+        enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
+
     enrichment["cluster"] = enrichment["cluster"].astype(str)
 
     if ax is None:
@@ -484,7 +494,7 @@ def plot_cluster_enrichment(
     )
 
     handles, labels = ax.get_legend_handles_labels()
-    plt.legend(
+    ax.legend(
         handles[2:], labels[2:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
     )
 
@@ -559,7 +569,9 @@ def plot_transitions(
     visualization="networks",
     silence_diagonal=False,
     cluster: bool = True,
+    axes: list = None,
     save: bool = False,
+    **kwargs,
 ):
     """Computes and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
 
@@ -576,15 +588,13 @@ def plot_transitions(
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
         cluster (bool): If True (default) rows and columns on heatmaps are hierarchically clustered.
+        axes (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
     # Get requested experimental condition. If none is provided, default to the first one available.
     if exp_condition is None:
-        exp_conditions = {
-            key: val.iloc[:, 0].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
-        }
+        exp_conditions = exp_condition
     else:
         exp_conditions = {
             key: val.loc[:, exp_condition].values[0]
@@ -599,21 +609,46 @@ def plot_transitions(
         bin_size=bin_size,
         bin_index=bin_index,
         silence_diagonal=silence_diagonal,
-        aggregate=True,
+        aggregate=(exp_conditions is not None),
         normalize=True,
     )
 
+    if exp_conditions is None:
+        grouped_transitions = np.mean(
+            np.concatenate(
+                [np.expand_dims(i, axis=0) for i in grouped_transitions.values()]
+            ),
+            axis=0,
+        )
+
     # Use seaborn to plot heatmaps across both conditions
-    fig, axes = plt.subplots(1, len(set(exp_conditions.values())), figsize=(16, 8))
+    if axes is None:
+        fig, axes = plt.subplots(
+            1,
+            (len(set(exp_conditions.values())) if exp_conditions is not None else 1),
+            figsize=(16, 8),
+        )
+
+    if not isinstance(axes, np.ndarray) and not isinstance(axes, Sequence):
+        axes = [axes]
+
+    if exp_conditions is not None:
+        iters = zip(set(exp_conditions.values()), axes)
+    else:
+        iters = zip([None], axes)
 
     if visualization == "networks":
 
-        for exp_condition, ax in zip(set(exp_conditions.values()), axes):
+        for exp_condition, ax in iters:
 
-            G = nx.DiGraph(grouped_transitions[exp_condition])
+            try:
+                G = nx.DiGraph(grouped_transitions[exp_condition])
+            except:
+                G = nx.DiGraph(grouped_transitions)
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
 
             pos = nx.spring_layout(G, scale=1, center=None, dim=2)
+
             nx.draw(
                 G,
                 ax=ax,
@@ -626,15 +661,19 @@ def plot_transitions(
                 width=weights,
                 alpha=0.6,
                 pos=pos,
+                **kwargs,
             )
             ax.set_title(exp_condition)
 
     elif visualization == "heatmaps":
 
-        for exp_condition, ax in zip(set(exp_conditions.values()), axes):
+        for exp_condition, ax in iters:
 
             if cluster:
-                clustered_transitions = grouped_transitions[exp_condition]
+                if isinstance(grouped_transitions, dict):
+                    clustered_transitions = grouped_transitions[exp_condition]
+                else:
+                    clustered_transitions = grouped_transitions
                 # Cluster rows and columns and reorder
                 row_link = linkage(
                     clustered_transitions, method="average", metric="euclidean"
@@ -650,27 +689,31 @@ def plot_transitions(
                 vmin=0,
                 vmax=0.35,
                 ax=ax,
+                **kwargs,
             )
             ax.set_title(exp_condition)
 
-    plt.tight_layout()
-    if save:
-        plt.savefig(
-            os.path.join(
-                coordinates._project_path,
-                coordinates._project_name,
-                "Figures",
-                "deepof_transitions{}_viz={}_bin_size={}_bin_index={}_{}.pdf".format(
-                    (f"_{save}" if isinstance(save, str) else ""),
-                    visualization,
-                    bin_size,
-                    bin_index,
-                    calendar.timegm(time.gmtime()),
-                ),
-            )
-        )
+    if axes is None:
 
-    plt.show()
+        plt.tight_layout()
+
+        if save:
+            plt.savefig(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Figures",
+                    "deepof_transitions{}_viz={}_bin_size={}_bin_index={}_{}.pdf".format(
+                        (f"_{save}" if isinstance(save, str) else ""),
+                        visualization,
+                        bin_size,
+                        bin_index,
+                        calendar.timegm(time.gmtime()),
+                    ),
+                )
+            )
+
+        plt.show()
 
 
 def plot_stationary_entropy(
@@ -748,6 +791,14 @@ def plot_stationary_entropy(
         y="exp condition",
         x="entropy",
         ax=ax,
+        linewidth=2,
+    )
+    sns.stripplot(
+        data=ungrouped_entropy_scores,
+        y="exp condition",
+        x="entropy",
+        ax=ax,
+        color="black",
     )
     plt.ylabel("experimental condition")
 
@@ -1007,6 +1058,12 @@ def plot_embeddings(
             ax=ax,
         )
 
+    if not aggregate_experiments:
+        if ax is None:
+            plt.legend("", frameon=False)
+        else:
+            ax.get_legend().remove()
+
     if save:
         plt.savefig(
             os.path.join(
@@ -1022,12 +1079,6 @@ def plot_embeddings(
                 ),
             )
         )
-
-    if not aggregate_experiments:
-        if ax is None:
-            plt.legend("", frameon=False)
-        else:
-            ax.get_legend().remove()
 
     title = "deepOF - unsupervised {}embedding".format(
         ("aggregated " if aggregate_experiments else "")
@@ -1636,7 +1687,7 @@ def output_cluster_video(
             if frame_mask[i]:
 
                 res_frame = cv2.resize(frame, [v_width, v_height])
-                re_path = re.findall(".+/(.+).mp4", path)[0]
+                re_path = re.findall(".+/(.+)DLC", path)[0]
 
                 if path is not None:
                     cv2.putText(
@@ -1883,7 +1934,7 @@ def export_annotated_video(
                 for video in filtered_videos
                 if state
                 == np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+).mp4", video)[0]][
+                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
                         condition
                     ]
                 )
@@ -1932,13 +1983,13 @@ def export_annotated_video(
                     val
                     for key, val in breaks.items()
                     if key
-                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
                 ],
                 [
                     val
                     for key, val in soft_counts.items()
                     if key
-                    in [re.findall("(.+).mp4", video)[0] for video in filtered_videos]
+                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
                 ],
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
@@ -1956,28 +2007,32 @@ def export_annotated_video(
 
 def plot_distance_between_conditions(
     # Model selection parameters
-    coordinates,
-    embedding,
-    soft_counts,
-    breaks,
-    exp_condition,
-    embedding_aggregation_method="median",
-    distance_metric="wasserstein",
-    n_jobs=-1,
+    coordinates: coordinates,
+    embedding: dict,
+    soft_counts: dict,
+    breaks: dict,
+    exp_condition: str,
+    embedding_aggregation_method: str = "median",
+    distance_metric: str = "wasserstein",
+    n_jobs: int = -1,
+    save: bool = False,
+    ax: Any = None,
 ):
     """Plots the distance between conditions across a growing time window. Finds an optimal separation binning based on the
     distance between conditions, and plots the distance between conditions across all non-overlapping bins. Useful, for example,
     to measure habituation across time.
 
     Args:
-        coordinates: coordinates object for the current project. Used to get video paths.
-        embedding: embedding object for the current project. Used to get video paths.
-        soft_counts: dictionary with soft_counts per experiment.
-        breaks: dictionary with break lengths for each video.
-        exp_condition: experimental condition to use for the distance calculation.
-        embedding_aggregation_method: method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
-        distance_metric: distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
-        n_jobs: number of jobs to use for the distance calculation.
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        embedding (dict): embedding object for the current project. Used to get video paths.
+        soft_counts (dict): dictionary with soft_counts per experiment.
+        breaks (dict): dictionary with break lengths for each video.
+        exp_condition (str): experimental condition to use for the distance calculation.
+        embedding_aggregation_method (str): method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
+        distance_metric (str): distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
+        n_jobs (int): number of jobs to use for the distance calculation.
+        save (bool): if True, saves the figure to the project directory.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
     """
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
@@ -2058,6 +2113,7 @@ def plot_distance_between_conditions(
         x="Time",
         y=distance_metric,
         color="#d6dbd2",
+        ax=ax,
     )
     sns.lineplot(
         data=bin_distance_df,
@@ -2065,6 +2121,7 @@ def plot_distance_between_conditions(
         y=distance_metric,
         color="#0b7189",
         zorder=100,
+        ax=ax,
     )
     sns.scatterplot(
         data=bin_distance_df,
@@ -2074,11 +2131,29 @@ def plot_distance_between_conditions(
         s=200,
         linewidth=1,
         zorder=100,
+        ax=ax,
     )
 
-    plt.title("deepOF - distance between conditions")
-    plt.xlim(0, len(distance_array) + 10)
-    plt.tight_layout()
+    if ax is None:
+        plt.title("deepOF - distance between conditions")
+        plt.xlim(0, len(distance_array) + coordinates._frame_rate)
+        plt.tight_layout()
+
+    if save:  # pragma: no cover
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_distance_between_conditions_{}{}_{}_{}_{}.pdf".format(
+                    exp_condition,
+                    embedding_aggregation_method,
+                    distance_metric,
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
 
 
 def tag_annotated_frames(
@@ -2283,7 +2358,7 @@ def annotate_video(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     try:
-        vid_name = re.findall("(.*).mp4", tracks[vid_index])[0]
+        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
     except IndexError:
         vid_name = tracks[vid_index]
 

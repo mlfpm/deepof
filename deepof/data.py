@@ -1308,6 +1308,7 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        interaction_ratio: float = 1.0,
         **kwargs,
     ) -> table_dict:
         """Generates a dataset with all specified features.
@@ -1324,6 +1325,8 @@ class Coordinates:
             (see preprocess in table_dict documentation).
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and
             distance-weighted adjacency matrices on the raw data are returned.
+            interaction_ratio (float): increase this value to ponder more features related to animal interaction
+            (i.e. distances between body parts across animals). Useful for multi-animal embeddings only.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -1382,10 +1385,16 @@ class Coordinates:
                 if n == f:
                     node_sorting_indices.append(j)
 
+        inner_link_bool_mask = []
         for e in [tuple(sorted(e)) for e in list(graph.edges)]:
             for j, f in enumerate(edge_feature_names):
                 if e == f:
                     edge_sorting_indices.append(j)
+
+            if len(self._animal_ids) > 1:
+                inner_link_bool_mask.append(
+                    len(set([node.split("_")[0] for node in e])) == 1
+                )
 
         # Create graph datasets
         if preprocess:
@@ -1428,6 +1437,11 @@ class Coordinates:
                 ),
             )
 
+        # Change the weight of all features unrelated to animal interactions
+        if interaction_ratio != 1 and animal_id is None:
+            dataset[0] /= interaction_ratio
+            dataset[1][:, :, np.array(inner_link_bool_mask)] /= interaction_ratio
+
         return tuple(dataset), graph, tab_dict, global_scaler
 
     # noinspection PyDefaultArgument
@@ -1463,6 +1477,19 @@ class Coordinates:
         dists = self.get_distances()
         angs = self.get_angles()
         speeds = self.get_coords(speed=1)
+        if len(self._animal_ids) <= 1:
+            features_dict = (
+                deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
+                    self
+                )
+            )
+        else:
+            features_dict = {
+                _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
+                    self, animal_id=_id
+                )
+                for _id in self._animal_ids
+            }
 
         # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
@@ -1474,7 +1501,7 @@ class Coordinates:
                 raw_coords=raw_coords,
                 coords=coords,
                 dists=dists,
-                angs=angs,
+                full_features=features_dict,
                 speeds=speeds,
                 video=[vid for vid in self._videos if key + "DLC" in vid][0],
                 trained_model_path=self._trained_model_path,

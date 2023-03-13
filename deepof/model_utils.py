@@ -1573,6 +1573,7 @@ def embedding_per_video(
     animal_id: str = None,
     ruptures: bool = False,
     global_scaler: Any = None,
+    interaction_ratio: float = 1.0,
 ):
     """Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
 
@@ -1586,6 +1587,8 @@ def embedding_per_video(
         per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        interaction_ratio (float): increase this value to ponder more features related to animal interaction
+        (i.e. distances between body parts across animals). Useful for multi-animal embeddings only.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -1609,6 +1612,7 @@ def embedding_per_video(
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,
+                interaction_ratio=interaction_ratio,
             )
 
         else:

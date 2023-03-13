@@ -13,6 +13,7 @@ import pickle
 import warnings
 from typing import Any, List, NewType
 from shapely.geometry import Point, Polygon
+from sklearn.preprocessing import StandardScaler
 
 import cv2
 import numpy as np
@@ -21,6 +22,7 @@ import regex as re
 import sklearn.pipeline
 
 import deepof.utils
+import deepof.post_hoc
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -285,15 +287,13 @@ def sniff_object(
 
 
 def huddle(
-    pos_dframe: pd.DataFrame,
-    speed_dframe: pd.DataFrame,
+    X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
 ) -> np.array:
     """Returns true when the mouse is huddling a pretrained model.
 
     Parameters:
-        - pos_dframe (pandas.DataFrame): position of body parts over time
-        - speed_dframe (pandas.DataFrame): speed of body parts over time
+        - X_huddle (pandas.DataFrame): mouse features over time
         - huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
 
     Returns:
@@ -301,8 +301,7 @@ def huddle(
     """
 
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    X_huddle = pd.concat([pos_dframe, speed_dframe], axis=1).to_numpy()
-    y_huddle = huddle_estimator.predict(X_huddle)
+    y_huddle = huddle_estimator.predict(StandardScaler().fit_transform(X_huddle))
 
     return y_huddle
 
@@ -503,8 +502,8 @@ def supervised_tagging(
     raw_coords: table_dict,
     coords: table_dict,
     dists: table_dict,
-    angs: table_dict,
     speeds: table_dict,
+    full_features: dict,
     video: str,
     trained_model_path: str = None,
     params: dict = {},
@@ -517,8 +516,8 @@ def supervised_tagging(
         - raw_coords (deepof.data.table_dict): table_dict with raw coordinates
         - coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
         - dists (deepof.data.table_dict): table_dict with already processed distances
-        - angs (deepof.data.table_dict): table_dict with already processed angles
         - speeds (deepof.data.table_dict): table_dict with already processed speeds
+        - full_features (dict): dictionary with
         - video (str): string name of the experiment to tag
         - trained_model_path (str): path indicating where all pretrained models are located
         - params (dict): dictionary to overwrite the default values of the parameters of the functions
@@ -707,25 +706,12 @@ def supervised_tagging(
                 animal_id=_id,
             )
         )
-        # tag_dict[_id + undercond + "huddle"] = huddle(
-        #     coords.loc[  # Filter coordinates to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in coords.columns
-        #             if col in deepof.utils.filter_columns(coords.columns, _id)
-        #         ],
-        #     ],
-        #     speeds.loc[  # Filter speeds to keep only the current animal
-        #         :,
-        #         [
-        #             col
-        #             for col in speeds.columns
-        #             if col in deepof.utils.filter_columns(speeds.columns, _id)
-        #         ],
-        #     ],
-        #     huddle_estimator,
-        # )
+        tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
+            huddle(
+                full_features[_id][vid_name],
+                huddle_estimator=huddle_estimator,
+            )
+        )
         tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
             look_around(
                 speeds,
