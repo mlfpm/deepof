@@ -873,7 +873,7 @@ def annotate_time_chunks(
 
     # Filter instances with less confidence that specified
     qual_filter = (
-        np.concatenate([soft for soft in soft_counts.values()]).mean(axis=1)
+        np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
         > min_confidence
     )
     comprehensive_features = comprehensive_features[qual_filter]
@@ -1041,15 +1041,24 @@ def explain_clusters(
 
     """
 
+    # Pass the data through the scaler and oversampler before computing SHAP values
+    processed_stats = full_cluster_clf.named_steps["normalization"].transform(
+        chunk_stats
+    )
+    processed_stats = full_cluster_clf.named_steps["oversampling"].fit_resample(
+        processed_stats, hard_counts
+    )[0]
+    processed_stats = pd.DataFrame(processed_stats, columns=chunk_stats.columns)
+
     # Get SHAP values for the given model
     n_clusters = len(np.unique(hard_counts))
     explainer = shap.KernelExplainer(
-        full_cluster_clf.predict_proba,
-        data=shap.kmeans(chunk_stats, n_clusters),
+        full_cluster_clf.named_steps["classifier"].predict_proba,
+        data=shap.kmeans(processed_stats, n_clusters),
         normalize=False,
     )
     if samples is not None and samples < chunk_stats.shape[0]:
-        chunk_stats = chunk_stats.sample(samples)
-    shap_values = explainer.shap_values(chunk_stats, nsamples=samples, n_jobs=-1)
+        processed_stats = processed_stats.sample(samples)
+    shap_values = explainer.shap_values(processed_stats, nsamples=samples, n_jobs=-1)
 
-    return shap_values, explainer, chunk_stats
+    return shap_values, explainer, processed_stats

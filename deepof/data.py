@@ -314,7 +314,9 @@ class Project:
 
             for i, video_path in enumerate(self.videos):
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
-                    os.path.join(self.project_path, "Videos", video_path),
+                    os.path.join(
+                        self.project_path, self.project_name, "Videos", video_path
+                    ),
                     self.arena,
                     i,
                     self.videos,

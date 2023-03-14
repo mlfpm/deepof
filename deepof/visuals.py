@@ -1563,7 +1563,7 @@ def plot_cluster_detection_performance(
 
         confusion_matrices.append(cm)
 
-    cluster_names = ["cluster {}".format(i) for i in range(10)]
+    cluster_names = ["cluster {}".format(i) for i in sorted(list(set(hard_counts)))]
 
     if visualization == "confusion_matrix":
 
