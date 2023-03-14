@@ -873,7 +873,7 @@ def annotate_time_chunks(
 
     # Filter instances with less confidence that specified
     qual_filter = (
-        np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
+        np.concatenate([soft for soft in soft_counts.values()]).mean(axis=1)
         > min_confidence
     )
     comprehensive_features = comprehensive_features[qual_filter]
