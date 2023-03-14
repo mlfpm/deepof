@@ -44,7 +44,7 @@ def get_recurrent_encoder(
     use_gnn: bool = True,
     gru_unroll: bool = False,
     bidirectional_merge: str = "concat",
-    interaction_reg: float = 0,
+    interaction_regularization: float = 0.0,
 ):
     """Returns a deep recurrent neural encoder.
 
@@ -61,6 +61,7 @@ def get_recurrent_encoder(
         as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         - gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
         - bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+        - interaction_regularization (float): Regularization parameter for the interaction features.
 
     Returns:
         keras.Model: a keras model that can be trained to encode motion tracking instances into a vector.
@@ -114,7 +115,7 @@ def get_recurrent_encoder(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
-            node_regularizer=tf.keras.regularizers.l1(interaction_reg),
+            node_regularizer=tf.keras.regularizers.l1(interaction_regularization),
         )
 
         # Process adjacency matrix
@@ -234,6 +235,7 @@ def get_TCN_encoder(
     use_skip_connections: bool = True,
     dropout_rate: int = 0,
     activation: str = "relu",
+    interaction_regularization: float = 0.0,
 ):
     """Returns a Temporal Convolutional Network (TCN) encoder.
 
@@ -256,6 +258,7 @@ def get_TCN_encoder(
         - use_skip_connections: whether to use skip connections between TCN layers
         - dropout_rate: dropout rate for the TCN layers
         - activation: activation function for the TCN layers
+        - interaction_regularization (float): Regularization parameter for the interaction features
 
     Returns:
         keras.Model: a keras model that can be trained to encode a sequence of motion tracking instances into a latent
@@ -332,6 +335,7 @@ def get_TCN_encoder(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
+            node_regularizer=tf.keras.regularizers.l1(interaction_regularization),
         )
 
         # Process adjacency matrix
@@ -447,6 +451,7 @@ def get_transformer_encoder(
     num_heads: int = 64,
     dff: int = 128,
     dropout_rate: float = 0.1,
+    interaction_regularization: float = 0.0,
 ):
     """Transformer encoder.
 
@@ -465,6 +470,7 @@ def get_transformer_encoder(
         - num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
         - dff (int): dimensionality of the token embeddings
         - dropout_rate (float): dropout rate
+        - interaction_regularization (float): regularization parameter for the interaction features
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
@@ -541,6 +547,7 @@ def get_transformer_encoder(
             node_channels=latent_dim,
             edge_channels=latent_dim,
             activation="relu",
+            node_regularizer=tf.keras.regularizers.l1(interaction_regularization),
         )
 
         # Process adjacency matrix
@@ -771,6 +778,7 @@ def get_vqvae(
     beta: float = 1.0,
     kmeans_loss: float = 0.0,
     encoder_type: str = "recurrent",
+    interaction_regularization: float = 0.0,
 ):
     """Builds a Vector-Quantization variational autoencoder (VQ-VAE) model, adapted to the DeepOF setting.
 
@@ -785,6 +793,7 @@ def get_vqvae(
         - beta (float): beta parameter of the VQ loss.
         - kmeans_loss (float): regularization parameter for the Gram matrix.
         - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+        - interaction_regularization (float): Regularization parameter for the interaction features.
 
     Returns:
         - encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -809,6 +818,7 @@ def get_vqvae(
             adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_recurrent_decoder(
             input_shape=input_shape[1:], latent_dim=latent_dim
@@ -821,6 +831,7 @@ def get_vqvae(
             adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_TCN_decoder(input_shape=input_shape[1:], latent_dim=latent_dim)
 
@@ -831,6 +842,7 @@ def get_vqvae(
             adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_transformer_decoder(input_shape[1:], latent_dim=latent_dim)
 
@@ -867,6 +879,7 @@ class VQVAE(tf.keras.models.Model):
         kmeans_loss: float = 0.0,
         use_gnn: bool = True,
         encoder_type: str = "recurrent",
+        interaction_regularization: float = 0.0,
         **kwargs,
     ):
         """Initializes a VQ-VAE model.
@@ -880,6 +893,7 @@ class VQVAE(tf.keras.models.Model):
             beta (float): Beta parameter of the VQ loss, as described in the original VQVAE paper.
             kmeans_loss (float): Regularization parameter for the Gram matrix.
             encoder_type (str): Type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            interaction_regularization (float): Regularization parameter for the interaction features.
             **kwargs: Additional keyword arguments.
         """
         super(VQVAE, self).__init__(**kwargs)
@@ -892,6 +906,7 @@ class VQVAE(tf.keras.models.Model):
         self.beta = beta
         self.kmeans = kmeans_loss
         self.encoder_type = encoder_type
+        self.interaction_regularization = interaction_regularization
 
         # Define VQ_VAE model
         (
@@ -910,6 +925,7 @@ class VQVAE(tf.keras.models.Model):
             self.beta,
             self.kmeans,
             self.encoder_type,
+            self.interaction_regularization,
         )
 
         # Define metrics to track
@@ -1171,7 +1187,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             name="cluster_variances",
             activation="softplus",
             kernel_initializer="glorot_uniform",
-            activity_regularizer=tf.keras.regularizers.l2(0.1),
+            activity_regularizer=tf.keras.regularizers.l1(0.1),
         )
 
         self.cluster_control_layer = deepof.model_utils.ClusterControl(
@@ -1303,6 +1319,7 @@ def get_vade(
     kmeans_loss: float = 1.0,
     reg_cluster_variance: bool = False,
     encoder_type: str = "recurrent",
+    interaction_regularization: float = 0.0,
 ):
     """Builds a Gaussian mixture variational autoencoder (VaDE) model, adapted to the DeepOF setting.
 
@@ -1321,6 +1338,7 @@ def get_vade(
             - kmeans_loss (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.
             - reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            - interaction_regularization (float): weight of the interaction regularization term.
 
     Returns:
         - encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
@@ -1337,6 +1355,7 @@ def get_vade(
             edge_feature_shape=edge_feature_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_recurrent_decoder(
             input_shape=input_shape[1:], latent_dim=latent_dim
@@ -1349,6 +1368,7 @@ def get_vade(
             edge_feature_shape=edge_feature_shape[1:],
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_TCN_decoder(input_shape=input_shape[1:], latent_dim=latent_dim)
 
@@ -1359,6 +1379,7 @@ def get_vade(
             adjacency_matrix=adjacency_matrix,
             latent_dim=latent_dim,
             use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
         )
         decoder = get_transformer_decoder(input_shape[1:], latent_dim=latent_dim)
 
@@ -1494,6 +1515,7 @@ class VaDE(tf.keras.models.Model):
         reg_cat_clusters: float = 1.0,
         reg_cluster_variance: bool = False,
         encoder_type: str = "recurrent",
+        interaction_regularization: float = 0.0,
         **kwargs,
     ):
         """Initalizes a VaDE model.
@@ -1515,6 +1537,7 @@ class VaDE(tf.keras.models.Model):
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             - reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            - interaction_regularization (float): Regularization parameter for the interaction features.
             - **kwargs: Additional keyword arguments.
         """
         super(VaDE, self).__init__(**kwargs)
@@ -1533,6 +1556,7 @@ class VaDE(tf.keras.models.Model):
         self.reg_cat_clusters = reg_cat_clusters
         self.reg_cluster_variance = reg_cluster_variance
         self.encoder_type = encoder_type
+        self.interaction_regularization = interaction_regularization
 
         # Define VaDE model
         self.encoder, self.decoder, self.grouper, self.vade = get_vade(
@@ -1549,6 +1573,7 @@ class VaDE(tf.keras.models.Model):
             kmeans_loss=self.kmeans,
             reg_cluster_variance=self.reg_cluster_variance,
             encoder_type=self.encoder_type,
+            interaction_regularization=self.interaction_regularization,
         )
 
         # Propagate the optimizer to all relevant sub-models, to enable metric annealing
@@ -1813,6 +1838,7 @@ class Contrastive(tf.keras.models.Model):
         loss_function: str = "nce",
         beta: float = 0.1,
         tau: float = 0.1,
+        interaction_regularization: float = 0.0,
         **kwargs,
     ):
         """Initalizes a self-supervised Contrastive embedding model.
@@ -1825,11 +1851,12 @@ class Contrastive(tf.keras.models.Model):
             - latent_dim (int): Dimensionality of the latent space.
             - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
             as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-            - temperature: float = 0.1,
-            - similarity_function: str = "cosine",
-            - loss_function: str = 'nce',
-            - beta: float = 0.1,
-            - tau: float = 0.1,
+            - temperature (float):
+            - similarity_function (str):
+            - loss_function (str):
+            - beta (float):
+            - tau (float):
+            - interaction_regularization (float): Regularization parameter for the interaction features.
             - **kwargs: Additional keyword arguments.
         """
         super(Contrastive, self).__init__(**kwargs)
@@ -1846,6 +1873,7 @@ class Contrastive(tf.keras.models.Model):
         self.tau = tau
         self.optimizer = Nadam(learning_rate=1e-3, clipvalue=0.75)
         self.encoder_type = encoder_type
+        self.interaction_regularization = interaction_regularization
 
         # Define Contrastive model
         if encoder_type == "recurrent":
@@ -1859,6 +1887,7 @@ class Contrastive(tf.keras.models.Model):
                 adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
             )
 
         elif encoder_type == "TCN":
@@ -1871,6 +1900,7 @@ class Contrastive(tf.keras.models.Model):
                 adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
             )
 
         elif encoder_type == "transformer":
@@ -1884,6 +1914,7 @@ class Contrastive(tf.keras.models.Model):
                 adjacency_matrix=self.adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
             )
 
         # Define metrics to track

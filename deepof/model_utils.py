@@ -1277,6 +1277,7 @@ def autoencoder_fitting(
     contrastive_loss_function: str,
     beta: float,
     tau: float,
+    interaction_regularization: float,
     run: int = 0,
     **kwargs,
 ):
@@ -1304,6 +1305,7 @@ def autoencoder_fitting(
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
+        interaction_regularization (float): Weight of the interaction regularization term (L1 penalization to all features not related to interactions).
         run (int): Run number to use for logging.
 
         # VaDE Model specific parameters
@@ -1413,6 +1415,7 @@ def autoencoder_fitting(
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
                 encoder_type=encoder_type,
+                interaction_regularization=interaction_regularization,
             )
             ae_full_model.optimizer = tf.keras.optimizers.Nadam(
                 learning_rate=1e-4, clipvalue=0.75
@@ -1432,6 +1435,7 @@ def autoencoder_fitting(
                 n_components=n_components,
                 reg_cat_clusters=reg_cat_clusters,
                 encoder_type=encoder_type,
+                interaction_regularization=interaction_regularization,
             )
 
         elif embedding_model == "Contrastive":
@@ -1445,6 +1449,7 @@ def autoencoder_fitting(
                 temperature=temperature,
                 similarity_function=contrastive_similarity_function,
                 loss_function=contrastive_loss_function,
+                interaction_regularization=interaction_regularization,
                 beta=beta,
                 tau=tau,
             )
@@ -1573,7 +1578,6 @@ def embedding_per_video(
     animal_id: str = None,
     ruptures: bool = False,
     global_scaler: Any = None,
-    interaction_ratio: float = 1.0,
 ):
     """Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
 
@@ -1587,8 +1591,6 @@ def embedding_per_video(
         per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
-        interaction_ratio (float): increase this value to ponder more features related to animal interaction
-        (i.e. distances between body parts across animals). Useful for multi-animal embeddings only.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -1612,7 +1614,6 @@ def embedding_per_video(
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,
-                interaction_ratio=interaction_ratio,
             )
 
         else:

@@ -1308,7 +1308,6 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
-        interaction_ratio: float = 1.0,
         **kwargs,
     ) -> table_dict:
         """Generates a dataset with all specified features.
@@ -1325,8 +1324,6 @@ class Coordinates:
             (see preprocess in table_dict documentation).
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and
             distance-weighted adjacency matrices on the raw data are returned.
-            interaction_ratio (float): increase this value to ponder more features related to animal interaction
-            (i.e. distances between body parts across animals). Useful for multi-animal embeddings only.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -1436,11 +1433,6 @@ class Coordinates:
                     ],
                 ),
             )
-
-        # Change the weight of all features unrelated to animal interactions
-        if interaction_ratio != 1 and animal_id is None:
-            dataset[0] /= interaction_ratio
-            dataset[1][:, :, np.array(inner_link_bool_mask)] /= interaction_ratio
 
         return tuple(dataset), graph, tab_dict, global_scaler
 
@@ -1580,6 +1572,7 @@ class Coordinates:
         kl_warmup: int = 15,
         reg_cat_clusters: float = 0.0,
         recluster: bool = False,
+        interaction_regularization: float = 0.0,
         **kwargs,
     ) -> Tuple:
         """Annotates coordinates using a deep unsupervised autoencoder.
@@ -1616,6 +1609,7 @@ class Coordinates:
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
             minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
+            interaction_regularization (float): weight of the interaction regularization term for all encoders.
             **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
@@ -1648,6 +1642,7 @@ class Coordinates:
             kl_warmup=kl_warmup,
             reg_cat_clusters=reg_cat_clusters,
             recluster=recluster,
+            interaction_regularization=interaction_regularization,
             **kwargs,
         )
 
