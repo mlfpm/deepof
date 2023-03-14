@@ -144,9 +144,10 @@ def get_aggregated_embedding(
 
 
 def select_time_bin(
-    embedding: table_dict,
-    soft_counts: table_dict,
-    breaks: table_dict,
+    embedding: table_dict = None,
+    soft_counts: table_dict = None,
+    breaks: table_dict = None,
+    supervised_annotations: table_dict = None,
     bin_size: int = 0,
     bin_index: int = 0,
     precomputed: np.ndarray = None,
@@ -162,6 +163,7 @@ def select_time_bin(
         experimental conditions, and the values are the soft counts for each condition.
         breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         conditions, and the values are the breaks for each condition.
+        supervised_annotations (TableDict): table dict with supervised annotations per animal experiment across time.
         bin_size (int): The size of the time bin to select.
         bin_index (int): The index of the time bin to select.
         precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each
@@ -172,38 +174,51 @@ def select_time_bin(
     """
 
     # If precomputed, filter each experiment using the provided boolean array
-    if precomputed is not None:
-        breaks_mask_dict = {}
+    if supervised_annotations is None:
 
-        for key in breaks.keys():
-            if embedding[key].shape[0] > len(precomputed):
-                breaks_mask_dict[key] = np.concatenate(
-                    [
-                        precomputed,
-                        [False] * (embedding[key].shape[0] - len(precomputed)),
-                    ]
-                ).astype(bool)
+        if precomputed is not None:
+            breaks_mask_dict = {}
 
-            else:
-                breaks_mask_dict[key] = precomputed[: embedding[key].shape[0]]
+            for key in breaks.keys():
+                if embedding[key].shape[0] > len(precomputed):
+                    breaks_mask_dict[key] = np.concatenate(
+                        [
+                            precomputed,
+                            [False] * (embedding[key].shape[0] - len(precomputed)),
+                        ]
+                    ).astype(bool)
+
+                else:
+                    breaks_mask_dict[key] = precomputed[: embedding[key].shape[0]]
+
+        else:
+            # Get cumulative length of each video using breaks, and mask the cumsum dictionary,
+            # to check whether a certain instance falls into the desired bin
+            breaks_mask_dict = {
+                key: (np.cumsum(value) >= bin_size * bin_index)
+                & (np.cumsum(value) < bin_size * (bin_index + 1))
+                for key, value in breaks.items()
+            }
+
+        # Filter embedding, soft_counts and breaks using the above masks
+        embedding = {
+            key: value[breaks_mask_dict[key]] for key, value in embedding.items()
+        }
+        soft_counts = {
+            key: value[breaks_mask_dict[key]] for key, value in soft_counts.items()
+        }
+        breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
 
     else:
-        # Get cumulative length of each video using breaks, and mask the cumsum dictionary,
-        # to check whether a certain instance falls into the desired bin
-        breaks_mask_dict = {
-            key: (np.cumsum(value) >= bin_size * bin_index)
-            & (np.cumsum(value) < bin_size * (bin_index + 1))
-            for key, value in breaks.items()
+        supervised_annotations = {
+            key: val.iloc[
+                bin_size
+                * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
+            ]
+            for key, val in supervised_annotations.items()
         }
 
-    # Filter embedding, soft_counts and breaks using the above masks
-    embedding = {key: value[breaks_mask_dict[key]] for key, value in embedding.items()}
-    soft_counts = {
-        key: value[breaks_mask_dict[key]] for key, value in soft_counts.items()
-    }
-    breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
-
-    return embedding, soft_counts, breaks
+    return embedding, soft_counts, breaks, supervised_annotations
 
 
 def condition_distance_binning(
@@ -260,13 +275,13 @@ def condition_distance_binning(
 
         if scan_mode == "per-bin":
 
-            cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
-                embedding, soft_counts, breaks, step_bin, bin_index
+            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
+                embedding, soft_counts, breaks, bin_size=step_bin, bin_index=bin_index
             )
 
         elif scan_mode == "growing_window":
-            cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
-                embedding, soft_counts, breaks, bin_index, 0
+            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
+                embedding, soft_counts, breaks, bin_size=bin_index, bin_index=0
             )
 
         else:
@@ -275,7 +290,7 @@ def condition_distance_binning(
                 "the precomputed_bins parameter"
             )
 
-            cur_embedding, cur_soft_counts, cur_breaks = select_time_bin(
+            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
                 embedding,
                 soft_counts,
                 breaks,
@@ -390,11 +405,12 @@ def separation_between_conditions(
     return current_distance
 
 
-def cluster_enrichment_across_conditions(
-    embedding: table_dict,
-    soft_counts: table_dict,
-    breaks: table_dict,
-    exp_conditions: dict,
+def enrichment_across_conditions(
+    embedding: table_dict = None,
+    soft_counts: table_dict = None,
+    breaks: table_dict = None,
+    supervised_annotations: table_dict = None,
+    exp_conditions: dict = None,
     bin_size: int = None,
     bin_index: int = None,
     precomputed: np.ndarray = None,
@@ -410,6 +426,7 @@ def cluster_enrichment_across_conditions(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
         experimental conditions, and the values are the soft counts for each condition.
         breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
+        supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
         conditions, and the values are the breaks for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
         names of the experiments, and the values are the names of their corresponding
@@ -425,25 +442,35 @@ def cluster_enrichment_across_conditions(
 
     """
     # Select time bin and filter all relevant objects
+
     if precomputed is not None:
-        embedding, soft_counts, breaks = select_time_bin(
+        embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
             embedding,
             soft_counts,
             breaks,
+            supervised_annotations=supervised_annotations,
             precomputed=precomputed,
         )
 
     elif bin_size is not None and bin_index is not None:
-        embedding, soft_counts, breaks = select_time_bin(
-            embedding, soft_counts, breaks, bin_size, bin_index
+        embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
+            embedding, soft_counts, breaks, supervised_annotations, bin_size, bin_index
         )
 
-    assert list(embedding.values())[0].shape[0] > 0
+    if supervised_annotations is None:
 
-    # Extract time on cluster for all videos and add experimental information
-    counter_df = get_time_on_cluster(
-        soft_counts, breaks, normalize=normalize, reduce_dim=False
-    )
+        assert list(embedding.values())[0].shape[0] > 0
+
+        # Extract time on cluster for all videos and add experimental information
+        counter_df = get_time_on_cluster(
+            soft_counts, breaks, normalize=normalize, reduce_dim=False
+        )
+    else:
+        # Extract time on each behaviour for all videos and add experimental information
+        counter_df = pd.DataFrame(
+            {key: np.sum(val) for key, val in supervised_annotations.items()}
+        ).T
+
     counter_df["exp condition"] = counter_df.index.map(exp_conditions)
 
     return counter_df.melt(
@@ -608,6 +635,7 @@ def compute_UMAP(embeddings, cluster_assignments):
 def align_deepof_kinematics_with_unsupervised_labels(
     deepof_project: project,
     kin_derivative: int = 1,
+    include_feature_derivatives: bool = False,
     include_distances: bool = True,
     include_angles: bool = True,
     include_areas: bool = True,
@@ -622,9 +650,10 @@ def align_deepof_kinematics_with_unsupervised_labels(
     Args:
         deepof_project (Project): A deepof.Project object.
         kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
-        include_distances (bool): Whether to include distances in the alignment. kin_derivative is taken into account.
-        include_angles (bool): Whether to include angles in the alignment. kin_derivative is taken into account.
-        include_areas (bool): Whether to include areas in the alignment. kin_derivative is taken into account.
+        include_feature_derivatives (bool): Whether to compute speed on distances, angles, and areas, if they are included.
+        include_distances (bool): Whether to include distances in the alignment.
+        include_angles (bool): Whether to include angles in the alignment.
+        include_areas (bool): Whether to include areas in the alignment.
         animal_id (str): The animal ID to use, in case of multi-animal projects.
 
     Returns:
@@ -650,40 +679,45 @@ def align_deepof_kinematics_with_unsupervised_labels(
             cur_kinematics = {key: pd.DataFrame() for key in cur_kinematics.keys()}
 
         if include_distances:
-            cur_distances = deepof_project.get_distances(speed=der)
+            if der == 0 or include_feature_derivatives:
+                cur_distances = deepof_project.get_distances(speed=der)
 
-            # If specified, filter on specific animals
-            if animal_id is not None:
-                cur_distances = cur_distances.filter_id(animal_id)
+                # If specified, filter on specific animals
+                if animal_id is not None:
+                    cur_distances = cur_distances.filter_id(animal_id)
 
-            cur_kinematics = {
-                key: pd.concat([kin, dist], axis=1)
-                for (key, kin), dist in zip(
-                    cur_kinematics.items(), cur_distances.values()
-                )
-            }
+                cur_kinematics = {
+                    key: pd.concat([kin, dist], axis=1)
+                    for (key, kin), dist in zip(
+                        cur_kinematics.items(), cur_distances.values()
+                    )
+                }
 
         if include_angles:
-            cur_angles = deepof_project.get_angles(speed=der)
+            if der == 0 or include_feature_derivatives:
+                cur_angles = deepof_project.get_angles(speed=der)
 
-            # If specified, filter on specific animals
-            if animal_id is not None:
-                cur_angles = cur_angles.filter_id(animal_id)
+                # If specified, filter on specific animals
+                if animal_id is not None:
+                    cur_angles = cur_angles.filter_id(animal_id)
 
-            cur_kinematics = {
-                key: pd.concat([kin, angle], axis=1)
-                for (key, kin), angle in zip(
-                    cur_kinematics.items(), cur_angles.values()
-                )
-            }
+                cur_kinematics = {
+                    key: pd.concat([kin, angle], axis=1)
+                    for (key, kin), angle in zip(
+                        cur_kinematics.items(), cur_angles.values()
+                    )
+                }
 
         if include_areas:
-            cur_areas = deepof_project.get_areas(speed=der, selected_id=animal_id)
+            if der == 0 or include_feature_derivatives:
+                cur_areas = deepof_project.get_areas(speed=der, selected_id=animal_id)
 
-            cur_kinematics = {
-                key: pd.concat([kin, area], axis=1)
-                for (key, kin), area in zip(cur_kinematics.items(), cur_areas.values())
-            }
+                cur_kinematics = {
+                    key: pd.concat([kin, area], axis=1)
+                    for (key, kin), area in zip(
+                        cur_kinematics.items(), cur_areas.values()
+                    )
+                }
 
         # Add corresponding suffixes to most common moments
         if der == 0:

@@ -1475,18 +1475,17 @@ class Coordinates:
         raw_coords = self.get_coords(center=None)
         coords = self.get_coords(center="Center", align="Spine_1")
         dists = self.get_distances()
-        angs = self.get_angles()
         speeds = self.get_coords(speed=1)
         if len(self._animal_ids) <= 1:
             features_dict = (
                 deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self
+                    self, include_angles=False
                 )
             )
         else:
             features_dict = {
                 _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self, animal_id=_id
+                    self, animal_id=_id, include_angles=False
                 )
                 for _id in self._animal_ids
             }

@@ -708,7 +708,7 @@ def supervised_tagging(
         )
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
-                full_features[_id][vid_name],
+                (full_features[_id][vid_name] if _id else full_features[vid_name]),
                 huddle_estimator=huddle_estimator,
             )
         )

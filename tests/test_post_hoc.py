@@ -143,7 +143,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize):
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
-    enrichment = deepof.post_hoc.cluster_enrichment_across_conditions(
+    enrichment = deepof.post_hoc.enrichment_across_conditions(
         embedding,
         soft_counts,
         breaks,

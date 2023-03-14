@@ -397,11 +397,13 @@ def plot_gantt(
     plt.show()
 
 
-def plot_cluster_enrichment(
+def plot_enrichment(
     coordinates: coordinates,
-    embeddings: table_dict,
-    soft_counts: table_dict,
+    embeddings: table_dict = None,
+    soft_counts: table_dict = None,
     breaks: table_dict = None,
+    supervised_annotations: table_dict = None,
+    plot_proportions: bool = True,
     add_stats: str = "Mann-Whitney",
     # Quality selection parameters
     min_confidence: float = 0.0,
@@ -424,6 +426,9 @@ def plot_cluster_enrichment(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
+        plot_proportions (bool): if supervised annotations are provided, display only traits that are measured
+        as proportions instead of real values. Useful to visualize traits with different scales.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
         available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order
@@ -452,11 +457,24 @@ def plot_cluster_enrichment(
             for key, val in coordinates.get_exp_conditions.items()
         }
 
+    if supervised_annotations is not None:
+        if plot_proportions:
+            supervised_annotations = {
+                key: val.loc[:, [col for col in val.columns if "speed" not in col]]
+                for key, val in supervised_annotations.items()
+            }
+        else:
+            supervised_annotations = {
+                key: val.loc[:, [col for col in val.columns if "speed" in col]]
+                for key, val in supervised_annotations.items()
+            }
+
     # Get cluster enrichment across conditions for the desired settings
-    enrichment = deepof.post_hoc.cluster_enrichment_across_conditions(
+    enrichment = deepof.post_hoc.enrichment_across_conditions(
         embedding=embeddings,
         soft_counts=soft_counts,
         breaks=breaks,
+        supervised_annotations=supervised_annotations,
         exp_conditions=exp_conditions,
         bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
         bin_index=bin_index,
@@ -499,12 +517,20 @@ def plot_cluster_enrichment(
     )
 
     if add_stats:
-        pairs = list(
-            product(
-                set(np.concatenate(list(soft_counts.values())).argmax(axis=1)),
-                set(exp_conditions.values()),
+        if supervised_annotations is None:
+            pairs = list(
+                product(
+                    set(np.concatenate(list(soft_counts.values())).argmax(axis=1)),
+                    set(exp_conditions.values()),
+                )
             )
-        )
+        else:
+            pairs = list(
+                product(
+                    list(supervised_annotations.values())[0].columns,
+                    set(exp_conditions.values()),
+                )
+            )
         pairs = [
             list(map(tuple, p))
             for p in np.array(pairs)
@@ -908,12 +934,12 @@ def plot_embeddings(
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
     if bin_size is not None:
-        embeddings, soft_counts, breaks = deepof.post_hoc.select_time_bin(
+        embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
             embeddings,
             soft_counts,
             breaks,
-            coordinates._frame_rate * bin_size,
-            bin_index,
+            bin_size=coordinates._frame_rate * bin_size,
+            bin_index=bin_index,
         )
 
     # Keep only those experiments for which we have an experimental condition assigned
@@ -1482,6 +1508,21 @@ def animate_skeleton(
     plt.tight_layout()
 
     if save is not None:
+        save = os.path.join(
+            coordinates._project_path,
+            coordinates._project_name,
+            "Out_videos",
+            "deepof_embedding_animation{}_{}_{}.mp4".format(
+                (f"_{save}" if isinstance(save, str) else ""),
+                (
+                    "cluster={}".format(selected_cluster)
+                    if selected_cluster is not None
+                    else experiment_id
+                ),
+                calendar.timegm(time.gmtime()),
+            ),
+        )
+
         writevideo = FFMpegWriter(fps=15)
         animation.save(save, writer=writevideo)
 
@@ -1506,7 +1547,7 @@ def plot_cluster_detection_performance(
         cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
-        save:
+        save: name of the file where to save the produced figure.
         visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
 
     """
@@ -2300,8 +2341,8 @@ def tag_annotated_frames(
 
             if tag_dict[_id + undercond + "climbing"][fnum]:
                 write_on_frame("climbing", down_pos)
-            # elif tag_dict[_id + undercond + "huddle"][fnum]:
-            #     write_on_frame("huddling", down_pos)
+            elif tag_dict[_id + undercond + "huddle"][fnum]:
+                write_on_frame("huddling", down_pos)
             elif tag_dict[_id + undercond + "sniffing"][fnum]:
                 write_on_frame("sniffing", down_pos)
 
