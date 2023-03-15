@@ -1537,6 +1537,7 @@ def plot_cluster_detection_performance(
     groups: list,
     save: bool = False,
     visualization: str = "confusion_matrix",
+    ax: plt.Axes = None,
 ):
     """Plots either a confusion matrix or a bar chart with balanced accuracy for cluster detection cross validated models.
     Designed to be run after deepof.post_hoc.train_supervised_cluster_detectors (see documentation for details).
@@ -1549,10 +1550,14 @@ def plot_cluster_detection_performance(
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
         save: name of the file where to save the produced figure.
         visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
+        ax (plt.Axes): axis where to plot the figure. If None, a new figure is created.
 
     """
     n_clusters = len(np.unique(hard_counts))
     confusion_matrices = []
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
 
     for clf, fold in zip(cluster_gbm_performance["estimator"], groups):
         cm = confusion_matrix(
@@ -1578,10 +1583,9 @@ def plot_cluster_detection_performance(
         row_order = dendrogram(row_link, no_plot=True)["leaves"]
         cm = cm.iloc[row_order, row_order]
 
-        plt.title("Confusion matrix for multiclass state prediction")
-        sns.heatmap(cm, annot=True, cmap="Blues")
-
-        plt.yticks(rotation=0)
+        ax.set_title("Confusion matrix for multiclass state prediction")
+        sns.heatmap(cm, annot=True, cmap="Blues", ax=ax)
+        ax.set_yticks(ax.get_yticks(), rotation=45)
 
     elif visualization == "balanced_accuracy":
 
@@ -1610,22 +1614,26 @@ def plot_cluster_detection_performance(
 
         dataset = pd.DataFrame(dataset)
 
-        plt.title("Supervised cluster mapping performance")
+        ax.set_title("Supervised cluster mapping performance")
 
-        sns.barplot(data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3])
-        plt.axhline(1 / n_clusters, linestyle="--", color="black")
+        sns.barplot(
+            data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3], ax=ax
+        )
+        sns.stripplot(data=dataset, color="black", ax=ax)
 
-        plt.xlabel("Cluster")
-        plt.ylabel("Balanced accuracy")
+        ax.axhline(1 / n_clusters, linestyle="--", color="black")
+        ax.set_ylim(0, 1)
 
-        plt.ylim(0, 1)
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Balanced accuracy")
 
     else:
         raise ValueError(
             "Invalid plot selected. Visualization should be one of 'confusion_matrix' or 'balanced_accuracy'. See documentation for details."
         )
 
-    plt.tight_layout()
+    if ax is None:
+        plt.tight_layout()
 
     if save:
         plt.savefig(
@@ -1640,7 +1648,9 @@ def plot_cluster_detection_performance(
                 ),
             )
         )
-    plt.show()
+
+    if ax is None:
+        plt.show()
 
 
 def plot_shap_swarm_per_cluster(

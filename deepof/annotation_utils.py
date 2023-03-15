@@ -712,14 +712,12 @@ def supervised_tagging(
                 huddle_estimator=huddle_estimator,
             )
         )
-        tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
-            look_around(
-                speeds,
-                likelihoods,
-                params["huddle_speed"],
-                params["nose_likelihood"],
-                animal_id=_id,
-            )
+        tag_dict[_id + undercond + "lookaround"] = look_around(
+            speeds,
+            likelihoods,
+            params["huddle_speed"],
+            params["nose_likelihood"],
+            animal_id=_id,
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
