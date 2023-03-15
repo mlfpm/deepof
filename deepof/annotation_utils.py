@@ -456,7 +456,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
     defaults = {
         "speed_pause": 5,
         "climb_tol": 10,
-        "close_contact_tol": 35,
+        "close_contact_tol": 25,
         "side_contact_tol": 45,
         "follow_frames": 10,
         "follow_tol": 5,
