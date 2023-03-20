@@ -18,6 +18,7 @@ from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+from shutil import rmtree
 
 import deepof.post_hoc
 import deepof.data
@@ -57,11 +58,14 @@ def test_get_aggregated_embedding(reduce_dim, agg):
 @given(
     bin_size=st.integers(min_value=15, max_value=20),
     bin_index=st.integers(min_value=0, max_value=1),
+    supervised=st.booleans(),
 )
-def test_select_time_bin(bin_size, bin_index):
+def test_select_time_bin(bin_size, bin_index, supervised):
 
     # Define a test embedding dixtionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    if supervised:
+        embedding = {i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}
 
     # Define a test matrix of soft counts
     soft_counts = {}
@@ -72,21 +76,30 @@ def test_select_time_bin(bin_size, bin_index):
     # Create a dictionary of breaks, whose sums add up to the number of chunks
     breaks = {i: np.array([10] * 100) for i in range(10)}
 
-    embedding, soft_counts, breaks = deepof.post_hoc.select_time_bin(
-        embedding, soft_counts, breaks, bin_size, bin_index
+    embedding, soft_counts, breaks, supervised_annots = deepof.post_hoc.select_time_bin(
+        embedding=(embedding if not supervised else None),
+        soft_counts=(soft_counts if not supervised else None),
+        breaks=(breaks if not supervised else None),
+        supervised_annotations=(None if not supervised else embedding),
+        bin_size=bin_size,
+        bin_index=bin_index,
     )
 
-    # Assert that the embedding and soft counts are correctly binned
-    assert list(embedding.values())[0].shape[0] > 0
-    assert list(soft_counts.values())[0].shape[0] > 0
-    assert list(breaks.values())[0].shape[0] > 0
+    # Assert that all returned objects are binned
+    if not supervised:
+        assert list(embedding.values())[0].shape[0] > 0
+        assert list(soft_counts.values())[0].shape[0] > 0
+        assert list(breaks.values())[0].shape[0] > 0
+
+    else:
+        assert list(supervised_annots.values())[0].shape[0] > 0
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     scan_mode=st.sampled_from(["growing-window", "per-bin"]),
     agg=st.sampled_from(["time_on_cluster", "mean", "median"]),
-    metric=st.sampled_from(["auc-linear", "wasserstein"]),
+    metric=st.sampled_from(["auc", "wasserstein"]),
 )
 def test_condition_distance_binning(scan_mode, agg, metric):
 
@@ -112,7 +125,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         breaks=breaks,
         exp_conditions=exp_conditions,
         start_bin=11,
-        end_bin=100,
+        end_bin=99,
         step_bin=11,
         scan_mode=scan_mode,
         agg=agg,
@@ -120,12 +133,15 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         n_jobs=1,
     )
 
-    # Assert that the embedding and soft counts are correctly binned
-    assert np.argmax(distance_binning) >= 0
+    assert isinstance(distance_binning, np.ndarray)
 
 
-@given(bin_size=st.integers(min_value=11, max_value=100), normalize=st.booleans())
-def test_cluster_enrichment_across_conditions(bin_size, normalize):
+@given(
+    bin_size=st.integers(min_value=11, max_value=100),
+    normalize=st.booleans(),
+    supervised=st.booleans(),
+)
+def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     # Define a test embedding dixtionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
@@ -147,7 +163,12 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize):
         embedding,
         soft_counts,
         breaks,
-        exp_conditions,
+        supervised_annotations=(
+            None
+            if not supervised
+            else {i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}
+        ),
+        exp_conditions=exp_conditions,
         bin_size=bin_size,
         bin_index=0,
         normalize=normalize,
@@ -232,9 +253,29 @@ def test_compute_transition_matrix_per_condition(
 )
 def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
 
+    project_path = os.path.join(
+        ".", "tests", "test_examples", "test_{}_topview".format(mode), "deepof_project"
+    )
+    if os.path.exists(project_path):
+        rmtree(project_path)
+
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "Tables",
         ),
         arena="circular-autodetect",
         video_scale=380,
@@ -244,6 +285,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
     ).create()
+    rmtree(project_path)
 
     # get breaks
     breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
@@ -279,7 +321,7 @@ def test_chunk_summary_statistics():
     chunked_dataset = np.random.uniform(size=(100, 25, 4))
 
     kinematic_features = deepof.post_hoc.chunk_summary_statistics(
-        chunked_dataset, pd.Series(hard_counts), body_part_names
+        chunked_dataset, body_part_names
     )
 
     assert isinstance(kinematic_features, pd.DataFrame)
@@ -290,11 +332,33 @@ def test_chunk_summary_statistics():
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
 )
-def test_annotate_time_chunks(mode, sampler):
+def test_shap_pipeline(mode, sampler):
+
+    project_path = os.path.join(
+        ".", "tests", "test_examples", "test_{}_topview".format(mode), "deepof_project"
+    )
+    if os.path.exists(project_path):
+        rmtree(project_path)
+
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
         ),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "Tables",
+        ),
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -302,35 +366,38 @@ def test_annotate_time_chunks(mode, sampler):
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
     ).create()
+    rmtree(project_path)
 
     # get breaks and soft_counts
     breaks = {}
     soft_counts = {}
     for i in ["test", "test2"]:
-        counts = np.random.normal(size=(10, 10))
-        breaks[i] = np.array([10] * 10)
+        counts = np.random.normal(size=(100 - 25 + 1, 10))
+        breaks[i] = np.array([1] * (100 - 25 + 1))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
     # get supervised annotations from project
     supervised_annotations = prun.supervised_annotation()
 
     # annotate time chunks
-    time_chunks, hard_counts = deepof.post_hoc.annotate_time_chunks(
+    time_chunks, hard_counts, breaks = deepof.post_hoc.annotate_time_chunks(
         prun,
         soft_counts,
         breaks,
         supervised_annotations,
+        window_size=25,
         animal_id=(
             sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
         ),
         kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
         include_distances=sampler.draw(st.booleans()),
         include_angles=sampler.draw(st.booleans()),
-        aggregate=sampler.draw(st.one_of(st.just("mean"), st.just("tsfresh"))),
+        aggregate=sampler.draw(st.one_of(st.just("mean"), st.just("seglearn"))),
     )
 
     assert isinstance(time_chunks, pd.DataFrame)
     assert isinstance(hard_counts, pd.Series)
+    assert isinstance(breaks, dict)
 
 
 @given(folds=st.integers(min_value=2, max_value=10))

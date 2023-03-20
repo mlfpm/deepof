@@ -1,1 +1,11 @@
-deepof/trained_models/elliptical_arena_detection_20210331-005020.tf/variables/variables.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/tutorial_project/Coordinates/deepof_coordinates.pkl filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_64DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_61DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_56DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_63DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_62DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Videos/20191204_Day2_SI_JB08_Test_54DLC_resnet50_20210323_BWnetwork_Joeri_lucas_dualMar23shuffle1_1030000_labeled.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/Trained_weights/deepof_unsupervised_sa_VaDE_encoder_recurrent_encodings_input=graph_k=10_latdim=8_changepoints_False_kmeans_loss=0.0.pkl filter=lfs diff=lfs merge=lfs -text
+docs/source/tutorial_notebooks/tutorial_files/tutorial_project/Coordinates/SHAP_analysis_results_SI_sa.pkl filter=lfs diff=lfs merge=lfs -text
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text

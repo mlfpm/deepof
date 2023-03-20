@@ -110,9 +110,10 @@ def plot_arena(
 def heatmap(
     dframe: pd.DataFrame,
     bodyparts: List,
-    xlim: tuple,
-    ylim: tuple,
-    title: str,
+    xlim: tuple = None,
+    ylim: tuple = None,
+    title: str = None,
+    mask: np.ndarray = None,
     save: str = False,
     dpi: int = 200,
     ax: Any = None,
@@ -127,6 +128,8 @@ def heatmap(
         bodyparts (List): bodyparts to represent (at least 1)
         xlim (float): limits of the x-axis
         ylim (float): limits of the y-axis
+        title (str): title of the figure
+        mask (np.ndarray): mask to apply to the heatmap across time
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
@@ -146,8 +149,36 @@ def heatmap(
             figsize=(8 * len(bodyparts), 8),
         )
 
+    if isinstance(dframe, dict):
+
+        if mask is not None:
+            assert isinstance(
+                mask, dict
+            ), "If dframe is a dictionary, mask must be one as well."
+
+            # Pad each mask in the dictionary with False values to match the length of each dataframe
+            mask = {
+                k: np.pad(
+                    v, (0, len(dframe[k]) - len(v)), "constant", constant_values=False
+                )
+                for k, v in mask.items()
+            }
+            mask = np.concatenate(list(mask.values()), axis=0)
+
+        # Concatenate all dataframes which are values of the dictionary into a single one
+        dframe = pd.concat(dframe.values(), axis=0).reset_index(drop=True)
+
+    if mask is None:
+        mask = np.ones(len(dframe), dtype=bool)
+
+    else:
+        # Pad the mask with False values to match the length of the dataframe
+        mask = np.pad(
+            mask, (0, len(dframe) - len(mask)), "constant", constant_values=False
+        )
+
     for i, bpart in enumerate(bodyparts):
-        heatmap = dframe[bpart]
+        heatmap = dframe[bpart].loc[mask]
 
         if len(bodyparts) > 1:
             sns.kdeplot(
@@ -161,14 +192,23 @@ def heatmap(
             )
         else:
             sns.kdeplot(
-                x=heatmap.x, y=heatmap.y, cmap="magma", fill=True, alpha=1, ax=ax
+                x=heatmap.x,
+                y=heatmap.y,
+                cmap="magma",
+                fill=True,
+                alpha=1,
+                ax=ax,
+                **kwargs,
             )
             ax = np.array([ax])
 
     for x, bp in zip(ax, bodyparts):
-        x.set_xlim(xlim)
-        x.set_ylim(ylim)
-        x.set_title(f"{bp} - {title}", fontsize=10)
+        if xlim is not None:
+            x.set_xlim(xlim)
+        if ylim is not None:
+            x.set_ylim(ylim)
+        if title is not None:
+            x.set_title(f"{bp} - {title}", fontsize=10)
 
     if save:  # pragma: no cover
         plt.savefig(
@@ -193,6 +233,7 @@ def plot_heatmaps(
     center: str = "arena",
     align: str = None,
     exp_condition: str = None,
+    condition_value: str = None,
     display_arena: bool = True,
     xlim: float = None,
     ylim: float = None,
@@ -212,8 +253,9 @@ def plot_heatmaps(
         the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with
         (see preprocess in table_dict documentation).
-        exp_condition (str): Experimental condition to plot. If available, it filters the experiments
-        to keep only those whose condition matches the given string.
+        exp_condition (str): Experimental condition to plot base filters on.
+        condition_value (str): Experimental condition value to plot. If available, it filters the
+        experiments to keep only those whose condition value matches the given string in the provided exp_condition.
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
@@ -229,9 +271,13 @@ def plot_heatmaps(
     """
     coords = coordinates.get_coords(center=center, align=align)
 
-    if exp_condition is not None:
+    if exp_condition is not None and condition_value is not None:
         coords = coords.filter_videos(
-            [k for k, v in coordinates.get_exp_conditions.items() if v == exp_condition]
+            [
+                k
+                for k, v in coordinates.get_exp_conditions.items()
+                if v[exp_condition].values == condition_value
+            ]
         )
 
     if not center:  # pragma: no cover
@@ -245,7 +291,7 @@ def plot_heatmaps(
         )
 
     elif exp_condition is not None:
-        title_suffix += f" - {exp_condition}"
+        title_suffix += f" - {condition_value}"
 
     if experiment_id != "average":
 
@@ -300,7 +346,7 @@ def plot_gantt(
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
-    """  # TODO: extend to supervised annotations, and add time below
+    """
     # Determine plot type
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
@@ -309,8 +355,24 @@ def plot_gantt(
     else:
         plot_type = "mixed"
 
-    hard_counts = soft_counts[experiment_id].argmax(axis=1)
-    gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
+    if plot_type == "unsupervised":
+        hard_counts = soft_counts[experiment_id].argmax(axis=1)
+        gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
+
+    elif plot_type == "supervised":
+        row_shape = supervised_annotations[experiment_id].shape[1] - len(
+            [
+                col
+                for col in supervised_annotations[experiment_id].columns
+                if "speed" in col
+            ]
+        )
+        gantt = np.zeros(
+            [
+                row_shape,
+                supervised_annotations[experiment_id].shape[0],
+            ]
+        )
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
@@ -323,8 +385,16 @@ def plot_gantt(
 
     # Iterate over unsupervised clusters and plot
     rows = 0
-    for cluster, color in zip(range(hard_counts.max() + 1), colors):
-        gantt[cluster] = hard_counts == cluster
+
+    for cluster, color in zip(range(gantt.shape[0]), colors):
+
+        if plot_type == "unsupervised":
+            gantt[cluster] = hard_counts == cluster
+        elif plot_type == "supervised":
+            if "speed" in supervised_annotations[experiment_id].iloc[:, cluster].name:
+                continue
+            gantt[cluster] = supervised_annotations[experiment_id].iloc[:, cluster]
+
         gantt_cp = gantt.copy()
         gantt_cp[[i for i in range(gantt.shape[0]) if i != cluster]] = np.nan
         plt.axhline(y=cluster, color="k", linewidth=0.5)
@@ -359,7 +429,15 @@ def plot_gantt(
         # Concatenate cluster IDs and checkpoint names if they exist
         np.concatenate(
             [
-                np.arange(hard_counts.max() + 1),
+                (
+                    np.arange(hard_counts.max() + 1)
+                    if plot_type == "unsupervised"
+                    else [
+                        col
+                        for col in supervised_annotations[experiment_id].columns
+                        if "speed" not in col
+                    ]
+                ),
                 np.array(additional_checkpoints.index)
                 if additional_checkpoints is not None
                 else [],
@@ -375,7 +453,7 @@ def plot_gantt(
     plt.axvline(x=gantt.shape[1], color="k", linewidth=2)
 
     plt.xlabel("Time", fontsize=10)
-    plt.ylabel("Cluster", fontsize=10)
+    plt.ylabel(("Cluster" if plot_type == "unsupervised" else ""), fontsize=10)
 
     if save:
         plt.savefig(
@@ -669,7 +747,7 @@ def plot_transitions(
 
             try:
                 G = nx.DiGraph(grouped_transitions[exp_condition])
-            except:
+            except nx.NetworkXError:
                 G = nx.DiGraph(grouped_transitions)
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
 
@@ -866,11 +944,98 @@ def plot_stationary_entropy(
     plt.show()
 
 
+def _filter_embeddings(
+    coordinates,
+    embeddings,
+    soft_counts,
+    breaks,
+    supervised_annotations,
+    use_keys,
+    exp_condition,
+    bin_size,
+    bin_index,
+):
+    """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
+
+    # Get experimental conditions per video
+    if exp_condition is None:
+        exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
+
+    concat_hue = [
+        i[exp_condition].values[0]
+        for i in list(coordinates.get_exp_conditions.values())
+    ]
+
+    if use_keys is not None:
+        try:
+            try:
+                embeddings = {key: embeddings[key] for key in use_keys}
+                soft_counts = {key: soft_counts[key] for key in use_keys}
+                breaks = {key: breaks[key] for key in use_keys}
+            except AttributeError:
+                supervised_annotations = {
+                    key: supervised_annotations[key] for key in use_keys
+                }
+        except AttributeError:
+            raise ValueError(
+                "Either embeddings, soft_counts, and breaks or supervised_annotations must be provided."
+            )
+        concat_hue = [
+            j
+            for i, j in zip(list(coordinates.get_exp_conditions.keys()), concat_hue)
+            if i in use_keys
+        ]
+
+    # Restrict embeddings, soft_counts and breaks to the selected time bin
+    if bin_size is not None:
+        if embeddings is not None:
+            embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
+                embeddings,
+                soft_counts,
+                breaks,
+                bin_size=coordinates._frame_rate * bin_size,
+                bin_index=bin_index,
+            )
+        elif supervised_annotations is not None:
+            _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
+                supervised_annotations=supervised_annotations,
+                bin_size=coordinates._frame_rate * bin_size,
+                bin_index=bin_index,
+            )
+
+        # Keep only those experiments for which we have an experimental condition assigned
+        if embeddings is not None:
+            embeddings = {
+                key: val
+                for key, val in embeddings.items()
+                if key in coordinates.get_exp_conditions.keys()
+            }
+            soft_counts = {
+                key: val
+                for key, val in soft_counts.items()
+                if key in coordinates.get_exp_conditions.keys()
+            }
+            breaks = {
+                key: val
+                for key, val in breaks.items()
+                if key in coordinates.get_exp_conditions.keys()
+            }
+        elif supervised_annotations is not None:
+            supervised_annotations = {
+                key: val
+                for key, val in supervised_annotations.items()
+                if key in coordinates.get_exp_conditions.keys()
+            }
+
+    return embeddings, soft_counts, breaks, supervised_annotations, concat_hue
+
+
 def plot_embeddings(
     coordinates: coordinates,
-    embeddings: table_dict,
-    soft_counts: table_dict,
+    embeddings: table_dict = None,
+    soft_counts: table_dict = None,
     breaks: table_dict = None,
+    supervised_annotations: table_dict = None,
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Time selection parameters
@@ -895,6 +1060,7 @@ def plot_embeddings(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
         available is used.
         use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
@@ -913,84 +1079,58 @@ def plot_embeddings(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
-    # Get experimental conditions per video
-    if exp_condition is None:
-        exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
 
-    concat_hue = [
-        i[exp_condition].values[0]
-        for i in list(coordinates.get_exp_conditions.values())
-    ]
-
-    if use_keys is not None:
-        embeddings = {key: embeddings[key] for key in use_keys}
-        soft_counts = {key: soft_counts[key] for key in use_keys}
-        breaks = {key: breaks[key] for key in use_keys}
-        concat_hue = [
-            j
-            for i, j in zip(list(coordinates.get_exp_conditions.keys()), concat_hue)
-            if i in use_keys
-        ]
-
-    # Restrict embeddings, soft_counts and breaks to the selected time bin
-    if bin_size is not None:
-        embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
-            embeddings,
-            soft_counts,
-            breaks,
-            bin_size=coordinates._frame_rate * bin_size,
-            bin_index=bin_index,
-        )
-
-    # Keep only those experiments for which we have an experimental condition assigned
-    embeddings = {
-        key: val
-        for key, val in embeddings.items()
-        if key in coordinates.get_exp_conditions.keys()
-    }
-    soft_counts = {
-        key: val
-        for key, val in soft_counts.items()
-        if key in coordinates.get_exp_conditions.keys()
-    }
-    breaks = {
-        key: val
-        for key, val in breaks.items()
-        if key in coordinates.get_exp_conditions.keys()
-    }
+    # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
+    (
+        emb_to_plot,
+        counts_to_plot,
+        breaks_to_plot,
+        sup_annots_to_plot,
+        concat_hue,
+    ) = _filter_embeddings(
+        coordinates,
+        copy.deepcopy(embeddings),
+        copy.deepcopy(soft_counts),
+        copy.deepcopy(breaks),
+        copy.deepcopy(supervised_annotations),
+        use_keys,
+        exp_condition,
+        bin_size,
+        bin_index,
+    )
 
     # Plot unravelled temporal embeddings
-    if not aggregate_experiments:
+    if not aggregate_experiments and emb_to_plot is not None:
 
         if samples is not None:
 
             # Sample per animal, to avoid alignment issues
-            for key in embeddings.keys():
+            for key in emb_to_plot.keys():
 
                 sample_ids = np.random.choice(
-                    range(embeddings[key].shape[0]), samples, replace=False
+                    range(emb_to_plot[key].shape[0]), samples, replace=False
                 )
-                embeddings[key] = embeddings[key][sample_ids]
-                soft_counts[key] = soft_counts[key][sample_ids]
-                breaks[key] = breaks[key][sample_ids]
+                emb_to_plot[key] = emb_to_plot[key][sample_ids]
+                counts_to_plot[key] = counts_to_plot[key][sample_ids]
+                breaks_to_plot[key] = breaks_to_plot[key][sample_ids]
 
         # Concatenate experiments and align experimental conditions
-        concat_embeddings = np.concatenate(list(embeddings.values()), 0)
+        concat_embeddings = np.concatenate(list(emb_to_plot.values()), 0)
 
         # Concatenate breaks
-        concat_breaks = tf.concat(list(breaks.values()), 0)
+        concat_breaks = tf.concat(list(breaks_to_plot.values()), 0)
 
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
-            np.concatenate(list(soft_counts.values()), 0), axis=1
+            np.concatenate(list(counts_to_plot.values()), 0), axis=1
         )
 
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
-            [np.max(val, axis=1) for val in soft_counts.values()]
+            [np.max(val, axis=1) for val in counts_to_plot.values()]
         )
 
-        break_lens = tf.stack([len(i) for i in list(breaks.values())], 0)
+        break_lens = tf.stack([len(i) for i in list(breaks_to_plot.values())], 0)
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
@@ -1006,7 +1146,7 @@ def plot_embeddings(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(embeddings))), break_lens),
+                "exp_id": np.repeat(list(range(len(emb_to_plot))), break_lens),
                 "breaks": concat_breaks,
                 "confidence": confidence,
                 "cluster": cluster_assignments,
@@ -1022,16 +1162,24 @@ def plot_embeddings(
 
     else:
 
+        if not aggregate_experiments:
+            aggregate_experiments = "median"
+
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                soft_counts, breaks, reduce_dim=True
+                counts_to_plot, breaks_to_plot, reduce_dim=True
             )
 
         else:
-            aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                embeddings, agg=aggregate_experiments, reduce_dim=True
-            )
+            if emb_to_plot is not None:
+                aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True
+                )
+            else:
+                aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True
+                )
 
         aggregated_embeddings = aggregated_embeddings.loc[
             (coordinates.get_exp_conditions.keys() if use_keys is None else use_keys), :
@@ -1106,8 +1254,9 @@ def plot_embeddings(
             )
         )
 
-    title = "deepOF - unsupervised {}embedding".format(
-        ("aggregated " if aggregate_experiments else "")
+    title = "deepOF - {}supervised {}embedding".format(
+        ("un" if sup_annots_to_plot is None else ""),
+        ("aggregated " if aggregate_experiments else ""),
     )
     if ax is not None:
         ax.set_title(title, fontsize=15)
@@ -1165,53 +1314,64 @@ def _scatter_embeddings(
     plt.show()
 
 
-# noinspection PyTypeChecker
-def animate_skeleton(
-    coordinates: coordinates,
-    experiment_id: str,
-    animal_id: list = None,
-    center: str = "arena",
-    align: str = None,
-    frame_limit: int = None,
-    min_confidence: float = 0.0,
-    min_bout_duration: int = None,
-    cluster_assignments: np.ndarray = None,
-    embedding: Union[List, np.ndarray] = None,
-    selected_cluster: np.ndarray = None,
-    display_arena: bool = True,
-    legend: bool = True,
-    save: bool = None,
-    dpi: int = 300,
-):
-    """Renders a FuncAnimation object with embeddings and/or motion trajectories over time.
+def _get_polygon_coords(data, animal_id=""):
+    """Generates polygons to animate for the indicated animal in the provided dataframe."""
 
-    Args:
-        coordinates (coordinates): deepof Coordinates object.
-        experiment_id (str): Name of the experiment to display.
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with
-        (see preprocess in table_dict documentation).
-        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
-        min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
-        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
-        If provided together with selected_cluster, only instances of the specified component are returned.
-        Defaults to None.
-        only instances of the specified component are returned. Defaults to None.
-        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation
-        shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
-        are available.
-        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
-        than one animal in the representation, False otherwise.
-        save (str): name of the file where to save the produced animation.
-        dpi (int): dots per inch of the figure to create.
-    """
-    # Get data to plot from coordinates object
+    if animal_id:
+        animal_id += "_"
+
+    elif animal_id is None:
+        animal_id = ""
+
+    head = np.concatenate(
+        [
+            data.xs(f"{animal_id}Nose", 1).values,
+            data.xs(f"{animal_id}Left_ear", 1).values,
+            data.xs(f"{animal_id}Spine_1", 1).values,
+            data.xs(f"{animal_id}Right_ear", 1).values,
+        ],
+        axis=1,
+    )
+
+    body = np.concatenate(
+        [
+            data.xs(f"{animal_id}Spine_1", 1).values,
+            data.xs(f"{animal_id}Left_fhip", 1).values,
+            data.xs(f"{animal_id}Left_bhip", 1).values,
+            data.xs(f"{animal_id}Spine_2", 1).values,
+            data.xs(f"{animal_id}Right_bhip", 1).values,
+            data.xs(f"{animal_id}Right_fhip", 1).values,
+        ],
+        axis=1,
+    )
+
+    tail = np.concatenate(
+        [
+            data.xs(f"{animal_id}Spine_2", 1).values,
+            data.xs(f"{animal_id}Tail_base", 1).values,
+        ],
+        axis=1,
+    )
+
+    return [head, body, tail]
+
+
+def _process_animation_data(
+    coordinates,
+    experiment_id,
+    animal_id,
+    center,
+    align,
+    min_confidence,
+    min_bout_duration,
+    cluster_assignments,
+    embedding,
+    selected_cluster,
+):
+    """Auxiliary function to process data for animation outputs."""
+
     data = coordinates.get_coords(center=center, align=align)
+    cluster_embedding, concat_embedding = None, None
 
     # Filter requested animals
     if animal_id:
@@ -1312,46 +1472,83 @@ def animate_skeleton(
             concat_embedding = concat_embedding[full_confidence_indices]
             cluster_assignments = cluster_assignments[full_confidence_indices]
 
-    def get_polygon_coords(data, animal_id=""):
-        """Generates polygons to animate for the indicated animal in the provided dataframe."""
+    return (
+        data,
+        x_dv,
+        y_dv,
+        embedding,
+        cluster_embedding,
+        concat_embedding,
+        cluster_assignments,
+    )
 
-        if animal_id:
-            animal_id += "_"
 
-        elif animal_id is None:
-            animal_id = ""
+# noinspection PyTypeChecker
+def animate_skeleton(
+    coordinates: coordinates,
+    experiment_id: str,
+    animal_id: list = None,
+    center: str = "arena",
+    align: str = None,
+    frame_limit: int = None,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
+    cluster_assignments: np.ndarray = None,
+    embedding: Union[List, np.ndarray] = None,
+    selected_cluster: np.ndarray = None,
+    display_arena: bool = True,
+    legend: bool = True,
+    save: bool = None,
+    dpi: int = 300,
+):
+    """Renders a FuncAnimation object with embeddings and/or motion trajectories over time.
 
-        head = np.concatenate(
-            [
-                data.xs(f"{animal_id}Nose", 1).values,
-                data.xs(f"{animal_id}Left_ear", 1).values,
-                data.xs(f"{animal_id}Spine_1", 1).values,
-                data.xs(f"{animal_id}Right_ear", 1).values,
-            ],
-            axis=1,
-        )
-
-        body = np.concatenate(
-            [
-                data.xs(f"{animal_id}Spine_1", 1).values,
-                data.xs(f"{animal_id}Left_fhip", 1).values,
-                data.xs(f"{animal_id}Left_bhip", 1).values,
-                data.xs(f"{animal_id}Spine_2", 1).values,
-                data.xs(f"{animal_id}Right_bhip", 1).values,
-                data.xs(f"{animal_id}Right_fhip", 1).values,
-            ],
-            axis=1,
-        )
-
-        tail = np.concatenate(
-            [
-                data.xs(f"{animal_id}Spine_2", 1).values,
-                data.xs(f"{animal_id}Tail_base", 1).values,
-            ],
-            axis=1,
-        )
-
-        return [head, body, tail]
+    Args:
+        coordinates (coordinates): deepof Coordinates object.
+        experiment_id (str): Name of the experiment to display.
+        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
+        center (str): Name of the body part to which the positions will be centered. If false,
+        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with
+        (see preprocess in table_dict documentation).
+        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
+        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
+        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
+        If provided together with selected_cluster, only instances of the specified component are returned.
+        Defaults to None.
+        only instances of the specified component are returned. Defaults to None.
+        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation
+        shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
+        are available.
+        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
+        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
+        than one animal in the representation, False otherwise.
+        save (str): name of the file where to save the produced animation.
+        dpi (int): dots per inch of the figure to create.
+    """
+    # Get and process data to plot from coordinates object
+    (
+        data,
+        x_dv,
+        y_dv,
+        embedding,
+        cluster_embedding,
+        concat_embedding,
+        cluster_assignments,
+    ) = _process_animation_data(
+        coordinates,
+        experiment_id,
+        animal_id,
+        center,
+        align,
+        min_confidence,
+        min_bout_duration,
+        cluster_assignments,
+        embedding,
+        selected_cluster,
+    )
 
     # Define canvas
     fig = plt.figure(figsize=((16 if embedding is not None else 8), 8), dpi=dpi)
@@ -1399,7 +1596,7 @@ def animate_skeleton(
     else:
         animal_ids = [animal_id]
 
-    polygons = [get_polygon_coords(data, aid) for aid in animal_ids]
+    polygons = [_get_polygon_coords(data, aid) for aid in animal_ids]
 
     if animal_id is None:
         hue = np.zeros(len(np.array(init_x)))
@@ -1936,7 +2133,7 @@ def export_annotated_video(
     soft_counts: dict = None,
     breaks: dict = None,
     experiment_id: str = None,
-    min_confidence: float = 0.0,
+    min_confidence: float = 0.75,
     min_bout_duration: int = None,
     frame_limit_per_video: int = np.inf,
     exp_conditions: dict = {},
@@ -1962,6 +2159,10 @@ def export_annotated_video(
     out_path = os.path.join(proj_path, "Out_videos")
     if not os.path.exists(out_path):
         os.mkdir(out_path)
+
+    # If no bout duration is provided, use half the frame rate
+    if min_bout_duration is None:
+        min_bout_duration = coordinates._frame_rate // 2
 
     # Compute sliding window lenth, to determine the frame/annotation offset
     first_key = list(coordinates.get_quality().keys())[0]

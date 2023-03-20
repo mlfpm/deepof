@@ -11,35 +11,71 @@ Testing module for deepof.models
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+import networkx as nx
+import numpy as np
 
 import deepof.model_utils
 import deepof.models
 
 
-@settings(deadline=None, max_examples=25)
+@settings(deadline=None)
 @given(
-    n_components=st.integers(min_value=2, max_value=4).filter(lambda x: x % 2 == 0),
-    latent_dim=st.integers(min_value=4, max_value=16).filter(lambda x: x % 2 == 0),
+    use_gnn=st.booleans(),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
 )
-def test_GMVAE_build(n_components, latent_dim):
-    gmvae = deepof.models.GMVAE(
-        input_shape=(1000, 15, 10),
-        n_components=n_components,
-        latent_dim=latent_dim,
+def test_VaDE_build(use_gnn, encoder_type):
+    vade = deepof.models.VaDE(
+        input_shape=(1000, 15, 33),
+        edge_feature_shape=(1000, 15, 11),
+        adjacency_matrix=nx.adjacency_matrix(
+            nx.generators.random_graphs.dense_gnm_random_graph(11, 11)
+        ).todense(),
+        use_gnn=use_gnn,
+        encoder_type=encoder_type,
+        n_components=10,
+        latent_dim=8,
         batch_size=64,
     )
-    gmvae.build((1000, 15, 10))
-    gmvae.compile()
+    vade.build([(1000, 15, 33), (1000, 15, 11)])
+    vade.compile()
 
 
-@settings(deadline=None, max_examples=25)
+@settings(deadline=None)
 @given(
-    latent_dim=st.integers(min_value=4, max_value=16).filter(lambda x: x % 2 == 0),
-    n_components=st.integers(min_value=4, max_value=16).filter(lambda x: x % 2 == 0),
+    use_gnn=st.booleans(),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
 )
-def test_VQVAE_build(latent_dim, n_components):
+def test_VQVAE_build(use_gnn, encoder_type):
     vqvae = deepof.models.VQVAE(
-        input_shape=(1000, 15, 10), latent_dim=latent_dim, n_components=n_components
+        input_shape=(1000, 15, 33),
+        edge_feature_shape=(1000, 15, 11),
+        adjacency_matrix=nx.adjacency_matrix(
+            nx.generators.random_graphs.dense_gnm_random_graph(11, 11)
+        ).todense(),
+        use_gnn=use_gnn,
+        encoder_type=encoder_type,
+        n_components=10,
+        latent_dim=8,
     )
-    vqvae.build((1000, 15, 10))
+    vqvae.build([(1000, 15, 33), (1000, 15, 11)])
     vqvae.compile()
+
+
+@settings(deadline=None)
+@given(
+    use_gnn=st.booleans(),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
+)
+def test_Contrastive_build(use_gnn, encoder_type):
+    contrasts = deepof.models.Contrastive(
+        input_shape=(1000, 15, 33),
+        edge_feature_shape=(1000, 15, 11),
+        adjacency_matrix=nx.adjacency_matrix(
+            nx.generators.random_graphs.dense_gnm_random_graph(11, 11)
+        ).todense(),
+        use_gnn=use_gnn,
+        encoder_type=encoder_type,
+        latent_dim=8,
+    )
+    contrasts.build([(1000, 7, 33), (1000, 7, 11)])
+    contrasts.compile()

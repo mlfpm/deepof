@@ -310,7 +310,7 @@ class Project:
         def get_first_length(arena_corners):
             return math.dist(arena_corners[0], arena_corners[1])
 
-        if self.arena in ["polygonal-manual", "circular-manual"]:
+        if self.arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
             for i, video_path in enumerate(self.videos):
                 arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
@@ -731,7 +731,8 @@ class Project:
 
         """
 
-        print("Setting up project directories...")
+        if verbose:
+            print("Setting up project directories...")
         self.set_up_project_directory()
         self.frame_rate = int(
             np.round(
@@ -1278,6 +1279,22 @@ class Coordinates:
         """Returns the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
 
+    def load_exp_conditions(self, filepath):  # pragma: no cover
+        """Loads experimental conditions from a wide-format csv table.
+
+        Args:
+            filepath (str): Path to the file containing the experimental conditions.
+
+        """
+        exp_conditions = pd.read_csv(filepath, index_col=0)
+        exp_conditions = {
+            exp_id: pd.DataFrame(
+                exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
+            ).T
+            for exp_id in exp_conditions.iloc[:, 0]
+        }
+        self._exp_conditions = exp_conditions
+
     def get_quality(self):
         """Retrieves a dictionary with the tagging quality per video, as reported by DLC."""
         return self._quality
@@ -1341,7 +1358,7 @@ class Coordinates:
         # Merge and extract names
         tab_dict = coords.merge(speeds, dists)
 
-        if precomputed_tab_dict is not None:
+        if precomputed_tab_dict is not None:  # pragma: no cover
             tab_dict = precomputed_tab_dict
 
         # Get corresponding feature graph
@@ -1420,7 +1437,7 @@ class Coordinates:
             except IndexError:
                 dataset += [to_preprocess[2], to_preprocess[2], to_preprocess[3]]
 
-        else:
+        else:  # pragma: no cover
             to_preprocess = np.concatenate(list(to_preprocess.values()))
 
             # Split node features (positions, speeds) from edge features (distances)
@@ -1436,7 +1453,12 @@ class Coordinates:
                 ),
             )
 
-        return tuple(dataset), graph, tab_dict, global_scaler
+        return (
+            tuple(dataset),
+            nx.adjacency_matrix(graph).todense(),
+            tab_dict,
+            global_scaler,
+        )
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
@@ -1476,7 +1498,7 @@ class Coordinates:
                     self, include_angles=False
                 )
             )
-        else:
+        else:  # pragma: no cover
             features_dict = {
                 _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
                     self, animal_id=_id, include_angles=False
@@ -1503,7 +1525,7 @@ class Coordinates:
             supervised_tags.index = tag_index
             tag_dict[key] = supervised_tags
 
-        if propagate_labels:
+        if propagate_labels:  # pragma: no cover
             for key, tab in tag_dict.items():
                 tab["pheno"] = self._exp_conditions[key]
 
@@ -1550,7 +1572,7 @@ class Coordinates:
         self,
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         adjacency_matrix: np.ndarray = None,
-        embedding_model: str = "VQVAE",
+        embedding_model: str = "VaDE",
         encoder_type: str = "recurrent",
         batch_size: int = 64,
         latent_dim: int = 4,
@@ -1576,7 +1598,7 @@ class Coordinates:
         recluster: bool = False,
         interaction_regularization: float = 0.0,
         **kwargs,
-    ) -> Tuple:
+    ) -> Tuple:  # pragma: no cover
         """Annotates coordinates using a deep unsupervised autoencoder.
 
         Args:
@@ -1617,44 +1639,75 @@ class Coordinates:
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
-        trained_models = deepof.model_utils.autoencoder_fitting(
-            preprocessed_object=preprocessed_object,
-            adjacency_matrix=adjacency_matrix,
-            embedding_model=embedding_model,
-            encoder_type=encoder_type,
-            batch_size=batch_size,
-            latent_dim=latent_dim,
-            epochs=epochs,
-            log_history=log_history,
-            log_hparams=log_hparams,
-            n_components=n_components,
-            kmeans_loss=kmeans_loss,
-            temperature=temperature,
-            contrastive_similarity_function=contrastive_similarity_function,
-            contrastive_loss_function=contrastive_loss_function,
-            beta=beta,
-            tau=tau,
-            output_path=os.path.join(self._project_path, output_path, "Trained_models"),
-            pretrained=pretrained,
-            save_checkpoints=save_checkpoints,
-            save_weights=save_weights,
-            input_type=input_type,
-            run=run,
-            kl_annealing_mode=kl_annealing_mode,
-            kl_warmup=kl_warmup,
-            reg_cat_clusters=reg_cat_clusters,
-            recluster=recluster,
-            interaction_regularization=interaction_regularization,
-            **kwargs,
-        )
+        if pretrained:
+            pretrained_path = os.path.join(
+                self._project_path,
+                self._project_name,
+                "Trained_models",
+                "trained_weights",
+            )
+            pretrained = os.path.join(
+                pretrained_path,
+                (
+                    pretrained
+                    if isinstance(pretrained, str)
+                    else [
+                        w
+                        for w in os.listdir(pretrained_path)
+                        if embedding_model in w
+                        and encoder_type in w
+                        and "encoding={}".format(latent_dim) in w
+                        and "k={}".format(n_components)
+                    ][0]
+                ),
+            )
+
+        try:
+            trained_models = deepof.model_utils.embedding_model_fitting(
+                preprocessed_object=preprocessed_object,
+                adjacency_matrix=adjacency_matrix,
+                embedding_model=embedding_model,
+                encoder_type=encoder_type,
+                batch_size=batch_size,
+                latent_dim=latent_dim,
+                epochs=epochs,
+                log_history=log_history,
+                log_hparams=log_hparams,
+                n_components=n_components,
+                kmeans_loss=kmeans_loss,
+                temperature=temperature,
+                contrastive_similarity_function=contrastive_similarity_function,
+                contrastive_loss_function=contrastive_loss_function,
+                beta=beta,
+                tau=tau,
+                output_path=os.path.join(
+                    self._project_path,
+                    self._project_name,
+                    output_path,
+                    "Trained_models",
+                ),
+                pretrained=pretrained,
+                save_checkpoints=save_checkpoints,
+                save_weights=save_weights,
+                input_type=input_type,
+                run=run,
+                kl_annealing_mode=kl_annealing_mode,
+                kl_warmup=kl_warmup,
+                reg_cat_clusters=reg_cat_clusters,
+                recluster=recluster,
+                interaction_regularization=interaction_regularization,
+                **kwargs,
+            )
+        except IndexError:
+            raise ValueError(
+                "No pretrained model found for the given parameters. Please train a model first."
+            )
 
         # returns a list of trained tensorflow models
         return trained_models
 
 
-class TableDict(
-    dict
-):  # TODO: Add frame_rate to be able to default preprocessing window-sizes
+class TableDict(dict):
     """Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
 
     Includes methods for generating training and testing datasets for the supervised and unsupervised models.
@@ -1958,7 +2011,7 @@ class TableDict(
             try:
                 X_test = np.concatenate(raw_data[test_index])
                 X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 test_index = np.array([], dtype=int)
                 X_train = np.concatenate(list(raw_data))
                 warnings.warn(
@@ -1979,7 +2032,7 @@ class TableDict(
             except IndexError:
                 pass
 
-        if self._propagate_annotations:
+        if self._propagate_annotations:  # pragma: no cover
             n_annot = list(self._propagate_annotations.values())[0].shape[1]
 
             try:
@@ -2090,7 +2143,7 @@ class TableDict(
 
             if scale not in ["robust", "standard", "minmax"]:
                 raise ValueError(
-                    "Invalid scaler. Select one of standard, minmax or None"
+                    "Invalid scaler. Select one of standard, minmax or robust"
                 )  # pragma: no cover
 
             # Scale each experiment independently, to control for animal size
@@ -2104,8 +2157,10 @@ class TableDict(
                 )
 
                 table_temp[key] = pd.DataFrame(
-                    current_tab, columns=tab.columns, index=tab.index
-                )
+                    current_tab,
+                    columns=tab.columns,
+                    index=tab.index,
+                ).apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
 
             # Scale all experiments together, to control for differential stats
             if scale == "standard":
@@ -2116,7 +2171,10 @@ class TableDict(
                 global_scaler = RobustScaler()
 
             if pretrained_scaler is None:
-                global_scaler.fit(np.concatenate(list(table_temp.values())))
+                concat_data = pd.concat(list(table_temp.values()))
+                global_scaler.fit(
+                    concat_data.loc[:, concat_data.dtypes == float].values
+                )
             else:
                 global_scaler = pretrained_scaler
 
@@ -2148,7 +2206,7 @@ class TableDict(
                     cur_tab[cur_tab < -interpolate_normalized] = np.nan
 
                 # Deal with the edge case of phenotype label propagation
-                except TypeError:
+                except TypeError:  # pragma: no cover
 
                     cur_tab[
                         np.append(
@@ -2310,7 +2368,7 @@ class TableDict(
             ), "training set and labels do not have the same shape"
 
         # If indicated and there are more than one animal in the dataset, split all animals as separate inputs
-        if len(self._animal_ids) > 1 and handle_ids == "split":
+        if len(self._animal_ids) > 1 and handle_ids == "split":  # pragma: no cover
             X_train_split, X_test_split = [], []
             for aid in self._animal_ids:
                 X_train_split.append(
@@ -2348,11 +2406,3 @@ class TableDict(
 if __name__ == "__main__":
     # Remove excessive logging from tensorflow
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-# Annotation
-# TODO: Fix issues and add supervised parameters (time in zone, etc).
-# TODO: Make rules universal. Measures shouldn't be necessary.
-# TODO: Label more data for supervised model training using SimBA, and integrate SimBA models
-
-# Visualization
-# TODO: Finish visualization pipeline (Projections and time-wise analyses)

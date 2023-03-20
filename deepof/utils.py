@@ -456,17 +456,20 @@ def scale_table(
     """
     exp_temp = feature_array.to_numpy()
 
+    annot_length = 0
     if coordinates._propagate_labels:
         exp_temp = exp_temp[:, :-1]
+        annot_length += 1
 
     if coordinates._propagate_annotations:
         exp_temp = exp_temp[
             :, : -list(coordinates._propagate_annotations.values())[0].shape[1]
         ]
+        annot_length += list(coordinates._propagate_annotations.values())[0].shape[1]
 
     if global_scaler is None:
         # Scale each modality separately using a custom function
-        exp_temp = scale_animal(exp_temp, coordinates._connectivity, scale)
+        exp_temp = scale_animal(exp_temp, scale)
     else:
         # Scale all experiments together, to control for differential stats
         exp_temp = global_scaler.transform(exp_temp)
@@ -474,7 +477,7 @@ def scale_table(
     current_tab = np.concatenate(
         [
             exp_temp,
-            feature_array.copy().to_numpy()[:, feature_array.shape[1] :],
+            feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
         ],
         axis=1,
     )
@@ -482,7 +485,7 @@ def scale_table(
     return current_tab
 
 
-def scale_animal(feature_array: np.ndarray, graph: nx.Graph, scale: str):
+def scale_animal(feature_array: np.ndarray, scale: str):
     """Scales features in the provided array.
 
     Args:
@@ -1466,7 +1469,7 @@ def filter_short_bouts(
     confidence_indices: np.ndarray,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
-):
+):  # pragma: no cover
     """Filters out cluster assignment bouts shorter than min_bout_duration.
 
     Args:

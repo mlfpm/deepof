@@ -6,6 +6,8 @@
   <title>Index &mdash; deepof 0.1.85 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
+      <link rel="stylesheet" href="_static/thebelab.css" type="text/css" />
     <link rel="shortcut icon" href="_static/deepof.ico"/>
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
@@ -17,6 +19,9 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script src="_static/thebelab-helper.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="#" />
@@ -225,8 +230,6 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="deepof.post_hoc.html#deepof.post_hoc.cluster_enrichment_across_conditions">cluster_enrichment_across_conditions() (in module deepof.post_hoc)</a>
-</li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.cluster_frequencies_regularizer">cluster_frequencies_regularizer() (in module deepof.model_utils)</a>
 </li>
       <li><a href="deepof.utils.html#deepof.utils.cluster_transition_matrix">cluster_transition_matrix() (in module deepof.utils)</a>
@@ -273,7 +276,7 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="deepof.model_utils.html#deepof.model_utils.dcl_loss">dcl_loss() (in module deepof.model_utils)</a>
 </li>
-      <li><a href="deepof.data.html#deepof.data.Coordinates.deep_unsupervised_embedding">deep_unsupervised_embedding() (deepof.data.Coordinates static method)</a>
+      <li><a href="deepof.data.html#deepof.data.Coordinates.deep_unsupervised_embedding">deep_unsupervised_embedding() (deepof.data.Coordinates method)</a>
 </li>
       <li>
     deepof
@@ -363,10 +366,12 @@
 </li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.embedding_per_video">embedding_per_video() (in module deepof.model_utils)</a>
 </li>
-      <li><a href="deepof.utils.html#deepof.utils.enumerate_all_bridges">enumerate_all_bridges() (in module deepof.utils)</a>
+      <li><a href="deepof.post_hoc.html#deepof.post_hoc.enrichment_across_conditions">enrichment_across_conditions() (in module deepof.post_hoc)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="deepof.utils.html#deepof.utils.enumerate_all_bridges">enumerate_all_bridges() (in module deepof.utils)</a>
+</li>
       <li><a href="deepof.post_hoc.html#deepof.post_hoc.explain_clusters">explain_clusters() (in module deepof.post_hoc)</a>
 </li>
       <li><a href="deepof.model_utils.html#deepof.model_utils.ExponentialLearningRate">ExponentialLearningRate (class in deepof.model_utils)</a>
@@ -386,6 +391,8 @@
       <li><a href="deepof.utils.html#deepof.utils.filter_columns">filter_columns() (in module deepof.utils)</a>
 </li>
       <li><a href="deepof.data.html#deepof.data.TableDict.filter_id">filter_id() (deepof.data.TableDict method)</a>
+</li>
+      <li><a href="deepof.utils.html#deepof.utils.filter_short_bouts">filter_short_bouts() (in module deepof.utils)</a>
 </li>
       <li><a href="deepof.data.html#deepof.data.TableDict.filter_videos">filter_videos() (deepof.data.TableDict method)</a>
 </li>
@@ -642,11 +649,11 @@
 </li>
       <li><a href="deepof.visuals.html#deepof.visuals.plot_cluster_detection_performance">plot_cluster_detection_performance() (in module deepof.visuals)</a>
 </li>
-      <li><a href="deepof.visuals.html#deepof.visuals.plot_cluster_enrichment">plot_cluster_enrichment() (in module deepof.visuals)</a>
-</li>
       <li><a href="deepof.visuals.html#deepof.visuals.plot_distance_between_conditions">plot_distance_between_conditions() (in module deepof.visuals)</a>
 </li>
       <li><a href="deepof.visuals.html#deepof.visuals.plot_embeddings">plot_embeddings() (in module deepof.visuals)</a>
+</li>
+      <li><a href="deepof.visuals.html#deepof.visuals.plot_enrichment">plot_enrichment() (in module deepof.visuals)</a>
 </li>
       <li><a href="deepof.visuals.html#deepof.visuals.plot_gantt">plot_gantt() (in module deepof.visuals)</a>
 </li>

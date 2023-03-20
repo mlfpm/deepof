@@ -1,2 +1,3 @@
 recursive-include deepof *
 include requirements.txt
+recursive-exclude tests *

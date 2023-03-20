@@ -38,6 +38,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.coverage",
     "sphinx.ext.napoleon",
+    'jupyter_sphinx',
     "nbsphinx",
 ]
 autosummary_generate = True

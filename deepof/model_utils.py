@@ -56,24 +56,21 @@ def select_contrastive_loss(
     beta=0.1,
     elimination_topk=0.1,
     attraction=False,
-):
-    """
+):  # pragma: no cover
+    """Selects and applies the contrastive loss function to be used in the Contrastive embedding models.
 
     Args:
-        history:
-        future:
-        similarity:
-        loss_fn:
-        temperature:
-        tau:
-        beta:
-        elimination_topk:
-        attraction:
-
-    Returns:
+        history: Tensor of shape (batch_size, seq_len, embedding_dim).
+        future: Tensor of shape (batch_size, seq_len, embedding_dim).
+        similarity: Function that computes the similarity between two tensors.
+        loss_fn: String indicating the loss function to be used.
+        temperature: Float indicating the temperature to be used in the specified loss function.
+        tau: Float indicating the tau value to be used if DCL or hard DLC are selected.
+        beta: Float indicating the beta value to be used if hard DLC is selected.
+        elimination_topk: Float indicating the top-k value to be used if FC is selected.
+        attraction: Boolean indicating whether to use attraction in FC.
 
     """
-
     similarity_dict = {
         "cosine": _cosine_similarity,
         "dot": _dot_similarity,
@@ -112,7 +109,8 @@ def select_contrastive_loss(
     return loss, pos, neg
 
 
-def _cosine_similarity(x, y):
+def _cosine_similarity(x, y):  # pragma: no cover
+    """Computes the cosine similarity between two tensors."""
 
     v = tf.keras.losses.CosineSimilarity(
         axis=2, reduction=tf.keras.losses.Reduction.NONE
@@ -120,13 +118,16 @@ def _cosine_similarity(x, y):
     return -v
 
 
-def _dot_similarity(x, y):
+def _dot_similarity(x, y):  # pragma: no cover
+    """Computes the dot product between two tensors."""
+
     v = tf.tensordot(tf.expand_dims(x, 1), tf.expand_dims(tf.transpose(y), 0), axes=2)
 
     return v
 
 
-def _euclidean_similarity(x, y):
+def _euclidean_similarity(x, y):  # pragma: no cover
+    """Computes the euclidean distance between two tensors."""
 
     x1 = tf.expand_dims(x, 1)
     y1 = tf.expand_dims(y, 0)
@@ -135,7 +136,8 @@ def _euclidean_similarity(x, y):
     return s
 
 
-def _edit_similarity(x, y):
+def _edit_similarity(x, y):  # pragma: no cover
+    """Computes the edit distance between two tensors."""
 
     x1 = tf.expand_dims(x, 1)
     y1 = tf.expand_dims(y, 0)
@@ -144,7 +146,11 @@ def _edit_similarity(x, y):
     return s
 
 
-def nce_loss(history, future, similarity, temperature=0.1):
+def nce_loss(history, future, similarity, temperature=0.1):  # pragma: no cover
+    """Computes the NCE loss function, as described in the paper "A Simple Framework for Contrastive
+    Learning of Visual Representations" (https://arxiv.org/abs/2002.05709).
+
+    """
     criterion = tf.keras.losses.BinaryCrossentropy(
         from_logits=True, reduction=tf.keras.losses.Reduction.SUM
     )
@@ -171,14 +177,10 @@ def nce_loss(history, future, similarity, temperature=0.1):
     return loss, mean_sim, mean_neg
 
 
-def dcl_loss(history, future, similarity, temperature=0.1, debiased=True, tau_plus=0.1):
-    # from Debiased Contrastive Learning paper: https://github.com/chingyaoc/DCL/
-    # pos: exponential for positive example
-    # neg: sum of exponentials for negative examples
-    # N : number of negative examples
-    # t : temperature scaling
-    # tau_plus : class probability
-
+def dcl_loss(
+    history, future, similarity, temperature=0.1, debiased=True, tau_plus=0.1
+):  # pragma: no cover
+    """Computes the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
     N = history.shape[0]
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
@@ -212,7 +214,12 @@ def dcl_loss(history, future, similarity, temperature=0.1, debiased=True, tau_pl
 
 def fc_loss(
     history, future, similarity, temperature=0.1, elimination_topk=0.1, attraction=False
-):
+):  # pragma: no cover
+    """Computes the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations"
+    (https://arxiv.org/abs/2004.11362).
+
+    """
+
     N = history.shape[0]
     if elimination_topk > 0.5:
         elimination_topk = 0.5
@@ -249,18 +256,11 @@ def fc_loss(
 
 def hard_loss(
     history, future, similarity, temperature, beta=0.0, debiased=True, tau_plus=0.1
-):
-    # from ICLR2021 paper: Contrastive LEarning with Hard Negative Samples https://www.groundai.com/project/contrastive-learning-with-hard-negative-samples
-    # pos: exponential for positive example
-    # neg: sum of exponentials for negative examples
-    # N : number of negative examples
-    # t : temperature scaling
-    # tau_plus : class probability
-    #
-    # reweight = (beta * neg) / neg.mean()
-    # Neg = max((-N * tau_plus * pos + reweight * neg).sum() / (1 - tau_plus), e ** (-1 / t))
-    # hard_loss = -log(pos.sum() / (pos.sum() + Neg))
+):  # pragma: no cover
+    """Computes the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples"
+    (https://arxiv.org/abs/2011.03343).
 
+    """
     N = history.shape[0]
 
     sim = similarity(history, future)
@@ -294,34 +294,6 @@ def hard_loss(
     mean_sim = K.mean(tf.linalg.tensor_diag_part(sim))
     mean_neg = K.mean(neg)
     return loss, mean_sim, mean_neg
-
-
-def load_treatments(train_path):
-    """
-
-    Loads a dictionary containing the treatments per individual, to be loaded as metadata in the coordinates class.
-
-    Args:
-        train_path (str): path to the training data.
-
-    Returns:
-        dict: dictionary containing the treatments per individual.
-
-    """
-
-    try:
-        with open(
-            os.path.join(
-                train_path,
-                [i for i in os.listdir(train_path) if i.endswith(".json")][0],
-            ),
-            "r",
-        ) as handle:
-            treatment_dict = json.load(handle)
-    except IndexError:
-        treatment_dict = None
-
-    return treatment_dict
 
 
 def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
@@ -841,7 +813,7 @@ class ProbabilisticDecoder(tf.keras.layers.Layer):
             convert_to_tensor_fn="mean",
         )
 
-    def call(self, inputs):
+    def call(self, inputs):  # pragma: no cover
         """
 
         Maps the reconstruction output of a given decoder to a multivariate normal distribution.
@@ -995,7 +967,7 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
         ffn_output = self.dropout2(ffn_output, training=training)
         out2 = self.layernorm2(out1 + ffn_output)
 
-        if return_scores:
+        if return_scores:  # pragma: no cover
             return out2, attn_scores
 
         return out2
@@ -1043,7 +1015,9 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
         self.dropout3 = tf.keras.layers.Dropout(rate)
 
-    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+    def call(
+        self, x, enc_output, training, look_ahead_mask, padding_mask
+    ):  # pragma: no cover
 
         attn1, attn_weights_block1 = self.mha1(
             key=x,
@@ -1184,7 +1158,9 @@ class TransformerDecoder(tf.keras.layers.Layer):
         ]
         self.dropout = tf.keras.layers.Dropout(self.rate)
 
-    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+    def call(
+        self, x, enc_output, training, look_ahead_mask, padding_mask
+    ):  # pragma: no cover
 
         seq_len = tf.shape(x)[1]
         attention_weights = {}
@@ -1249,7 +1225,7 @@ def log_hyperparameters():
     return logparams, metrics
 
 
-def autoencoder_fitting(
+def embedding_model_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     adjacency_matrix: np.ndarray,
     embedding_model: str,
@@ -1283,7 +1259,7 @@ def autoencoder_fitting(
 ):
     """
 
-    Trains the specified autoencoder on the preprocessed data.
+    Trains the specified embedding model on the preprocessed data.
 
     Args:
         coordinates (np.ndarray): Coordinates of the data.
@@ -1327,7 +1303,7 @@ def autoencoder_fitting(
 
     """
     # Select strategy based on available hardware
-    if len(tf.config.list_physical_devices("GPU")) > 1:
+    if len(tf.config.list_physical_devices("GPU")) > 1:  # pragma: no cover
         strategy = tf.distribute.MirroredStrategy(
             [dev.name for dev in tf.config.list_physical_devices("GPU")]
         )
@@ -1454,7 +1430,7 @@ def autoencoder_fitting(
                 tau=tau,
             )
 
-        else:
+        else:  # pragma: no cover
             raise ValueError(
                 "Invalid embedding model. Select one of 'VQVAE', 'VaDE', and 'Contrastive'"
             )
@@ -1492,12 +1468,12 @@ def autoencoder_fitting(
         **kwargs,
     )
 
-    if embedding_model == "VaDE" and recluster == True:
+    if embedding_model == "VaDE" and recluster == True:  # pragma: no cover
         ae_full_model.pretrain(
             train_dataset, embed_x=Xs, embed_a=a_train, epochs=0, **kwargs
         )
 
-    if pretrained:
+    if pretrained:  # pragma: no cover
         # If pretrained models are specified, load weights and return
         ae_full_model.build([X_train.shape, a_train.shape])
         ae_full_model.load_weights(pretrained)
@@ -1526,29 +1502,32 @@ def autoencoder_fitting(
                 # Configure hyperparameter logging in tensorboard
                 hp.hparams_config(hparams=logparams, metrics=metrics)
                 hp.hparams(logparam)  # Log hyperparameters
+
                 # Log metrics
-                tf.summary.scalar(
-                    "val_number_of_populated_clusters",
-                    ae_full_model.history.history["val_number_of_populated_clusters"][
-                        -1
-                    ],
-                    step=0,
-                )
-                tf.summary.scalar(
-                    "val_reconstruction_loss",
-                    ae_full_model.history.history["val_reconstruction_loss"][-1],
-                    step=0,
-                )
-                tf.summary.scalar(
-                    "val_kmeans_loss",
-                    ae_full_model.history.history["val_kmeans_loss"][-1],
-                    step=0,
-                )
                 tf.summary.scalar(
                     "val_total_loss",
                     ae_full_model.history.history["val_total_loss"][-1],
                     step=0,
                 )
+
+                if embedding_model != "Contrastive":
+                    tf.summary.scalar(
+                        "val_reconstruction_loss",
+                        ae_full_model.history.history["val_reconstruction_loss"][-1],
+                        step=0,
+                    )
+                    tf.summary.scalar(
+                        "val_number_of_populated_clusters",
+                        ae_full_model.history.history[
+                            "val_number_of_populated_clusters"
+                        ][-1],
+                        step=0,
+                    )
+                    tf.summary.scalar(
+                        "val_kmeans_loss",
+                        ae_full_model.history.history["val_kmeans_loss"][-1],
+                        step=0,
+                    )
 
                 if embedding_model == "VQVAE":
                     tf.summary.scalar(
@@ -1564,8 +1543,12 @@ def autoencoder_fitting(
                         step=0,
                     )
 
-                elif embedding_model == "contrastive":
-                    raise NotImplementedError
+                elif embedding_model == "Contrastive":
+                    tf.summary.scalar(
+                        "val_total_loss",
+                        ae_full_model.history.history["val_total_loss"][-1],
+                        step=0,
+                    )
 
     return ae_full_model
 
@@ -1578,7 +1561,7 @@ def embedding_per_video(
     animal_id: str = None,
     ruptures: bool = False,
     global_scaler: Any = None,
-):
+):  # pragma: no cover
     """Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
 
     Args:
@@ -1602,7 +1585,7 @@ def embedding_per_video(
     soft_counts = {}
     breaks = {}
 
-    for key in tqdm.tqdm(coordinates.get_exp_conditions.keys()):
+    for key in tqdm.tqdm(to_preprocess.keys()):
 
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
             processed_exp, _, _, _ = coordinates.get_graph_dataset(
@@ -1637,16 +1620,16 @@ def embedding_per_video(
 
 
 def tune_search(
-    data: tuple,
+    preprocessed_object: tuple,
+    adjacency_matrix: np.ndarray,
     encoding_size: int,
     embedding_model: str,
-    encoder_type: str,
     hypertun_trials: int,
     hpt_type: str,
     k: int,
     project_name: str,
     callbacks: List,
-    batch_size: int = 64,
+    batch_size: int = 1024,
     n_epochs: int = 30,
     n_replicas: int = 1,
     outpath: str = "unsupervised_tuner_search",
@@ -1656,11 +1639,11 @@ def tune_search(
     Define the search space using keras-tuner and hyperband or bayesian optimization
 
     Args:
-        data (tf.data.Dataset): Dataset object for training and validation.
+        preprocessed_object (tf.data.Dataset): Dataset object for training and validation.
+        adjacency_matrix (np.ndarray): Adjacency matrix for the graph.
         encoding_size (int): Size of the encoding layer.
-        encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
-        and contrastive.
+        and Contrastive.
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
@@ -1679,44 +1662,82 @@ def tune_search(
 
     """
 
-    X_train, y_train, X_val, y_val = data
+    # Load data
+    try:
+        X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
+    except ValueError:
+        X_train, y_train, X_val, y_val = preprocessed_object
+        a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
 
-    assert hpt_type in ["bayopt", "hyperband"], (
-        "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
+    # Make sure that batch_size is not larger than training set
+    if batch_size > preprocessed_object[0].shape[0]:
+        batch_size = preprocessed_object[0].shape[0]
+
+    # Set options for tf.data.Datasets
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = (
+        tf.data.experimental.AutoShardPolicy.DATA
     )
 
     Xs, ys = X_train, [X_train]
     Xvals, yvals = X_val, [X_val]
 
+    # Cast to float32
+    ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
+    yvals = tuple([tf.cast(dat, tf.float32) for dat in yvals])
+
     # Convert data to tf.data.Dataset objects
     train_dataset = (
-        tf.data.Dataset.from_tensor_slices((Xs, tuple(ys)))
+        tf.data.Dataset.from_tensor_slices(
+            (tf.cast(Xs, tf.float32), tf.cast(a_train, tf.float32), tuple(ys))
+        )
         .batch(batch_size, drop_remainder=True)
         .shuffle(buffer_size=X_train.shape[0])
+        .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
     )
-    val_dataset = tf.data.Dataset.from_tensor_slices((Xvals, tuple(yvals))).batch(
-        batch_size, drop_remainder=True
+    val_dataset = (
+        tf.data.Dataset.from_tensor_slices(
+            (tf.cast(Xvals, tf.float32), tf.cast(a_val, tf.float32), tuple(yvals))
+        )
+        .batch(batch_size, drop_remainder=True)
+        .with_options(options)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+
+    assert hpt_type in ["bayopt", "hyperband"], (
+        "Invalid hyperparameter tuning framework. " "Select one of bayopt and hyperband"
     )
 
     if embedding_model == "VQVAE":
         hypermodel = deepof.hypermodels.VQVAE(
-            encoder_type=encoder_type,
             input_shape=X_train.shape,
+            edge_feature_shape=a_train.shape,
+            use_gnn=len(preprocessed_object) == 6,
+            adjacency_matrix=adjacency_matrix,
             latent_dim=encoding_size,
             n_components=k,
         )
     elif embedding_model == "VaDE":
         hypermodel = deepof.hypermodels.VaDE(
-            encoder_type=encoder_type,
             input_shape=X_train.shape,
+            edge_feature_shape=a_train.shape,
+            use_gnn=len(preprocessed_object) == 6,
+            adjacency_matrix=adjacency_matrix,
             latent_dim=encoding_size,
             n_components=k,
             batch_size=batch_size,
         )
-    elif embedding_model == "contrastive":
-        raise NotImplementedError
+    elif embedding_model == "Contrastive":
+        hypermodel = deepof.hypermodels.Contrastive(
+            input_shape=X_train.shape,
+            edge_feature_shape=a_train.shape,
+            use_gnn=len(preprocessed_object) == 6,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=encoding_size,
+        )
 
-    tuner_objective = "val_loss"
+    tuner_objective = "val_total_loss"
 
     # noinspection PyUnboundLocalVariable
     hpt_params = {

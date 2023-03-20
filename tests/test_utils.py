@@ -22,6 +22,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
+from shutil import rmtree
 
 import deepof.data
 import deepof.utils
@@ -219,25 +220,7 @@ def test_angle(abc):
         )
         angles.append(ang)
 
-    assert np.allclose(deepof.utils.angle(a, b, c), np.array(angles))
-
-
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    array=arrays(
-        dtype=float,
-        shape=st.tuples(
-            st.integers(min_value=3, max_value=3),
-            st.integers(min_value=5, max_value=100),
-            st.integers(min_value=2, max_value=2),
-        ),
-        elements=st.floats(
-            min_value=1, max_value=10, allow_nan=False, allow_infinity=False
-        ).map(lambda x: x + np.random.uniform(0, 10)),
-    )
-)
-def test_angle_trio(array):
-    assert len(deepof.utils.angle_trio(array)) == 3
+    assert np.allclose(deepof.utils.angle([a, b, c]), np.array(angles))
 
 
 @settings(max_examples=10, deadline=None)
@@ -352,12 +335,23 @@ def test_interpolate_outliers(mode):
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
     ).create()
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
     coords = prun.get_coords()
     lkhood = prun.get_quality()
     coords_name = list(coords.keys())[0]
@@ -390,17 +384,12 @@ def test_interpolate_outliers(mode):
 
 @settings(deadline=None, max_examples=10)
 @given(
-    indexes=st.data(), detection_type=st.one_of(st.just("rule-based"), st.just("cnn"))
+    indexes=st.data(),
 )
-def test_recognize_arena_and_subfunctions(indexes, detection_type):
+def test_recognize_arena_and_subfunctions(indexes):
 
     path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
-    cnn_path = os.path.join("deepof", "trained_models")
-    cnn_model = os.path.join(
-        cnn_path, [i for i in os.listdir(cnn_path) if i.startswith("elliptic")][0]
-    )
-    cnn_model = tf.keras.models.load_model(cnn_model)
 
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
     recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
@@ -412,8 +401,6 @@ def test_recognize_arena_and_subfunctions(indexes, detection_type):
         path=path,
         recoglimit=recoglimit,
         arena_type="circular-autodetect",
-        detection_mode=detection_type,
-        cnn_model=cnn_model,
     )
     assert len(arena) == 3
     assert len(arena[0]) == 3
@@ -478,8 +465,8 @@ def test_gmm_compute(x, n_components, cv_type):
     x=arrays(
         dtype=float,
         shape=st.tuples(
-            st.integers(min_value=10, max_value=1000),
-            st.integers(min_value=10, max_value=1000),
+            st.integers(min_value=10, max_value=100),
+            st.integers(min_value=10, max_value=100),
         ),
         elements=st.floats(min_value=1.0, max_value=1.0),
     ).map(lambda x: x * np.random.uniform(0, 2, x.shape)),

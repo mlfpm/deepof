@@ -4,9 +4,11 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DeepOF supervised pipeline: detecting pre-defined behaviors &mdash; deepof 0.1.85 documentation</title>
+  <title>Supervised annotation in DeepOF - search for pre-established patterns &mdash; deepof 0.1.85 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/thebelab.css" type="text/css" />
     <link rel="shortcut icon" href="../_static/deepof.ico"/>
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -18,6 +20,9 @@
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="../_static/doctools.js"></script>
         <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/thebelab-helper.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -43,14 +48,14 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">DeepOF supervised pipeline: detecting pre-defined behaviors</a><ul>
-<li><a class="reference internal" href="#Tutorial-index:">Tutorial index:</a><ul>
-<li><a class="reference internal" href="#Supervised-annotation-in-DeepOF---search-for-pre-established-patterns">Supervised annotation in DeepOF - search for pre-established patterns</a></li>
-<li><a class="reference internal" href="#Load-a-previously-initiated-project">Load a previously initiated project</a></li>
-<li><a class="reference internal" href="#Run-the-supervised-annotation-pipeline.">Run the supervised annotation pipeline.</a></li>
-<li><a class="reference internal" href="#Explore-trait-enrichment-across-conditions.">Explore trait enrichment across conditions.</a></li>
-<li><a class="reference internal" href="#Generate-Gantt-plots-with-all-traits.">Generate Gantt plots with all traits.</a></li>
-<li><a class="reference internal" href="#Exporting-video-snippets">Exporting video snippets</a></li>
+<li><a class="reference internal" href="#">Supervised annotation in DeepOF - search for pre-established patterns</a><ul>
+<li><a class="reference internal" href="#What-we’ll-cover:">What we’ll cover:</a><ul>
+<li><a class="reference internal" href="#Loading-a-previously-initiated-project">Loading a previously initiated project</a></li>
+<li><a class="reference internal" href="#Running-the-supervised-annotation-pipeline">Running the supervised annotation pipeline</a></li>
+<li><a class="reference internal" href="#Generating-Gantt-charts-with-all-traits">Generating Gantt charts with all traits</a></li>
+<li><a class="reference internal" href="#Exploring-trait-enrichment-across-conditions.">Exploring trait enrichment across conditions.</a></li>
+<li><a class="reference internal" href="#PCA-embedding-of-supervised-traits">PCA embedding of supervised traits</a></li>
+<li><a class="reference internal" href="#What’s-next">What’s next</a></li>
 </ul>
 </li>
 </ul>
@@ -71,7 +76,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home"></a></li>
-      <li class="breadcrumb-item active">DeepOF supervised pipeline: detecting pre-defined behaviors</li>
+      <li class="breadcrumb-item active">Supervised annotation in DeepOF - search for pre-established patterns</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/tutorial_notebooks/deepof_supervised_tutorial.ipynb.txt" rel="nofollow"> View page source</a>
       </li>
@@ -364,301 +369,554 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
-<span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="s2">&quot;../../..&quot;</span><span class="p">)</span>
-<span class="kn">import</span> <span class="nn">deepof.data</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">warnings</span>
-<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
-</pre></div>
-</div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
 <span class="o">%</span><span class="k">autoreload</span> 2
 </pre></div>
 </div>
 </div>
-<section id="DeepOF-supervised-pipeline:-detecting-pre-defined-behaviors">
-<h1>DeepOF supervised pipeline: detecting pre-defined behaviors<a class="headerlink" href="#DeepOF-supervised-pipeline:-detecting-pre-defined-behaviors" title="Permalink to this heading"></a></h1>
-<section id="Tutorial-index:">
-<h2>Tutorial index:<a class="headerlink" href="#Tutorial-index:" title="Permalink to this heading"></a></h2>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>* Brief introduction to supervised analysis, including the figure with all tracked behaviors.
-* Load the previous project.
-* Run the supervised annotation pipeline.
-* Visualize global embeddings using the retrieved traits.
-* Visualize animated unsupervised embeddings, coloured by specific traits.
-* Explore trait enrichment across conditions.
-* Generate Gantt plots with all traits.
-* Export video snippets.
-</pre></div>
-</div>
 <section id="Supervised-annotation-in-DeepOF---search-for-pre-established-patterns">
-<h3>Supervised annotation in DeepOF - search for pre-established patterns<a class="headerlink" href="#Supervised-annotation-in-DeepOF---search-for-pre-established-patterns" title="Permalink to this heading"></a></h3>
+<h1>Supervised annotation in DeepOF - search for pre-established patterns<a class="headerlink" href="#Supervised-annotation-in-DeepOF---search-for-pre-established-patterns" title="Permalink to this heading"></a></h1>
+<section id="What-we’ll-cover:">
+<h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>* Run the supervised annotation pipeline.
+* Visualize global embeddings using the retrieved traits.
+* Explore trait enrichment across conditions.
+* Visualize animated unsupervised embeddings, coloured by specific traits.
+* Generate Gantt plots with all traits.
+</pre></div>
+</div>
+<p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, and the data entry API within DeepOF, located in deepof.data</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">deepof.data</span>
 </pre></div>
 </div>
 </div>
+<p>We’ll also need some plotting gear:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.visuals</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
+</pre></div>
+</div>
+</div>
+<section id="Loading-a-previously-initiated-project">
+<h3>Loading a previously initiated project<a class="headerlink" href="#Loading-a-previously-initiated-project" title="Permalink to this heading"></a></h3>
+<p>As last time, we’ll load the already created tutorial dataset for further processing:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load a previously saved project</span>
+<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p><strong>NOTE</strong> to better show how DeepOF deals with statistics, all results shown in the documentation version of this tutorial were obtained using the full SI dataset, containing a total of 53 animals. If you’d like to gain access to this dataset, check out the code availability statement of the main DeepOF paper.</p>
 </section>
-<section id="Load-a-previously-initiated-project">
-<h3>Load a previously initiated project<a class="headerlink" href="#Load-a-previously-initiated-project" title="Permalink to this heading"></a></h3>
+<section id="Running-the-supervised-annotation-pipeline">
+<h3>Running the supervised annotation pipeline<a class="headerlink" href="#Running-the-supervised-annotation-pipeline" title="Permalink to this heading"></a></h3>
+<p>The supervised pipeline within DeepOF aims at providing simple but generalizable annotators for a variety of single and dyadic traits (as depicted in the figure below). Each of these traits is tagged independently, which means that more than one label can be applied per time point!</p>
+<img alt="supervised" src="../_images/deepof_supervised.png" />
+<p>Running the pipeline is as simple as executing the .supervised_annotation() method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let’s run it and see what happens:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pickle</span>
-
-<span class="c1"># # FC data</span>
-<span class="c1"># my_deepof_project = deepof.data.load_project(&quot;./deepof_FC_project_files/&quot;)</span>
-
-<span class="c1"># with open(&quot;./deepof_FC_project_files/Coordinates/FC_dataset_experimental_conditions.pkl&quot;, &quot;rb&quot;) as handle:</span>
-<span class="c1">#     exp_conditions = pickle.load(handle)</span>
-<span class="c1"># my_deepof_project._exp_conditions = exp_conditions</span>
-
-<span class="c1"># SI data</span>
-<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;../../Desktop/deepOF_datasets/Tagged_videos/Data_for_deepof_SI/deepof_SI_project/&quot;</span><span class="p">)</span>
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;deepof_SI_exp_conds.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
-    <span class="n">exp_conds</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_exp_conditions</span> <span class="o">=</span> <span class="n">exp_conds</span>
-
-<span class="c1"># Update project path to a local path</span>
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_project_path</span> <span class="o">=</span> <span class="s2">&quot;../../Desktop/deepOF_datasets/Tagged_videos/Data_for_deepof_SI/&quot;</span>
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_project_name</span> <span class="o">=</span> <span class="s2">&quot;deepof_SI_project&quot;</span>
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_trained_model_path</span> <span class="o">=</span> <span class="s2">&quot;./deepof/trained_models/&quot;</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
-</section>
-<section id="Run-the-supervised-annotation-pipeline.">
-<h3>Run the supervised annotation pipeline.<a class="headerlink" href="#Run-the-supervised-annotation-pipeline." title="Permalink to this heading"></a></h3>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">supervised_annotation</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-    <span class="n">val</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;../../Desktop/&quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="s2">&quot;_supervised_labels.csv&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
+<p>It worked! Upon inspection, we see that supervised annotations contains a dictionary-like object with experiment IDs as keys, and data frames with annotations as values:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">(</span>
-    <span class="n">video_output</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;20191203_Day1_SI_JB08_Test_14&#39;</span><span class="p">],</span> <span class="n">frame_limit</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span><span class="p">[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>nose2nose</th>
+      <th>sidebyside</th>
+      <th>sidereside</th>
+      <th>B_nose2tail</th>
+      <th>W_nose2tail</th>
+      <th>B_nose2body</th>
+      <th>W_nose2body</th>
+      <th>B_following</th>
+      <th>W_following</th>
+      <th>B_climbing</th>
+      <th>B_sniffing</th>
+      <th>B_huddle</th>
+      <th>B_lookaround</th>
+      <th>B_speed</th>
+      <th>W_climbing</th>
+      <th>W_sniffing</th>
+      <th>W_huddle</th>
+      <th>W_lookaround</th>
+      <th>W_speed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>00:00:00</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+    </tr>
+    <tr>
+      <th>00:00:00.039935995</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+    </tr>
+    <tr>
+      <th>00:00:00.079871991</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+    </tr>
+    <tr>
+      <th>00:00:00.119807987</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+    </tr>
+    <tr>
+      <th>00:00:00.159743982</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>2.236</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>10.636</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>00:09:58.800320021</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>6.593</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>1.0</td>
+      <td>0.086</td>
+    </tr>
+    <tr>
+      <th>00:09:58.840256017</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>4.934</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>1.0</td>
+      <td>0.083</td>
+    </tr>
+    <tr>
+      <th>00:09:58.880192012</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>5.557</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>1.0</td>
+      <td>0.064</td>
+    </tr>
+    <tr>
+      <th>00:09:58.920128008</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>6.130</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>1.0</td>
+      <td>0.046</td>
+    </tr>
+    <tr>
+      <th>00:09:58.960064004</th>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>4.628</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.031</td>
+    </tr>
+  </tbody>
+</table>
+<p>14999 rows × 19 columns</p>
+</div></div>
+</div>
+<p>All annotations are tracked for both animals in the data (the column names have a prefix indicating to which animal they belong -B or W for black and white, respectively-). Labels with no prefixes (such as ‘nose2nose’) correspond to dyadic interactions.</p>
+<p>Moreover, most cells in the data frame depicted above show 0 or 1 values, indicating the presence or absence of the given trait. The only exception is speed, which is expressed in millimeters per frame.</p>
+<p>Now that we know what we’re looking at, let’s explore a few simple analyses we can run within DeepOF:</p>
+</section>
+<section id="Generating-Gantt-charts-with-all-traits">
+<h3>Generating Gantt charts with all traits<a class="headerlink" href="#Generating-Gantt-charts-with-all-traits" title="Permalink to this heading"></a></h3>
+<p>The last thing we’ll do for now is to visualize all tagged patterns for a single video, using Gantt charts. To this end, let’s use deepof.visuals.plot_gantt()</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_gantt</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-
-
-  0%|                                                                                                                                                                                    | 0/53 [00:00&lt;?, ?it/s]
-
-  2%|███▏                                                                                                                                                                        | 1/53 [00:03&lt;03:13,  3.73s/it]
-
-  4%|██████▍                                                                                                                                                                     | 2/53 [00:07&lt;02:59,  3.53s/it]
-
-  6%|█████████▋                                                                                                                                                                  | 3/53 [00:10&lt;03:01,  3.63s/it]
-
-  8%|████████████▉                                                                                                                                                               | 4/53 [00:15&lt;03:16,  4.01s/it]
-
-  9%|████████████████▏                                                                                                                                                           | 5/53 [00:18&lt;02:57,  3.70s/it]
-
- 11%|███████████████████▍                                                                                                                                                        | 6/53 [00:21&lt;02:45,  3.51s/it]
-
- 13%|██████████████████████▋                                                                                                                                                     | 7/53 [00:25&lt;02:40,  3.49s/it]
-
- 15%|█████████████████████████▉                                                                                                                                                  | 8/53 [00:29&lt;02:44,  3.65s/it]
-
- 17%|█████████████████████████████▏                                                                                                                                              | 9/53 [00:32&lt;02:36,  3.55s/it]
-
- 19%|████████████████████████████████▎                                                                                                                                          | 10/53 [00:36&lt;02:44,  3.82s/it]
-
- 21%|███████████████████████████████████▍                                                                                                                                       | 11/53 [00:40&lt;02:40,  3.82s/it]
-
- 23%|██████████████████████████████████████▋                                                                                                                                    | 12/53 [00:43&lt;02:26,  3.58s/it]
-
- 25%|█████████████████████████████████████████▉                                                                                                                                 | 13/53 [00:47&lt;02:18,  3.46s/it]
-
- 26%|█████████████████████████████████████████████▏                                                                                                                             | 14/53 [00:50&lt;02:18,  3.55s/it]
-
- 28%|████████████████████████████████████████████████▍                                                                                                                          | 15/53 [00:54&lt;02:13,  3.52s/it]
-
- 30%|███████████████████████████████████████████████████▌                                                                                                                       | 16/53 [00:57&lt;02:12,  3.59s/it]
-
- 32%|██████████████████████████████████████████████████████▊                                                                                                                    | 17/53 [01:01&lt;02:06,  3.52s/it]
-
- 34%|██████████████████████████████████████████████████████████                                                                                                                 | 18/53 [01:04&lt;02:00,  3.45s/it]
-
- 36%|█████████████████████████████████████████████████████████████▎                                                                                                             | 19/53 [01:07&lt;01:46,  3.14s/it]
-
- 38%|████████████████████████████████████████████████████████████████▌                                                                                                          | 20/53 [01:10&lt;01:48,  3.29s/it]
-
- 40%|███████████████████████████████████████████████████████████████████▊                                                                                                       | 21/53 [01:13&lt;01:44,  3.26s/it]
-
- 42%|██████████████████████████████████████████████████████████████████████▉                                                                                                    | 22/53 [01:18&lt;01:51,  3.60s/it]
-
-  0%|                                                                                                                                                                                     | 0/1 [08:49&lt;?, ?it/s]
-
-
- 45%|█████████████████████████████████████████████████████████████████████████████▍                                                                                             | 24/53 [01:24&lt;01:36,  3.34s/it]
-
- 47%|████████████████████████████████████████████████████████████████████████████████▋                                                                                          | 25/53 [01:28&lt;01:36,  3.44s/it]
-
- 49%|███████████████████████████████████████████████████████████████████████████████████▉                                                                                       | 26/53 [01:31&lt;01:31,  3.39s/it]
-
- 51%|███████████████████████████████████████████████████████████████████████████████████████                                                                                    | 27/53 [01:34&lt;01:28,  3.41s/it]
-
- 53%|██████████████████████████████████████████████████████████████████████████████████████████▎                                                                                | 28/53 [01:37&lt;01:23,  3.33s/it]
-
- 55%|█████████████████████████████████████████████████████████████████████████████████████████████▌                                                                             | 29/53 [01:41&lt;01:22,  3.43s/it]
-
- 57%|████████████████████████████████████████████████████████████████████████████████████████████████▊                                                                          | 30/53 [01:44&lt;01:16,  3.33s/it]
-
- 58%|████████████████████████████████████████████████████████████████████████████████████████████████████                                                                       | 31/53 [01:48&lt;01:19,  3.63s/it]
-
- 60%|███████████████████████████████████████████████████████████████████████████████████████████████████████▏                                                                   | 32/53 [01:52&lt;01:16,  3.66s/it]
-
- 62%|██████████████████████████████████████████████████████████████████████████████████████████████████████████▍                                                                | 33/53 [01:55&lt;01:10,  3.54s/it]
-
- 64%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████▋                                                             | 34/53 [01:59&lt;01:07,  3.54s/it]
-
- 66%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉                                                          | 35/53 [02:03&lt;01:05,  3.64s/it]
-
- 68%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏                                                      | 36/53 [02:06&lt;01:00,  3.59s/it]
-
- 70%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▍                                                   | 37/53 [02:10&lt;00:57,  3.62s/it]
-
- 72%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▌                                                | 38/53 [02:14&lt;00:54,  3.64s/it]
-
- 74%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊                                             | 39/53 [02:18&lt;00:54,  3.87s/it]
-
- 75%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████                                          | 40/53 [02:21&lt;00:46,  3.60s/it]
-
- 77%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎                                      | 41/53 [02:24&lt;00:41,  3.45s/it]
-
- 79%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▌                                   | 42/53 [02:28&lt;00:38,  3.51s/it]
-
- 81%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▋                                | 43/53 [02:31&lt;00:34,  3.46s/it]
-
- 83%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉                             | 44/53 [02:35&lt;00:31,  3.47s/it]
-
- 85%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏                         | 45/53 [02:38&lt;00:26,  3.34s/it]
-
- 87%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▍                      | 46/53 [02:42&lt;00:24,  3.47s/it]
-
- 89%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▋                   | 47/53 [02:46&lt;00:22,  3.80s/it]
-
- 91%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊                | 48/53 [02:50&lt;00:18,  3.80s/it]
-
- 92%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████             | 49/53 [02:53&lt;00:14,  3.69s/it]
-
- 94%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎         | 50/53 [02:57&lt;00:11,  3.67s/it]
-
- 96%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▌      | 51/53 [03:00&lt;00:07,  3.53s/it]
-
- 98%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊   | 52/53 [03:03&lt;00:03,  3.39s/it]
-
-100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 53/53 [03:06&lt;00:00,  3.52s/it]
-100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:05&lt;00:00,  5.62s/it]
-</pre></div></div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_22_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_22_0.png" />
 </div>
+</div>
+<p>Thats good for a quick visualization, but let’s indeed compare how these patterns compare across experimental conditions!</p>
+</section>
+<section id="Exploring-trait-enrichment-across-conditions.">
+<h3>Exploring trait enrichment across conditions.<a class="headerlink" href="#Exploring-trait-enrichment-across-conditions." title="Permalink to this heading"></a></h3>
+<p>The simplest (but quite powerful) thing to do is to test for enrichment across traits. We can compute all statistics and plot the results using the deepof.visuals.plot_enrichment() function. The code below creates a figure with two plots with different scales (one for speed and one for everything else, given the differences in y-axis values).</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_project_name</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">subplot_mosaic</span><span class="p">(</span>
+    <span class="n">mosaic</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">           AAAAB</span>
+<span class="s2">           AAAAB</span>
+<span class="s2">           &quot;&quot;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">add_stats</span><span class="o">=</span><span class="s2">&quot;Mann-Whitney&quot;</span><span class="p">,</span>
+    <span class="n">plot_proportions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">add_stats</span><span class="o">=</span><span class="s2">&quot;Mann-Whitney&quot;</span><span class="p">,</span>
+    <span class="n">plot_proportions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">fig</span><span class="p">:</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">(),</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">45</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;right&#39;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_legend</span><span class="p">()</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
-</pre></div>
+<div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<div class="highlight"><pre>
-&#39;deepof_SI_project&#39;
-</pre></div></div>
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_26_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_26_0.png" />
 </div>
-</section>
-<section id="Explore-trait-enrichment-across-conditions.">
-<h3>Explore trait enrichment across conditions.<a class="headerlink" href="#Explore-trait-enrichment-across-conditions." title="Permalink to this heading"></a></h3>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</div>
+<p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in deepof.visuals.plot_enrichment().</p>
+<p>In the figures, you see all tagged traits in the X-axis, and the frames per video in the y-axis. Bars represent averages, and error bars standard deviations. By default, DeepOF runs a Mann-Whitney U non-parametric test on the means per test, and controls for multiple testing using Benjamini-Hochberg’s method. For details on how to change both the tests to run and the multiple testing parameters, feel free to check the full API reference or the function docstring.</p>
+<p>Most functions within DeepOF allow the user to restrict the data to certain periods of time. This can be useful to quantify habituation, for example (as we’ll see), or to explore how the retrieved patterns interact with timed environmental cues (such as tones, experimental actions, etc.).</p>
+<p>To see how this works in the context of supervised annotation enrichment, let’s generate the same figure as above, but for the first two minutes of data only:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tt</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
-    <span class="s2">&quot;../../Desktop/deepOF_datasets/Tagged_videos/Data_for_deepof_OF/deepof_OF_classifiers/project_folder/csv/targets_inserted/20191203_Day1_OF_JB08_Test_12.csv&quot;</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">subplot_mosaic</span><span class="p">(</span>
+    <span class="n">mosaic</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">           AAAAB</span>
+<span class="s2">           AAAAB</span>
+<span class="s2">           &quot;&quot;&quot;</span><span class="p">,</span>
 <span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tt</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tt</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tt</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
-    <span class="s2">&quot;../../Desktop/deepOF_datasets/Tagged_videos/Data_for_deepof_OF/deepof_OF_classifiers/project_folder/csv/targets_inserted/20191203_Day1_OF_JB08_Test_12.csv&quot;</span><span class="p">,</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">add_stats</span><span class="o">=</span><span class="s2">&quot;Mann-Whitney&quot;</span><span class="p">,</span>
+    <span class="n">plot_proportions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">bin_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">bin_size</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">],</span>
 <span class="p">)</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">add_stats</span><span class="o">=</span><span class="s2">&quot;Mann-Whitney&quot;</span><span class="p">,</span>
+    <span class="n">plot_proportions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">bin_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">bin_size</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">fig</span><span class="p">:</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">(),</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">45</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;right&#39;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">[</span><span class="n">ax</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_legend</span><span class="p">()</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" />
+</div>
+</div>
+<p>Even though at first glance the figure may look similar, there are some important differences! For starters, the y-axis now shows lower values, since we’re only looking at two minutes of data instead of ten. Moreover, the effect sizes in some tagged patterns (such as huddling or speed) are much larger. Some patterns (such as nose2body) even show high significance where they were barely different across conditions before!</p>
+<p>We seem to already be picking up the habituation of the stressed animals to their novel environment. For more details on this specific effect and the rationale behind how it’s quantified, feel free to check out the main DeepOF paper!</p>
+<p>But, for now, let’s continue with another interesting tool: PCA projections.</p>
 </section>
-<section id="Generate-Gantt-plots-with-all-traits.">
-<h3>Generate Gantt plots with all traits.<a class="headerlink" href="#Generate-Gantt-plots-with-all-traits." title="Permalink to this heading"></a></h3>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<section id="PCA-embedding-of-supervised-traits">
+<h3>PCA embedding of supervised traits<a class="headerlink" href="#PCA-embedding-of-supervised-traits" title="Permalink to this heading"></a></h3>
+<p>An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We’ll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the deepof.visuals.plot_embeddings() function.</p>
+<p>Moreover, we can also restrict the analysis over time. Let’s compare, again, the whole data to the first two minutes:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_embeddings</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_embeddings</span><span class="p">(</span>
+    <span class="n">my_deepof_project</span><span class="p">,</span>
+    <span class="n">supervised_annotations</span><span class="o">=</span><span class="n">supervised_annotation</span><span class="p">,</span>
+    <span class="n">bin_size</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+    <span class="n">bin_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">ax</span><span class="o">=</span><span class="n">ax2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;supervised embeddings of full videos&quot;</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;supervised embeddings of first two minutes&quot;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_33_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_33_0.png" />
+</div>
+</div>
+<p>We can see how, indeed, the PCA on the average set of annotators seems to distinguish across conditions better when looking at the first two minutes only. We’ll continue to explore this idea in the next (and last) tutorial.</p>
 </section>
-<section id="Exporting-video-snippets">
-<h3>Exporting video snippets<a class="headerlink" href="#Exporting-video-snippets" title="Permalink to this heading"></a></h3>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
-</pre></div>
-</div>
-</div>
+<section id="What’s-next">
+<h3>What’s next<a class="headerlink" href="#What’s-next" title="Permalink to this heading"></a></h3>
+<p>That’s it for this second tutorial. Next and last, we’ll explore the main forte of the package: we’ll learn to embed our data in a sequence-aware manner, to get behavioral patterns in an unsupervised way using deep clustering (where the “deep” in DeepOF comes from). See you there!</p>
 </section>
 </section>
 </section>

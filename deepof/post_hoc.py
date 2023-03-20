@@ -176,7 +176,7 @@ def select_time_bin(
     # If precomputed, filter each experiment using the provided boolean array
     if supervised_annotations is None:
 
-        if precomputed is not None:
+        if precomputed is not None:  # pragma: no cover
             breaks_mask_dict = {}
 
             for key in breaks.keys():
@@ -443,7 +443,7 @@ def enrichment_across_conditions(
     """
     # Select time bin and filter all relevant objects
 
-    if precomputed is not None:
+    if precomputed is not None:  # pragma: no cover
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
             embedding,
             soft_counts,
@@ -537,8 +537,12 @@ def compute_transition_matrix_per_condition(
 
     # Filter data to get desired subset
     if bin_size is not None and bin_index is not None:
-        embedding, soft_counts, breaks = select_time_bin(
-            embedding, soft_counts, breaks, bin_size, bin_index
+        embedding, soft_counts, breaks, _ = select_time_bin(
+            embedding,
+            soft_counts,
+            breaks,
+            bin_size=bin_size,
+            bin_index=bin_index,
         )
 
     # Get hard counts per video
@@ -617,7 +621,7 @@ def compute_steady_state(
     return steady_states
 
 
-def compute_UMAP(embeddings, cluster_assignments):
+def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
 
     lda = LinearDiscriminantAnalysis(
         n_components=np.min([embeddings.shape[1], len(set(cluster_assignments)) - 1]),
@@ -953,7 +957,7 @@ def train_supervised_cluster_detectors(
     sampled_breaks: dict,
     n_folds: int = None,
     verbose: int = 1,
-):
+):  # pragma: no cover
     """
 
     Args:
@@ -1024,7 +1028,7 @@ def explain_clusters(
     hard_counts: np.ndarray,
     full_cluster_clf: Pipeline,
     samples: int = 10000,
-):
+):  # pragma: no cover
     """Computes SHAP feature importance for models mapping chunk_stats to cluster assignments.
 
     Args:

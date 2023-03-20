@@ -57,7 +57,7 @@ Or use `poetry <https://python-poetry.org/>`_:
 
 .. code:: bash
 
-   # after installing poetry and clonning the DeepOF repository, just run
+   # after installing poetry and cloning the DeepOF repository, just run
    poetry install # from the main directory
 
 What you need

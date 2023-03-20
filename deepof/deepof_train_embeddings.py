@@ -495,7 +495,7 @@ if __name__ == "__main__":
         )
 
         best_hyperparameters, best_model = deepof.model_utils.tune_search(
-            data=[X_train, y_train, X_val, y_val],
+            preprocessed_object=[X_train, y_train, X_val, y_val],
             batch_size=batch_size,
             encoding_size=encoding_size,
             hypertun_trials=hypertun_trials,
