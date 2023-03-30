@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Supervised annotation in DeepOF - search for pre-established patterns &mdash; deepof 0.1.85 documentation</title>
+  <title>Supervised annotation in DeepOF - search for pre-established patterns &mdash; deepof 0.2cle documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
@@ -36,11 +36,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="../index.html" class="icon icon-home"> deepof
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            deepof
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -75,7 +79,7 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
       <li class="breadcrumb-item active">Supervised annotation in DeepOF - search for pre-established patterns</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/tutorial_notebooks/deepof_supervised_tutorial.ipynb.txt" rel="nofollow"> View page source</a>
@@ -427,7 +431,7 @@ div.rendered_html tbody tr:hover {
 <img alt="supervised" src="../_images/deepof_supervised.png" />
 <p>Running the pipeline is as simple as executing the .supervised_annotation() method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let’s run it and see what happens:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
@@ -879,7 +883,7 @@ div.rendered_html tbody tr:hover {
 <p>An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We’ll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the deepof.visuals.plot_embeddings() function.</p>
 <p>Moreover, we can also restrict the analysis over time. Let’s compare, again, the whole data to the first two minutes:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
@@ -916,7 +920,7 @@ div.rendered_html tbody tr:hover {
 </section>
 <section id="What’s-next">
 <h3>What’s next<a class="headerlink" href="#What’s-next" title="Permalink to this heading"></a></h3>
-<p>That’s it for this second tutorial. Next and last, we’ll explore the main forte of the package: we’ll learn to embed our data in a sequence-aware manner, to get behavioral patterns in an unsupervised way using deep clustering (where the “deep” in DeepOF comes from). See you there!</p>
+<p>That’s it for this second tutorial. <a class="reference external" href="https://deepof.readthedocs.io/en/latest/tutorial_notebooks/deepof_unsupervised_tutorial.html">Next</a> and last for now, we’ll explore the main forte of the package: we’ll learn to embed our data in a sequence-aware manner, to get behavioral patterns in an unsupervised way using deep clustering (where the “deep” in DeepOF comes from). See you there!</p>
 </section>
 </section>
 </section>

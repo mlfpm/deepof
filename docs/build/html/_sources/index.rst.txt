@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.1.6-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.2-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/
@@ -148,8 +148,8 @@ Full API reference
 * `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
 * `deepof.models (deep unsupervised models) <deepof.models.html>`_
 * `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
-* `deepof.annotation_utils (deep rule-based annotation auxiliary functions) <deepof.annotation_utils.html>`_
+* `deepof.annotation_utils (rule-based and supervised annotation auxiliary functions) <deepof.annotation_utils.html>`_
 * `deepof.model_utils (deep machine learning models' auxiliary functions) <deepof.model_utils.html>`_
-* `deepof.visuals (auxiliary visualization functions) <deepof.visuals.html>`_
-* `deepof.post_hoc (auxiliary annotation analysis functions) <deepof.post_hoc.html>`_
+* `deepof.visuals (visualization functions) <deepof.visuals.html>`_
+* `deepof.post_hoc (post-hoc analysis functions) <deepof.post_hoc.html>`_
 

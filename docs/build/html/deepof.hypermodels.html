@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.hypermodels module &mdash; deepof 0.1.85 documentation</title>
+  <title>deepof.hypermodels module &mdash; deepof 0.2cle documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
@@ -34,11 +34,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> deepof
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            deepof
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -46,21 +50,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.hypermodels module</a><ul>
-<li><a class="reference internal" href="#deepof.hypermodels.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a><ul>
-<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.__init__"><code class="docutils literal notranslate"><span class="pre">VQVAE.__init__()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.get_hparams"><code class="docutils literal notranslate"><span class="pre">VQVAE.get_hparams()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.build"><code class="docutils literal notranslate"><span class="pre">VQVAE.build()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#deepof.hypermodels.GMVAE"><code class="docutils literal notranslate"><span class="pre">GMVAE</span></code></a><ul>
-<li><a class="reference internal" href="#deepof.hypermodels.GMVAE.__init__"><code class="docutils literal notranslate"><span class="pre">GMVAE.__init__()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.hypermodels.GMVAE.get_hparams"><code class="docutils literal notranslate"><span class="pre">GMVAE.get_hparams()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.hypermodels.GMVAE.build"><code class="docutils literal notranslate"><span class="pre">GMVAE.build()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
+<li><a class="reference internal" href="#">deepof.hypermodels module</a></li>
 </ul>
 </div>
         </div>
@@ -76,7 +66,7 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a></li>
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
       <li class="breadcrumb-item active">deepof.hypermodels module</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/deepof.hypermodels.rst.txt" rel="nofollow"> View page source</a>
@@ -111,80 +101,8 @@
     text-align: unset;
 }
 </style>
-<section id="module-deepof.hypermodels">
-<span id="deepof-hypermodels-module"></span><h1>deepof.hypermodels module<a class="headerlink" href="#module-deepof.hypermodels" title="Permalink to this heading"></a></h1>
-<p>keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.hypermodels.</span></span><span class="sig-name descname"><span class="pre">VQVAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">12</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">HyperModel</span></code></p>
-<p>Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_VQVAE</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">12</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>VQVAE hypermodel for hyperparameter tuning.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input tensor.</p></li>
-<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
-<li><p><strong>learn_rate</strong> (<em>float</em>) – learning rate for the optimizer.</p></li>
-<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the quantization space.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.get_hparams">
-<span class="sig-name descname"><span class="pre">get_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.get_hparams" title="Permalink to this definition"></a></dt>
-<dd><p>Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.build" title="Permalink to this definition"></a></dt>
-<dd><p>Overrides Hypermodel’s build method</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="deepof.hypermodels.GMVAE">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.hypermodels.</span></span><span class="sig-name descname"><span class="pre">GMVAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.GMVAE" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">HyperModel</span></code></p>
-<p>Hyperparameter tuning pipeline for deepof.models.SEQ_2_SEQ_GMVAE</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.GMVAE.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.GMVAE.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>GMVAE hypermodel for hyperparameter tuning.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input tensor.</p></li>
-<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
-<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
-<li><p><strong>learn_rate</strong> (<em>float</em>) – learning rate for the optimizer.</p></li>
-<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the quantization space.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.GMVAE.get_hparams">
-<span class="sig-name descname"><span class="pre">get_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.GMVAE.get_hparams" title="Permalink to this definition"></a></dt>
-<dd><p>Retrieve hyperparameters to tune</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="deepof.hypermodels.GMVAE.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.GMVAE.build" title="Permalink to this definition"></a></dt>
-<dd><p>Overrides Hypermodel’s build method</p>
-</dd></dl>
-
-</dd></dl>
-
+<section id="deepof-hypermodels-module">
+<h1>deepof.hypermodels module<a class="headerlink" href="#deepof-hypermodels-module" title="Permalink to this heading"></a></h1>
 </section>
 
 

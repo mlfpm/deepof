@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Formatting your data: feature extraction from motion tracking output &mdash; deepof 0.1.85 documentation</title>
+  <title>Formatting your data: feature extraction from motion tracking output &mdash; deepof 0.2cle documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
@@ -36,11 +36,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="../index.html" class="icon icon-home"> deepof
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            deepof
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -75,7 +79,7 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
       <li class="breadcrumb-item active">Formatting your data: feature extraction from motion tracking output</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb.txt" rel="nofollow"> View page source</a>
@@ -384,12 +388,13 @@ div.rendered_html tbody tr:hover {
 <li><p>Interact with your project: generate coordinates, distances, angles, and areas.</p></li>
 <li><p>Exploratory visualizations: heatmaps and processed animations.</p></li>
 </ul>
-<p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, and the data entry API within DeepOF, located in deepof.data</p>
+<p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, pandas to load data frames, and the data entry API within DeepOF, located in deepof.data</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
 <span class="kn">import</span> <span class="nn">deepof.data</span>
 </pre></div>
@@ -421,20 +426,20 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># my_deepof_project = deepof.data.Project(</span>
-<span class="c1">#                 project_path=os.path.join(&quot;tutorial_files&quot;),</span>
-<span class="c1">#                 video_path=os.path.join(&quot;tutorial_files/Videos/&quot;),</span>
-<span class="c1">#                 table_path=os.path.join(&quot;tutorial_files/Tables/&quot;),</span>
-<span class="c1">#                 project_name=&quot;tutorial_project&quot;,</span>
-<span class="c1">#                 arena=&quot;circular-manual&quot;,</span>
-<span class="c1">#                 animal_ids=[&quot;B&quot;, &quot;W&quot;],</span>
-<span class="c1">#                 video_format=&quot;.mp4&quot;,</span>
-<span class="c1">#                 exclude_bodyparts=[&quot;Tail_1&quot;, &quot;Tail_2&quot;, &quot;Tail_tip&quot;],</span>
-<span class="c1">#                 video_scale=380,</span>
-<span class="c1">#                 enable_iterative_imputation=10,</span>
-<span class="c1">#                 smooth_alpha=1,</span>
-<span class="c1">#                 exp_conditions=None,</span>
-<span class="c1"># )</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files&quot;</span><span class="p">),</span>
+                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Videos/&quot;</span><span class="p">),</span>
+                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Tables/&quot;</span><span class="p">),</span>
+                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;tutorial_project&quot;</span><span class="p">,</span>
+                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;circular-manual&quot;</span><span class="p">,</span>
+                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;W&quot;</span><span class="p">],</span>
+                <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;.mp4&quot;</span><span class="p">,</span>
+                <span class="n">exclude_bodyparts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Tail_1&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_2&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_tip&quot;</span><span class="p">],</span>
+                <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
+                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">exp_conditions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -454,7 +459,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># my_deepof_project = my_deepof_project.create()</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -876,148 +881,148 @@ methods with the y-axis.</p>
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>(W_Center, W_Spine_2)</th>
-      <th>(W_Center, W_Spine_1)</th>
-      <th>(B_Nose, W_Tail_base)</th>
-      <th>(W_Center, W_Right_fhip)</th>
-      <th>(W_Spine_2, W_Tail_base)</th>
-      <th>(B_Spine_2, B_Tail_base)</th>
-      <th>(B_Center, B_Left_fhip)</th>
-      <th>(W_Left_ear, W_Nose)</th>
-      <th>(W_Left_ear, W_Spine_1)</th>
-      <th>(B_Right_ear, B_Spine_1)</th>
-      <th>...</th>
       <th>(W_Left_bhip, W_Spine_2)</th>
+      <th>(W_Left_ear, W_Spine_1)</th>
       <th>(W_Right_ear, W_Spine_1)</th>
       <th>(B_Tail_base, W_Tail_base)</th>
-      <th>(B_Center, B_Spine_2)</th>
-      <th>(W_Right_bhip, W_Spine_2)</th>
+      <th>(B_Tail_base, W_Nose)</th>
+      <th>(B_Left_ear, B_Nose)</th>
       <th>(B_Right_bhip, B_Spine_2)</th>
-      <th>(B_Left_bhip, B_Spine_2)</th>
+      <th>(B_Center, B_Spine_1)</th>
+      <th>(B_Spine_2, B_Tail_base)</th>
       <th>(B_Left_ear, B_Spine_1)</th>
+      <th>...</th>
+      <th>(W_Center, W_Spine_1)</th>
+      <th>(B_Right_ear, B_Spine_1)</th>
+      <th>(W_Left_ear, W_Nose)</th>
+      <th>(B_Center, B_Right_fhip)</th>
+      <th>(B_Nose, W_Tail_base)</th>
+      <th>(W_Spine_2, W_Tail_base)</th>
       <th>(B_Nose, W_Nose)</th>
+      <th>(B_Nose, B_Right_ear)</th>
+      <th>(W_Right_bhip, W_Spine_2)</th>
       <th>(W_Nose, W_Right_ear)</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>00:00:00</th>
-      <td>15.650178</td>
-      <td>20.063313</td>
-      <td>115.579049</td>
-      <td>13.097221</td>
-      <td>24.262574</td>
-      <td>14.630636</td>
-      <td>17.696946</td>
-      <td>18.915606</td>
-      <td>27.171833</td>
-      <td>14.300370</td>
-      <td>...</td>
       <td>12.385698</td>
+      <td>27.171833</td>
       <td>24.124739</td>
       <td>98.128243</td>
-      <td>13.459102</td>
-      <td>10.990415</td>
+      <td>148.682085</td>
+      <td>15.958751</td>
       <td>11.352427</td>
-      <td>15.294229</td>
+      <td>13.866569</td>
+      <td>14.630636</td>
       <td>15.403174</td>
+      <td>...</td>
+      <td>20.063313</td>
+      <td>14.300370</td>
+      <td>18.915606</td>
+      <td>13.307170</td>
+      <td>115.579049</td>
+      <td>24.262574</td>
       <td>198.053922</td>
+      <td>18.862163</td>
+      <td>10.990415</td>
       <td>22.932418</td>
     </tr>
     <tr>
       <th>00:00:00.039935995</th>
-      <td>19.941976</td>
-      <td>21.979316</td>
-      <td>118.523850</td>
-      <td>14.866295</td>
-      <td>19.983948</td>
-      <td>14.515957</td>
-      <td>16.623784</td>
-      <td>19.199412</td>
-      <td>25.867469</td>
-      <td>14.756100</td>
-      <td>...</td>
       <td>15.770459</td>
+      <td>25.867469</td>
       <td>23.760425</td>
       <td>103.329454</td>
-      <td>13.773171</td>
-      <td>13.792246</td>
+      <td>157.634272</td>
+      <td>15.336850</td>
       <td>11.621177</td>
-      <td>15.264173</td>
+      <td>13.405917</td>
+      <td>14.515957</td>
       <td>15.763673</td>
+      <td>...</td>
+      <td>21.979316</td>
+      <td>14.756100</td>
+      <td>19.199412</td>
+      <td>13.469051</td>
+      <td>118.523850</td>
+      <td>19.983948</td>
       <td>202.762435</td>
+      <td>16.465716</td>
+      <td>13.792246</td>
       <td>21.945866</td>
     </tr>
     <tr>
       <th>00:00:00.079871991</th>
-      <td>17.233418</td>
-      <td>20.005466</td>
-      <td>123.177995</td>
-      <td>15.611454</td>
-      <td>16.667571</td>
-      <td>14.816680</td>
-      <td>15.889020</td>
-      <td>22.317250</td>
-      <td>27.690706</td>
-      <td>14.490980</td>
-      <td>...</td>
       <td>14.512332</td>
+      <td>27.690706</td>
       <td>25.432991</td>
       <td>112.995114</td>
-      <td>13.896078</td>
-      <td>14.562744</td>
+      <td>166.003249</td>
+      <td>15.235294</td>
       <td>11.461481</td>
-      <td>14.663255</td>
+      <td>13.382224</td>
+      <td>14.816680</td>
       <td>15.101808</td>
+      <td>...</td>
+      <td>20.005466</td>
+      <td>14.490980</td>
+      <td>22.317250</td>
+      <td>14.120393</td>
+      <td>123.177995</td>
+      <td>16.667571</td>
       <td>203.411343</td>
+      <td>15.122226</td>
+      <td>14.562744</td>
       <td>24.897477</td>
     </tr>
     <tr>
       <th>00:00:00.119807987</th>
-      <td>18.067626</td>
-      <td>20.297740</td>
-      <td>122.999419</td>
-      <td>16.004378</td>
-      <td>16.546259</td>
-      <td>16.005507</td>
-      <td>15.497258</td>
-      <td>21.072843</td>
-      <td>29.150648</td>
-      <td>15.648562</td>
-      <td>...</td>
       <td>15.156571</td>
+      <td>29.150648</td>
       <td>24.268611</td>
       <td>120.138537</td>
-      <td>14.175288</td>
-      <td>13.743853</td>
+      <td>171.913365</td>
+      <td>16.106972</td>
       <td>12.029250</td>
-      <td>14.804978</td>
+      <td>12.382525</td>
+      <td>16.005507</td>
       <td>16.356251</td>
+      <td>...</td>
+      <td>20.297740</td>
+      <td>15.648562</td>
+      <td>21.072843</td>
+      <td>14.674685</td>
+      <td>122.999419</td>
+      <td>16.546259</td>
       <td>202.302336</td>
+      <td>15.177336</td>
+      <td>13.743853</td>
       <td>24.811224</td>
     </tr>
     <tr>
       <th>00:00:00.159743982</th>
-      <td>18.335068</td>
-      <td>21.108747</td>
-      <td>122.297162</td>
-      <td>15.228391</td>
-      <td>17.880008</td>
-      <td>15.589586</td>
-      <td>14.875425</td>
-      <td>21.258547</td>
-      <td>26.537352</td>
-      <td>16.058247</td>
-      <td>...</td>
       <td>15.140400</td>
+      <td>26.537352</td>
       <td>25.116524</td>
       <td>123.879733</td>
-      <td>13.787522</td>
-      <td>13.464188</td>
+      <td>174.999760</td>
+      <td>18.105548</td>
       <td>12.912796</td>
-      <td>15.041685</td>
+      <td>12.236212</td>
+      <td>15.589586</td>
       <td>15.709842</td>
+      <td>...</td>
+      <td>21.108747</td>
+      <td>16.058247</td>
+      <td>21.258547</td>
+      <td>15.184137</td>
+      <td>122.297162</td>
+      <td>17.880008</td>
       <td>201.555974</td>
+      <td>16.304625</td>
+      <td>13.464188</td>
       <td>22.888286</td>
     </tr>
     <tr>
@@ -1046,122 +1051,122 @@ methods with the y-axis.</p>
     </tr>
     <tr>
       <th>00:09:58.800320021</th>
-      <td>13.452932</td>
-      <td>15.193842</td>
-      <td>192.208726</td>
-      <td>13.115358</td>
-      <td>13.580543</td>
-      <td>14.777048</td>
-      <td>15.145972</td>
-      <td>23.578072</td>
-      <td>18.947365</td>
-      <td>17.047292</td>
-      <td>...</td>
       <td>15.959499</td>
+      <td>18.947365</td>
       <td>17.337064</td>
       <td>232.725078</td>
-      <td>16.948890</td>
-      <td>13.668491</td>
+      <td>173.390137</td>
+      <td>21.064461</td>
       <td>13.705981</td>
-      <td>13.848864</td>
+      <td>14.144830</td>
+      <td>14.777048</td>
       <td>17.036406</td>
+      <td>...</td>
+      <td>15.193842</td>
+      <td>17.047292</td>
+      <td>23.578072</td>
+      <td>12.428442</td>
+      <td>192.208726</td>
+      <td>13.580543</td>
       <td>148.947746</td>
+      <td>22.771844</td>
+      <td>13.668491</td>
       <td>19.360373</td>
     </tr>
     <tr>
       <th>00:09:58.840256017</th>
-      <td>13.575291</td>
-      <td>15.144409</td>
-      <td>187.529354</td>
-      <td>13.095647</td>
-      <td>13.570579</td>
-      <td>14.639053</td>
-      <td>14.145984</td>
-      <td>23.603226</td>
-      <td>18.991163</td>
-      <td>17.452928</td>
-      <td>...</td>
       <td>15.970098</td>
+      <td>18.991163</td>
       <td>17.331226</td>
       <td>229.550823</td>
-      <td>19.694996</td>
-      <td>13.799025</td>
+      <td>170.363060</td>
+      <td>16.473568</td>
       <td>13.381874</td>
-      <td>13.526511</td>
+      <td>12.262096</td>
+      <td>14.639053</td>
       <td>20.530436</td>
+      <td>...</td>
+      <td>15.144409</td>
+      <td>17.452928</td>
+      <td>23.603226</td>
+      <td>10.621567</td>
+      <td>187.529354</td>
+      <td>13.570579</td>
       <td>145.290080</td>
+      <td>22.886996</td>
+      <td>13.799025</td>
       <td>19.405286</td>
     </tr>
     <tr>
       <th>00:09:58.880192012</th>
-      <td>13.580242</td>
-      <td>15.172837</td>
-      <td>186.805039</td>
-      <td>13.063902</td>
-      <td>13.587918</td>
-      <td>15.440113</td>
-      <td>15.632956</td>
-      <td>23.564206</td>
-      <td>19.010041</td>
-      <td>18.024676</td>
-      <td>...</td>
       <td>16.005486</td>
+      <td>19.010041</td>
       <td>17.314768</td>
       <td>227.365469</td>
-      <td>17.733240</td>
-      <td>13.820064</td>
+      <td>169.135490</td>
+      <td>18.671978</td>
       <td>13.731724</td>
-      <td>13.801566</td>
+      <td>15.814718</td>
+      <td>15.440113</td>
       <td>19.567327</td>
+      <td>...</td>
+      <td>15.172837</td>
+      <td>18.024676</td>
+      <td>23.564206</td>
+      <td>12.458673</td>
+      <td>186.805039</td>
+      <td>13.587918</td>
       <td>147.479959</td>
+      <td>21.823175</td>
+      <td>13.820064</td>
       <td>19.419134</td>
     </tr>
     <tr>
       <th>00:09:58.920128008</th>
-      <td>13.580242</td>
-      <td>15.172837</td>
-      <td>186.805039</td>
-      <td>13.063902</td>
-      <td>13.587918</td>
-      <td>15.440113</td>
-      <td>15.632956</td>
-      <td>23.564206</td>
-      <td>19.010041</td>
-      <td>18.024676</td>
-      <td>...</td>
       <td>16.005486</td>
+      <td>19.010041</td>
       <td>17.314768</td>
       <td>227.365469</td>
-      <td>17.733240</td>
-      <td>13.820064</td>
+      <td>169.135490</td>
+      <td>18.671978</td>
       <td>13.731724</td>
-      <td>13.801566</td>
+      <td>15.814718</td>
+      <td>15.440113</td>
       <td>19.567327</td>
+      <td>...</td>
+      <td>15.172837</td>
+      <td>18.024676</td>
+      <td>23.564206</td>
+      <td>12.458673</td>
+      <td>186.805039</td>
+      <td>13.587918</td>
       <td>147.479959</td>
+      <td>21.823175</td>
+      <td>13.820064</td>
       <td>19.419134</td>
     </tr>
     <tr>
       <th>00:09:58.960064004</th>
-      <td>13.580242</td>
-      <td>15.172837</td>
-      <td>186.805039</td>
-      <td>13.063902</td>
-      <td>13.587918</td>
-      <td>15.440113</td>
-      <td>15.632956</td>
-      <td>23.564206</td>
-      <td>19.010041</td>
-      <td>18.024676</td>
-      <td>...</td>
       <td>16.005486</td>
+      <td>19.010041</td>
       <td>17.314768</td>
       <td>227.365469</td>
-      <td>17.733240</td>
-      <td>13.820064</td>
+      <td>169.135490</td>
+      <td>18.671978</td>
       <td>13.731724</td>
-      <td>13.801566</td>
+      <td>15.814718</td>
+      <td>15.440113</td>
       <td>19.567327</td>
+      <td>...</td>
+      <td>15.172837</td>
+      <td>18.024676</td>
+      <td>23.564206</td>
+      <td>12.458673</td>
+      <td>186.805039</td>
+      <td>13.587918</td>
       <td>147.479959</td>
+      <td>21.823175</td>
+      <td>13.820064</td>
       <td>19.419134</td>
     </tr>
   </tbody>
@@ -1989,53 +1994,18 @@ methods with the y-axis.</p>
 </section>
 <section id="Loading-experimental-conditions">
 <h3>Loading experimental conditions<a class="headerlink" href="#Loading-experimental-conditions" title="Permalink to this heading"></a></h3>
-<p>So far, DeepOF does not know to which condition each animal belongs. This can be either set up at project creation (as described above) or specified afterward.</p>
-<p>To simplify things, here we’ll load an already created object and explain how it works after loading it.</p>
-<div class="nbinput nblast docutils container">
+<p>So far, DeepOF does not know to which condition each animal belongs. This can be either set up when creating the project (as described above) or specified afterward using the .load_exp_conditions() method. We just need to pass the path to a CSV file containing all conditions per animal as extra columns. The only hard requirement is that the first column should have the experiment IDs.</p>
+<p>Here is an example:</p>
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/Coordinates/deepof_tutorial_exp_conds.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
-    <span class="n">exp_conds</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
-
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_exp_conditions</span> <span class="o">=</span> <span class="n">exp_conds</span>
-</pre></div>
-</div>
-</div>
-<p>By setting the _exp_conditions attribute in the Coordinates object, we can now have access to experimental information on the provided mice. Let’s explore what’s in there with the .get_exp_conditions property:</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/Coordinates/tutorial_exp_conditions.csv&quot;</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-{&#39;20191204_Day2_SI_JB08_Test_54&#39;:           CSDS
-0  Nonstressed, &#39;20191204_Day2_SI_JB08_Test_56&#39;:        CSDS
-0  Stressed, &#39;20191204_Day2_SI_JB08_Test_61&#39;:        CSDS
-0  Stressed, &#39;20191204_Day2_SI_JB08_Test_62&#39;:        CSDS
-0  Stressed, &#39;20191204_Day2_SI_JB08_Test_63&#39;:           CSDS
-0  Nonstressed, &#39;20191204_Day2_SI_JB08_Test_64&#39;:           CSDS
-0  Nonstressed}
-</pre></div></div>
-</div>
-<p>Note that each value is a data frame with a single row, where each column refers to an experimental trait. Adding more columns would allow DeepOF to compare more metadata on the animals (such as sex, strain, etc.).</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="p">[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -2057,19 +2027,78 @@ methods with the y-axis.</p>
   <thead>
     <tr style="text-align: right;">
       <th></th>
+      <th>experiment_id</th>
       <th>CSDS</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>0</th>
+      <td>20191204_Day2_SI_JB08_Test_54</td>
+      <td>Nonstressed</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>20191204_Day2_SI_JB08_Test_56</td>
+      <td>Stressed</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>20191204_Day2_SI_JB08_Test_61</td>
+      <td>Stressed</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>20191204_Day2_SI_JB08_Test_62</td>
+      <td>Stressed</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>20191204_Day2_SI_JB08_Test_63</td>
+      <td>Nonstressed</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>20191204_Day2_SI_JB08_Test_64</td>
       <td>Nonstressed</td>
     </tr>
   </tbody>
 </table>
 </div></div>
 </div>
-<p>We can see that, as previously mentioned, there’s a dictionary with all animal experiments as keys, and data frames with conditions as values. In this case we only have the CSDS condition, which can take two values (“Nonstressed” and “Stressed”). We also see there are exactly three animals per condition.</p>
+<p>Great! Now that we understand how the CSV should be formatted, let’s then load it onto our project:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">load_exp_conditions</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/Coordinates/tutorial_exp_conditions.csv&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>And we’re done!. Let’s explore what’s in there with the .get_exp_conditions property:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;20191204_Day2_SI_JB08_Test_54&#39;:           CSDS
+0  Nonstressed, &#39;20191204_Day2_SI_JB08_Test_56&#39;:        CSDS
+1  Stressed, &#39;20191204_Day2_SI_JB08_Test_61&#39;:        CSDS
+2  Stressed, &#39;20191204_Day2_SI_JB08_Test_62&#39;:        CSDS
+3  Stressed, &#39;20191204_Day2_SI_JB08_Test_63&#39;:           CSDS
+4  Nonstressed, &#39;20191204_Day2_SI_JB08_Test_64&#39;:           CSDS
+5  Nonstressed}
+</pre></div></div>
+</div>
+<p>We can see that the property retrieves a dictionary with all animal experiments as keys, and data frames with conditions as values. Although in this case we only have the CSDS condition, which can take two values (“Nonstressed” and “Stressed”, with three animals each), adding more just requires us to add extra columns to the CSV file.</p>
 <p>Now that we have a basic understanding of how to create and interact with a project, let’s show some plots!</p>
 </section>
 <section id="Basic-visual-exploration">
@@ -6991,7 +7020,7 @@ AABMYXZmNTkuMjcuMTAw
 </section>
 <section id="What’s-next">
 <h3>What’s next<a class="headerlink" href="#What’s-next" title="Permalink to this heading"></a></h3>
-<p>That’s it for this tutorial. Next, we’ll see how to run a supervised annotation pipeline with pretrained models!</p>
+<p>That’s it for this tutorial. <a class="reference external" href="https://deepof.readthedocs.io/en/latest/tutorial_notebooks/deepof_supervised_tutorial.html">Next</a>, we’ll see how to run a supervised annotation pipeline with pretrained models!</p>
 </section>
 </section>
 </section>
