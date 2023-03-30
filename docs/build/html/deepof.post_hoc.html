@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.post_hoc module &mdash; deepof 0.2cle documentation</title>
+  <title>deepof.post_hoc module &mdash; deepof 0.2 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
@@ -50,7 +50,25 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.post_hoc module</a></li>
+<li><a class="reference internal" href="#">deepof.post_hoc module</a><ul>
+<li><a class="reference internal" href="#deepof.post_hoc.get_time_on_cluster"><code class="docutils literal notranslate"><span class="pre">get_time_on_cluster()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.get_aggregated_embedding"><code class="docutils literal notranslate"><span class="pre">get_aggregated_embedding()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.select_time_bin"><code class="docutils literal notranslate"><span class="pre">select_time_bin()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.condition_distance_binning"><code class="docutils literal notranslate"><span class="pre">condition_distance_binning()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.separation_between_conditions"><code class="docutils literal notranslate"><span class="pre">separation_between_conditions()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.enrichment_across_conditions"><code class="docutils literal notranslate"><span class="pre">enrichment_across_conditions()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.get_transitions"><code class="docutils literal notranslate"><span class="pre">get_transitions()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.compute_transition_matrix_per_condition"><code class="docutils literal notranslate"><span class="pre">compute_transition_matrix_per_condition()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.compute_steady_state"><code class="docutils literal notranslate"><span class="pre">compute_steady_state()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.compute_UMAP"><code class="docutils literal notranslate"><span class="pre">compute_UMAP()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels"><code class="docutils literal notranslate"><span class="pre">align_deepof_kinematics_with_unsupervised_labels()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.chunk_summary_statistics"><code class="docutils literal notranslate"><span class="pre">chunk_summary_statistics()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.annotate_time_chunks"><code class="docutils literal notranslate"><span class="pre">annotate_time_chunks()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.chunk_cv_splitter"><code class="docutils literal notranslate"><span class="pre">chunk_cv_splitter()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.train_supervised_cluster_detectors"><code class="docutils literal notranslate"><span class="pre">train_supervised_cluster_detectors()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.post_hoc.explain_clusters"><code class="docutils literal notranslate"><span class="pre">explain_clusters()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div>
         </div>
@@ -101,8 +119,430 @@
     text-align: unset;
 }
 </style>
-<section id="deepof-post-hoc-module">
-<h1>deepof.post_hoc module<a class="headerlink" href="#deepof-post-hoc-module" title="Permalink to this heading"></a></h1>
+<section id="module-deepof.post_hoc">
+<span id="deepof-post-hoc-module"></span><h1>deepof.post_hoc module<a class="headerlink" href="#module-deepof.post_hoc" title="Permalink to this heading"></a></h1>
+<p>Data structures and functions for analyzing supervised and unsupervised model results.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.get_time_on_cluster">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">get_time_on_cluster</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.get_time_on_cluster" title="Permalink to this definition"></a></dt>
+<dd><p>Given a set of cluster assignments and the corresponding breaks, computes how much each
+animal spent on each cluster.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>each</em>) – </p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>normalize</strong> (<em>bool</em>) – Whether to normalize the time by the total number of frames in</p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>reduce_dim</strong> (<em>bool</em>) – Whether to reduce the dimensionality of the embeddings to 2D. If False,</p></li>
+<li><p><strong>dimensionality.</strong> (<em>the embeddings are kept in their original</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dataframe with the time spent on each cluster for each experiment.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.get_aggregated_embedding">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">get_aggregated_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">agg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.get_aggregated_embedding" title="Permalink to this definition"></a></dt>
+<dd><p>Aggregates the embeddings of a set of videos, using the specified aggregation method.
+Instead of an embedding per chunk, the function returns an embedding per experiment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the embeddings for each</em>) – </p></li>
+<li><p><strong>reduce_dim</strong> (<em>bool</em>) – Whether to reduce the dimensionality of the embeddings to 2D. If False,</p></li>
+<li><p><strong>dimensionality.</strong> (<em>the embeddings are kept in their original</em>) – </p></li>
+<li><p><strong>agg</strong> (<em>str</em>) – The aggregation method to use. Can be either “mean” or “median”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dataframe with the aggregated embeddings for each experiment.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.select_time_bin">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">select_time_bin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.select_time_bin" title="Permalink to this definition"></a></dt>
+<dd><p>Selects a time bin and filters all relevant objects (embeddings, soft_counts and breaks).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>supervised_annotations</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – table dict with supervised annotations per animal experiment across time.</p></li>
+<li><p><strong>bin_size</strong> (<em>int</em>) – The size of the time bin to select.</p></li>
+<li><p><strong>bin_index</strong> (<em>int</em>) – The index of the time bin to select.</p></li>
+<li><p><strong>precomputed</strong> (<em>np.ndarray</em>) – Boolean array. If provided, ignores every othe parameter and just indexes each</p></li>
+<li><p><strong>mask.</strong> (<em>experiment using the provided</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple of the filtered embeddings, soft counts, and breaks.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.condition_distance_binning">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">condition_distance_binning</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scan_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'growing_window'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed_bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">agg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'auc'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.condition_distance_binning" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the distance between the embeddings of two conditions, using the specified
+aggregation method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
+<li><p><strong>experiments</strong> (<em>names</em><em> of </em><em>the</em>) – </p></li>
+<li><p><strong>corresponding</strong> (<em>and the values are the names</em><em> of </em><em>their</em>) – </p></li>
+<li><p><strong>conditions.</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>start_bin</strong> (<em>int</em>) – The index of the first bin to compute the distance for.</p></li>
+<li><p><strong>end_bin</strong> (<em>int</em>) – The index of the last bin to compute the distance for.</p></li>
+<li><p><strong>step_bin</strong> (<em>int</em>) – The step size of the bins to compute the distance for.</p></li>
+<li><p><strong>scan_mode</strong> (<em>str</em>) – The mode to use for computing the distance. Can be one of “growing-window”</p></li>
+<li><p><strong>binning</strong><strong>)</strong> (<em>(</em><em>used to select optimal</em>) – </p></li>
+<li><p><strong>discriminability</strong> (<em>&quot;per-bin&quot;</em><em> (</em><em>used to evaluate how</em>) – </p></li>
+<li><p><strong>&quot;precomputed&quot;</strong> (<em>evolves in subsequent bins</em><em> of </em><em>a specified size</em><em>) </em><em>or</em>) – </p></li>
+<li><p><strong>ndarray</strong> (<em>which requires a numpy</em>) – </p></li>
+<li><p><strong>precomputed_bins.</strong> (<em>with bin IDs to be passed to</em>) – </p></li>
+<li><p><strong>precomputed_bins</strong> (<em>np.ndarray</em>) – numpy array with IDs mapping to different bins, not necessarily having</p></li>
+<li><p><strong>reported.</strong> (<em>the same size. Difference across conditions for each</em><em> of </em><em>these bins will be</em>) – </p></li>
+<li><p><strong>agg</strong> (<em>str</em>) – The aggregation method to use. Can be either “mean”, “median”, or “time_on_cluster”.</p></li>
+<li><p><strong>metric</strong> (<em>str</em>) – The distance metric to use. Can be either “auc” (where the reported ‘distance’</p></li>
+<li><p><strong>embeddings</strong><strong>)</strong> (<em>is based on performance</em><em> of </em><em>a classifier when separating aggregated</em>) – </p></li>
+<li><p><strong>or</strong> – </p></li>
+<li><p><strong>&quot;wasserstein&quot;</strong> (<em>which computes distances based on optimal transport</em>) – </p></li>
+<li><p><strong>n_jobs</strong> (<em>int</em>) – The number of jobs to use for parallel processing.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An array with distances between conditions across the resulting time bins</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.separation_between_conditions">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">separation_between_conditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cur_embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cur_soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cur_breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">agg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.separation_between_conditions" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the distance between the embeddings of two conditions, using the specified
+aggregation method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cur_embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
+<li><p><strong>cur_soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>cur_breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
+<li><p><strong>experiments</strong> (<em>names</em><em> of </em><em>the</em>) – </p></li>
+<li><p><strong>corresponding</strong> (<em>and the values are the names</em><em> of </em><em>their</em>) – </p></li>
+<li><p><strong>conditions.</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>agg</strong> (<em>str</em>) – The aggregation method to use. Can be one of “time on cluster”, “mean”, or “median”.</p></li>
+<li><p><strong>metric</strong> (<em>str</em>) – The distance metric to use. Can be either “auc” (where the reported ‘distance’</p></li>
+<li><p><strong>embeddings</strong><strong>)</strong> (<em>is based on performance</em><em> of </em><em>a classifier when separating aggregated</em>) – </p></li>
+<li><p><strong>or</strong> – </p></li>
+<li><p><strong>&quot;wasserstein&quot;</strong> (<em>which computes distances based on optimal transport</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The distance between the embeddings of the two conditions.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.enrichment_across_conditions">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">enrichment_across_conditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.enrichment_across_conditions" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the population of each cluster across conditions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>supervised_annotations</strong> (<em>tableDict</em>) – table dict with supervised annotations per animal experiment across time.</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
+<li><p><strong>experiments</strong> (<em>names</em><em> of </em><em>the</em>) – </p></li>
+<li><p><strong>corresponding</strong> (<em>and the values are the names</em><em> of </em><em>their</em>) – </p></li>
+<li><p><strong>conditions.</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>bin_size</strong> (<em>int</em>) – The size of the time bins to use. If None, the embeddings are not binned.</p></li>
+<li><p><strong>bin_index</strong> (<em>int</em>) – The index of the bin to use. If None, the embeddings are not binned.</p></li>
+<li><p><strong>precomputed</strong> (<em>np.ndarray</em>) – Boolean array. If provided, ignores every othe parameter and just indexes each</p></li>
+<li><p><strong>mask.</strong> (<em>experiment using the provided</em>) – </p></li>
+<li><p><strong>normalize</strong> (<em>bool</em>) – Whether to normalize the population of each cluster across conditions.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A long format dataframe with the population of each cluster across conditions.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.get_transitions">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">get_transitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_sequence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_states</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.get_transitions" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the transitions between states in a state sequence.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state_sequence</strong> (<em>list</em>) – A list of states.</p></li>
+<li><p><strong>n_states</strong> (<em>int</em>) – The number of states.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The resulting transition matrix.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.compute_transition_matrix_per_condition">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">compute_transition_matrix_per_condition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">silence_diagonal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.compute_transition_matrix_per_condition" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the transition matrices specific to each condition.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of embeddings, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> (<em>experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the breaks for each</em>) – </p></li>
+<li><p><strong>soft_counts</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of soft counts, where the keys are the names of the</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>breaks</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.TableDict" title="deepof.data.TableDict"><em>TableDict</em></a>) – A dictionary of breaks, where the keys are the names of the experimental</p></li>
+<li><p><strong>conditions</strong> – </p></li>
+<li><p><strong>condition.</strong> – </p></li>
+<li><p><strong>exp_conditions</strong> (<em>dict</em>) – A dictionary of experimental conditions, where the keys are the</p></li>
+<li><p><strong>experiments</strong> (<em>names</em><em> of </em><em>the</em>) – </p></li>
+<li><p><strong>corresponding</strong> (<em>and the values are the names</em><em> of </em><em>their</em>) – </p></li>
+<li><p><strong>silence_diagonal</strong> (<em>bool</em>) – If True, diagonal elements on the transition matrix are set to zero.</p></li>
+<li><p><strong>bin_size</strong> (<em>int</em>) – The size of the time bins to use. If None, the embeddings are not binned.</p></li>
+<li><p><strong>bin_index</strong> (<em>int</em>) – The index of the bin to use. If None, the embeddings are not binned.</p></li>
+<li><p><strong>aggregate</strong> (<em>str</em>) – Whether to aggregate the embeddings across time.</p></li>
+<li><p><strong>normalize</strong> (<em>str</em>) – Whether to normalize the population of each cluster across conditions.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary of transition matrices, where the keys are the names of the experimental
+conditions, and the values are the transition matrices for each condition.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.compute_steady_state">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">compute_steady_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transition_matrices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_entropy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_iters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.compute_steady_state" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the steady state of each transition matrix provided in a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>transition_matrices</strong> (<em>dict</em>) – A dictionary of transition matrices, where the keys are</p></li>
+<li><p><strong>conditions</strong> (<em>the names</em><em> of </em><em>the experimental</em>) – </p></li>
+<li><p><strong>condition.</strong> (<em>and the values are the transition matrices for each</em>) – </p></li>
+<li><p><strong>return_entropy</strong> (<em>bool</em>) – Whether to return the entropy of the steady state. If False, the steady states themselves are</p></li>
+<li><p><strong>returned.</strong> – </p></li>
+<li><p><strong>n_iters</strong> (<em>int</em>) – The number of iterations to use for the Markov chain.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary of steady states, where the keys are the names of the experimental conditions, and the values are
+the steady states for each condition. If return_entropy is True, values correspond to the entropy of each
+steady state.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.compute_UMAP">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">compute_UMAP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_assignments</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.compute_UMAP" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">align_deepof_kinematics_with_unsupervised_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deepof_project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kin_derivative</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_feature_derivatives</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_distances</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_angles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_areas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels" title="Permalink to this definition"></a></dt>
+<dd><p>In order to annotate time chunks with as many relevant features as possible, this function aligns the kinematics
+of a deepof project (speed and acceleration of body parts, distances, and angles) with the hard cluster assignments
+obtained from the unsupervised pipeline.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>deepof_project</strong> (<a class="reference internal" href="deepof.data.html#deepof.data.Project" title="deepof.data.Project"><em>Project</em></a>) – A deepof.Project object.</p></li>
+<li><p><strong>kin_derivative</strong> (<em>int</em>) – The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.</p></li>
+<li><p><strong>include_feature_derivatives</strong> (<em>bool</em>) – Whether to compute speed on distances, angles, and areas, if they are included.</p></li>
+<li><p><strong>include_distances</strong> (<em>bool</em>) – Whether to include distances in the alignment.</p></li>
+<li><p><strong>include_angles</strong> (<em>bool</em>) – Whether to include angles in the alignment.</p></li>
+<li><p><strong>include_areas</strong> (<em>bool</em>) – Whether to include areas in the alignment.</p></li>
+<li><p><strong>animal_id</strong> (<em>str</em>) – The animal ID to use, in case of multi-animal projects.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary of aligned kinematics, where the keys are the names of the experimental conditions, and the
+values are the aligned kinematics for each condition.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.chunk_summary_statistics">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">chunk_summary_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunked_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body_part_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.chunk_summary_statistics" title="Permalink to this definition"></a></dt>
+<dd><p>Extracts summary statistics from a chunked dataset using seglearn.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chunked_dataset</strong> (<em>np.ndarray</em>) – Preprocessed training set (of shape chunks x time x features),</p></li>
+<li><p><strong>data.</strong> (<em>where each entry corresponds to a time chunk of</em>) – </p></li>
+<li><p><strong>body_part_names</strong> (<em>list</em>) – A list of the names of the body parts.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dataframe of kinematic features, of shape chunks by features.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.annotate_time_chunks">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">annotate_time_chunks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deepof_project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_confidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kin_derivative</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_distances</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_angles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_areas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.annotate_time_chunks" title="Permalink to this definition"></a></dt>
+<dd><p>Annotate time chunks produced after change-point detection using the unsupervised pipeline, using a set
+of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>deepof_project</strong> – Project object.</p></li>
+<li><p><strong>soft_counts</strong> – matrix with soft cluster assignments produced by the unsupervised pipeline.</p></li>
+<li><p><strong>breaks</strong> – the breaks for each condition.</p></li>
+<li><p><strong>supervised_annotations</strong> – set of supervised annotations produced by the supervised pipeline withing deepof.</p></li>
+<li><p><strong>window_size</strong> (<em>int</em>) – Minimum size of the applied ruptures. If automatic_changepoints is False,</p></li>
+<li><p><strong>defaults</strong> (<em>specifies the size</em><em> of </em><em>the sliding window to pass through the data to generate training instances. None</em>) – </p></li>
+<li><p><strong>frame-rate.</strong> (<em>to video</em>) – </p></li>
+<li><p><strong>window_step</strong> (<em>int</em>) – Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,</p></li>
+<li><p><strong>case</strong> (<em>specifies the step to take when sliding the aforementioned window. In this</em>) – </p></li>
+<li><p><strong>indicates</strong> (<em>a value</em><em> of </em><em>1</em>) – </p></li>
+<li><p><strong>window</strong> (<em>a true sliding</em>) – </p></li>
+<li><p><strong>chunks.</strong> (<em>10000 and the number</em><em> of </em><em>available</em>) – </p></li>
+<li><p><strong>animal_id</strong> (<em>str</em>) – The animal ID to use, in case of multi-animal projects.</p></li>
+<li><p><strong>samples</strong> (<em>int</em>) – Time chunks samples to take to reduce computational time. Defaults to the minimum between</p></li>
+<li><p><strong>chunks.</strong> – </p></li>
+<li><p><strong>min_confidence</strong> (<em>float</em>) – minimum confidence in cluster assignments used for quality control filtering.</p></li>
+<li><p><strong>kin_derivative</strong> – The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.</p></li>
+<li><p><strong>include_distances</strong> – Whether to include distances in the alignment. kin_derivative is taken into account.</p></li>
+<li><p><strong>include_angles</strong> – Whether to include angles in the alignment. kin_derivative is taken into account.</p></li>
+<li><p><strong>include_areas</strong> – Whether to include areas in the alignment. kin_derivative is taken into account.</p></li>
+<li><p><strong>aggregate</strong> – aggregation mode. Can be either “mean” (computationally cheapest), just use the average per feature,</p></li>
+<li><p><strong>series.</strong> (<em>or &quot;seglearn&quot; which runs a thorough feature extraction and selection pipeline on each time</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dataframe of kinematic features, of shape chunks by features.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.chunk_cv_splitter">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">chunk_cv_splitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_folds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.chunk_cv_splitter" title="Permalink to this definition"></a></dt>
+<dd><p>Given a matrix with extracted features per chunk, returns a list containing
+a set of cross-validation folds, grouped by experimental video. This makes
+sure that chunks coming from the same experiment will never be leaked between
+training and testing sets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chunk_stats</strong> (<em>pd.DataFrame</em>) – matrix with statistics per chunk, sorted by experiment.</p></li>
+<li><p><strong>breaks</strong> (<em>dict</em>) – dictionary containing ruprures per video.</p></li>
+<li><p><strong>n_folds</strong> (<em>int</em>) – number of cross-validation folds to compute.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>list containing a training and testing set per CV fold.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.train_supervised_cluster_detectors">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">train_supervised_cluster_detectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hard_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampled_breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_folds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.train_supervised_cluster_detectors" title="Permalink to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chunk_stats</strong> (<em>pd.DataFrame</em>) – table with descriptive statistics for a series of sequences (‘chunks’).</p></li>
+<li><p><strong>hard_counts</strong> (<em>np.ndarray</em>) – cluster assignments for the corresponding ‘chunk_stats’ table.</p></li>
+<li><p><strong>sampled_breaks</strong> (<em>dict</em>) – sequence length of each chunk per experiment.</p></li>
+<li><p><strong>n_folds</strong> (<em>int</em>) – number of folds for cross validation. If None (default) leave-one-experiment-out CV is used.</p></li>
+<li><p><strong>verbose</strong> (<em>int</em>) – verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>trained supervised model on the full dataset, mapping chunk stats
+to cluster assignments. Useful to run the SHAP explainability pipeline.
+cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
+groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>full_cluster_clf (imblearn.pipeline.Pipeline)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.post_hoc.explain_clusters">
+<span class="sig-prename descclassname"><span class="pre">deepof.post_hoc.</span></span><span class="sig-name descname"><span class="pre">explain_clusters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hard_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_cluster_clf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Pipeline</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.post_hoc.explain_clusters" title="Permalink to this definition"></a></dt>
+<dd><p>Computes SHAP feature importance for models mapping chunk_stats to cluster assignments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chunk_stats</strong> (<em>pd.DataFrame</em>) – matrix with statistics per chunk, sorted by experiment.</p></li>
+<li><p><strong>np.ndarray</strong><strong>)</strong> – cluster assignments for the corresponding ‘chunk_stats’ table.</p></li>
+<li><p><strong>hard_counts</strong> (<em>np.ndarray</em>) – cluster assignments for the corresponding ‘chunk_stats’ table.</p></li>
+<li><p><strong>full_cluster_clf</strong> (<em>imblearn.pipeline.Pipeline</em>) – trained supervised model on the full dataset, mapping chunk stats</p></li>
+<li><p><strong>assignments.</strong> (<em>to cluster</em>) – </p></li>
+<li><p><strong>samples</strong> (<em>int</em>) – number of samples to draw from the original chunk_stats dataset.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>shap_values per cluster.
+explainer (shap.explainers._kernel.Kernel): trained SHAP KernelExplainer.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>shap_values (list)</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 

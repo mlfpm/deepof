@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.hypermodels module &mdash; deepof 0.2cle documentation</title>
+  <title>deepof.hypermodels module &mdash; deepof 0.2 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
@@ -50,7 +50,27 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.hypermodels module</a></li>
+<li><a class="reference internal" href="#">deepof.hypermodels module</a><ul>
+<li><a class="reference internal" href="#deepof.hypermodels.VaDE"><code class="docutils literal notranslate"><span class="pre">VaDE</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.hypermodels.VaDE.__init__"><code class="docutils literal notranslate"><span class="pre">VaDE.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.VaDE.get_hparams"><code class="docutils literal notranslate"><span class="pre">VaDE.get_hparams()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.VaDE.build"><code class="docutils literal notranslate"><span class="pre">VaDE.build()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.hypermodels.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.__init__"><code class="docutils literal notranslate"><span class="pre">VQVAE.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.get_hparams"><code class="docutils literal notranslate"><span class="pre">VQVAE.get_hparams()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.VQVAE.build"><code class="docutils literal notranslate"><span class="pre">VQVAE.build()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.hypermodels.Contrastive"><code class="docutils literal notranslate"><span class="pre">Contrastive</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.hypermodels.Contrastive.__init__"><code class="docutils literal notranslate"><span class="pre">Contrastive.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.Contrastive.get_hparams"><code class="docutils literal notranslate"><span class="pre">Contrastive.get_hparams()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.hypermodels.Contrastive.build"><code class="docutils literal notranslate"><span class="pre">Contrastive.build()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
         </div>
@@ -101,8 +121,123 @@
     text-align: unset;
 }
 </style>
-<section id="deepof-hypermodels-module">
-<h1>deepof.hypermodels module<a class="headerlink" href="#deepof-hypermodels-module" title="Permalink to this heading"></a></h1>
+<section id="module-deepof.hypermodels">
+<span id="deepof-hypermodels-module"></span><h1>deepof.hypermodels module<a class="headerlink" href="#module-deepof.hypermodels" title="Permalink to this heading"></a></h1>
+<p>keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.hypermodels.VaDE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.hypermodels.</span></span><span class="sig-name descname"><span class="pre">VaDE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VaDE" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">HyperModel</span></code></p>
+<p>Hyperparameter tuning pipeline for deepof.models.VaDE</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VaDE.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VaDE.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>VaDE hypermodel for hyperparameter tuning.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input tensor.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
+<li><p><strong>learn_rate</strong> (<em>float</em>) – learning rate for the optimizer.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the quantization space.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature tensor.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – whether to use a graph neural network to encode the input data.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the graph.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VaDE.get_hparams">
+<span class="sig-name descname"><span class="pre">get_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VaDE.get_hparams" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieve hyperparameters to tune</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VaDE.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VaDE.build" title="Permalink to this definition"></a></dt>
+<dd><p>Overrides Hypermodel’s build method</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.hypermodels.</span></span><span class="sig-name descname"><span class="pre">VQVAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">HyperModel</span></code></p>
+<p>Hyperparameter tuning pipeline for deepof.models.VQVAE</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>VQVAE hypermodel for hyperparameter tuning.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input tensor.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
+<li><p><strong>learn_rate</strong> (<em>float</em>) – learning rate for the optimizer.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the quantization space.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature tensor.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – whether to use a graph neural network to encode the input data.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the graph.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.get_hparams">
+<span class="sig-name descname"><span class="pre">get_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.get_hparams" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.VQVAE.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.VQVAE.build" title="Permalink to this definition"></a></dt>
+<dd><p>Overrides Hypermodel’s build method</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.hypermodels.Contrastive">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.hypermodels.</span></span><span class="sig-name descname"><span class="pre">Contrastive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.Contrastive" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">HyperModel</span></code></p>
+<p>Hyperparameter tuning pipeline for deepof.models.Contrastive</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.Contrastive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learn_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.Contrastive.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Contrastive hypermodel for hyperparameter tuning.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input tensor.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
+<li><p><strong>learn_rate</strong> (<em>float</em>) – learning rate for the optimizer.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature tensor.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – whether to use a graph neural network to encode the input data.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the graph.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.Contrastive.get_hparams">
+<span class="sig-name descname"><span class="pre">get_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.Contrastive.get_hparams" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.hypermodels.Contrastive.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.hypermodels.Contrastive.build" title="Permalink to this definition"></a></dt>
+<dd><p>Overrides Hypermodel’s build method</p>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.models module &mdash; deepof 0.2cle documentation</title>
+  <title>deepof.models module &mdash; deepof 0.2 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
@@ -50,7 +50,60 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">deepof.models module</a></li>
+<li><a class="reference internal" href="#">deepof.models module</a><ul>
+<li><a class="reference internal" href="#deepof.models.get_recurrent_encoder"><code class="docutils literal notranslate"><span class="pre">get_recurrent_encoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.get_recurrent_decoder"><code class="docutils literal notranslate"><span class="pre">get_recurrent_decoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.get_TCN_encoder"><code class="docutils literal notranslate"><span class="pre">get_TCN_encoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.get_TCN_decoder"><code class="docutils literal notranslate"><span class="pre">get_TCN_decoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.get_transformer_encoder"><code class="docutils literal notranslate"><span class="pre">get_transformer_encoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.get_transformer_decoder"><code class="docutils literal notranslate"><span class="pre">get_transformer_decoder()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VectorQuantizer"><code class="docutils literal notranslate"><span class="pre">VectorQuantizer</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.VectorQuantizer.__init__"><code class="docutils literal notranslate"><span class="pre">VectorQuantizer.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VectorQuantizer.call"><code class="docutils literal notranslate"><span class="pre">VectorQuantizer.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VectorQuantizer.get_code_indices"><code class="docutils literal notranslate"><span class="pre">VectorQuantizer.get_code_indices()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.models.get_vqvae"><code class="docutils literal notranslate"><span class="pre">get_vqvae()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VQVAE"><code class="docutils literal notranslate"><span class="pre">VQVAE</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.VQVAE.__init__"><code class="docutils literal notranslate"><span class="pre">VQVAE.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VQVAE.call"><code class="docutils literal notranslate"><span class="pre">VQVAE.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VQVAE.metrics"><code class="docutils literal notranslate"><span class="pre">VQVAE.metrics</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VQVAE.train_step"><code class="docutils literal notranslate"><span class="pre">VQVAE.train_step()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VQVAE.test_step"><code class="docutils literal notranslate"><span class="pre">VQVAE.test_step()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.models.GaussianMixtureLatent"><code class="docutils literal notranslate"><span class="pre">GaussianMixtureLatent</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.GaussianMixtureLatent.__init__"><code class="docutils literal notranslate"><span class="pre">GaussianMixtureLatent.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.GaussianMixtureLatent.call"><code class="docutils literal notranslate"><span class="pre">GaussianMixtureLatent.call()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.models.get_vade"><code class="docutils literal notranslate"><span class="pre">get_vade()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Classifier"><code class="docutils literal notranslate"><span class="pre">Classifier</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.Classifier.__init__"><code class="docutils literal notranslate"><span class="pre">Classifier.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Classifier.call"><code class="docutils literal notranslate"><span class="pre">Classifier.call()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.models.VaDE"><code class="docutils literal notranslate"><span class="pre">VaDE</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.VaDE.__init__"><code class="docutils literal notranslate"><span class="pre">VaDE.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.metrics"><code class="docutils literal notranslate"><span class="pre">VaDE.metrics</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.get_gmm_params"><code class="docutils literal notranslate"><span class="pre">VaDE.get_gmm_params</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.set_pretrain_mode"><code class="docutils literal notranslate"><span class="pre">VaDE.set_pretrain_mode()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.pretrain"><code class="docutils literal notranslate"><span class="pre">VaDE.pretrain()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.call"><code class="docutils literal notranslate"><span class="pre">VaDE.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.train_step"><code class="docutils literal notranslate"><span class="pre">VaDE.train_step()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.VaDE.test_step"><code class="docutils literal notranslate"><span class="pre">VaDE.test_step()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deepof.models.Contrastive"><code class="docutils literal notranslate"><span class="pre">Contrastive</span></code></a><ul>
+<li><a class="reference internal" href="#deepof.models.Contrastive.__init__"><code class="docutils literal notranslate"><span class="pre">Contrastive.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Contrastive.metrics"><code class="docutils literal notranslate"><span class="pre">Contrastive.metrics</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Contrastive.call"><code class="docutils literal notranslate"><span class="pre">Contrastive.call()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Contrastive.train_step"><code class="docutils literal notranslate"><span class="pre">Contrastive.train_step()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.models.Contrastive.test_step"><code class="docutils literal notranslate"><span class="pre">Contrastive.test_step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
         </div>
@@ -101,8 +154,619 @@
     text-align: unset;
 }
 </style>
-<section id="deepof-models-module">
-<h1>deepof.models module<a class="headerlink" href="#deepof-models-module" title="Permalink to this heading"></a></h1>
+<section id="module-deepof.models">
+<span id="deepof-models-module"></span><h1>deepof.models module<a class="headerlink" href="#module-deepof.models" title="Permalink to this heading"></a></h1>
+<p>deep autoencoder models for unsupervised pose detection.</p>
+<ul class="simple">
+<li><p>VQ-VAE: a variational autoencoder with a vector quantization latent-space (<a class="reference external" href="https://arxiv.org/abs/1711.00937">https://arxiv.org/abs/1711.00937</a>).</p></li>
+<li><p>VaDE: a variational autoencoder with a Gaussian mixture latent-space.</p></li>
+<li><p>Contrastive: an embedding model consisting of a single encoder, trained using a contrastive loss.</p></li>
+</ul>
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_recurrent_encoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_recurrent_encoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gru_unroll</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bidirectional_merge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'concat'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_recurrent_encoder" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a deep recurrent neural encoder.</p>
+<blockquote>
+<div><p>Builds a neural network capable of encoding the motion tracking instances into a vector ready to be fed to</p>
+</div></blockquote>
+<p>one of the provided structured latent spaces.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the node features for the input data. Should be time x nodes x features.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers.</p></li>
+<li><p><strong>features.</strong> (<em>Should be time x edges x</em>) – </p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimension of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>gru_unroll</strong> (<em>-</em>) – whether to unroll the GRU layers. Defaults to False.</p></li>
+<li><p><strong>bidirectional_merge</strong> (<em>-</em>) – how to merge the forward and backward GRU layers. Defaults to “concat”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a keras model that can be trained to encode motion tracking instances into a vector.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>keras.Model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_recurrent_decoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_recurrent_decoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gru_unroll</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bidirectional_merge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'concat'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_recurrent_decoder" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a recurrent neural decoder.</p>
+<p>Builds a deep neural network capable of decoding the structured latent space generated by one of the compatible
+classes into a sequence of motion tracking instances, either reconstructing the original
+input, or generating new data from given clusters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>gru_unroll</strong> (<em>bool</em>) – whether to unroll the GRU layers. Defaults to False.</p></li>
+<li><p><strong>bidirectional_merge</strong> (<em>str</em>) – how to merge the forward and backward GRU layers. Defaults to “concat”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a keras model that can be trained to decode the latent space into a series of motion tracking
+sequences.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>keras.Model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_TCN_encoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_TCN_encoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_filters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_stacks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_dilations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(1,</span> <span class="pre">2,</span> <span class="pre">4,</span> <span class="pre">8)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'causal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_skip_connections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'relu'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_TCN_encoder" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a Temporal Convolutional Network (TCN) encoder.</p>
+<p>Builds a neural network that can be used to encode motion tracking instances into a
+vector. Each layer contains a residual block with a convolutional layer and a skip connection. See the following
+paper for more details: <a class="reference external" href="https://arxiv.org/pdf/1803.01271.pdf">https://arxiv.org/pdf/1803.01271.pdf</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>conv_filters</strong> (<em>-</em>) – number of filters in the TCN layers</p></li>
+<li><p><strong>kernel_size</strong> (<em>-</em>) – size of the convolutional kernels</p></li>
+<li><p><strong>conv_stacks</strong> (<em>-</em>) – number of TCN layers</p></li>
+<li><p><strong>conv_dilations</strong> (<em>-</em>) – list of dilation factors for each TCN layer</p></li>
+<li><p><strong>padding</strong> (<em>-</em>) – padding mode for the TCN layers</p></li>
+<li><p><strong>use_skip_connections</strong> (<em>-</em>) – whether to use skip connections between TCN layers</p></li>
+<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate for the TCN layers</p></li>
+<li><p><strong>activation</strong> (<em>-</em>) – activation function for the TCN layers</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a keras model that can be trained to encode a sequence of motion tracking instances into a latent
+space using temporal convolutional networks.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>keras.Model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_TCN_decoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_TCN_decoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_filters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_stacks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conv_dilations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(8,</span> <span class="pre">4,</span> <span class="pre">2,</span> <span class="pre">1)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'causal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_skip_connections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'relu'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_TCN_decoder" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a Temporal Convolutional Network (TCN) decoder.</p>
+<p>Builds a neural network that can be used to decode a latent space into a sequence of
+motion tracking instances. Each layer contains a residual block with a convolutional layer and a skip connection. See
+the following paper for more details: <a class="reference external" href="https://arxiv.org/pdf/1803.01271.pdf">https://arxiv.org/pdf/1803.01271.pdf</a>,</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>conv_filters</strong> (<em>-</em>) – number of filters in the TCN layers</p></li>
+<li><p><strong>kernel_size</strong> (<em>-</em>) – size of the convolutional kernels</p></li>
+<li><p><strong>conv_stacks</strong> (<em>-</em>) – number of TCN layers</p></li>
+<li><p><strong>conv_dilations</strong> (<em>-</em>) – list of dilation factors for each TCN layer</p></li>
+<li><p><strong>padding</strong> (<em>-</em>) – padding mode for the TCN layers</p></li>
+<li><p><strong>use_skip_connections</strong> (<em>-</em>) – whether to use skip connections between TCN layers</p></li>
+<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate for the TCN layers</p></li>
+<li><p><strong>activation</strong> (<em>-</em>) – activation function for the TCN layers</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a keras model that can be trained to decode a latent space into a sequence of motion tracking
+instances using temporal convolutional networks.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>keras.Model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_transformer_encoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_transformer_encoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_transformer_encoder" title="Permalink to this definition"></a></dt>
+<dd><p>Transformer encoder.</p>
+<p>Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
+Adapted according to <a class="reference external" href="https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true">https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true</a>
+and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https://arxiv.org/abs/1711.03905</a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>num_layers</strong> (<em>-</em>) – number of transformer layers to include</p></li>
+<li><p><strong>num_heads</strong> (<em>-</em>) – number of heads of the multi-head-attention layers used on the transformer encoder</p></li>
+<li><p><strong>dff</strong> (<em>-</em>) – dimensionality of the token embeddings</p></li>
+<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – regularization parameter for the interaction features</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_transformer_decoder">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_transformer_decoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_transformer_decoder" title="Permalink to this definition"></a></dt>
+<dd><p>Transformer decoder.</p>
+<p>Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
+Adapted according to <a class="reference external" href="https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true">https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true</a>
+and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https://arxiv.org/abs/1711.03905</a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>num_layers</strong> (<em>int</em>) – number of transformer layers to include</p></li>
+<li><p><strong>num_heads</strong> (<em>int</em>) – number of heads of the multi-head-attention layers used on the transformer encoder</p></li>
+<li><p><strong>dff</strong> (<em>int</em>) – dimensionality of the token embeddings</p></li>
+<li><p><strong>dropout_rate</strong> (<em>float</em>) – dropout rate</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.VectorQuantizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">VectorQuantizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VectorQuantizer" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>Vector quantizer layer.</p>
+<p>Quantizes the input vectors into a fixed number of clusters using L2 norm. Based on
+<a class="reference external" href="https://arxiv.org/pdf/1509.03700.pdf">https://arxiv.org/pdf/1509.03700.pdf</a>, and adapted for clustering using <a class="reference external" href="https://arxiv.org/abs/1806.02199">https://arxiv.org/abs/1806.02199</a>.
+Implementation based on <a class="reference external" href="https://keras.io/examples/generative/vq_vae/">https://keras.io/examples/generative/vq_vae/</a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VectorQuantizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VectorQuantizer.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the VQ layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_components</strong> (<em>int</em>) – number of embeddings to use</p></li>
+<li><p><strong>embedding_dim</strong> (<em>int</em>) – dimensionality of the embeddings</p></li>
+<li><p><strong>beta</strong> (<em>float</em>) – beta value for the loss function</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – regularization parameter for the Gram matrix</p></li>
+<li><p><strong>**kwargs</strong> – additional arguments for the parent class</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VectorQuantizer.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VectorQuantizer.call" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the VQ layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>tf.Tensor</em>) – input tensor</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>output tensor</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>x (tf.Tensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VectorQuantizer.get_code_indices">
+<span class="sig-name descname"><span class="pre">get_code_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flattened_inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_soft_counts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VectorQuantizer.get_code_indices" title="Permalink to this definition"></a></dt>
+<dd><p>Getter for the code indices at any given time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>flattened_inputs</strong> (<em>tf.Tensor</em>) – flattened input tensor (encoder output)</p></li>
+<li><p><strong>return_soft_counts</strong> (<em>bool</em>) – whether to return soft counts based on the distance to the codes, instead of</p></li>
+<li><p><strong>indices</strong> (<em>the code</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>code indices tensor with cluster assignments.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>encoding_indices (tf.Tensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_vqvae">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_vqvae</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recurrent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_vqvae" title="Permalink to this definition"></a></dt>
+<dd><p>Builds a Vector-Quantization variational autoencoder (VQ-VAE) model, adapted to the DeepOF setting.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input to the encoder.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimension of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>n_components</strong> (<em>-</em>) – number of embeddings in the embedding layer.</p></li>
+<li><p><strong>beta</strong> (<em>-</em>) – beta parameter of the VQ loss.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>-</em>) – regularization parameter for the Gram matrix.</p></li>
+<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>connected encoder of the VQ-VAE model.
+Outputs a vector of shape (latent_dim,).
+- decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+- grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model.
+Outputs cluster indices of shape (batch_size,).
+- vqvae (tf.keras.Model): complete VQ VAE model.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>encoder (tf.keras.Model)</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.VQVAE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">VQVAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VQVAE" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>VQ-VAE model adapted to the DeepOF setting.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VQVAE.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recurrent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VQVAE.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes a VQ-VAE model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – Shape of the input to the full model.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – Dimensionality of the latent space.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – Number of embeddings (clusters) in the embedding layer.</p></li>
+<li><p><strong>beta</strong> (<em>float</em>) – Beta parameter of the VQ loss, as described in the original VQVAE paper.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – Regularization parameter for the Gram matrix.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – Type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VQVAE.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VQVAE.call" title="Permalink to this definition"></a></dt>
+<dd><p>Calls the VQVAE model.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="deepof.models.VQVAE.metrics">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">metrics</span></span><a class="headerlink" href="#deepof.models.VQVAE.metrics" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes VQVAE tracked metrics.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VQVAE.train_step">
+<span class="sig-name descname"><span class="pre">train_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VQVAE.train_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a training step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VQVAE.test_step">
+<span class="sig-name descname"><span class="pre">test_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VQVAE.test_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a test step.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.GaussianMixtureLatent">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">GaussianMixtureLatent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.GaussianMixtureLatent" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>Gaussian Mixture probabilistic latent space model.</p>
+<p>Used to represent the embedding of motion tracking data in a mixture of Gaussians
+with a provided number of components, with means, covariances and weights.
+Implementation based on VaDE (<a class="reference external" href="https://arxiv.org/abs/1611.05148">https://arxiv.org/abs/1611.05148</a>)
+and VaDE-SC (<a class="reference external" href="https://openreview.net/forum?id=RQ428ZptQfU">https://openreview.net/forum?id=RQ428ZptQfU</a>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.GaussianMixtureLatent.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_annealing_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mc_kl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmd_warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmd_annealing_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cluster_variance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.GaussianMixtureLatent.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the Gaussian Mixture Latent layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the Gaussian mixture.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
+<li><p><strong>kl_warmup</strong> (<em>int</em>) – number of epochs to warm up the KL divergence.</p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>str</em>) – mode to use for annealing the KL divergence. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>mc_kl</strong> (<em>int</em>) – number of Monte Carlo samples to use for computing the KL divergence.</p></li>
+<li><p><strong>mmd_warmup</strong> (<em>int</em>) – number of epochs to warm up the MMD.</p></li>
+<li><p><strong>mmd_annealing_mode</strong> (<em>str</em>) – mode to use for annealing the MMD. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – weight of the Gram matrix regularization loss.</p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>bool</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>**kwargs</strong> – keyword arguments passed to the parent class</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.GaussianMixtureLatent.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.GaussianMixtureLatent.call" title="Permalink to this definition"></a></dt>
+<dd><p>Computes the output of the layer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.models.get_vade">
+<span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">get_vade</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_annealing_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'sigmoid'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mc_kl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cluster_variance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recurrent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.get_vade" title="Permalink to this definition"></a></dt>
+<dd><p>Builds a Gaussian mixture variational autoencoder (VaDE) model, adapted to the DeepOF setting.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>n_components</strong> (<em>-</em>) – number of components in the Gaussian mixture.</p></li>
+<li><p><strong>batch_size</strong> (<em>-</em>) – batch size for training.</p></li>
+<li><p><strong>kl_warmup</strong> (<em>-</em>) – Number of iterations during which to warm up the KL divergence.</p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>-</em>) – mode to use for annealing the KL divergence. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>mc_kl</strong> (<em>-</em>) – number of Monte Carlo samples to use for computing the KL divergence.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>-</em>) – weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.</p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>-</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – weight of the interaction regularization term.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>connected encoder of the VQ-VAE model.
+Outputs a vector of shape (latent_dim,).
+- decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+- grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,).
+for each training instance, corresponding to the soft counts for each cluster.
+- vade (tf.keras.Model): complete VaDE model</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>encoder (tf.keras.Model)</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.Classifier">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">Classifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Classifier" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>Classifier for supervised pose motif elucidation.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Classifier.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2048</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias_initializer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recurrent'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Classifier.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes a classifier model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>batch_size</strong> (<em>-</em>) – batch size for training.</p></li>
+<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>bias_initializer</strong> (<em>-</em>) – value to initialize the bias of the last layer to (default: 0.0).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Classifier.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Classifier.call" title="Permalink to this definition"></a></dt>
+<dd><p>Forward pass of the classifier.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inputs</strong> (<em>-</em>) – input data.</p></li>
+<li><p><strong>training</strong> (<em>-</em>) – whether the model is in training mode.</p></li>
+<li><p><strong>mask</strong> (<em>-</em>) – mask for the input data.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.VaDE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">VaDE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>Gaussian Mixture Variational Autoencoder for pose motif elucidation.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_annealing_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_warmup_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">montecarlo_kl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cat_clusters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_cluster_variance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recurrent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initalizes a VaDE model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – Shape of the input to the full model.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>batch_size</strong> (<em>-</em>) – Batch size for training.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – Dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>-</em>) – Annealing mode for KL annealing. Can be one of ‘linear’ and ‘sigmoid’.</p></li>
+<li><p><strong>kl_warmup_epochs</strong> (<em>-</em>) – Number of epochs to warmup KL annealing.</p></li>
+<li><p><strong>montecarlo_kl</strong> (<em>-</em>) – Number of Monte Carlo samples for KL divergence.</p></li>
+<li><p><strong>n_components</strong> (<em>-</em>) – Number of mixture components in the latent space.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>-</em>) – weight of the gram matrix regularization loss.</p></li>
+<li><p><strong>reg_cat_clusters</strong> (<em>-</em>) – whether to use the penalized uneven cluster membership in the latent space, by</p></li>
+<li><p><strong>distribution.</strong> (<em>minimizing the KL divergence between cluster membership and a uniform categorical</em>) – </p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>-</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>**kwargs</strong> (<em>-</em>) – <p>Additional keyword arguments.</p>
+</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="deepof.models.VaDE.metrics">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">metrics</span></span><a class="headerlink" href="#deepof.models.VaDE.metrics" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes tracked metrics of VaDE model.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="deepof.models.VaDE.get_gmm_params">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_gmm_params</span></span><a class="headerlink" href="#deepof.models.VaDE.get_gmm_params" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.set_pretrain_mode">
+<span class="sig-name descname"><span class="pre">set_pretrain_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">switch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.set_pretrain_mode" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.pretrain">
+<span class="sig-name descname"><span class="pre">pretrain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embed_x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embed_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gmm_initialize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.pretrain" title="Permalink to this definition"></a></dt>
+<dd><p>Runs a GMM directed pretraining of the encoder, to minimize the likelihood of getting stuck in a local minimum.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.call" title="Permalink to this definition"></a></dt>
+<dd><p>Calls the VaDE model.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.train_step">
+<span class="sig-name descname"><span class="pre">train_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.train_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a training step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.VaDE.test_step">
+<span class="sig-name descname"><span class="pre">test_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.VaDE.test_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a test step.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="deepof.models.Contrastive">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.models.</span></span><span class="sig-name descname"><span class="pre">Contrastive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Contrastive" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></p>
+<p>Self-supervised contrastive embeddings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Contrastive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'TCN'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gnn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity_function</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cosine'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_function</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'nce'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tau</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Contrastive.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initalizes a self-supervised Contrastive embedding model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_shape</strong> (<em>-</em>) – Shape of the input to the full model.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>latent_dim</strong> (<em>-</em>) – Dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
+<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
+<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
+<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
+<li><p><strong>temperature</strong> (<em>-</em>) – </p></li>
+<li><p><strong>similarity_function</strong> (<em>-</em>) – </p></li>
+<li><p><strong>loss_function</strong> (<em>-</em>) – </p></li>
+<li><p><strong>beta</strong> (<em>-</em>) – </p></li>
+<li><p><strong>tau</strong> (<em>-</em>) – </p></li>
+<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>**kwargs</strong> (<em>-</em>) – <p>Additional keyword arguments.</p>
+</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="deepof.models.Contrastive.metrics">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">metrics</span></span><a class="headerlink" href="#deepof.models.Contrastive.metrics" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes tracked metrics of the contrastive model.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Contrastive.call">
+<span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Contrastive.call" title="Permalink to this definition"></a></dt>
+<dd><p>Calls the contrastive model.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Contrastive.train_step">
+<span class="sig-name descname"><span class="pre">train_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Contrastive.train_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a training step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="deepof.models.Contrastive.test_step">
+<span class="sig-name descname"><span class="pre">test_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.models.Contrastive.test_step" title="Permalink to this definition"></a></dt>
+<dd><p>Performs a test step.</p>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 
