@@ -369,17 +369,9 @@ div.rendered_html tbody tr:hover {
     text-align: unset;
 }
 </style>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
-<span class="o">%</span><span class="k">autoreload</span> 2
-</pre></div>
-</div>
-</div>
 <section id="Formatting-your-data:-feature-extraction-from-motion-tracking-output">
 <h1>Formatting your data: feature extraction from motion tracking output<a class="headerlink" href="#Formatting-your-data:-feature-extraction-from-motion-tracking-output" title="Permalink to this heading"></a></h1>
+<p><a class="reference external" href="https://colab.research.google.com/github/lucasmiranda42/deepof/blob/master/docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" /></a></p>
 <section id="What-we’ll-cover:">
 <h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
 <ul class="simple">
@@ -388,6 +380,20 @@ div.rendered_html tbody tr:hover {
 <li><p>Interact with your project: generate coordinates, distances, angles, and areas.</p></li>
 <li><p>Exploratory visualizations: heatmaps and processed animations.</p></li>
 </ul>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
+<span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
+<span class="c1"># !pip install -q -e deepof --progress-bar off</span>
+<span class="c1"># !gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing</span>
+<span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
+</div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, pandas to load data frames, and the data entry API within DeepOF, located in deepof.data</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
@@ -2145,7 +2151,7 @@ methods with the y-axis.</p>
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_46_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_46_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_47_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_47_0.png" />
 </div>
 </div>
 <p>It seems stressed animals spend more time closer to the walls of the arena, and less time in the center! For details on how deepof.visuals.plot_heatmap() works, feel free to check the full API reference or the function docstring.</p>

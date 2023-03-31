@@ -369,25 +369,30 @@ div.rendered_html tbody tr:hover {
     text-align: unset;
 }
 </style>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
-<span class="o">%</span><span class="k">autoreload</span> 2
-</pre></div>
-</div>
-</div>
 <section id="Supervised-annotation-in-DeepOF---search-for-pre-established-patterns">
 <h1>Supervised annotation in DeepOF - search for pre-established patterns<a class="headerlink" href="#Supervised-annotation-in-DeepOF---search-for-pre-established-patterns" title="Permalink to this heading"></a></h1>
+<p><a class="reference external" href="https://colab.research.google.com/github/lucasmiranda42/deepof/blob/master/docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" /></a></p>
 <section id="What-we’ll-cover:">
 <h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>* Run the supervised annotation pipeline.
-* Visualize global embeddings using the retrieved traits.
-* Explore trait enrichment across conditions.
-* Visualize animated unsupervised embeddings, coloured by specific traits.
-* Generate Gantt plots with all traits.
+<ul class="simple">
+<li><p>Run the supervised annotation pipeline.</p></li>
+<li><p>Generate Gantt plots with all traits.</p></li>
+<li><p>Explore trait enrichment across conditions.</p></li>
+<li><p>Visualize global embeddings using the retrieved traits.</p></li>
+</ul>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
+<span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
+<span class="c1"># !pip install -q -e deepof --progress-bar off</span>
+<span class="c1"># !gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing</span>
+<span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
 </div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, and the data entry API within DeepOF, located in deepof.data</p>
 <div class="nbinput nblast docutils container">
@@ -766,7 +771,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_22_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_22_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_23_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_23_0.png" />
 </div>
 </div>
 <p>Thats good for a quick visualization, but let’s indeed compare how these patterns compare across experimental conditions!</p>
@@ -817,7 +822,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_26_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_26_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" />
 </div>
 </div>
 <p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in deepof.visuals.plot_enrichment().</p>
@@ -871,7 +876,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_30_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_30_0.png" />
 </div>
 </div>
 <p>Even though at first glance the figure may look similar, there are some important differences! For starters, the y-axis now shows lower values, since we’re only looking at two minutes of data instead of ten. Moreover, the effect sizes in some tagged patterns (such as huddling or speed) are much larger. Some patterns (such as nose2body) even show high significance where they were barely different across conditions before!</p>
@@ -913,7 +918,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_33_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_33_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_34_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_34_0.png" />
 </div>
 </div>
 <p>We can see how, indeed, the PCA on the average set of annotators seems to distinguish across conditions better when looking at the first two minutes only. We’ll continue to explore this idea in the next (and last) tutorial.</p>

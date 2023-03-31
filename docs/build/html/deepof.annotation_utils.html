@@ -119,32 +119,27 @@
 </style>
 <section id="deepof-annotation-utils-module">
 <h1>deepof.annotation_utils module<a class="headerlink" href="#deepof-annotation-utils-module" title="Permalink to this heading"></a></h1>
-<span class="target" id="module-deepof.annotation_utils"></span><p>Functions and general utilities for supervised pose estimation. See documentation for details</p>
+<span class="target" id="module-deepof.annotation_utils"></span><p>Functions and general utilities for supervised pose estimation. See documentation for details.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.close_single_contact">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">close_single_contact</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_abs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_rel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.close_single_contact" title="Permalink to this definition"></a></dt>
-<dd><p>Returns a boolean array that’s True if the specified body parts are closer than tol.</p>
+<dd><p>Return a boolean array that’s True if the specified body parts are closer than tol.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pos_dframe</strong> (<em>-</em>) – DLC output as pandas.DataFrame; only applicable</p></li>
-<li><p><strong>experiments.</strong> (<em>to two-animal</em>) – </p></li>
-<li><p><strong>left</strong> (<em>-</em>) – First member of the potential contact</p></li>
-<li><p><strong>right</strong> (<em>-</em>) – Second member of the potential contact</p></li>
-<li><p><strong>tol</strong> (<em>-</em>) – maximum distance for which a contact is reported</p></li>
-<li><p><strong>arena_abs</strong> (<em>-</em>) – length in mm of the diameter of the real arena</p></li>
-<li><p><strong>arena_rel</strong> (<em>-</em>) – length in pixels of the diameter of the arena in the video</p></li>
+<li><p><strong>pos_dframe</strong> (<em>pandas.DataFrame</em>) – DLC output as pandas.DataFrame; only applicable to two-animal experiments.</p></li>
+<li><p><strong>left</strong> (<em>string</em>) – First member of the potential contact</p></li>
+<li><p><strong>right</strong> (<em>string</em>) – Second member of the potential contact</p></li>
+<li><p><strong>tol</strong> (<em>float</em>) – maximum distance for which a contact is reported</p></li>
+<li><p><strong>arena_abs</strong> (<em>int</em>) – length in mm of the diameter of the real arena</p></li>
+<li><p><strong>arena_rel</strong> (<em>int</em>) – length in pixels of the diameter of the arena in the video</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>True if the distance between the two specified points
-is less than tol, False otherwise</p>
+<dd class="field-even"><p>True if the distance between the two specified points is less than tol, False otherwise</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>contact_array (np.array)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>contact_array (np.array)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -152,7 +147,7 @@ is less than tol, False otherwise</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.close_double_contact">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">close_double_contact</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_abs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_rel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rev</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.close_double_contact" title="Permalink to this definition"></a></dt>
-<dd><p>Returns a boolean array that’s True if the specified body parts are closer than tol.</p>
+<dd><p>Return a boolean array that’s True if the specified body parts are closer than tol.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -184,31 +179,30 @@ is less than tol, False otherwise</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.rotate">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">rotate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">origin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ang</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.rotate" title="Permalink to this definition"></a></dt>
-<dd><p>Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot</p>
+<dd><p>Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.outside_ellipse">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">outside_ellipse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e_center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e_axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e_angle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.outside_ellipse" title="Permalink to this definition"></a></dt>
-<dd><p>Auxiliar function to climb_wall and sniff_object. Returns True if the passed x, y coordinates
+<dd><p>Auxiliar function to climb_wall and sniff_object.</p>
+<p>Returns True if the passed x, y coordinates
 are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain threshold</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.climb_wall">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">climb_wall</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arena_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pos_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centered_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.climb_wall" title="Permalink to this definition"></a></dt>
-<dd><p>Returns True if the specified mouse is climbing the wall</p>
+<dd><p>Return True if the specified mouse is climbing the wall.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>arena_type</strong> (<em>-</em>) – arena type; must be one of [‘polygonal-manual’, ‘circular-autodetect’]</p></li>
-<li><p><strong>arena</strong> (<em>-</em>) – contains arena location and shape details</p></li>
-<li><p><strong>pos_dict</strong> (<em>-</em>) – position over time for all videos in a project</p></li>
-<li><p><strong>tol</strong> (<em>-</em>) – minimum tolerance to report a hit</p></li>
-<li><p><strong>nose</strong> (<em>-</em>) – indicates the name of the body part representing the nose of</p></li>
-<li><p><strong>animal</strong> (<em>the selected</em>) – </p></li>
-<li><p><strong>arena_dims</strong> (<em>-</em>) – indicates radius of the real arena in mm</p></li>
-<li><p><strong>centered_data</strong> (<em>-</em>) – indicates whether the input data is centered</p></li>
+<li><p><strong>arena_type</strong> (<em>str</em>) – arena type; must be one of [‘polygonal-manual’, ‘circular-autodetect’]</p></li>
+<li><p><strong>arena</strong> (<em>np.array</em>) – contains arena location and shape details</p></li>
+<li><p><strong>pos_dict</strong> (<em>table_dict</em>) – position over time for all videos in a project</p></li>
+<li><p><strong>tol</strong> (<em>float</em>) – minimum tolerance to report a hit</p></li>
+<li><p><strong>nose</strong> (<em>str</em>) – indicates the name of the body part representing the nose of the selected animal</p></li>
+<li><p><strong>centered_data</strong> (<em>bool</em>) – indicates whether the input data is centered</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -216,10 +210,7 @@ are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain 
 is climbing the walls of the arena</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>climbing (np.array)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>climbing (np.array)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -227,22 +218,20 @@ is climbing the walls of the arena</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.sniff_object">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">sniff_object</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">speed_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pos_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol_speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centered_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'arena'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.sniff_object" title="Permalink to this definition"></a></dt>
-<dd><p>Returns True if the specified mouse is sniffing an object</p>
+<dd><p>Return True if the specified mouse is sniffing an object.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>speed_dframe</strong> (<em>-</em>) – speed of body parts over time</p></li>
-<li><p><strong>arena_type</strong> (<em>-</em>) – arena type; must be one of [‘polygonal-manual’, ‘circular-autodetect’]</p></li>
-<li><p><strong>arena</strong> (<em>-</em>) – contains arena location and shape details</p></li>
-<li><p><strong>pos_dict</strong> (<em>-</em>) – position over time for all videos in a project</p></li>
-<li><p><strong>tol</strong> (<em>-</em>) – minimum tolerance to report a hit</p></li>
-<li><p><strong>nose</strong> (<em>-</em>) – indicates the name of the body part representing the nose of</p></li>
-<li><p><strong>animal</strong> (<em>the selected</em>) – </p></li>
-<li><p><strong>arena_dims</strong> (<em>-</em>) – indicates radius of the real arena in mm</p></li>
-<li><p><strong>centered_data</strong> (<em>-</em>) – indicates whether the input data is centered</p></li>
-<li><p><strong>object</strong> (<em>-</em>) – indicates the object that the animal is sniffing.</p></li>
-<li><p><strong>[</strong><strong>'arena'</strong> (<em>Can be one of</em>) – </p></li>
-<li><p><strong>'partner'</strong><strong>]</strong> – </p></li>
+<li><p><strong>speed_dframe</strong> (<em>pandas.DataFrame</em>) – speed of body parts over time.</p></li>
+<li><p><strong>arena_type</strong> (<em>str</em>) – arena type; must be one of [‘polygonal-manual’, ‘circular-autodetect’].</p></li>
+<li><p><strong>arena</strong> (<em>np.array</em>) – contains arena location and shape details.</p></li>
+<li><p><strong>pos_dict</strong> (<em>table_dict</em>) – position over time for all videos in a project.</p></li>
+<li><p><strong>tol</strong> (<em>float</em>) – minimum tolerance to report a hit.</p></li>
+<li><p><strong>nose</strong> (<em>str</em>) – indicates the name of the body part representing the nose of the selected animal.</p></li>
+<li><p><strong>centered_data</strong> (<em>bool</em>) – indicates whether the input data is centered.</p></li>
+<li><p><strong>s_object</strong> (<em>str</em>) – indicates the object to sniff. Must be one of [‘arena’, ‘object’].</p></li>
+<li><p><strong>animal_id</strong> (<em>str</em>) – indicates the animal to sniff. Must be one of animal_ids.</p></li>
+<li><p><strong>tol_speed</strong> (<em>float</em>) – minimum speed to report a hit.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -250,10 +239,7 @@ is climbing the walls of the arena</p>
 is sniffing the selected object</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>sniffing (np.array)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>sniffing (np.array)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -261,12 +247,12 @@ is sniffing the selected object</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.huddle">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">huddle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X_huddle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">huddle_estimator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Pipeline</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.huddle" title="Permalink to this definition"></a></dt>
-<dd><p>Returns true when the mouse is huddling a pretrained model.</p>
+<dd><p>Return true when the mouse is huddling a pretrained model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>X_huddle</strong> (<em>-</em>) – mouse features over time</p></li>
-<li><p><strong>huddle_estimator</strong> (<em>-</em>) – pre-trained model to predict feature occurrence</p></li>
+<li><p><strong>X_huddle</strong> (<em>pandas.DataFrame</em>) – mouse features over time</p></li>
+<li><p><strong>huddle_estimator</strong> (<em>sklearn.pipeline.Pipeline</em>) – pre-trained model to predict feature occurrence</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -281,13 +267,13 @@ is sniffing the selected object</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.dig">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">dig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dig_estimator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Pipeline</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.dig" title="Permalink to this definition"></a></dt>
-<dd><p>Returns true when the mouse is digging using a pretrained model.</p>
+<dd><p>Return true when the mouse is digging using a pretrained model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pos_dframe</strong> (<em>-</em>) – position of body parts over time</p></li>
-<li><p><strong>speed_dframe</strong> (<em>-</em>) – speed of body parts over time</p></li>
-<li><p><strong>dig_estimator</strong> (<em>-</em>) – pre-trained model to predict feature occurrence</p></li>
+<li><p><strong>pos_dframe</strong> (<em>pandas.DataFrame</em>) – position of body parts over time</p></li>
+<li><p><strong>speed_dframe</strong> (<em>pandas.DataFrame</em>) – speed of body parts over time</p></li>
+<li><p><strong>dig_estimator</strong> (<em>sklearn.pipeline.Pipeline</em>) – pre-trained model to predict feature occurrence</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -302,17 +288,14 @@ is sniffing the selected object</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.look_around">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">look_around</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">speed_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">likelihood_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol_speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol_likelihood</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.look_around" title="Permalink to this definition"></a></dt>
-<dd><p>Returns true when the mouse is looking around using simple rules.</p>
+<dd><p>Return true when the mouse is looking around using simple rules.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>speed_dframe</strong> (<em>-</em>) – speed of body parts over time</p></li>
-<li><p><strong>likelihood_dframe</strong> (<em>-</em>) – likelihood of body part tracker over time,</p></li>
-<li><p><strong>DeepLabCut</strong> (<em>as directly obtained from</em>) – </p></li>
-<li><p><strong>tol_speed</strong> (<em>-</em>) – Maximum tolerated speed for the center of the mouse</p></li>
-<li><p><strong>tol_likelihood</strong> (<em>-</em>) – Maximum tolerated likelihood for the nose (if the animal</p></li>
-<li><p><strong>digging</strong> (<em>is</em>) – </p></li>
-<li><p><strong>occluded</strong><strong>)</strong><strong>.</strong> (<em>the nose is momentarily</em>) – </p></li>
+<li><p><strong>speed_dframe</strong> (<em>pandas.DataFrame</em>) – speed of body parts over time</p></li>
+<li><p><strong>likelihood_dframe</strong> (<em>pandas.DataFrame</em>) – likelihood of body part tracker over time, as directly obtained from DeepLabCut</p></li>
+<li><p><strong>tol_speed</strong> (<em>float</em>) – Maximum tolerated speed for the center of the mouse</p></li>
+<li><p><strong>tol_likelihood</strong> (<em>float</em>) – Maximum tolerated likelihood for the nose (if the animal is digging, the nose is momentarily occluded).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -327,22 +310,18 @@ is sniffing the selected object</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.following_path">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">following_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distance_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">follower</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">followed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frames</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.following_path" title="Permalink to this definition"></a></dt>
-<dd><p>For multi animal videos only. Returns True if ‘follower’ is closer than tol to the path that
-followed has walked over the last specified number of frames</p>
+<dd><p>Return True if ‘follower’ is closer than tol to the path that followed has walked over the last specified number of frames.</p>
+<p>For multi animal videos only.</p>
 <blockquote>
 <div><dl class="simple">
-<dt>Parameters:</dt><dd><ul class="simple">
-<li><p>distance_dframe (pandas.DataFrame): distances between bodyparts; generated by the preprocess module</p></li>
-<li><p>position_dframe (pandas.DataFrame): position of bodyparts; generated by the preprocess module</p></li>
-<li><p>follower (str) identifier for the animal who’s following</p></li>
-<li><p>followed (str) identifier for the animal who’s followed</p></li>
-<li><p>frames (int) frames in which to track whether the process consistently occurs,</p></li>
-<li><p>tol (float) Maximum distance for which True is returned</p></li>
-</ul>
+<dt>Args:</dt><dd><p>distance_dframe (pandas.DataFrame): distances between bodyparts; generated by the preprocess module
+position_dframe (pandas.DataFrame): position of bodyparts; generated by the preprocess module
+follower (str) identifier for the animal who’s following
+followed (str) identifier for the animal who’s followed
+frames (int) frames in which to track whether the process consistently occurs,
+tol (float) Maximum distance for which True is returned</p>
 </dd>
-<dt>Returns:</dt><dd><ul class="simple">
-<li><p>follow (np.array): boolean sequence, True if conditions are fulfilled, False otherwise</p></li>
-</ul>
+<dt>Returns:</dt><dd><p>follow (np.array): boolean sequence, True if conditions are fulfilled, False otherwise</p>
 </dd>
 </dl>
 </div></blockquote>
@@ -351,26 +330,20 @@ followed has walked over the last specified number of frames</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.max_behaviour">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">max_behaviour</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">behaviour_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepped</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.max_behaviour" title="Permalink to this definition"></a></dt>
-<dd><p>Returns the most frequent behaviour in a window of window_size frames</p>
+<dd><p>Return the most frequent behaviour in a window of window_size frames.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>behaviour_dframe</strong> (<em>-</em>) – boolean matrix containing occurrence</p></li>
-<li><p><strong>video</strong> (<em>of tagged behaviours per frame in the</em>) – </p></li>
-<li><p><strong>window_size</strong> (<em>-</em>) – size of the window to use when computing</p></li>
-<li><p><strong>slot</strong> (<em>the maximum behaviour per time</em>) – </p></li>
-<li><p><strong>stepped</strong> (<em>-</em>) – sliding windows don’t overlap if True. False by default</p></li>
+<li><p><strong>behaviour_dframe</strong> (<em>pd.DataFrame</em>) – boolean matrix containing occurrence of tagged behaviours per frame in the video</p></li>
+<li><p><strong>window_size</strong> (<em>int</em>) – size of the window to use when computing the maximum behaviour per time slot</p></li>
+<li><p><strong>stepped</strong> (<em>bool</em>) – sliding windows don’t overlap if True. False by default</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>string array with the most common behaviour per instance
-of the sliding window</p>
+<dd class="field-even"><p>string array with the most common behaviour per instance of the sliding window</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>max_array (np.array)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>max_array (np.array)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -378,20 +351,17 @@ of the sliding window</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.get_hparameters">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">get_hparameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hparams</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#deepof.annotation_utils.get_hparameters" title="Permalink to this definition"></a></dt>
-<dd><p>Returns the most frequent behaviour in a window of window_size frames</p>
+<dd><p>Return the most frequent behaviour in a window of window_size frames.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>hparams</strong> (<em>-</em>) – dictionary containing hyperparameters to overwrite</p>
+<dd class="field-odd"><p><strong>hparams</strong> (<em>dict</em>) – dictionary containing hyperparameters to overwrite</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>dictionary with overwritten parameters. Those not
 specified in the input retain their default values</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>defaults (dict)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>defaults (dict)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -399,13 +369,13 @@ specified in the input retain their default values</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.frame_corners">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">frame_corners</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">w</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corners</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.frame_corners" title="Permalink to this definition"></a></dt>
-<dd><p>Returns a dictionary with the corner positions of the video frame</p>
+<dd><p>Return a dictionary with the corner positions of the video frame.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>w</strong> (<em>-</em>) – width of the frame in pixels</p></li>
-<li><p><strong>h</strong> (<em>-</em>) – height of the frame in pixels</p></li>
-<li><p><strong>corners</strong> (<em>-</em>) – dictionary containing corners to overwrite</p></li>
+<li><p><strong>w</strong> (<em>int</em>) – width of the frame in pixels</p></li>
+<li><p><strong>h</strong> (<em>int</em>) – height of the frame in pixels</p></li>
+<li><p><strong>corners</strong> (<em>dict</em>) – dictionary containing corners to overwrite</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -413,10 +383,7 @@ specified in the input retain their default values</p>
 specified in the input retain their default values</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>defaults (dict)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>defaults (dict)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -424,20 +391,20 @@ specified in the input retain their default values</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.supervised_tagging">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">supervised_tagging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coord_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dists</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speeds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trained_model_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#deepof.annotation_utils.supervised_tagging" title="Permalink to this definition"></a></dt>
-<dd><p>Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
-video displaying the information in real time</p>
+<dd><p>Output a dataframe with the registered motives per frame.</p>
+<p>If specified, produces a labeled video displaying the information in real time</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>coord_object</strong> (<em>-</em>) – coordinates object containing the project information</p></li>
-<li><p><strong>raw_coords</strong> (<em>-</em>) – table_dict with raw coordinates</p></li>
-<li><p><strong>coords</strong> (<em>-</em>) – table_dict with already processed (centered and aligned) coordinates</p></li>
-<li><p><strong>dists</strong> (<em>-</em>) – table_dict with already processed distances</p></li>
-<li><p><strong>speeds</strong> (<em>-</em>) – table_dict with already processed speeds</p></li>
-<li><p><strong>full_features</strong> (<em>-</em>) – dictionary with</p></li>
-<li><p><strong>video</strong> (<em>-</em>) – string name of the experiment to tag</p></li>
-<li><p><strong>trained_model_path</strong> (<em>-</em>) – path indicating where all pretrained models are located</p></li>
-<li><p><strong>params</strong> (<em>-</em>) – dictionary to overwrite the default values of the parameters of the functions</p></li>
+<li><p><strong>coord_object</strong> (<em>deepof.data.coordinates</em>) – coordinates object containing the project information</p></li>
+<li><p><strong>raw_coords</strong> (<em>deepof.data.table_dict</em>) – table_dict with raw coordinates</p></li>
+<li><p><strong>coords</strong> (<em>deepof.data.table_dict</em>) – table_dict with already processed (centered and aligned) coordinates</p></li>
+<li><p><strong>dists</strong> (<em>deepof.data.table_dict</em>) – table_dict with already processed distances</p></li>
+<li><p><strong>speeds</strong> (<em>deepof.data.table_dict</em>) – table_dict with already processed speeds</p></li>
+<li><p><strong>full_features</strong> (<em>dict</em>) – dictionary with</p></li>
+<li><p><strong>video</strong> (<em>str</em>) – string name of the experiment to tag</p></li>
+<li><p><strong>trained_model_path</strong> (<em>str</em>) – path indicating where all pretrained models are located</p></li>
+<li><p><strong>params</strong> (<em>dict</em>) – dictionary to overwrite the default values of the parameters of the functions</p></li>
 <li><p><strong>details.</strong> (<em>that the rule-based pose estimation utilizes. See documentation for</em>) – </p></li>
 </ul>
 </dd>
@@ -446,10 +413,7 @@ video displaying the information in real time</p>
 value is a boolean indicating trait detection at a given time</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>tag_df (pandas.DataFrame)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>tag_df (pandas.DataFrame)</p>
 </dd>
 </dl>
 </dd></dl>

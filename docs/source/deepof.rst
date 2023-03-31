@@ -12,8 +12,8 @@ Submodules
    deepof.hypermodels
    deepof.models
    deepof.post_hoc
-   deepof.supervised_utils
-   deepof.unsupervised_utils
+   deepof.annotation_utils
+   deepof.model_utils
    deepof.utils
    deepof.visuals
 

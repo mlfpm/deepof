@@ -174,7 +174,7 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.select_contrastive_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">select_contrastive_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nce'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tau</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elimination_topk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.select_contrastive_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Selects and applies the contrastive loss function to be used in the Contrastive embedding models.</p>
+<dd><p>Select and applies the contrastive loss function to be used in the Contrastive embedding models.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -195,36 +195,32 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.nce_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">nce_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.nce_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the NCE loss function, as described in the paper “A Simple Framework for Contrastive
-Learning of Visual Representations” (<a class="reference external" href="https://arxiv.org/abs/2002.05709">https://arxiv.org/abs/2002.05709</a>).</p>
+<dd><p>Compute the NCE loss function, as described in the paper “A Simple Framework for Contrastive Learning of Visual Representations” (<a class="reference external" href="https://arxiv.org/abs/2002.05709">https://arxiv.org/abs/2002.05709</a>).</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.dcl_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">dcl_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debiased</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tau_plus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.dcl_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the DCL loss function, as described in the paper “Debiased Contrastive Learning” (<a class="reference external" href="https://github.com/chingyaoc/DCL/">https://github.com/chingyaoc/DCL/</a>).</p>
+<dd><p>Compute the DCL loss function, as described in the paper “Debiased Contrastive Learning” (<a class="reference external" href="https://github.com/chingyaoc/DCL/">https://github.com/chingyaoc/DCL/</a>).</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.fc_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">fc_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elimination_topk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.fc_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the FC loss function, as described in the paper “Fully-Contrastive Learning of Visual Representations”
-(<a class="reference external" href="https://arxiv.org/abs/2004.11362">https://arxiv.org/abs/2004.11362</a>).</p>
+<dd><p>Compute the FC loss function, as described in the paper “Fully-Contrastive Learning of Visual Representations” (<a class="reference external" href="https://arxiv.org/abs/2004.11362">https://arxiv.org/abs/2004.11362</a>).</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.hard_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">hard_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debiased</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tau_plus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.hard_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the Hard loss function, as described in the paper “Contrastive Learning with Hard Negative Samples”
-(<a class="reference external" href="https://arxiv.org/abs/2011.03343">https://arxiv.org/abs/2011.03343</a>).</p>
+<dd><p>Compute the Hard loss function, as described in the paper “Contrastive Learning with Hard Negative Samples” (<a class="reference external" href="https://arxiv.org/abs/2011.03343">https://arxiv.org/abs/2011.03343</a>).</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_kmeans_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_kmeans_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latent_means</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">64</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_kmeans_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
-space.
-Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pdf">https://arxiv.org/pdf/1610.04794.pdf</a>, and <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3">https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3</a>.</p>
+<dd><p>Add a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent space.</p>
+<p>Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pdf">https://arxiv.org/pdf/1610.04794.pdf</a>, and <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3">https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3</a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -245,7 +241,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_k_nearest_neighbors">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_k_nearest_neighbors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_k_nearest_neighbors" title="Permalink to this definition"></a></dt>
-<dd><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index</p>
+<dd><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -266,7 +262,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_shannon_entropy">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_shannon_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_shannon_entropy" title="Permalink to this definition"></a></dt>
-<dd><p>Computes Shannon entropy for a given tensor</p>
+<dd><p>Compute Shannon entropy for a given tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>tensor</strong> (<em>tf.Tensor</em>) – tensor to compute the entropy for</p>
@@ -283,7 +279,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.plot_lr_vs_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">plot_lr_vs_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">losses</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.plot_lr_vs_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Plots learing rate versus the loss function of the model</p>
+<dd><p>Plot learing rate versus the loss function of the model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -312,7 +308,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_recurrent_block">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_recurrent_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gru_unroll</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bidirectional_merge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_recurrent_block" title="Permalink to this definition"></a></dt>
-<dd><p>Builds a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.</p>
+<dd><p>Build a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -331,8 +327,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.positional_encoding">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">positional_encoding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">d_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.positional_encoding" title="Permalink to this definition"></a></dt>
-<dd><p>Computes positional encodings, as in
-<a class="reference external" href="https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf">https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf</a>.</p>
+<dd><p>Compute positional encodings, as in <a class="reference external" href="https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf">https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf</a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -346,7 +341,7 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.create_padding_mask">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">create_padding_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.create_padding_mask" title="Permalink to this definition"></a></dt>
-<dd><p>Creates a padding mask, with zeros where data is missing, and ones where data is available.</p>
+<dd><p>Create a padding mask, with zeros where data is missing, and ones where data is available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>seq</strong> (<em>tf.Tensor</em>) – Sequence to compute the mask on</p>
@@ -357,8 +352,8 @@ Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pd
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.create_look_ahead_mask">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">create_look_ahead_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.create_look_ahead_mask" title="Permalink to this definition"></a></dt>
-<dd><p>Creates a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.
-Useful for transformer decoder, which allows it to go through the data in a sequential manner, without taking
+<dd><p>Create a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.</p>
+<p>Useful for transformer decoder, which allows it to go through the data in a sequential manner, without taking
 the future into account.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -370,8 +365,8 @@ the future into account.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.create_masks">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">create_masks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.create_masks" title="Permalink to this definition"></a></dt>
-<dd><p>Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.
-This includes encoder and decoder padding masks, and a look-ahead mask</p>
+<dd><p>Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.</p>
+<p>This includes encoder and decoder padding masks, and a look-ahead mask</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>inp</strong> (<em>tf.Tensor</em>) – input sequence to create the masks for.</p>
@@ -382,7 +377,7 @@ This includes encoder and decoder padding masks, and a look-ahead mask</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.find_learning_rate">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">find_learning_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.find_learning_rate" title="Permalink to this definition"></a></dt>
-<dd><p>Trains the provided model for an epoch with an exponentially increasing learning rate</p>
+<dd><p>Train the provided model for an epoch with an exponentially increasing learning rate.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -406,7 +401,7 @@ This includes encoder and decoder padding masks, and a look-ahead mask</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_hard_counts">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_hard_counts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.get_hard_counts" title="Permalink to this definition"></a></dt>
-<dd><p>Computes hard counts per cluster in a differentiable way</p>
+<dd><p>Compute hard counts per cluster in a differentiable way.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>soft_counts</strong> (<em>tf.Tensor</em>) – soft counts per cluster</p>
@@ -417,9 +412,8 @@ This includes encoder and decoder padding masks, and a look-ahead mask</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.cluster_frequencies_regularizer">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">cluster_frequencies_regularizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.cluster_frequencies_regularizer" title="Permalink to this definition"></a></dt>
-<dd><p>Computes the KL divergence between the cluster assignment distribution
-and a uniform prior across clusters. While this assumes an equal distribution
-between clusters, the prior can be tweaked to reflect domain knowledge.</p>
+<dd><p>Compute the KL divergence between the cluster assignment distribution and a uniform prior across clusters.</p>
+<p>While this assumes an equal distribution between clusters, the prior can be tweaked to reflect domain knowledge.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -435,7 +429,7 @@ between clusters, the prior can be tweaked to reflect domain knowledge.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.get_callbacks">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">get_callbacks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoder_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kmeans_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logparam</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#deepof.model_utils.get_callbacks" title="Permalink to this definition"></a></dt>
-<dd><p>Generates callbacks used for model training.</p>
+<dd><p>Generate callbacks used for model training.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -466,7 +460,7 @@ between clusters, the prior can be tweaked to reflect domain knowledge.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.CustomStopper.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_epoch</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.CustomStopper.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initializes the CustomStopper callback.</p>
+<dd><p>Initialize the CustomStopper callback.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -481,27 +475,13 @@ between clusters, the prior can be tweaked to reflect domain knowledge.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.CustomStopper.get_config">
 <span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.CustomStopper.get_config" title="Permalink to this definition"></a></dt>
-<dd><p>Updates callback metadata</p>
+<dd><p>Update callback metadata.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.CustomStopper.on_epoch_end">
 <span class="sig-name descname"><span class="pre">on_epoch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.CustomStopper.on_epoch_end" title="Permalink to this definition"></a></dt>
-<dd><p>Called at the end of an epoch.</p>
-<p>Subclasses should override for any actions to run. This function should
-only be called during TRAIN mode.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>epoch</strong> – Integer, index of epoch.</p></li>
-<li><p><strong>logs</strong> – Dict, metric results for this training epoch, and for the
-validation epoch if validation is performed. Validation result
-keys are prefixed with <cite>val_</cite>. For training epoch, the values of
-the <cite>Model</cite>’s metrics are returned. Example:
-<cite>{‘loss’: 0.2, ‘accuracy’: 0.7}</cite>.</p></li>
-</ul>
-</dd>
-</dl>
+<dd><p>Check whether to stop training.</p>
 </dd></dl>
 
 </dd></dl>
@@ -510,12 +490,12 @@ the <cite>Model</cite>’s metrics are returned. Example:
 <dt class="sig sig-object py" id="deepof.model_utils.ExponentialLearningRate">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">ExponentialLearningRate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ExponentialLearningRate" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Callback</span></code></p>
-<p>Simple class that allows to grow learning rate exponentially during training.
-Used to trigger optimal learning rate search in deepof.train_utils.find_learning_rate.</p>
+<p>Simple class that allows to grow learning rate exponentially during training.</p>
+<p>Used to trigger optimal learning rate search in deepof.train_utils.find_learning_rate.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ExponentialLearningRate.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ExponentialLearningRate.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initializes the exponential learning rate callback</p>
+<dd><p>Initialize the exponential learning rate callback.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>factor</strong> (<em>float</em>) – factor by which to multiply the learning rate</p>
@@ -526,7 +506,7 @@ Used to trigger optimal learning rate search in deepof.train_utils.find_learning
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ExponentialLearningRate.on_batch_end">
 <span class="sig-name descname"><span class="pre">on_batch_end</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ExponentialLearningRate.on_batch_end" title="Permalink to this definition"></a></dt>
-<dd><p>This callback acts after processing each batch</p>
+<dd><p>Apply on batch end.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -543,16 +523,17 @@ Used to trigger optimal learning rate search in deepof.train_utils.find_learning
 <dt class="sig sig-object py" id="deepof.model_utils.ProbabilisticDecoder">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">ProbabilisticDecoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ProbabilisticDecoder" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Layer</span></code></p>
-<p>Maps the reconstruction output of a given decoder to a multivariate normal distribution.</p>
+<p>Map the reconstruction output of a given decoder to a multivariate normal distribution.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ProbabilisticDecoder.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_shape</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ProbabilisticDecoder.__init__" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initialize the probabilistic decoder.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ProbabilisticDecoder.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ProbabilisticDecoder.call" title="Permalink to this definition"></a></dt>
-<dd><p>Maps the reconstruction output of a given decoder to a multivariate normal distribution.</p>
+<dd><p>Map the reconstruction output of a given decoder to a multivariate normal distribution.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>inputs</strong> (<em>tuple</em>) – tuple containing the reconstruction output and the validity mask</p>
@@ -572,13 +553,14 @@ Used to trigger optimal learning rate search in deepof.train_utils.find_learning
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterControl">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">ClusterControl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterControl" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Layer</span></code></p>
-<p>Identity layer that evaluates different clustering metrics between the components of the latent Gaussian Mixture
+<p>Identity layer.</p>
+<p>Evaluates different clustering metrics between the components of the latent Gaussian Mixture
 using the entropy of the nearest neighbourhood. If self.loss_weight &gt; 0, it also adds a regularization
 penalty to the loss function which attempts to maximize the number of populated clusters during training.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterControl.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterControl.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Initializes the ClusterControl layer</p>
+<dd><p>Initialize the ClusterControl layer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -598,13 +580,13 @@ penalty to the loss function which attempts to maximize the number of populated 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterControl.get_config">
 <span class="sig-name descname"><span class="pre">get_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterControl.get_config" title="Permalink to this definition"></a></dt>
-<dd><p>Updates Constraint metadata</p>
+<dd><p>Update Constraint metadata.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.ClusterControl.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.ClusterControl.call" title="Permalink to this definition"></a></dt>
-<dd><p>Updates Layer’s call method</p>
+<dd><p>Update Layer’s call method.</p>
 </dd></dl>
 
 </dd></dl>
@@ -617,7 +599,7 @@ penalty to the loss function which attempts to maximize the number of populated 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerEncoderLayer.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerEncoderLayer.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Constructor for the transformer encoder layer.</p>
+<dd><p>Construct the transformer encoder layer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -633,65 +615,7 @@ penalty to the loss function which attempts to maximize the number of populated 
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerEncoderLayer.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_scores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerEncoderLayer.call" title="Permalink to this definition"></a></dt>
-<dd><p>This is where the layer’s logic lives.</p>
-<p>The <cite>call()</cite> method may not create state (except in its first
-invocation, wrapping the creation of variables or other resources in
-<cite>tf.init_scope()</cite>).  It is recommended to create state, including
-<cite>tf.Variable</cite> instances and nested <cite>Layer</cite> instances,</p>
-<blockquote>
-<div><p>in <cite>__init__()</cite>, or in the <cite>build()</cite> method that is</p>
-</div></blockquote>
-<p>called automatically before <cite>call()</cite> executes for the first time.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>inputs</strong> – <p>Input tensor, or dict/list/tuple of input tensors.
-The first positional <cite>inputs</cite> argument is subject to special rules:
-- <cite>inputs</cite> must be explicitly passed. A layer cannot have zero</p>
-<blockquote>
-<div><p>arguments, and <cite>inputs</cite> cannot be provided via the default value
-of a keyword argument.</p>
-</div></blockquote>
-<ul>
-<li><p>NumPy array or Python scalar values in <cite>inputs</cite> get cast as
-tensors.</p></li>
-<li><p>Keras mask metadata is only collected from <cite>inputs</cite>.</p></li>
-<li><p>Layers are built (<cite>build(input_shape)</cite> method)
-using shape info from <cite>inputs</cite> only.</p></li>
-<li><p><cite>input_spec</cite> compatibility is only checked against <cite>inputs</cite>.</p></li>
-<li><p>Mixed precision input casting is only applied to <cite>inputs</cite>.
-If a layer has tensor arguments in <cite>*args</cite> or <cite>**kwargs</cite>, their
-casting behavior in mixed precision should be handled manually.</p></li>
-<li><p>The SavedModel input specification is generated using <cite>inputs</cite>
-only.</p></li>
-<li><p>Integration with various ecosystem packages like TFMOT, TFLite,
-TF.js, etc is only supported for <cite>inputs</cite> and not for tensors in
-positional and keyword arguments.</p></li>
-</ul>
-</p></li>
-<li><p><strong>*args</strong> – Additional positional arguments. May contain tensors, although
-this is not recommended, for the reasons above.</p></li>
-<li><p><strong>**kwargs</strong> – <p>Additional keyword arguments. May contain tensors, although
-this is not recommended, for the reasons above.
-The following optional keyword arguments are reserved:
-- <cite>training</cite>: Boolean scalar tensor of Python boolean indicating</p>
-<blockquote>
-<div><p>whether the <cite>call</cite> is meant for training or inference.</p>
-</div></blockquote>
-<ul>
-<li><p><cite>mask</cite>: Boolean input mask. If the layer’s <cite>call()</cite> method takes a
-<cite>mask</cite> argument, its default value will be set to the mask
-generated for <cite>inputs</cite> by the previous layer (if <cite>input</cite> did come
-from a layer that generated a corresponding mask, i.e. if it came
-from a Keras layer with masking support).</p></li>
-</ul>
-</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A tensor or list/tuple of tensors.</p>
-</dd>
-</dl>
+<dd><p>Call the transformer encoder layer.</p>
 </dd></dl>
 
 </dd></dl>
@@ -704,7 +628,7 @@ from a Keras layer with masking support).</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerDecoderLayer.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerDecoderLayer.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Constructor for the transformer decoder layer.</p>
+<dd><p>Construct the transformer decoder layer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -720,65 +644,7 @@ from a Keras layer with masking support).</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerDecoderLayer.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enc_output</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">look_ahead_mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_mask</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerDecoderLayer.call" title="Permalink to this definition"></a></dt>
-<dd><p>This is where the layer’s logic lives.</p>
-<p>The <cite>call()</cite> method may not create state (except in its first
-invocation, wrapping the creation of variables or other resources in
-<cite>tf.init_scope()</cite>).  It is recommended to create state, including
-<cite>tf.Variable</cite> instances and nested <cite>Layer</cite> instances,</p>
-<blockquote>
-<div><p>in <cite>__init__()</cite>, or in the <cite>build()</cite> method that is</p>
-</div></blockquote>
-<p>called automatically before <cite>call()</cite> executes for the first time.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>inputs</strong> – <p>Input tensor, or dict/list/tuple of input tensors.
-The first positional <cite>inputs</cite> argument is subject to special rules:
-- <cite>inputs</cite> must be explicitly passed. A layer cannot have zero</p>
-<blockquote>
-<div><p>arguments, and <cite>inputs</cite> cannot be provided via the default value
-of a keyword argument.</p>
-</div></blockquote>
-<ul>
-<li><p>NumPy array or Python scalar values in <cite>inputs</cite> get cast as
-tensors.</p></li>
-<li><p>Keras mask metadata is only collected from <cite>inputs</cite>.</p></li>
-<li><p>Layers are built (<cite>build(input_shape)</cite> method)
-using shape info from <cite>inputs</cite> only.</p></li>
-<li><p><cite>input_spec</cite> compatibility is only checked against <cite>inputs</cite>.</p></li>
-<li><p>Mixed precision input casting is only applied to <cite>inputs</cite>.
-If a layer has tensor arguments in <cite>*args</cite> or <cite>**kwargs</cite>, their
-casting behavior in mixed precision should be handled manually.</p></li>
-<li><p>The SavedModel input specification is generated using <cite>inputs</cite>
-only.</p></li>
-<li><p>Integration with various ecosystem packages like TFMOT, TFLite,
-TF.js, etc is only supported for <cite>inputs</cite> and not for tensors in
-positional and keyword arguments.</p></li>
-</ul>
-</p></li>
-<li><p><strong>*args</strong> – Additional positional arguments. May contain tensors, although
-this is not recommended, for the reasons above.</p></li>
-<li><p><strong>**kwargs</strong> – <p>Additional keyword arguments. May contain tensors, although
-this is not recommended, for the reasons above.
-The following optional keyword arguments are reserved:
-- <cite>training</cite>: Boolean scalar tensor of Python boolean indicating</p>
-<blockquote>
-<div><p>whether the <cite>call</cite> is meant for training or inference.</p>
-</div></blockquote>
-<ul>
-<li><p><cite>mask</cite>: Boolean input mask. If the layer’s <cite>call()</cite> method takes a
-<cite>mask</cite> argument, its default value will be set to the mask
-generated for <cite>inputs</cite> by the previous layer (if <cite>input</cite> did come
-from a layer that generated a corresponding mask, i.e. if it came
-from a Keras layer with masking support).</p></li>
-</ul>
-</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A tensor or list/tuple of tensors.</p>
-</dd>
-</dl>
+<dd><p>Call the transformer decoder layer.</p>
 </dd></dl>
 
 </dd></dl>
@@ -787,13 +653,14 @@ from a Keras layer with masking support).</p></li>
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerEncoder">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">TransformerEncoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerEncoder" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Layer</span></code></p>
-<p>Transformer encoder. Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
+<p>Transformer encoder.</p>
+<p>Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
 Adapted according to <a class="reference external" href="https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true">https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true</a>
 and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https://arxiv.org/abs/1711.03905</a>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerEncoder.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_layers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seq_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_position_encoding</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerEncoder.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Constructor for the transformer encoder.</p>
+<dd><p>Construct the transformer encoder.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -812,65 +679,7 @@ and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https:
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerEncoder.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerEncoder.call" title="Permalink to this definition"></a></dt>
-<dd><p>This is where the layer’s logic lives.</p>
-<p>The <cite>call()</cite> method may not create state (except in its first
-invocation, wrapping the creation of variables or other resources in
-<cite>tf.init_scope()</cite>).  It is recommended to create state, including
-<cite>tf.Variable</cite> instances and nested <cite>Layer</cite> instances,</p>
-<blockquote>
-<div><p>in <cite>__init__()</cite>, or in the <cite>build()</cite> method that is</p>
-</div></blockquote>
-<p>called automatically before <cite>call()</cite> executes for the first time.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>inputs</strong> – <p>Input tensor, or dict/list/tuple of input tensors.
-The first positional <cite>inputs</cite> argument is subject to special rules:
-- <cite>inputs</cite> must be explicitly passed. A layer cannot have zero</p>
-<blockquote>
-<div><p>arguments, and <cite>inputs</cite> cannot be provided via the default value
-of a keyword argument.</p>
-</div></blockquote>
-<ul>
-<li><p>NumPy array or Python scalar values in <cite>inputs</cite> get cast as
-tensors.</p></li>
-<li><p>Keras mask metadata is only collected from <cite>inputs</cite>.</p></li>
-<li><p>Layers are built (<cite>build(input_shape)</cite> method)
-using shape info from <cite>inputs</cite> only.</p></li>
-<li><p><cite>input_spec</cite> compatibility is only checked against <cite>inputs</cite>.</p></li>
-<li><p>Mixed precision input casting is only applied to <cite>inputs</cite>.
-If a layer has tensor arguments in <cite>*args</cite> or <cite>**kwargs</cite>, their
-casting behavior in mixed precision should be handled manually.</p></li>
-<li><p>The SavedModel input specification is generated using <cite>inputs</cite>
-only.</p></li>
-<li><p>Integration with various ecosystem packages like TFMOT, TFLite,
-TF.js, etc is only supported for <cite>inputs</cite> and not for tensors in
-positional and keyword arguments.</p></li>
-</ul>
-</p></li>
-<li><p><strong>*args</strong> – Additional positional arguments. May contain tensors, although
-this is not recommended, for the reasons above.</p></li>
-<li><p><strong>**kwargs</strong> – <p>Additional keyword arguments. May contain tensors, although
-this is not recommended, for the reasons above.
-The following optional keyword arguments are reserved:
-- <cite>training</cite>: Boolean scalar tensor of Python boolean indicating</p>
-<blockquote>
-<div><p>whether the <cite>call</cite> is meant for training or inference.</p>
-</div></blockquote>
-<ul>
-<li><p><cite>mask</cite>: Boolean input mask. If the layer’s <cite>call()</cite> method takes a
-<cite>mask</cite> argument, its default value will be set to the mask
-generated for <cite>inputs</cite> by the previous layer (if <cite>input</cite> did come
-from a layer that generated a corresponding mask, i.e. if it came
-from a Keras layer with masking support).</p></li>
-</ul>
-</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A tensor or list/tuple of tensors.</p>
-</dd>
-</dl>
+<dd><p>Call the transformer encoder.</p>
 </dd></dl>
 
 </dd></dl>
@@ -879,13 +688,14 @@ from a Keras layer with masking support).</p></li>
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerDecoder">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">TransformerDecoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerDecoder" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Layer</span></code></p>
-<p>Transformer decoder. Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
+<p>Transformer decoder.</p>
+<p>Based on <a class="reference external" href="https://www.tensorflow.org/text/tutorials/transformer">https://www.tensorflow.org/text/tutorials/transformer</a>.
 Adapted according to <a class="reference external" href="https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true">https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true</a>
 and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https://arxiv.org/abs/1711.03905</a>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerDecoder.__init__">
 <span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_layers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seq_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dff</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_position_encoding</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerDecoder.__init__" title="Permalink to this definition"></a></dt>
-<dd><p>Constructor for the transformer decoder.</p>
+<dd><p>Construct the transformer decoder.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -904,65 +714,7 @@ and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https:
 <dl class="py method">
 <dt class="sig sig-object py" id="deepof.model_utils.TransformerDecoder.call">
 <span class="sig-name descname"><span class="pre">call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enc_output</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">look_ahead_mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_mask</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.TransformerDecoder.call" title="Permalink to this definition"></a></dt>
-<dd><p>This is where the layer’s logic lives.</p>
-<p>The <cite>call()</cite> method may not create state (except in its first
-invocation, wrapping the creation of variables or other resources in
-<cite>tf.init_scope()</cite>).  It is recommended to create state, including
-<cite>tf.Variable</cite> instances and nested <cite>Layer</cite> instances,</p>
-<blockquote>
-<div><p>in <cite>__init__()</cite>, or in the <cite>build()</cite> method that is</p>
-</div></blockquote>
-<p>called automatically before <cite>call()</cite> executes for the first time.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>inputs</strong> – <p>Input tensor, or dict/list/tuple of input tensors.
-The first positional <cite>inputs</cite> argument is subject to special rules:
-- <cite>inputs</cite> must be explicitly passed. A layer cannot have zero</p>
-<blockquote>
-<div><p>arguments, and <cite>inputs</cite> cannot be provided via the default value
-of a keyword argument.</p>
-</div></blockquote>
-<ul>
-<li><p>NumPy array or Python scalar values in <cite>inputs</cite> get cast as
-tensors.</p></li>
-<li><p>Keras mask metadata is only collected from <cite>inputs</cite>.</p></li>
-<li><p>Layers are built (<cite>build(input_shape)</cite> method)
-using shape info from <cite>inputs</cite> only.</p></li>
-<li><p><cite>input_spec</cite> compatibility is only checked against <cite>inputs</cite>.</p></li>
-<li><p>Mixed precision input casting is only applied to <cite>inputs</cite>.
-If a layer has tensor arguments in <cite>*args</cite> or <cite>**kwargs</cite>, their
-casting behavior in mixed precision should be handled manually.</p></li>
-<li><p>The SavedModel input specification is generated using <cite>inputs</cite>
-only.</p></li>
-<li><p>Integration with various ecosystem packages like TFMOT, TFLite,
-TF.js, etc is only supported for <cite>inputs</cite> and not for tensors in
-positional and keyword arguments.</p></li>
-</ul>
-</p></li>
-<li><p><strong>*args</strong> – Additional positional arguments. May contain tensors, although
-this is not recommended, for the reasons above.</p></li>
-<li><p><strong>**kwargs</strong> – <p>Additional keyword arguments. May contain tensors, although
-this is not recommended, for the reasons above.
-The following optional keyword arguments are reserved:
-- <cite>training</cite>: Boolean scalar tensor of Python boolean indicating</p>
-<blockquote>
-<div><p>whether the <cite>call</cite> is meant for training or inference.</p>
-</div></blockquote>
-<ul>
-<li><p><cite>mask</cite>: Boolean input mask. If the layer’s <cite>call()</cite> method takes a
-<cite>mask</cite> argument, its default value will be set to the mask
-generated for <cite>inputs</cite> by the previous layer (if <cite>input</cite> did come
-from a layer that generated a corresponding mask, i.e. if it came
-from a Keras layer with masking support).</p></li>
-</ul>
-</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A tensor or list/tuple of tensors.</p>
-</dd>
-</dl>
+<dd><p>Call the transformer decoder.</p>
 </dd></dl>
 
 </dd></dl>
@@ -970,7 +722,8 @@ from a Keras layer with masking support).</p></li>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.log_hyperparameters">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">log_hyperparameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.log_hyperparameters" title="Permalink to this definition"></a></dt>
-<dd><p>Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning</p>
+<dd><p>Log hyperparameters in tensorboard.</p>
+<p>Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>List containing the hyperparameters to log in tensorboard.
@@ -1033,7 +786,7 @@ metrics (list): List containing the metrics to log in tensorboard.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.embedding_per_video">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">embedding_per_video</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_preprocess</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'standard'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ruptures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">global_scaler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.embedding_per_video" title="Permalink to this definition"></a></dt>
-<dd><p>Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.</p>
+<dd><p>Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1062,7 +815,7 @@ breaks (table_dict): breaks per experiment.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.tune_search">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">tune_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">preprocessed_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hypertun_trials</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hpt_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">callbacks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_replicas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'unsupervised_tuner_search'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#deepof.model_utils.tune_search" title="Permalink to this definition"></a></dt>
-<dd><p>Define the search space using keras-tuner and hyperband or bayesian optimization</p>
+<dd><p>Define the search space using keras-tuner and hyperband or bayesian optimization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
