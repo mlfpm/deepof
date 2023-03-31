@@ -2,11 +2,7 @@
 # encoding: utf-8
 # module deepof
 
-"""
-
-Functions and general utilities for the deepof package.
-
-"""
+"""Functions and general utilities for the deepof package."""
 
 from copy import deepcopy
 from dask_image.imread import imread
@@ -41,10 +37,9 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx.Graph:
-    """
+    """Create a nx.Graph object with the connectivity of the bodyparts in the DLC topview model for a single mouse.
 
-    Creates a nx.Graph object with the connectivity of the bodyparts in the
-    DLC topview model for a single mouse. Used later for angle computing, among others.
+    Used later for angle computing, among others.
 
     Args:
         animal_ids (str): if more than one animal is tagged, specify the animal identyfier as a string.
@@ -54,7 +49,6 @@ def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx
         connectivity (nx.Graph)
 
     """
-
     if animal_ids is None:
         animal_ids = [""]
     if not isinstance(animal_ids, list):
@@ -113,7 +107,7 @@ def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx
 
 
 def edges_to_weithed_adj(adj: np.ndarray, edges: np.ndarray):
-    """Converts an edge feature matrix to a weighted adjacency matrix.
+    """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
         - adj (np.ndarray): binary adjacency matrix of the current graph.
@@ -130,7 +124,7 @@ def edges_to_weithed_adj(adj: np.ndarray, edges: np.ndarray):
 
 
 def enumerate_all_bridges(G: nx.graph) -> list:
-    """Enumerates all 3-node connected sequences in the given graph.
+    """Enumerate all 3-node connected sequences in the given graph.
 
     Args:
         - G (nx.graph): Animal connectivity graph.
@@ -156,7 +150,7 @@ def enumerate_all_bridges(G: nx.graph) -> list:
 def str2bool(v: str) -> bool:
     """
 
-    Returns the passed string as a boolean.
+    Return the passed string as a boolean.
 
     Args:
         v (str): String to transform to boolean value.
@@ -165,7 +159,6 @@ def str2bool(v: str) -> bool:
         bool. If conversion is not possible, it raises an error
 
     """
-
     if isinstance(v, bool):
         return v  # pragma: no cover
     elif v.lower() in ("yes", "true", "t", "y", "1"):
@@ -176,9 +169,7 @@ def str2bool(v: str) -> bool:
 
 
 def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
-    """
-
-    Returns a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
+    """Return a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
 
     Args:
         dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihood.
@@ -188,7 +179,6 @@ def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
         filt_mask (np.array): mask on the rows of dframe
 
     """
-
     Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
     Likes = np.nan_to_num(Likes, nan=1.0)
     filt_mask = np.all(Likes > threshold, axis=0)
@@ -197,9 +187,7 @@ def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
 
 
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    Returns the DataFrame in polar coordinates.
+    """Return the DataFrame in polar coordinates.
 
     Args:
         tab (pandas.DataFrame): Table with cartesian coordinates.
@@ -208,7 +196,6 @@ def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
         polar (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
 
     """
-
     tab_ = np.array(tab)
     complex_ = tab_[:, 0] + 1j * tab_[:, 1]
     polar = pd.DataFrame(np.array([abs(complex_), np.angle(complex_)]).T)
@@ -217,9 +204,7 @@ def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
 
 
 def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    Returns a pandas.DataFrame in which all the coordinates are polar.
+    """Return a pandas.DataFrame in which all the coordinates are polar.
 
     Args:
         cartesian_df (pandas.DataFrame): DataFrame containing tables with cartesian coordinates.
@@ -228,7 +213,6 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
         result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
 
     """
-
     result = []
     for df in list(cartesian_df.columns.levels[0]):
         result.append(bp2polar(cartesian_df[df]))
@@ -244,9 +228,7 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
 def compute_dist(
     pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
-    """
-
-    Returns a pandas.DataFrame with the scaled distances between a pair of body parts.
+    """Return a pandas.DataFrame with the scaled distances between a pair of body parts.
 
     Args:
         pair_array (numpy.array): np.array of shape N * 4 containing X, y positions.
@@ -258,7 +240,6 @@ def compute_dist(
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between a pair of body parts.
 
     """
-
     lim = 2 if pair_array.shape[1] == 4 else 1
     a, b = pair_array[:, :lim], pair_array[:, lim:]
     ab = a - b
@@ -270,9 +251,7 @@ def compute_dist(
 def bpart_distance(
     dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
 ) -> pd.DataFrame:
-    """
-
-    Returns a pandas.DataFrame with the scaled distances between all pairs of body parts.
+    """Return a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
     Args:
         dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
@@ -284,7 +263,6 @@ def bpart_distance(
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between all pairs of body parts.
 
     """
-
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
     for idx in indexes:
@@ -296,9 +274,7 @@ def bpart_distance(
 
 
 def angle(bpart_array: np.array) -> np.array:
-    """
-
-    Returns a numpy.ndarray with the angles between the provided instances.
+    """Return a numpy.ndarray with the angles between the provided instances.
 
     Args:
         bpart_array (numpy.array): 2D positions over time for a bodypart.
@@ -321,8 +297,8 @@ def angle(bpart_array: np.array) -> np.array:
 
 
 def compute_areas(coords, animal_id=None):
-    """
-    Computes relevant areas (head, torso, back, full) for the provided coordinates.
+    """Compute relevant areas (head, torso, back, full) for the provided coordinates.
+
     Args:
         coords: coordinates of the body parts for a single time point.
         animal_id: animal id for the provided coordinates, if any.
@@ -331,7 +307,6 @@ def compute_areas(coords, animal_id=None):
         areas: list including head, torso, back, and full areas for the provided coordinates.
 
     """
-
     head = ["Nose", "Left_ear", "Left_fhip", "Spine_1"]
 
     torso = ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"]
@@ -370,9 +345,7 @@ def compute_areas(coords, animal_id=None):
 def rotate(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:
-    """
-
-    Returns a 2D numpy.ndarray with the initial values rotated by angles radians.
+    """Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
     Args:
         p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
@@ -383,7 +356,6 @@ def rotate(
         - rotated (numpy.ndarray): rotated positions over time
 
     """
-
     R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
 
     o = np.atleast_2d(origin)
@@ -396,10 +368,10 @@ def rotate(
 
 # noinspection PyArgumentList
 def align_trajectories(data: np.array, mode: str = "all") -> np.array:
-    """
+    """Remove rotational variance on the trajectories.
 
-    Returns a numpy.array with the positions rotated in a way that the center (0 vector)
-    and the body part in the first column of data are aligned with the y axis.
+    Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
+    column of data are aligned with the y-axis.
 
     Args:
         data (numpy.ndarray): 3D array containing positions of body parts over time, where
@@ -411,7 +383,6 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         aligned_trajs (np.ndarray): 2D aligned positions over time.
 
     """
-
     angles = np.zeros(data.shape[0])
     data = deepcopy(data)
     dshape = data.shape
@@ -515,8 +486,9 @@ def scale_animal(feature_array: np.ndarray, scale: str):
 
 
 def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
-    """Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure
-    in Streams'). The algorithm models activity bursts in a time series as an
+    """Apply Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
+
+    The algorithm models activity bursts in a time series as an
     infinite hidden Markov model.
 
     Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
@@ -529,8 +501,9 @@ def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
         gamma: coefficient for the transition costs between states
         n, T: to have a fixed cost function (not dependent of the given offsets).
         Which is needed if you want to compare bursts for different inputs.
-        k: maximum burst level"""
+        k: maximum burst level
 
+    """
     if s <= 1:
         raise ValueError("s must be greater than 1!")
     if gamma <= 0:
@@ -649,9 +622,7 @@ def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
 
 
 def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
-    """
-
-    Returns a boolean array in which isolated appearances of a feature are smoothed.
+    """Return a boolean array in which isolated appearances of a feature are smoothed.
 
     Args:
         a (numpy.ndarray): Boolean instances.
@@ -661,7 +632,6 @@ def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
         a (numpy.ndarray): Smoothened boolean instances.
 
     """
-
     offsets = np.where(a)[0]
     if len(offsets) == 0:
         return a  # no detected activity
@@ -716,9 +686,7 @@ def rolling_window(
     automatic_changepoints: str = False,
     precomputed_breaks: np.ndarray = None,
 ) -> np.ndarray:
-    """
-
-    Returns a 3D numpy.array with a sliding-window extra dimension.
+    """Return a 3D numpy.array with a sliding-window extra dimension.
 
     Args:
         a (np.ndarray): N (instances) * m (features) shape
@@ -733,7 +701,6 @@ def rolling_window(
         rolled_a (np.ndarray): N (sliding window instances) * l (sliding window size) * m (features)
 
     """
-
     breakpoints = None
 
     if automatic_changepoints:
@@ -771,10 +738,9 @@ def rupture_per_experiment(
     window_step: int,
     precomputed_breaks: dict = None,
 ) -> np.ndarray:
-    """
+    """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
 
-    Apply the rupture method independently to each experiment, and concatenate into a single dataset
-    at the end. Returns a dataset and the rupture indices, adapted to be used in a concatenated version
+    Returns a dataset and the rupture indices, adapted to be used in a concatenated version
     of the labels.
 
     Args:
@@ -796,7 +762,6 @@ def rupture_per_experiment(
         rupture_indices (list): Indices of ruptures.
 
     """
-
     # Generate a base ruptured training set and a set of breaks
     ruptured_dataset, break_indices = None, None
     cumulative_shape = 0
@@ -856,9 +821,7 @@ def rupture_per_experiment(
 def smooth_mult_trajectory(
     series: np.array, alpha: int = 0, w_length: int = 11
 ) -> np.ndarray:
-    """
-
-    Returns a smoothed a trajectory using a Savitzky-Golay 1D filter.
+    """Return a smoothed a trajectory using a Savitzky-Golay 1D filter.
 
     Args:
         series (numpy.ndarray): 1D trajectory array with N (instances)
@@ -871,7 +834,6 @@ def smooth_mult_trajectory(
         smoothed_series (np.ndarray): smoothed version of the input, with equal shape
 
     """
-
     if alpha is None:
         return series
 
@@ -885,9 +847,7 @@ def smooth_mult_trajectory(
 
 
 def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
-    """
-
-    Fast implementation of a moving average function.
+    """Fast implementation of a moving average function.
 
     Args:
         time_series (pd.Series): Uni-variate time series to take the moving average of.
@@ -897,7 +857,6 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
         moving_avg (pd.Series): Uni-variate moving average over time_series.
 
     """
-
     moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
 
     return moving_avg
@@ -911,9 +870,8 @@ def mask_outliers(
     n_std: int,
     mode: str,
 ) -> pd.DataFrame:
-    """
+    """Return a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
 
-    Returns a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
     An outlier can be marked with one of two criteria: 1) the likelihood reported by DLC is below likelihood_tolerance,
     and/or 2) the deviation from a moving average model is greater than n_std.
 
@@ -929,7 +887,6 @@ def mask_outliers(
         mask (pd.DataFrame): Bi-variate mask over time_series. True indicates an outlier.
 
     """
-
     moving_avg_x = moving_average(time_series["x"], lag)
     moving_avg_y = moving_average(time_series["y"], lag)
 
@@ -962,10 +919,7 @@ def full_outlier_mask(
     n_std: int,
     mode: str,
 ) -> pd.DataFrame:
-    """
-
-    Iterates over all body parts of experiment, and outputs a dataframe where all x, y positions are
-    replaced by a boolean mask, where True indicates an outlier.
+    """Iterate over all body parts of experiment, and outputs a dataframe where all x, y positions are replaced by a boolean mask, where True indicates an outlier.
 
     Args:
         experiment (pd.DataFrame): Data frame with time series representing the x, y positions of every body part
@@ -980,7 +934,6 @@ def full_outlier_mask(
         full_mask (pd.DataFrame): Mask over all body parts in experiment. True indicates an outlier
 
     """
-
     body_parts = experiment.columns.levels[0]
     full_mask = experiment.copy()
 
@@ -1015,9 +968,8 @@ def interpolate_outliers(
     mode: str = "or",
     limit: int = 10,
 ) -> pd.DataFrame:
-    """
+    """Mark all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
 
-    Marks all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
     Args:
@@ -1034,7 +986,6 @@ def interpolate_outliers(
         interpolated_exp (pd.DataFrame): Interpolated version of experiment.
 
     """
-
     interpolated_exp = experiment.copy()
 
     # Creates a mask marking all outliers
@@ -1055,9 +1006,7 @@ def interpolate_outliers(
 
 
 def filter_columns(columns: list, selected_id: str) -> list:
-    """
-
-    Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id.
+    """Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id.
 
     Args:
         columns (list): List of columns to filter.
@@ -1067,7 +1016,6 @@ def filter_columns(columns: list, selected_id: str) -> list:
         filtered_columns (list): List of filtered columns.
 
     """
-
     if selected_id is None:
         return columns
 
@@ -1097,10 +1045,9 @@ def automatically_recognize_arena(
     recoglimit: int = 500,
     arena_type: str = "circular-autodetect",
 ) -> Tuple[np.array, int, int]:
-    """
+    """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
 
-    Returns numpy.ndarray with information about the arena recognised from the first frames
-    of the video. WARNING: estimates won't be reliable if the camera moves along the video.
+    WARNING: estimates won't be reliable if the camera moves along the video.
 
     Args:
         videos (list): Relative paths of the videos to analise.
@@ -1120,7 +1067,6 @@ def automatically_recognize_arena(
         w (int): Width of the video in pixels.
 
     """
-
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     if tables is not None:
@@ -1192,9 +1138,8 @@ def automatically_recognize_arena(
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list
 ):  # pragma: no cover
-    """
+    """Open a window and waits for the user to click on all corners of the polygonal arena.
 
-    Opens a window and waits for the user to click on all corners of the polygonal arena.
     The user should click on the corners in sequential order.
 
     Args:
@@ -1204,11 +1149,9 @@ def retrieve_corners_from_image(
         videos (list): List of videos to be processed.
 
     Returns:
-
         corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
 
     """
-
     corners = []
 
     def click_on_corners(event, x, y, flags, param):
@@ -1300,10 +1243,7 @@ def retrieve_corners_from_image(
 def extract_polygonal_arena_coordinates(
     video_path: str, arena_type: str, video_index: int, videos: list
 ):  # pragma: no cover
-    """
-
-    Reads a random frame from the selected video, and opens an interactive GUI to let the user delineate
-    the arena manually.
+    """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
 
     Args:
         video_path: Path to the video file.
@@ -1317,7 +1257,6 @@ def extract_polygonal_arena_coordinates(
         int: Width of the video.
 
     """
-
     current_video = imread(video_path)
     current_frame = np.random.choice(current_video.shape[0])
 
@@ -1332,9 +1271,7 @@ def extract_polygonal_arena_coordinates(
 
 
 def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
-    """
-
-    Fits an ellipse to the provided polygon.
+    """Fit an ellipse to the provided polygon.
 
     Args:
         polygon: List of (x,y) coordinates of the corners of the polygon.
@@ -1345,7 +1282,6 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
         float: Angle of the ellipse.
 
     """
-
     # Detect the main ellipse containing the arena
     ellipse_params = cv2.fitEllipse(np.array(polygon))
 
@@ -1360,10 +1296,7 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 def circular_arena_recognition(
     frame: np.ndarray,
 ) -> np.array:
-    """
-
-    Returns x,y position of the center, the lengths of the major and minor axes,
-    and the angle of the recognised arena.
+    """Return x,y position of the center, the lengths of the major and minor axes, and the angle of the recognised arena.
 
     Args:
         frame (np.ndarray): numpy.ndarray representing an individual frame of a video
@@ -1373,7 +1306,6 @@ def circular_arena_recognition(
         of the arena, and a third value indicating the radius.
 
     """
-
     # Convert image to grayscale, threshold it and close it with a 5x5 kernel
     kernel = np.ones((5, 5))
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -1404,9 +1336,7 @@ def rolling_speed(
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
-    """
-
-    Returns the average speed over n frames in pixels per frame.
+    """Return the average speed over n frames in pixels per frame.
 
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.
@@ -1423,7 +1353,6 @@ def rolling_speed(
         consequent derivatives.
 
     """
-
     original_shape = dframe.shape
     try:
         body_parts = dframe.columns.levels[0]
@@ -1470,7 +1399,7 @@ def filter_short_bouts(
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
 ):  # pragma: no cover
-    """Filters out cluster assignment bouts shorter than min_bout_duration.
+    """Filter out cluster assignment bouts shorter than min_bout_duration.
 
     Args:
         cluster_assignments (np.ndarray): Array of cluster assignments.
@@ -1517,9 +1446,7 @@ def filter_short_bouts(
 
 
 def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
-    """
-
-    Fits a Gaussian Mixture Model to the provided data and returns evaluation metrics.
+    """Fit a Gaussian Mixture Model to the provided data and returns evaluation metrics.
 
     Args:
         x (numpy.ndarray): Data matrix to train the model
@@ -1531,7 +1458,6 @@ def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
         - gmm_eval (list): model and associated BIC for downstream selection.
 
     """
-
     gmm = mixture.GaussianMixture(
         n_components=n_components,
         covariance_type=cv_type,
@@ -1552,10 +1478,9 @@ def gmm_model_selection(
     n_cores: int = False,
     cv_types: Tuple = ("spherical", "tied", "diag", "full"),
 ) -> Tuple[List[list], List[np.ndarray], Union[int, Any]]:
-    """
+    """Run GMM clustering model selection on the specified X dataframe.
 
-    Runs GMM clustering model selection on the specified X dataframe, outputs the bic distribution per model,
-    a vector with the median BICs and an object with the overall best model.
+    Outputs the bic distribution per model, a vector with the median BICs and an object with the overall best model.
 
     Args:
         x (pandas.DataFrame): Data matrix to train the models
@@ -1573,7 +1498,6 @@ def gmm_model_selection(
         - best_bic_gmm (sklearn.GMM): Unfitted version of the best found model
 
     """
-
     # Set the default of n_cores to the most efficient value
     if not n_cores:
         n_cores = min(multiprocessing.cpu_count(), n_runs)
@@ -1615,7 +1539,7 @@ def cluster_transition_matrix(
     autocorrelation: bool = True,
     return_graph: bool = False,
 ) -> Tuple[Union[nx.Graph, Any], np.ndarray]:
-    """Computes the transition matrix between clusters and the autocorrelation in the sequence.
+    """Compute the transition matrix between clusters and the autocorrelation in the sequence.
 
     Args:
         cluster_sequence (numpy.array): Sequence of cluster assignments.
@@ -1628,7 +1552,6 @@ def cluster_transition_matrix(
         autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation
         values on cluster assignment.
     """
-
     # Stores all possible transitions between clusters
     clusters = [str(i) for i in range(nclusts)]
     cluster_sequence = cluster_sequence.astype(str)

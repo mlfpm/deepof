@@ -2,11 +2,7 @@
 # encoding: utf-8
 # module deepof
 
-"""
-
-Data structures and functions for analyzing supervised and unsupervised model results.
-
-"""
+"""Data structures and functions for analyzing supervised and unsupervised model results."""
 
 from catboost import CatBoostClassifier
 from collections import Counter, defaultdict
@@ -48,10 +44,9 @@ def get_time_on_cluster(
     normalize: bool = True,
     reduce_dim: bool = False,
 ):
-    """
+    """Compute how much each animal spends on each cluster.
 
-    Given a set of cluster assignments and the corresponding breaks, computes how much each
-    animal spent on each cluster.
+    Requires a set of cluster assignments and their corresponding breaks.
 
     Args:
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
@@ -67,7 +62,6 @@ def get_time_on_cluster(
         A dataframe with the time spent on each cluster for each experiment.
 
     """
-
     # Reduce soft counts to hard assignments per video
     hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
 
@@ -104,9 +98,8 @@ def get_time_on_cluster(
 def get_aggregated_embedding(
     embedding: table_dict, reduce_dim: bool = False, agg: str = "mean"
 ):
-    """
+    """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
-    Aggregates the embeddings of a set of videos, using the specified aggregation method.
     Instead of an embedding per chunk, the function returns an embedding per experiment.
 
     Args:
@@ -120,7 +113,6 @@ def get_aggregated_embedding(
         A dataframe with the aggregated embeddings for each experiment.
 
     """
-
     # aggregate the provided embeddings and cast to a dataframe
     if agg == "mean":
         embedding = pd.DataFrame(
@@ -152,9 +144,7 @@ def select_time_bin(
     bin_index: int = 0,
     precomputed: np.ndarray = None,
 ):
-    """
-
-    Selects a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).
+    """Select a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).
 
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
@@ -171,8 +161,8 @@ def select_time_bin(
 
     Returns:
         A tuple of the filtered embeddings, soft counts, and breaks.
-    """
 
+    """
     # If precomputed, filter each experiment using the provided boolean array
     if supervised_annotations is None:
 
@@ -235,10 +225,7 @@ def condition_distance_binning(
     metric: str = "auc",
     n_jobs: int = cpu_count(),
 ):
-    """
-
-    Computes the distance between the embeddings of two conditions, using the specified
-    aggregation method.
+    """Compute the distance between the embeddings of two conditions, using the specified aggregation method.
 
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
@@ -269,7 +256,6 @@ def condition_distance_binning(
         An array with distances between conditions across the resulting time bins
 
     """
-
     # Divide the embeddings in as many corresponding bins, and compute distances
     def embedding_distance(bin_index):
 
@@ -328,10 +314,7 @@ def separation_between_conditions(
     agg: str,
     metric: str,
 ):
-    """
-
-    Computes the distance between the embeddings of two conditions, using the specified
-    aggregation method.
+    """Compute the distance between the embeddings of two conditions, using the specified aggregation method.
 
     Args:
         cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
@@ -352,7 +335,6 @@ def separation_between_conditions(
         The distance between the embeddings of the two conditions.
 
     """
-
     # Aggregate embeddings and add experimental conditions
     if agg == "time_on_cluster":
         aggregated_embeddings = get_time_on_cluster(
@@ -416,9 +398,7 @@ def enrichment_across_conditions(
     precomputed: np.ndarray = None,
     normalize: bool = False,
 ):
-    """
-
-    Computes the population of each cluster across conditions.
+    """Compute the population of each cluster across conditions.
 
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
@@ -479,9 +459,7 @@ def enrichment_across_conditions(
 
 
 def get_transitions(state_sequence: list, n_states: int):
-    """
-
-    Computes the transitions between states in a state sequence.
+    """Compute the transitions between states in a state sequence.
 
     Args:
         state_sequence (list): A list of states.
@@ -491,7 +469,6 @@ def get_transitions(state_sequence: list, n_states: int):
         The resulting transition matrix.
 
     """
-
     transition_matrix = np.zeros([n_states, n_states])
     for cur_state, next_state in zip(state_sequence[:-1], state_sequence[1:]):
         transition_matrix[cur_state, next_state] += 1
@@ -510,9 +487,7 @@ def compute_transition_matrix_per_condition(
     aggregate: str = True,
     normalize: str = True,
 ):
-    """
-
-    Computes the transition matrices specific to each condition.
+    """Compute the transition matrices specific to each condition.
 
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
@@ -534,7 +509,6 @@ def compute_transition_matrix_per_condition(
         conditions, and the values are the transition matrices for each condition.
 
     """
-
     # Filter data to get desired subset
     if bin_size is not None and bin_index is not None:
         embedding, soft_counts, breaks, _ = select_time_bin(
@@ -582,9 +556,7 @@ def compute_transition_matrix_per_condition(
 def compute_steady_state(
     transition_matrices: dict, return_entropy: bool = False, n_iters: int = 100000
 ):
-    """
-
-    Computes the steady state of each transition matrix provided in a dictionary.
+    """Compute the steady state of each transition matrix provided in a dictionary.
 
     Args:
         transition_matrices (dict): A dictionary of transition matrices, where the keys are
@@ -599,7 +571,6 @@ def compute_steady_state(
         steady state.
 
     """
-
     # Compute steady states by multiplying matrices by themselves n_iters times
     steady_states = {
         key: np.linalg.matrix_power(value, n_iters)
@@ -622,7 +593,7 @@ def compute_steady_state(
 
 
 def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
-
+    """Compute UMAP embeddings for visualization purposes."""
     lda = LinearDiscriminantAnalysis(
         n_components=np.min([embeddings.shape[1], len(set(cluster_assignments)) - 1]),
     )
@@ -645,7 +616,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
     include_areas: bool = True,
     animal_id: str = None,
 ):
-    """
+    """Align kinematics with unsupervised labels.
 
     In order to annotate time chunks with as many relevant features as possible, this function aligns the kinematics
     of a deepof project (speed and acceleration of body parts, distances, and angles) with the hard cluster assignments
@@ -665,7 +636,6 @@ def align_deepof_kinematics_with_unsupervised_labels(
         values are the aligned kinematics for each condition.
 
     """
-
     # Compute speeds and accelerations per bodypart
     kinematic_features = defaultdict(pd.DataFrame)
 
@@ -743,9 +713,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
 
 def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list):
-    """
-
-    Extracts summary statistics from a chunked dataset using seglearn.
+    """Extract summary statistics from a chunked dataset using seglearn.
 
     Args:
         chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features),
@@ -755,9 +723,7 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
     Returns:
         A dataframe of kinematic features, of shape chunks by features.
 
-
     """
-
     # Extract time series features with ts-learn and seglearn
     extracted_features = FeatureRep(feature_functions.base_features()).fit_transform(
         chunked_dataset
@@ -789,10 +755,9 @@ def annotate_time_chunks(
     include_areas: bool = True,
     aggregate: str = "mean",
 ):
-    """
+    """Annotate time chunks produced after change-point detection using the unsupervised pipeline.
 
-    Annotate time chunks produced after change-point detection using the unsupervised pipeline, using a set
-    of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
+    Uses a set of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
 
     Args:
         deepof_project: Project object.
@@ -820,7 +785,6 @@ def annotate_time_chunks(
         A dataframe of kinematic features, of shape chunks by features.
 
     """
-
     # Convert soft_counts to hard labels
     hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
     hard_counts = pd.Series(
@@ -919,7 +883,7 @@ def chunk_cv_splitter(
     breaks: dict,
     n_folds: int = None,
 ):
-    """
+    """Split a dataset into training and testing sets, grouped by video.
 
     Given a matrix with extracted features per chunk, returns a list containing
     a set of cross-validation folds, grouped by experimental video. This makes
@@ -935,7 +899,6 @@ def chunk_cv_splitter(
         list containing a training and testing set per CV fold.
 
     """
-
     # Extract number of experiments/folds
     n_experiments = len(breaks)
 
@@ -958,7 +921,7 @@ def train_supervised_cluster_detectors(
     n_folds: int = None,
     verbose: int = 1,
 ):  # pragma: no cover
-    """
+    """Train supervised models to detect clusters from kinematic features.
 
     Args:
         chunk_stats (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
@@ -974,7 +937,6 @@ def train_supervised_cluster_detectors(
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
 
     """
-
     groups = chunk_cv_splitter(chunk_stats, sampled_breaks, n_folds=n_folds)
 
     # Cross-validate GBM training across videos
@@ -1029,7 +991,7 @@ def explain_clusters(
     full_cluster_clf: Pipeline,
     samples: int = 10000,
 ):  # pragma: no cover
-    """Computes SHAP feature importance for models mapping chunk_stats to cluster assignments.
+    """Compute SHAP feature importance for models mapping chunk_stats to cluster assignments.
 
     Args:
         chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
@@ -1044,7 +1006,6 @@ def explain_clusters(
         explainer (shap.explainers._kernel.Kernel): trained SHAP KernelExplainer.
 
     """
-
     # Pass the data through the scaler and oversampler before computing SHAP values
     processed_stats = full_cluster_clf.named_steps["normalization"].transform(
         chunk_stats

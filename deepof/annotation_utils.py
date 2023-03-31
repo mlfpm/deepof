@@ -2,11 +2,7 @@
 # encoding: utf-8
 # module deepof
 
-"""
-
-Functions and general utilities for supervised pose estimation. See documentation for details
-
-"""
+"""Functions and general utilities for supervised pose estimation. See documentation for details."""
 
 import os
 import pickle
@@ -38,21 +34,20 @@ def close_single_contact(
     arena_abs: int,
     arena_rel: int,
 ) -> np.array:
-    """Returns a boolean array that's True if the specified body parts are closer than tol.
+    """Return a boolean array that's True if the specified body parts are closer than tol.
 
-    Parameters:
-        - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
-        to two-animal experiments.
-        - left (string): First member of the potential contact
-        - right (string): Second member of the potential contact
-        - tol (float): maximum distance for which a contact is reported
-        - arena_abs (int): length in mm of the diameter of the real arena
-        - arena_rel (int): length in pixels of the diameter of the arena in the video
+    Args:
+        pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable to two-animal experiments.
+        left (string): First member of the potential contact
+        right (string): Second member of the potential contact
+        tol (float): maximum distance for which a contact is reported
+        arena_abs (int): length in mm of the diameter of the real arena
+        arena_rel (int): length in pixels of the diameter of the arena in the video
 
     Returns:
-        - contact_array (np.array): True if the distance between the two specified points
-        is less than tol, False otherwise"""
+        contact_array (np.array): True if the distance between the two specified points is less than tol, False otherwise
 
+    """
     close_contact = None
 
     if isinstance(right, str):
@@ -85,7 +80,7 @@ def close_double_contact(
     arena_rel: int,
     rev: bool = False,
 ) -> np.array:
-    """Returns a boolean array that's True if the specified body parts are closer than tol.
+    """Return a boolean array that's True if the specified body parts are closer than tol.
 
     Parameters:
         - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
@@ -101,8 +96,9 @@ def close_double_contact(
 
     Returns:
         - double_contact (np.array): True if the distance between the two specified points
-        is less than tol, False otherwise"""
+        is less than tol, False otherwise
 
+    """
     if rev:
         double_contact = (
             (np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1) * arena_abs)
@@ -129,8 +125,7 @@ def close_double_contact(
 
 
 def rotate(origin, point, ang):
-    """Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot"""
-
+    """Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot."""
     ox, oy = origin
     px, py = point
 
@@ -140,9 +135,12 @@ def rotate(origin, point, ang):
 
 
 def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
-    """Auxiliar function to climb_wall and sniff_object. Returns True if the passed x, y coordinates
-    are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain threshold"""
+    """Auxiliar function to climb_wall and sniff_object.
 
+    Returns True if the passed x, y coordinates
+    are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain threshold
+
+    """
     x, y = rotate(e_center, (x, y), np.radians(e_angle))
 
     term_x = (x - e_center[0]) ** 2 / (e_axes[0] + threshold) ** 2
@@ -158,22 +156,21 @@ def climb_wall(
     nose: str,
     centered_data: bool = False,
 ) -> np.array:
-    """Returns True if the specified mouse is climbing the wall
+    """Return True if the specified mouse is climbing the wall.
 
-    Parameters:
-        - arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
-        - arena (np.array): contains arena location and shape details
-        - pos_dict (table_dict): position over time for all videos in a project
-        - tol (float): minimum tolerance to report a hit
-        - nose (str): indicates the name of the body part representing the nose of
-        the selected animal
-        - arena_dims (int): indicates radius of the real arena in mm
-        - centered_data (bool): indicates whether the input data is centered
+    Args:
+        arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
+        arena (np.array): contains arena location and shape details
+        pos_dict (table_dict): position over time for all videos in a project
+        tol (float): minimum tolerance to report a hit
+        nose (str): indicates the name of the body part representing the nose of the selected animal
+        centered_data (bool): indicates whether the input data is centered
 
     Returns:
-        - climbing (np.array): boolean array. True if selected animal
-        is climbing the walls of the arena"""
+        climbing (np.array): boolean array. True if selected animal
+        is climbing the walls of the arena
 
+    """
     nose = pos_dict[nose]
 
     if arena_type.startswith("circular"):
@@ -215,25 +212,25 @@ def sniff_object(
     s_object: str = "arena",
     animal_id: str = "",
 ):
-    """Returns True if the specified mouse is sniffing an object
+    """Return True if the specified mouse is sniffing an object.
 
-    Parameters:
-        - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
-        - arena (np.array): contains arena location and shape details
-        - pos_dict (table_dict): position over time for all videos in a project
-        - tol (float): minimum tolerance to report a hit
-        - nose (str): indicates the name of the body part representing the nose of
-        the selected animal
-        - arena_dims (int): indicates radius of the real arena in mm
-        - centered_data (bool): indicates whether the input data is centered
-        - object (str): indicates the object that the animal is sniffing.
-        Can be one of ['arena', 'partner']
+    Args:
+        speed_dframe (pandas.DataFrame): speed of body parts over time.
+        arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect'].
+        arena (np.array): contains arena location and shape details.
+        pos_dict (table_dict): position over time for all videos in a project.
+        tol (float): minimum tolerance to report a hit.
+        nose (str): indicates the name of the body part representing the nose of the selected animal.
+        centered_data (bool): indicates whether the input data is centered.
+        s_object (str): indicates the object to sniff. Must be one of ['arena', 'object'].
+        animal_id (str): indicates the animal to sniff. Must be one of animal_ids.
+        tol_speed (float): minimum speed to report a hit.
 
     Returns:
-        - sniffing (np.array): boolean array. True if selected animal
-        is sniffing the selected object"""
+        sniffing (np.array): boolean array. True if selected animal
+        is sniffing the selected object
 
+    """
     nose, nosing = pos_dict[nose], True
 
     if animal_id != "":
@@ -290,16 +287,16 @@ def huddle(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
 ) -> np.array:
-    """Returns true when the mouse is huddling a pretrained model.
+    """Return true when the mouse is huddling a pretrained model.
 
-    Parameters:
-        - X_huddle (pandas.DataFrame): mouse features over time
-        - huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
+    Args:
+        X_huddle (pandas.DataFrame): mouse features over time
+        huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
 
     Returns:
         y_huddle (np.array): 1 if the animal is huddling, 0 otherwise
-    """
 
+    """
     # Concatenate all relevant data frames and predict using the pre-trained estimator
     y_huddle = huddle_estimator.predict(StandardScaler().fit_transform(X_huddle))
 
@@ -311,17 +308,16 @@ def dig(
     speed_dframe: pd.DataFrame,
     dig_estimator: sklearn.pipeline.Pipeline,
 ):
-    """Returns true when the mouse is digging using a pretrained model.
+    """Return true when the mouse is digging using a pretrained model.
 
-    Parameters:
-        - pos_dframe (pandas.DataFrame): position of body parts over time
-        - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - dig_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
+    Args:
+        pos_dframe (pandas.DataFrame): position of body parts over time
+        speed_dframe (pandas.DataFrame): speed of body parts over time
+        dig_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
 
     Returns:
         dig (np.array): True if the animal is digging, False otherwise
     """
-
     # Concatenate all relevant data frames and predict using the pre-trained estimator
     pass
 
@@ -333,20 +329,18 @@ def look_around(
     tol_likelihood: float,
     animal_id: str = "",
 ):
-    """Returns true when the mouse is looking around using simple rules.
+    """Return true when the mouse is looking around using simple rules.
 
-    Parameters:
-        - speed_dframe (pandas.DataFrame): speed of body parts over time
-        - likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time,
-        as directly obtained from DeepLabCut
-        - tol_speed (float): Maximum tolerated speed for the center of the mouse
-        - tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal
-        is digging, the nose is momentarily occluded).
+    Args:
+        speed_dframe (pandas.DataFrame): speed of body parts over time
+        likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        tol_speed (float): Maximum tolerated speed for the center of the mouse
+        tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal is digging, the nose is momentarily occluded).
 
     Returns:
         lookaround (np.array): True if the animal is standing still and looking around, False otherwise
-    """
 
+    """
     if animal_id != "":
         animal_id += "_"
 
@@ -367,20 +361,22 @@ def following_path(
     frames: int = 20,
     tol: float = 0,
 ) -> np.array:
-    """For multi animal videos only. Returns True if 'follower' is closer than tol to the path that
-    followed has walked over the last specified number of frames
+    """Return True if 'follower' is closer than tol to the path that followed has walked over the last specified number of frames.
 
-        Parameters:
-            - distance_dframe (pandas.DataFrame): distances between bodyparts; generated by the preprocess module
-            - position_dframe (pandas.DataFrame): position of bodyparts; generated by the preprocess module
-            - follower (str) identifier for the animal who's following
-            - followed (str) identifier for the animal who's followed
-            - frames (int) frames in which to track whether the process consistently occurs,
-            - tol (float) Maximum distance for which True is returned
+    For multi animal videos only.
+
+        Args:
+            distance_dframe (pandas.DataFrame): distances between bodyparts; generated by the preprocess module
+            position_dframe (pandas.DataFrame): position of bodyparts; generated by the preprocess module
+            follower (str) identifier for the animal who's following
+            followed (str) identifier for the animal who's followed
+            frames (int) frames in which to track whether the process consistently occurs,
+            tol (float) Maximum distance for which True is returned
 
         Returns:
-            - follow (np.array): boolean sequence, True if conditions are fulfilled, False otherwise"""
+            follow (np.array): boolean sequence, True if conditions are fulfilled, False otherwise
 
+    """
     # Check that follower is close enough to the path that followed has passed though in the last frames
     shift_dict = {
         i: position_dframe[followed + "_Tail_base"].shift(i) for i in range(frames)
@@ -418,19 +414,17 @@ def following_path(
 def max_behaviour(
     behaviour_dframe: pd.DataFrame, window_size: int = 10, stepped: bool = False
 ) -> np.array:
-    """Returns the most frequent behaviour in a window of window_size frames
+    """Return the most frequent behaviour in a window of window_size frames.
 
-    Parameters:
-            - behaviour_dframe (pd.DataFrame): boolean matrix containing occurrence
-            of tagged behaviours per frame in the video
-            - window_size (int): size of the window to use when computing
-            the maximum behaviour per time slot
-            - stepped (bool): sliding windows don't overlap if True. False by default
+    Args:
+        behaviour_dframe (pd.DataFrame): boolean matrix containing occurrence of tagged behaviours per frame in the video
+        window_size (int): size of the window to use when computing the maximum behaviour per time slot
+        stepped (bool): sliding windows don't overlap if True. False by default
 
     Returns:
-        - max_array (np.array): string array with the most common behaviour per instance
-        of the sliding window"""
+        max_array (np.array): string array with the most common behaviour per instance of the sliding window
 
+    """
     speeds = [col for col in behaviour_dframe.columns if "speed" in col.lower()]
 
     behaviour_dframe = behaviour_dframe.drop(speeds, axis=1).astype(float)
@@ -444,15 +438,16 @@ def max_behaviour(
 
 # noinspection PyDefaultArgument
 def get_hparameters(hparams: dict = {}) -> dict:
-    """Returns the most frequent behaviour in a window of window_size frames
+    """Return the most frequent behaviour in a window of window_size frames.
 
-    Parameters:
-        - hparams (dict): dictionary containing hyperparameters to overwrite
+    Args:
+        hparams (dict): dictionary containing hyperparameters to overwrite
 
     Returns:
-        - defaults (dict): dictionary with overwritten parameters. Those not
-        specified in the input retain their default values"""
+        defaults (dict): dictionary with overwritten parameters. Those not
+        specified in the input retain their default values
 
+    """
     defaults = {
         "speed_pause": 5,
         "climb_tol": 10,
@@ -472,17 +467,18 @@ def get_hparameters(hparams: dict = {}) -> dict:
 
 # noinspection PyDefaultArgument
 def frame_corners(w, h, corners: dict = {}):
-    """Returns a dictionary with the corner positions of the video frame
+    """Return a dictionary with the corner positions of the video frame.
 
-    Parameters:
-        - w (int): width of the frame in pixels
-        - h (int): height of the frame in pixels
-        - corners (dict): dictionary containing corners to overwrite
+    Args:
+        w (int): width of the frame in pixels
+        h (int): height of the frame in pixels
+        corners (dict): dictionary containing corners to overwrite
 
     Returns:
-        - defaults (dict): dictionary with overwriten parameters. Those not
-        specified in the input retain their default values"""
+        defaults (dict): dictionary with overwriten parameters. Those not
+        specified in the input retain their default values
 
+    """
     defaults = {
         "downleft": (int(w * 0.3 / 10), int(h / 1.05)),
         "downright": (int(w * 6.5 / 10), int(h / 1.05)),
@@ -508,25 +504,27 @@ def supervised_tagging(
     trained_model_path: str = None,
     params: dict = {},
 ) -> pd.DataFrame:
-    """Outputs a dataframe with the registered motives per frame. If specified, produces a labeled
-    video displaying the information in real time
+    """Output a dataframe with the registered motives per frame.
 
-    Parameters:
-        - coord_object (deepof.data.coordinates): coordinates object containing the project information
-        - raw_coords (deepof.data.table_dict): table_dict with raw coordinates
-        - coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
-        - dists (deepof.data.table_dict): table_dict with already processed distances
-        - speeds (deepof.data.table_dict): table_dict with already processed speeds
-        - full_features (dict): dictionary with
-        - video (str): string name of the experiment to tag
-        - trained_model_path (str): path indicating where all pretrained models are located
-        - params (dict): dictionary to overwrite the default values of the parameters of the functions
+    If specified, produces a labeled video displaying the information in real time
+
+    Args:
+        coord_object (deepof.data.coordinates): coordinates object containing the project information
+        raw_coords (deepof.data.table_dict): table_dict with raw coordinates
+        coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
+        dists (deepof.data.table_dict): table_dict with already processed distances
+        speeds (deepof.data.table_dict): table_dict with already processed speeds
+        full_features (dict): dictionary with
+        video (str): string name of the experiment to tag
+        trained_model_path (str): path indicating where all pretrained models are located
+        params (dict): dictionary to overwrite the default values of the parameters of the functions
         that the rule-based pose estimation utilizes. See documentation for details.
 
     Returns:
-        - tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
-        value is a boolean indicating trait detection at a given time"""
+        tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
+        value is a boolean indicating trait detection at a given time
 
+    """
     # Load pre-trained models for ML annotated traits
     with open(
         os.path.join(
@@ -590,7 +588,7 @@ def supervised_tagging(
     ]
 
     def onebyone_contact(bparts: List):
-        """Returns a smooth boolean array with 1to1 contacts between two mice"""
+        """Return a smooth boolean array with 1to1 contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
 
         try:
@@ -615,8 +613,7 @@ def supervised_tagging(
         )
 
     def twobytwo_contact(rev):
-        """Returns a smooth boolean array with side by side contacts between two mice"""
-
+        """Return a smooth boolean array with side by side contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
@@ -633,6 +630,7 @@ def supervised_tagging(
         )
 
     def overall_speed(ovr_speeds, _id, ucond):
+        """Return the overall speed of a mouse."""
         bparts = [
             "Center",
             "Spine_1",

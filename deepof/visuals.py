@@ -47,7 +47,7 @@ table_dict = NewType("deepof_table_dict", Any)
 def plot_arena(
     coordinates: coordinates, center: str, color: str, ax: Any, i: Union[int, str]
 ):
-    """Plots the arena in the given canvas.
+    """Plot the arena in the given canvas.
 
     Args:
         coordinates (coordinates): deepof Coordinates object.
@@ -119,7 +119,7 @@ def heatmap(
     ax: Any = None,
     **kwargs,
 ) -> plt.figure:
-    """Returns a heatmap of the movement of a specific bodypart in the arena.
+    """Return a heatmap of the movement of a specific bodypart in the arena.
 
     If more than one bodypart is passed, it returns one subplot for each.
 
@@ -246,7 +246,7 @@ def plot_heatmaps(
     show: bool = True,
     **kwargs,
 ) -> plt.figure:  # pragma: no cover
-    """Plots heatmaps of the specified body parts (bodyparts) of the specified animal (i).
+    """Plot heatmaps of the specified body parts (bodyparts) of the specified animal (i).
 
     Args:
         coordinates (coordinates): deepof Coordinates object.
@@ -289,9 +289,9 @@ def plot_heatmaps(
         bin_size = bin_size * coordinates._frame_rate
         coords = {
             key: val.iloc[
-                 bin_size
-                 * bin_index: np.minimum(val.shape[0], bin_size * (bin_index + 1))
-                 ]
+                bin_size
+                * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
+            ]
             for key, val in coords.items()
         }
 
@@ -349,8 +349,7 @@ def plot_gantt(
     additional_checkpoints: pd.DataFrame = None,
     save: bool = False,
 ):
-    """Returns a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation,
-    and changepoint detection size visualization.
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
 
     Args:
         coordinates (project): deepOF project where the data is stored.
@@ -692,7 +691,7 @@ def plot_transitions(
     save: bool = False,
     **kwargs,
 ):
-    """Computes and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+    """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
@@ -850,7 +849,7 @@ def plot_stationary_entropy(
     ax: Any = None,
     save: bool = False,
 ):
-    """Computes and plots transition stationary distribution entropy per condition.
+    """Compute and plots transition stationary distribution entropy per condition.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
@@ -971,7 +970,6 @@ def _filter_embeddings(
     bin_index,
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
-
     # Get experimental conditions per video
     if exp_condition is None:
         exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
@@ -1067,8 +1065,7 @@ def plot_embeddings(
     ax: Any = None,
     save: bool = False,
 ):
-    """Returns a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation,
-    and changepoint detection size visualization.
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
@@ -1094,7 +1091,6 @@ def plot_embeddings(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
-
     # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
     (
         emb_to_plot,
@@ -1290,7 +1286,7 @@ def _scatter_embeddings(
     show: bool = True,
     dpi: int = 200,
 ) -> plt.figure:
-    """Returns a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+    """Return a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
 
     If labels are propagated, it automatically colours all data points with their respective condition.
 
@@ -1330,8 +1326,7 @@ def _scatter_embeddings(
 
 
 def _get_polygon_coords(data, animal_id=""):
-    """Generates polygons to animate for the indicated animal in the provided dataframe."""
-
+    """Generate polygons to animate for the indicated animal in the provided dataframe."""
     if animal_id:
         animal_id += "_"
 
@@ -1384,7 +1379,6 @@ def _process_animation_data(
     selected_cluster,
 ):
     """Auxiliary function to process data for animation outputs."""
-
     data = coordinates.get_coords(center=center, align=align)
     cluster_embedding, concat_embedding = None, None
 
@@ -1516,7 +1510,7 @@ def animate_skeleton(
     save: bool = None,
     dpi: int = 300,
 ):
-    """Renders a FuncAnimation object with embeddings and/or motion trajectories over time.
+    """Render a FuncAnimation object with embeddings and/or motion trajectories over time.
 
     Args:
         coordinates (coordinates): deepof Coordinates object.
@@ -1751,7 +1745,8 @@ def plot_cluster_detection_performance(
     visualization: str = "confusion_matrix",
     ax: plt.Axes = None,
 ):
-    """Plots either a confusion matrix or a bar chart with balanced accuracy for cluster detection cross validated models.
+    """Plot either a confusion matrix or a bar chart with balanced accuracy for cluster detection cross validated models.
+
     Designed to be run after deepof.post_hoc.train_supervised_cluster_detectors (see documentation for details).
 
     Args:
@@ -1804,12 +1799,11 @@ def plot_cluster_detection_performance(
         def compute_balanced_accuracy(cm, cluster_index):
             """
 
-            Computes balanced accuracy for a specific cluster given a confusion matrix
+            Compute balanced accuracy for a specific cluster given a confusion matrix.
 
             Formula: ((( TP / (TP+FN) + (TN/(TN+FP))) / 2
 
             """
-
             TP = cm[cluster_index, cluster_index]
             FP = cm[:, cluster_index].sum() - TP
             FN = cm[cluster_index, :].sum() - TP
@@ -1874,7 +1868,7 @@ def plot_shap_swarm_per_cluster(
     save: str = False,
     show: bool = True,
 ):
-    """
+    """Plot a swarm plot of the SHAP values for a given cluster.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
@@ -1927,7 +1921,7 @@ def output_cluster_video(
     path: str,
     frame_limit: int = np.inf,
 ):
-    """Outputs a video with the frames corresponding to the cluster.
+    """Output a video with the frames corresponding to the cluster.
 
     Args:
         cap: video capture object
@@ -2134,15 +2128,6 @@ def output_unsupervised_annotated_video(
     cv2.destroyAllWindows()
 
 
-def output_supervised_annotated_video():
-    """Given a video, and supervised assignments per frame, outputs a video with the frames annotated.
-
-    Args:
-
-    """
-    pass
-
-
 def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
@@ -2154,7 +2139,7 @@ def export_annotated_video(
     exp_conditions: dict = {},
     cluster_names: dict = {},
 ):
-    """Generic function to export annotated videos from both supervised and unsupervised pipelines.
+    """Export annotated videos from both supervised and unsupervised pipelines.
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
@@ -2190,8 +2175,7 @@ def export_annotated_video(
     def filter_experimental_conditions(
         coordinates: coordinates, videos: list, conditions: list
     ):
-        """Returns a list of videos that match the provided experimental conditions."""
-
+        """Return a list of videos that match the provided experimental conditions."""
         filtered_videos = videos
 
         for condition, state in conditions.items():
@@ -2285,9 +2269,10 @@ def plot_distance_between_conditions(
     save: bool = False,
     ax: Any = None,
 ):
-    """Plots the distance between conditions across a growing time window. Finds an optimal separation binning based on the
-    distance between conditions, and plots the distance between conditions across all non-overlapping bins. Useful, for example,
-    to measure habituation across time.
+    """Plot the distance between conditions across a growing time window.
+
+    Finds an optimal separation binning based on the distance between conditions, and plots it across all non-overlapping bins.
+    Useful, for example, to measure habituation over time.
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
@@ -2438,29 +2423,31 @@ def tag_annotated_frames(
     debug,
     coords,
 ):
-    """Helper function for annotate_video. Annotates a given frame with on-screen information
-    about the recognised patterns"""
+    """Annotate a given frame with on-screen information about the recognised patterns.
 
+    Helper function for annotate_video. No public use intended.
+
+    """
     arena, w, h = arena
 
     def write_on_frame(text, pos, col=(255, 255, 255)):
-        """Partial closure over cv2.putText to avoid code repetition"""
+        """Partial closure over cv2.putText to avoid code repetition."""
         return cv2.putText(frame, text, pos, font, 0.75, col, 2)
 
     def conditional_flag():
-        """Returns a tag depending on a condition"""
+        """Return a tag depending on a condition."""
         if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
             return left_flag
         return right_flag
 
     def conditional_pos():
-        """Returns a position depending on a condition"""
+        """Return a position depending on a condition."""
         if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
             return corners["downleft"]
         return corners["downright"]
 
     def conditional_col(cond=None):
-        """Returns a colour depending on a condition"""
+        """Return a colour depending on a condition."""
         if cond is None:
             cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
         if cond:
@@ -2599,7 +2586,7 @@ def annotate_video(
     debug: bool = False,
     params: dict = {},
 ) -> True:
-    """Renders a version of the input video with all supervised taggings in place.
+    """Render a version of the input video with all supervised taggings in place.
 
     Parameters:
         - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
@@ -2614,7 +2601,6 @@ def annotate_video(
         True
 
     """
-
     # Extract useful information from coordinates object
     tracks = list(coordinates._tables.keys())
     videos = coordinates._videos

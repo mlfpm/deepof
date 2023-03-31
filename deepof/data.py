@@ -65,7 +65,7 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def load_project(project_path: str) -> coordinates:
-    """Loads a pre-saved pickled Coordinates object.
+    """Load a pre-saved pickled Coordinates object.
 
     Args:
         project_path (str): name of the file to load.
@@ -111,7 +111,7 @@ class Project:
         video_format: str = ".mp4",
         video_scale: int = 1,
     ):
-        """Initializes a Project object.
+        """Initialize a Project object.
 
         Args:
             animal_ids (list): list of animal ids.
@@ -196,16 +196,15 @@ class Project:
         self.exclude_bodyparts = exclude_bodyparts
 
     def __str__(self):  # pragma: no cover
-        """Prints the object to stdout."""
+        """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self.videos))
 
     def __repr__(self):  # pragma: no cover
-        """Prints the object to stdout."""
+        """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self.videos))
 
     def set_up_project_directory(self):
-        """Creates a project directory where to save all produced results."""
-
+        """Create a project directory where to save all produced results."""
         # Create a project directory, as well as subfolders for videos and tables
         project_path = os.path.join(self.project_path, self.project_name)
 
@@ -293,7 +292,7 @@ class Project:
         return self._angles
 
     def get_arena(self, tables, verbose=False) -> np.array:
-        """Returns the arena as recognised from the videos.
+        """Return the arena as recognised from the videos.
 
         Args:
             tables (list): list of coordinate tables
@@ -399,7 +398,7 @@ class Project:
         return np.array(scales), arena_params, video_resolution
 
     def load_tables(self, verbose: bool = True) -> deepof.utils.Tuple:
-        """Loads videos and tables into dictionaries.
+        """Load videos and tables into dictionaries.
 
         Args:
             verbose (bool): If True, prints the progress of data loading.
@@ -582,7 +581,7 @@ class Project:
         return tab_dict, lik_dict
 
     def get_distances(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Computes the distances between all selected body parts over time. If ego is provided, it only returns distances to a specified bodypart.
+        """Compute the distances between all selected body parts over time. If ego is provided, it only returns distances to a specified bodypart.
 
         Args:
             tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
@@ -628,7 +627,7 @@ class Project:
         return distance_dict
 
     def get_angles(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Computes all the angles between adjacent bodypart trios per video and per frame in the data.
+        """Compute all the angles between adjacent bodypart trios per video and per frame in the data.
 
         Args:
             tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
@@ -678,7 +677,7 @@ class Project:
         return angle_dict
 
     def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Computes all relevant areas (head, torso, back) per video and per frame in the data.
+        """Compute all relevant areas (head, torso, back) per video and per frame in the data.
 
         Args:
             tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
@@ -724,7 +723,7 @@ class Project:
         return areas_dict
 
     def create(self, verbose: bool = True) -> coordinates:
-        """Generates a deepof.Coordinates dataset using all the options specified during initialization.
+        """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
@@ -733,7 +732,6 @@ class Project:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
 
         """
-
         if verbose:
             print("Setting up project directories...")
         self.set_up_project_directory()
@@ -893,11 +891,11 @@ class Coordinates:
         self._connectivity = connectivity
 
     def __str__(self):  # pragma: no cover
-        """Prints the object to stdout."""
+        """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self._videos))
 
     def __repr__(self):  # pragma: no cover
-        """Prints the object to stdout."""
+        """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self._videos))
 
     def get_coords(
@@ -911,7 +909,7 @@ class Coordinates:
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
-        """Returns a table_dict object with the coordinates of each animal as values.
+        """Return a table_dict object with the coordinates of each animal as values.
 
         Args:
             center (str): Name of the body part to which the positions will be centered. If false,
@@ -1079,7 +1077,7 @@ class Coordinates:
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
-        """Returns a table_dict object with the distances between body parts animal as values.
+        """Return a table_dict object with the distances between body parts animal as values.
 
         Args:
             speed (int): The derivative to use for speed.
@@ -1159,7 +1157,7 @@ class Coordinates:
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
     ) -> table_dict:
-        """Returns a table_dict object with the angles between body parts animal as values.
+        """Return a table_dict object with the angles between body parts animal as values.
 
         Args:
             degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
@@ -1215,7 +1213,7 @@ class Coordinates:
         )  # pragma: no cover
 
     def get_areas(self, speed: int = 0, selected_id: str = "all") -> table_dict:
-        """Returns a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
+        """Return a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
         Args:
             speed (int): The derivative to use for speed.
@@ -1279,11 +1277,11 @@ class Coordinates:
 
     @property
     def get_exp_conditions(self):
-        """Returns the stored dictionary with experimental conditions per subject."""
+        """Return the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
 
     def load_exp_conditions(self, filepath):  # pragma: no cover
-        """Loads experimental conditions from a wide-format csv table.
+        """Load experimental conditions from a wide-format csv table.
 
         Args:
             filepath (str): Path to the file containing the experimental conditions.
@@ -1299,16 +1297,16 @@ class Coordinates:
         self._exp_conditions = exp_conditions
 
     def get_quality(self):
-        """Retrieves a dictionary with the tagging quality per video, as reported by DLC."""
+        """Retrieve a dictionary with the tagging quality per video, as reported by DLC."""
         return self._quality
 
     @property
     def get_arenas(self):
-        """Retrieves all available information associated with the arena."""
+        """Retrieve all available information associated with the arena."""
         return self._arena, [self._arena_dims], self._scales
 
     def save(self, filename: str = None, timestamp: bool = True):
-        """Saves the current state of the Coordinates object to a pickled file.
+        """Save the current state of the Coordinates object to a pickled file.
 
         Args:
             filename (str): Name of the pickled file to store. If no name is provided, a default is used.
@@ -1332,7 +1330,7 @@ class Coordinates:
         preprocess: bool = True,
         **kwargs,
     ) -> table_dict:
-        """Generates a dataset with all specified features.
+        """Generate a dataset with all specified features.
 
         Args:
             animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal
@@ -1535,7 +1533,7 @@ class Coordinates:
         if video_output:  # pragma: no cover
 
             def output_video(idx):
-                """Outputs a single annotated video. Enclosed in a function to enable parallelization."""
+                """Output a single annotated video. Enclosed in a function to enable parallelization."""
                 deepof.visuals.annotate_video(
                     self,
                     tag_dict=tag_dict[idx],
@@ -1730,7 +1728,7 @@ class TableDict(dict):
         propagate_labels: bool = False,
         propagate_annotations: Union[Dict, bool] = False,
     ):
-        """Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
+        """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
 
         Includes methods for generating training and testing datasets for the autoencoders.
 
@@ -1762,7 +1760,7 @@ class TableDict(dict):
         self._propagate_annotations = propagate_annotations
 
     def filter_videos(self, keys: list) -> table_dict:
-        """Returns a subset of the original table_dict object, containing only the specified keys.
+        """Return a subset of the original table_dict object, containing only the specified keys.
 
         Useful, for example, to select data coming from videos of a specified condition.
 
@@ -1784,7 +1782,7 @@ class TableDict(dict):
         )
 
     def _prepare_projection(self) -> np.ndarray:
-        """Returns a numpy ndarray from the preprocessing of the table_dict object, ready for projection into a lower dimensional space."""
+        """Return a numpy ndarray from the preprocessing of the table_dict object, ready for projection into a lower dimensional space."""
         labels = None
 
         # Takes care of propagated labels if present
@@ -1805,7 +1803,7 @@ class TableDict(dict):
         n_components: int = 2,
         kernel: str = None,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a specified projection to an n_components space.
+        """Return a training set generated from the 2D original data (time x features) and a specified projection to an n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for performance or visualization reasons. For internal usage only.
 
@@ -1839,7 +1837,7 @@ class TableDict(dict):
     def random_projection(
         self, n_components: int = 2, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a random projection to a n_components space.
+        """Return a training set generated from the 2D original data (time x features) and a random projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons.
@@ -1856,7 +1854,7 @@ class TableDict(dict):
     def pca(
         self, n_components: int = 2, kernel: str = "linear"
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
-        """Returns a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
+        """Return a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons.
@@ -1874,7 +1872,7 @@ class TableDict(dict):
         self,
         n_components: int = 2,
     ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:  # pragma: no cover
-        """Returns a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
+        """Return a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for
         performance or visualization reasons.
@@ -1893,9 +1891,9 @@ class TableDict(dict):
         )
 
     def filter_id(self, selected_id: str = None) -> table_dict:
-        """Filters a TableDict object to keep only those columns related to the selected id.
+        """Filter a TableDict object to keep only those columns related to the selected id.
 
-        Leaves labels untouched if present.
+        Leave labels untouched if present.
 
         Args:
             selected_id (str): select a single animal on multi animal settings. Defaults to None
@@ -1920,7 +1918,7 @@ class TableDict(dict):
         )
 
     def merge(self, *args, ignore_index=False):
-        """Takes a number of table_dict objects and merges them to the current one.
+        """Take a number of table_dict objects and merges them to the current one.
 
         Returns a table_dict object of type 'merged'.
         Only annotations of the first table_dict object are kept.
@@ -1975,10 +1973,9 @@ class TableDict(dict):
     def get_training_set(
         self, current_table_dict: table_dict, test_videos: int = 0
     ) -> tuple:
-        """Generates training and test sets as numpy.array objects for model training.
+        """Generate training and test sets as numpy.array objects for model training.
 
         Intended for internal usage only.
-
 
         Args:
             current_table_dict (table_dict): table_dict object containing the data to be used for training.
@@ -2082,7 +2079,7 @@ class TableDict(dict):
         interpolate_normalized: int = 10,
         precomputed_breaks: dict = None,
     ) -> np.ndarray:
-        """Main method for preprocessing the loaded dataset before feeding to unsupervised embedding models.
+        """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
         Capable of returning training and test sets ready for model training.
 

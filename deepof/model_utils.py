@@ -2,11 +2,7 @@
 # encoding: utf-8
 # module deepof
 
-"""
-
-Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels.
-
-"""
+"""Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels."""
 
 from datetime import date, datetime
 from functools import partial
@@ -57,7 +53,7 @@ def select_contrastive_loss(
     elimination_topk=0.1,
     attraction=False,
 ):  # pragma: no cover
-    """Selects and applies the contrastive loss function to be used in the Contrastive embedding models.
+    """Select and applies the contrastive loss function to be used in the Contrastive embedding models.
 
     Args:
         history: Tensor of shape (batch_size, seq_len, embedding_dim).
@@ -110,8 +106,7 @@ def select_contrastive_loss(
 
 
 def _cosine_similarity(x, y):  # pragma: no cover
-    """Computes the cosine similarity between two tensors."""
-
+    """Compute the cosine similarity between two tensors."""
     v = tf.keras.losses.CosineSimilarity(
         axis=2, reduction=tf.keras.losses.Reduction.NONE
     )(tf.expand_dims(x, 1), tf.expand_dims(y, 0))
@@ -119,16 +114,14 @@ def _cosine_similarity(x, y):  # pragma: no cover
 
 
 def _dot_similarity(x, y):  # pragma: no cover
-    """Computes the dot product between two tensors."""
-
+    """Compute the dot product between two tensors."""
     v = tf.tensordot(tf.expand_dims(x, 1), tf.expand_dims(tf.transpose(y), 0), axes=2)
 
     return v
 
 
 def _euclidean_similarity(x, y):  # pragma: no cover
-    """Computes the euclidean distance between two tensors."""
-
+    """Compute the euclidean distance between two tensors."""
     x1 = tf.expand_dims(x, 1)
     y1 = tf.expand_dims(y, 0)
     d = tf.sqrt(tf.reduce_sum(tf.square(x1 - y1), axis=2))
@@ -137,8 +130,7 @@ def _euclidean_similarity(x, y):  # pragma: no cover
 
 
 def _edit_similarity(x, y):  # pragma: no cover
-    """Computes the edit distance between two tensors."""
-
+    """Compute the edit distance between two tensors."""
     x1 = tf.expand_dims(x, 1)
     y1 = tf.expand_dims(y, 0)
     d = tf.sqrt(tf.reduce_sum(tf.square(x1 - y1), axis=2))
@@ -147,10 +139,7 @@ def _edit_similarity(x, y):  # pragma: no cover
 
 
 def nce_loss(history, future, similarity, temperature=0.1):  # pragma: no cover
-    """Computes the NCE loss function, as described in the paper "A Simple Framework for Contrastive
-    Learning of Visual Representations" (https://arxiv.org/abs/2002.05709).
-
-    """
+    """Compute the NCE loss function, as described in the paper "A Simple Framework for Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2002.05709)."""
     criterion = tf.keras.losses.BinaryCrossentropy(
         from_logits=True, reduction=tf.keras.losses.Reduction.SUM
     )
@@ -180,7 +169,7 @@ def nce_loss(history, future, similarity, temperature=0.1):  # pragma: no cover
 def dcl_loss(
     history, future, similarity, temperature=0.1, debiased=True, tau_plus=0.1
 ):  # pragma: no cover
-    """Computes the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
+    """Compute the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
     N = history.shape[0]
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
@@ -215,11 +204,7 @@ def dcl_loss(
 def fc_loss(
     history, future, similarity, temperature=0.1, elimination_topk=0.1, attraction=False
 ):  # pragma: no cover
-    """Computes the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations"
-    (https://arxiv.org/abs/2004.11362).
-
-    """
-
+    """Compute the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2004.11362)."""
     N = history.shape[0]
     if elimination_topk > 0.5:
         elimination_topk = 0.5
@@ -257,10 +242,7 @@ def fc_loss(
 def hard_loss(
     history, future, similarity, temperature, beta=0.0, debiased=True, tau_plus=0.1
 ):  # pragma: no cover
-    """Computes the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples"
-    (https://arxiv.org/abs/2011.03343).
-
-    """
+    """Compute the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples" (https://arxiv.org/abs/2011.03343)."""
     N = history.shape[0]
 
     sim = similarity(history, future)
@@ -297,10 +279,8 @@ def hard_loss(
 
 
 def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
-    """
+    """Add a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent space.
 
-    Adds a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent
-    space.
     Based on https://arxiv.org/pdf/1610.04794.pdf, and https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
 
     Args:
@@ -322,9 +302,7 @@ def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no 
 
 @tf.function
 def get_k_nearest_neighbors(tensor, k, index):  # pragma: no cover
-    """
-
-    Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index
+    """Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index.
 
     Args:
         tensor (tf.Tensor): tensor to compute the k nearest neighbors for
@@ -344,9 +322,7 @@ def get_k_nearest_neighbors(tensor, k, index):  # pragma: no cover
 
 @tf.function
 def compute_shannon_entropy(tensor):  # pragma: no cover
-    """
-
-    Computes Shannon entropy for a given tensor
+    """Compute Shannon entropy for a given tensor.
 
     Args:
         tensor (tf.Tensor): tensor to compute the entropy for
@@ -355,7 +331,6 @@ def compute_shannon_entropy(tensor):  # pragma: no cover
         tf.Tensor: entropy of the tensor
 
     """
-
     tensor = tf.cast(tensor, tf.dtypes.int32)
     bins = (
         tf.math.bincount(tensor, dtype=tf.dtypes.float32)
@@ -365,16 +340,13 @@ def compute_shannon_entropy(tensor):  # pragma: no cover
 
 
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
-    """
-
-    Plots learing rate versus the loss function of the model
+    """Plot learing rate versus the loss function of the model.
 
     Args:
         rates (np.ndarray): array containing the learning rates to plot in the x-axis
         losses (np.ndarray): array containing the losses to plot in the y-axis
 
     """
-
     plt.plot(rates, losses)
     plt.gca().set_xscale("log")
     plt.hlines(min(losses), min(rates), max(rates))
@@ -384,9 +356,7 @@ def plot_lr_vs_loss(rates, losses):  # pragma: no cover
 
 
 def get_angles(pos: int, i: int, d_model: int):
-    """
-
-    Auxiliary function for positional encoding computation.
+    """Auxiliary function for positional encoding computation.
 
     Args:
         pos (int): position in the sequence.
@@ -394,7 +364,6 @@ def get_angles(pos: int, i: int, d_model: int):
         d_model (int): dimensionality of the embeddings.
 
     """
-
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
     return pos * angle_rates
 
@@ -402,7 +371,7 @@ def get_angles(pos: int, i: int, d_model: int):
 def get_recurrent_block(
     x: tf.Tensor, latent_dim: int, gru_unroll: bool, bidirectional_merge: str
 ):
-    """Builds a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.
+    """Build a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.
 
     Args:
         x (tf.Tensor): Input tensor.
@@ -459,17 +428,13 @@ def get_recurrent_block(
 
 
 def positional_encoding(position: int, d_model: int):
-    """
-
-    Computes positional encodings, as in
-    https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf.
+    """Compute positional encodings, as in https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf.
 
     Args:
         position (int): position in the sequence.
         d_model (int): dimensionality of the embeddings.
 
     """
-
     angle_rads = get_angles(
         np.arange(position)[:, np.newaxis], np.arange(d_model)[np.newaxis, :], d_model
     )
@@ -486,15 +451,12 @@ def positional_encoding(position: int, d_model: int):
 
 
 def create_padding_mask(seq: tf.Tensor):
-    """
-
-    Creates a padding mask, with zeros where data is missing, and ones where data is available.
+    """Create a padding mask, with zeros where data is missing, and ones where data is available.
 
     Args:
         seq (tf.Tensor): Sequence to compute the mask on
 
     """
-
     seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
 
     # add extra dimensions to add the padding to the attention logits.
@@ -502,9 +464,8 @@ def create_padding_mask(seq: tf.Tensor):
 
 
 def create_look_ahead_mask(size: int):
-    """
+    """Create a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.
 
-    Creates a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.
     Useful for transformer decoder, which allows it to go through the data in a sequential manner, without taking
     the future into account.
 
@@ -512,22 +473,19 @@ def create_look_ahead_mask(size: int):
         size (int): number of time steps in the sequence
 
     """
-
     mask = tf.linalg.band_part(tf.ones((size, size)), -1, 0)
     return tf.cast(mask, tf.float32)
 
 
 def create_masks(inp: tf.Tensor):
-    """
+    """Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.
 
-    Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.
     This includes encoder and decoder padding masks, and a look-ahead mask
 
     Args:
         inp (tf.Tensor): input sequence to create the masks for.
 
     """
-
     # Reduces the dimensionality of the mask to remove the feature dimension
     tar = inp[:, :, 0]
     inp = inp[:, :, 0]
@@ -552,9 +510,7 @@ def create_masks(inp: tf.Tensor):
 def find_learning_rate(
     model, data, epochs=1, batch_size=32, min_rate=10**-8, max_rate=10**-1
 ):
-    """
-
-    Trains the provided model for an epoch with an exponentially increasing learning rate
+    """Train the provided model for an epoch with an exponentially increasing learning rate.
 
     Args:
         model (tf.keras.Model): model to train
@@ -568,7 +524,6 @@ def find_learning_rate(
         float: learning rate that resulted in the lowest loss
 
     """
-
     init_weights = model.get_weights()
     iterations = len(data)
     factor = K.exp(K.log(max_rate / min_rate) / iterations)
@@ -583,15 +538,12 @@ def find_learning_rate(
 
 @tf.function
 def get_hard_counts(soft_counts: tf.Tensor):
-    """
-
-    Computes hard counts per cluster in a differentiable way
+    """Compute hard counts per cluster in a differentiable way.
 
     Args:
         soft_counts (tf.Tensor): soft counts per cluster
 
     """
-
     max_per_row = tf.expand_dims(tf.reduce_max(soft_counts, axis=1), axis=1)
 
     mask = tf.cast(soft_counts == max_per_row, tf.float32)
@@ -607,11 +559,9 @@ def get_hard_counts(soft_counts: tf.Tensor):
 def cluster_frequencies_regularizer(
     soft_counts: tf.Tensor, k: int, n_samples: int = 1000
 ):
-    """
+    """Compute the KL divergence between the cluster assignment distribution and a uniform prior across clusters.
 
-    Computes the KL divergence between the cluster assignment distribution
-    and a uniform prior across clusters. While this assumes an equal distribution
-    between clusters, the prior can be tweaked to reflect domain knowledge.
+    While this assumes an equal distribution between clusters, the prior can be tweaked to reflect domain knowledge.
 
     Args:
         soft_counts (tf.Tensor): soft counts per cluster
@@ -620,7 +570,6 @@ def cluster_frequencies_regularizer(
         modeling cluster assignments.
 
     """
-
     hard_counts = get_hard_counts(soft_counts)
 
     dist_a = tfd.Categorical(probs=hard_counts / k)
@@ -641,9 +590,7 @@ def get_callbacks(
     outpath: str = ".",
     run: int = False,
 ) -> List[Union[Any]]:
-    """
-
-    Generates callbacks used for model training.
+    """Generate callbacks used for model training.
 
     Args:
         embedding_model (str): name of the embedding model
@@ -659,7 +606,6 @@ def get_callbacks(
         List[Union[Any]]: List of callbacks to be used for training
 
     """
-
     run_ID = "{}{}{}{}{}{}{}".format(
         "deepof_unsupervised_{}_{}_encodings".format(embedding_model, encoder_type),
         ("_input_type={}".format(input_type if input_type else "coords")),
@@ -695,16 +641,10 @@ def get_callbacks(
 
 
 class CustomStopper(tf.keras.callbacks.EarlyStopping):
-    """
-
-    Custom early stopping callback. Prevents the model from stopping before warmup is over.
-
-    """
+    """Custom early stopping callback. Prevents the model from stopping before warmup is over."""
 
     def __init__(self, start_epoch, *args, **kwargs):
-        """
-
-        Initializes the CustomStopper callback.
+        """Initialize the CustomStopper callback.
 
         Args:
             start_epoch: epoch from which performance will be taken into account when deciding whether to stop training.
@@ -716,34 +656,26 @@ class CustomStopper(tf.keras.callbacks.EarlyStopping):
         self.start_epoch = start_epoch
 
     def get_config(self):  # pragma: no cover
-        """
-
-        Updates callback metadata
-
-        """
-
+        """Update callback metadata."""
         config = super().get_config().copy()
         config.update({"start_epoch": self.start_epoch})
         return config
 
     def on_epoch_end(self, epoch, logs=None):
-
+        """Check whether to stop training."""
         if epoch > self.start_epoch:
             super().on_epoch_end(epoch, logs)
 
 
 class ExponentialLearningRate(tf.keras.callbacks.Callback):
-    """
+    """Simple class that allows to grow learning rate exponentially during training.
 
-    Simple class that allows to grow learning rate exponentially during training.
     Used to trigger optimal learning rate search in deepof.train_utils.find_learning_rate.
 
     """
 
     def __init__(self, factor: float):
-        """
-
-        Initializes the exponential learning rate callback
+        """Initialize the exponential learning rate callback.
 
         Args:
             factor(float): factor by which to multiply the learning rate
@@ -756,16 +688,13 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
 
     # noinspection PyMethodOverriding
     def on_batch_end(self, batch: int, logs: dict):
-        """
-
-        This callback acts after processing each batch
+        """Apply on batch end.
 
         Args:
             batch: batch number
             logs (dict): dictionary containing the loss for the current batch
 
         """
-
         self.rates.append(K.get_value(self.model.optimizer.lr))
         if "total_loss" in logs.keys():
             self.losses.append(logs["total_loss"])
@@ -775,13 +704,10 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
 
 
 class ProbabilisticDecoder(tf.keras.layers.Layer):
-    """
-
-    Maps the reconstruction output of a given decoder to a multivariate normal distribution.
-
-    """
+    """Map the reconstruction output of a given decoder to a multivariate normal distribution."""
 
     def __init__(self, input_shape, **kwargs):
+        """Initialize the probabilistic decoder."""
         super().__init__(**kwargs)
         self.time_distributer = tf.keras.layers.Dense(
             tfpl.IndependentNormal.params_size(input_shape[1:]) // 2
@@ -814,9 +740,7 @@ class ProbabilisticDecoder(tf.keras.layers.Layer):
         )
 
     def call(self, inputs):  # pragma: no cover
-        """
-
-        Maps the reconstruction output of a given decoder to a multivariate normal distribution.
+        """Map the reconstruction output of a given decoder to a multivariate normal distribution.
 
         Args:
             inputs (tuple): tuple containing the reconstruction output and the validity mask
@@ -825,7 +749,6 @@ class ProbabilisticDecoder(tf.keras.layers.Layer):
             tf.Tensor: multivariate normal distribution
 
         """
-
         hidden, validity_mask = inputs
 
         hidden = tf.keras.layers.TimeDistributed(self.time_distributer)(hidden)
@@ -838,9 +761,9 @@ class ProbabilisticDecoder(tf.keras.layers.Layer):
 
 
 class ClusterControl(tf.keras.layers.Layer):
-    """
+    """Identity layer.
 
-    Identity layer that evaluates different clustering metrics between the components of the latent Gaussian Mixture
+    Evaluates different clustering metrics between the components of the latent Gaussian Mixture
     using the entropy of the nearest neighbourhood. If self.loss_weight > 0, it also adds a regularization
     penalty to the loss function which attempts to maximize the number of populated clusters during training.
 
@@ -855,9 +778,7 @@ class ClusterControl(tf.keras.layers.Layer):
         *args,
         **kwargs,
     ):
-        """
-
-        Initializes the ClusterControl layer
+        """Initialize the ClusterControl layer.
 
         Args:
             batch_size (int): batch size of the model
@@ -877,12 +798,7 @@ class ClusterControl(tf.keras.layers.Layer):
         self.k = k
 
     def get_config(self):  # pragma: no cover
-        """
-
-        Updates Constraint metadata
-
-        """
-
+        """Update Constraint metadata."""
         config = super().get_config().copy()
         config.update({"batch_size": self.batch_size})
         config.update({"n_components": self.n_components})
@@ -892,12 +808,7 @@ class ClusterControl(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs):  # pragma: no cover
-        """
-
-        Updates Layer's call method
-
-        """
-
+        """Update Layer's call method."""
         encodings, categorical = inputs[0], inputs[1]
 
         hard_groups = tf.math.argmax(categorical, axis=1)
@@ -919,16 +830,10 @@ class ClusterControl(tf.keras.layers.Layer):
 
 
 class TransformerEncoderLayer(tf.keras.layers.Layer):
-    """
-
-    Transformer encoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer.
-
-    """
+    """Transformer encoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer."""
 
     def __init__(self, key_dim, num_heads, dff, rate=0.1):
-        """
-
-        Constructor for the transformer encoder layer.
+        """Construct the transformer encoder layer.
 
         Args:
             key_dim: dimensionality of the time series
@@ -957,6 +862,7 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def call(self, x, training, mask, return_scores=False):
+        """Call the transformer encoder layer."""
         attn_output, attn_scores = self.mha(
             key=x, query=x, value=x, attention_mask=mask, return_attention_scores=True
         )  # (batch_size, input_seq_len, d_model)
@@ -974,16 +880,10 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
 
 
 class TransformerDecoderLayer(tf.keras.layers.Layer):
-    """
-
-    Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer.
-
-    """
+    """Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer."""
 
     def __init__(self, key_dim, num_heads, dff, rate=0.1):
-        """
-
-        Constructor for the transformer decoder layer.
+        """Construct the transformer decoder layer.
 
         Args:
             key_dim: dimensionality of the time series
@@ -1018,7 +918,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
     def call(
         self, x, enc_output, training, look_ahead_mask, padding_mask
     ):  # pragma: no cover
-
+        """Call the transformer decoder layer."""
         attn1, attn_weights_block1 = self.mha1(
             key=x,
             query=x,
@@ -1048,9 +948,9 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
 
 # noinspection PyCallingNonCallable
 class TransformerEncoder(tf.keras.layers.Layer):
-    """
+    """Transformer encoder.
 
-    Transformer encoder. Based on https://www.tensorflow.org/text/tutorials/transformer.
+    Based on https://www.tensorflow.org/text/tutorials/transformer.
     Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
     and https://arxiv.org/abs/1711.03905.
 
@@ -1066,9 +966,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
         maximum_position_encoding,
         rate=0.1,
     ):
-        """
-
-        Constructor for the transformer encoder.
+        """Construct the transformer encoder.
 
         Args:
             num_layers: number of transformer layers to include.
@@ -1095,7 +993,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(self.rate)
 
     def call(self, x, training):
-
+        """Call the transformer encoder."""
         # compute mask on the fly
         mask, _, _ = create_masks(x)
         seq_len = tf.shape(x)[1]
@@ -1114,8 +1012,9 @@ class TransformerEncoder(tf.keras.layers.Layer):
 
 # noinspection PyCallingNonCallable
 class TransformerDecoder(tf.keras.layers.Layer):
-    """
-    Transformer decoder. Based on https://www.tensorflow.org/text/tutorials/transformer.
+    """Transformer decoder.
+
+    Based on https://www.tensorflow.org/text/tutorials/transformer.
     Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
     and https://arxiv.org/abs/1711.03905.
     """
@@ -1130,9 +1029,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
         maximum_position_encoding,
         rate=0.1,
     ):
-        """
-
-        Constructor for the transformer decoder.
+        """Construct the transformer decoder.
 
         Args:
             num_layers: number of transformer layers to include.
@@ -1161,7 +1058,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
     def call(
         self, x, enc_output, training, look_ahead_mask, padding_mask
     ):  # pragma: no cover
-
+        """Call the transformer decoder."""
         seq_len = tf.shape(x)[1]
         attention_weights = {}
         x = self.embedding(x)
@@ -1180,7 +1077,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
 
 
 def log_hyperparameters():
-    """
+    """Log hyperparameters in tensorboard.
 
     Blueprint for hyperparameter and metric logging in tensorboard during hyperparameter tuning
 
@@ -1189,7 +1086,6 @@ def log_hyperparameters():
         metrics (list): List containing the metrics to log in tensorboard.
 
     """
-
     logparams = [
         hp.HParam(
             "latent_dim",
@@ -1562,7 +1458,7 @@ def embedding_per_video(
     ruptures: bool = False,
     global_scaler: Any = None,
 ):  # pragma: no cover
-    """Uses a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
+    """Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
 
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
@@ -1634,9 +1530,7 @@ def tune_search(
     n_replicas: int = 1,
     outpath: str = "unsupervised_tuner_search",
 ) -> tuple:
-    """
-
-    Define the search space using keras-tuner and hyperband or bayesian optimization
+    """Define the search space using keras-tuner and hyperband or bayesian optimization.
 
     Args:
         preprocessed_object (tf.data.Dataset): Dataset object for training and validation.
@@ -1661,7 +1555,6 @@ def tune_search(
         best_run (str): Name of the best run.
 
     """
-
     # Load data
     try:
         X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object

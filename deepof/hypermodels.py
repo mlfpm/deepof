@@ -2,11 +2,7 @@
 # encoding: utf-8
 # module deepof
 
-"""
-
-keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models
-
-"""
+"""keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models."""
 
 from keras_tuner import HyperModel
 from typing import Any, List, NewType
@@ -26,11 +22,7 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 class VaDE(HyperModel):
-    """
-
-    Hyperparameter tuning pipeline for deepof.models.VaDE
-
-    """
+    """Hyperparameter tuning pipeline for deepof.models.VaDE."""
 
     def __init__(
         self,
@@ -43,9 +35,7 @@ class VaDE(HyperModel):
         use_gnn: bool = False,
         adjacency_matrix: np.ndarray = None,
     ):
-        """
-
-        VaDE hypermodel for hyperparameter tuning.
+        """Build VaDE hypermodel for hyperparameter tuning.
 
         Args:
             input_shape (tuple): shape of the input tensor.
@@ -69,12 +59,7 @@ class VaDE(HyperModel):
         self.adjacency_matrix = adjacency_matrix
 
     def get_hparams(self, hp):
-        """
-
-        Retrieve hyperparameters to tune
-
-        """
-
+        """Retrieve hyperparameters to tune."""
         # Architectural hyperparameters
         encoder = hp.Choice(
             "encoder", ["recurrent", "TCN", "transformer"], default="recurrent"
@@ -104,12 +89,7 @@ class VaDE(HyperModel):
         )
 
     def build(self, hp):
-        """
-
-        Overrides Hypermodel's build method
-
-        """
-
+        """Override Hypermodel's build method."""
         # Hyperparameters to tune
         (
             encoder,
@@ -140,11 +120,7 @@ class VaDE(HyperModel):
 
 
 class VQVAE(HyperModel):
-    """
-
-    Hyperparameter tuning pipeline for deepof.models.VQVAE
-
-    """
+    """Hyperparameter tuning pipeline for deepof.models.VQVAE."""
 
     def __init__(
         self,
@@ -156,9 +132,7 @@ class VQVAE(HyperModel):
         use_gnn: bool = False,
         adjacency_matrix: np.ndarray = None,
     ):
-        """
-
-        VQVAE hypermodel for hyperparameter tuning.
+        """VQVAE hypermodel for hyperparameter tuning.
 
         Args:
             input_shape (tuple): shape of the input tensor.
@@ -170,7 +144,6 @@ class VQVAE(HyperModel):
             adjacency_matrix (np.ndarray): adjacency matrix of the graph.
 
         """
-
         super().__init__()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -181,12 +154,7 @@ class VQVAE(HyperModel):
         self.adjacency_matrix = adjacency_matrix
 
     def get_hparams(self, hp):
-        """
-
-        Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.
-
-        """
-
+        """Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss."""
         # Architectural hyperparameters
         encoder = hp.Choice(
             "encoder", ["recurrent", "TCN", "transformer"], default="recurrent"
@@ -198,12 +166,7 @@ class VQVAE(HyperModel):
         return (encoder, kmeans_loss)
 
     def build(self, hp):
-        """
-
-        Overrides Hypermodel's build method
-
-        """
-
+        """Override Hypermodel's build method."""
         # Hyperparameters to tune
         (encoder, kmeans_loss) = self.get_hparams(hp)
 
@@ -224,11 +187,7 @@ class VQVAE(HyperModel):
 
 
 class Contrastive(HyperModel):
-    """
-
-    Hyperparameter tuning pipeline for deepof.models.Contrastive
-
-    """
+    """Hyperparameter tuning pipeline for deepof.models.Contrastive."""
 
     def __init__(
         self,
@@ -239,9 +198,7 @@ class Contrastive(HyperModel):
         use_gnn: bool = False,
         adjacency_matrix: np.ndarray = None,
     ):
-        """
-
-        Contrastive hypermodel for hyperparameter tuning.
+        """Contrastive hypermodel for hyperparameter tuning.
 
         Args:
             input_shape (tuple): shape of the input tensor.
@@ -252,7 +209,6 @@ class Contrastive(HyperModel):
             adjacency_matrix (np.ndarray): adjacency matrix of the graph.
 
         """
-
         super().__init__()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -262,12 +218,7 @@ class Contrastive(HyperModel):
         self.adjacency_matrix = adjacency_matrix
 
     def get_hparams(self, hp):
-        """
-
-        Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss.
-
-        """
-
+        """Retrieve hyperparameters to tune, including the encoder type and the weight of the kmeans loss."""
         # Architectural hyperparameters
         encoder = hp.Choice(
             "encoder", ["recurrent", "TCN", "transformer"], default="recurrent"
@@ -276,12 +227,7 @@ class Contrastive(HyperModel):
         return encoder
 
     def build(self, hp):
-        """
-
-        Overrides Hypermodel's build method
-
-        """
-
+        """Override Hypermodel's build method."""
         # Hyperparameters to tune
         (encoder) = self.get_hparams(hp)
 
