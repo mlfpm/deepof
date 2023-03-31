@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold, cross_validate
+from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from imblearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -96,14 +96,14 @@ def get_time_on_cluster(
 
 
 def get_aggregated_embedding(
-    embedding: table_dict, reduce_dim: bool = False, agg: str = "mean"
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean"
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
     Instead of an embedding per chunk, the function returns an embedding per experiment.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
+        embedding (np.ndarray): A dictionary of embeddings, where the keys are the names of the
         experimental conditions, and the values are the embeddings for each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False,
         the embeddings are kept in their original dimensionality.
@@ -385,6 +385,34 @@ def separation_between_conditions(
             )
 
     return current_distance
+
+
+def fit_normative_global_model(global_normal_embeddings: table_dict):
+    """Fit a global model to the normal embeddings.
+
+    Args:
+        global_normal_embeddings (TableDict): A dictionary of embeddings, where the keys are the names of the
+        experimental conditions, and the values are the embeddings for each condition.
+
+    Returns:
+        A fitted global model.
+
+    """
+    # Define the range of bandwidth values to search over
+    params = {"bandwidth": np.linspace(0.1, 10, 200)}
+
+    # Create an instance of the KernelDensity estimator
+    kde = KernelDensity(kernel="gaussian")
+
+    # Perform a grid search to find the optimal bandwidth value
+    grid_search = GridSearchCV(kde, params, cv=10)
+    grid_search.fit(global_normal_embeddings)
+
+    kd_estimation = KernelDensity(
+        kernel="gaussian", bandwidth=grid_search.best_params_["bandwidth"]
+    ).fit(global_normal_embeddings)
+
+    return kd_estimation
 
 
 def enrichment_across_conditions(

@@ -18,6 +18,7 @@ from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+from hypothesis.extra import numpy as hnp
 from shutil import rmtree
 
 import deepof.post_hoc
@@ -134,6 +135,19 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     )
 
     assert isinstance(distance_binning, np.ndarray)
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    input_data=hnp.arrays(
+        shape=(10, 2),
+        dtype=np.float32,
+        elements=st.floats(min_value=0.0, max_value=1.0, width=32),
+    )
+)
+def test_fit_normative_global_model(input_data):
+    normative_model = deepof.post_hoc.fit_normative_global_model(input_data)
+    assert isinstance(normative_model.sample(10), np.ndarray)
 
 
 @given(
