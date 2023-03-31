@@ -239,6 +239,8 @@ def plot_heatmaps(
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
+    bin_size: int = None,
+    bin_index: int = None,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -261,6 +263,8 @@ def plot_heatmaps(
         ylim (float): y-axis limits.
         save (str):  if provided, the figure is saved to the specified path.
         experiment_id (str): index of the animal to plot.
+        bin_size (int): bin size for time filtering.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
         a new figure will be created.
@@ -279,6 +283,17 @@ def plot_heatmaps(
                 if v[exp_condition].values == condition_value
             ]
         )
+
+    # Filter for specific time bin
+    if bin_size is not None:
+        bin_size = bin_size * coordinates._frame_rate
+        coords = {
+            key: val.iloc[
+                 bin_size
+                 * bin_index: np.minimum(val.shape[0], bin_size * (bin_index + 1))
+                 ]
+            for key, val in coords.items()
+        }
 
     if not center:  # pragma: no cover
         warnings.warn("Heatmaps look better if you center the data")
@@ -1782,7 +1797,7 @@ def plot_cluster_detection_performance(
 
         ax.set_title("Confusion matrix for multiclass state prediction")
         sns.heatmap(cm, annot=True, cmap="Blues", ax=ax)
-        ax.set_yticks(ax.get_yticks(), rotation=45)
+        ax.set_yticks(ax.get_yticks(), ax.get_yticklabels(), rotation=0)
 
     elif visualization == "balanced_accuracy":
 

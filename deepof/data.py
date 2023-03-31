@@ -77,7 +77,10 @@ def load_project(project_path: str) -> coordinates:
     with open(
         os.path.join(project_path, "Coordinates", "deepof_coordinates.pkl"), "rb"
     ) as handle:
-        return pickle.load(handle)
+        coordinates = pickle.load(handle)
+
+    coordinates._project_path = os.path.split(project_path)[0]
+    return coordinates
 
 
 class Project:

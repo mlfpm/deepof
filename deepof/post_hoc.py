@@ -154,7 +154,7 @@ def select_time_bin(
 ):
     """
 
-    Selects a time bin and filters all relevant objects (embeddings, soft_counts and breaks).
+    Selects a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).
 
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
