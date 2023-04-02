@@ -146,7 +146,9 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     )
 )
 def test_fit_normative_global_model(input_data):
-    normative_model = deepof.post_hoc.fit_normative_global_model(input_data)
+    normative_model = deepof.post_hoc.fit_normative_global_model(
+        pd.DataFrame(input_data)
+    )
     assert isinstance(normative_model.sample(10), np.ndarray)
 
 
