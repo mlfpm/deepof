@@ -49,14 +49,10 @@ def get_time_on_cluster(
     Requires a set of cluster assignments and their corresponding breaks.
 
     Args:
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
-        conditions, and the values are the breaks for each condition.
-        normalize (bool): Whether to normalize the time by the total number of frames in
-        each condition.
-        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False,
-        the embeddings are kept in their original dimensionality.
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
+        normalize (bool): Whether to normalize the time by the total number of frames in each condition.
+        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
 
     Returns:
         A dataframe with the time spent on each cluster for each experiment.
@@ -103,10 +99,8 @@ def get_aggregated_embedding(
     Instead of an embedding per chunk, the function returns an embedding per experiment.
 
     Args:
-        embedding (np.ndarray): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False,
-        the embeddings are kept in their original dimensionality.
+        embedding (np.ndarray): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
 
     Returns:
@@ -147,17 +141,13 @@ def select_time_bin(
     """Select a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
-        conditions, and the values are the breaks for each condition.
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         supervised_annotations (TableDict): table dict with supervised annotations per animal experiment across time.
         bin_size (int): The size of the time bin to select.
         bin_index (int): The index of the time bin to select.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each
-        experiment using the provided mask.
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
 
     Returns:
         A tuple of the filtered embeddings, soft counts, and breaks.
@@ -228,28 +218,17 @@ def condition_distance_binning(
     """Compute the distance between the embeddings of two conditions, using the specified aggregation method.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
-        conditions, and the values are the breaks for each condition.
-        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
-        names of the experiments, and the values are the names of their corresponding
-        experimental conditions.
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         start_bin (int): The index of the first bin to compute the distance for.
         end_bin (int): The index of the last bin to compute the distance for.
         step_bin (int): The step size of the bins to compute the distance for.
-        scan_mode (str): The mode to use for computing the distance. Can be one of "growing-window"
-        (used to select optimal binning), "per-bin" (used to evaluate how discriminability
-        evolves in subsequent bins of a specified size) or "precomputed", which requires a numpy ndarray
-        with bin IDs to be passed to precomputed_bins.
-        precomputed_bins (np.ndarray): numpy array with IDs mapping to different bins, not necessarily having
-        the same size. Difference across conditions for each of these bins will be reported.
+        scan_mode (str): The mode to use for computing the distance. Can be one of "growing-window" (used to select optimal binning), "per-bin" (used to evaluate how discriminability evolves in subsequent bins of a specified size) or "precomputed", which requires a numpy ndarray with bin IDs to be passed to precomputed_bins.
+        precomputed_bins (np.ndarray): numpy array with IDs mapping to different bins, not necessarily having the same size. Difference across conditions for each of these bins will be reported.
         agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
-        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance'
-        is based on performance of a classifier when separating aggregated embeddings), or
-        "wasserstein" (which computes distances based on optimal transport).
+        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
         n_jobs (int): The number of jobs to use for parallel processing.
 
     Returns:
@@ -317,19 +296,12 @@ def separation_between_conditions(
     """Compute the distance between the embeddings of two conditions, using the specified aggregation method.
 
     Args:
-        cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        cur_soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
-        cur_breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
-        conditions, and the values are the breaks for each condition.
-        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
-        names of the experiments, and the values are the names of their corresponding
-        experimental conditions.
+        cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        cur_soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        cur_breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         agg (str): The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
-        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance'
-        is based on performance of a classifier when separating aggregated embeddings), or
-        "wasserstein" (which computes distances based on optimal transport).
+        metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
 
     Returns:
         The distance between the embeddings of the two conditions.
@@ -391,8 +363,7 @@ def fit_normative_global_model(global_normal_embeddings: table_dict):
     """Fit a global model to the normal embeddings.
 
     Args:
-        global_normal_embeddings (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
+        global_normal_embeddings (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
 
     Returns:
         A fitted global model.
@@ -429,20 +400,14 @@ def enrichment_across_conditions(
     """Compute the population of each cluster across conditions.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
-        conditions, and the values are the breaks for each condition.
-        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
-        names of the experiments, and the values are the names of their corresponding
-        experimental conditions.
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each
-        experiment using the provided mask.
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -518,14 +483,10 @@ def compute_transition_matrix_per_condition(
     """Compute the transition matrices specific to each condition.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the
-        experimental conditions, and the values are the embeddings for each condition.
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the
-        experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
-        conditions, and the values are the breaks for each condition.
-        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the
-        names of the experiments, and the values are the names of their corresponding
+        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
+        exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
@@ -587,16 +548,12 @@ def compute_steady_state(
     """Compute the steady state of each transition matrix provided in a dictionary.
 
     Args:
-        transition_matrices (dict): A dictionary of transition matrices, where the keys are
-        the names of the experimental conditions, and the values are the transition matrices for each condition.
-        return_entropy (bool): Whether to return the entropy of the steady state. If False, the steady states themselves are
-        returned.
+        transition_matrices (dict): A dictionary of transition matrices, where the keys are the names of the experimental conditions, and the values are the transition matrices for each condition.
+        return_entropy (bool): Whether to return the entropy of the steady state. If False, the steady states themselves are returned.
         n_iters (int): The number of iterations to use for the Markov chain.
 
     Returns:
-        A dictionary of steady states, where the keys are the names of the experimental conditions, and the values are
-        the steady states for each condition. If return_entropy is True, values correspond to the entropy of each
-        steady state.
+        A dictionary of steady states, where the keys are the names of the experimental conditions, and the values are the steady states for each condition. If return_entropy is True, values correspond to the entropy of each steady state.
 
     """
     # Compute steady states by multiplying matrices by themselves n_iters times
@@ -744,8 +701,7 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
     """Extract summary statistics from a chunked dataset using seglearn.
 
     Args:
-        chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features),
-        where each entry corresponds to a time chunk of data.
+        chunked_dataset (np.ndarray): Preprocessed training set (of shape chunks x time x features), where each entry corresponds to a time chunk of data.
         body_part_names (list): A list of the names of the body parts.
 
     Returns:
@@ -788,26 +744,20 @@ def annotate_time_chunks(
     Uses a set of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
 
     Args:
-        deepof_project: Project object.
-        soft_counts: matrix with soft cluster assignments produced by the unsupervised pipeline.
-        breaks: the breaks for each condition.
-        supervised_annotations: set of supervised annotations produced by the supervised pipeline withing deepof.
-        window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
-        specifies the size of the sliding window to pass through the data to generate training instances. None defaults
-        to video frame-rate.
-        window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
-        specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
-        a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
+        deepof_project (table_dict): Project object.
+        soft_counts (table_dict): matrix with soft cluster assignments produced by the unsupervised pipeline.
+        breaks (table_dict): the breaks for each condition.
+        supervised_annotations (table_dict): set of supervised annotations produced by the supervised pipeline withing deepof.
+        window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False, specifies the size of the sliding window to pass through the data to generate training instances. None defaults to video frame-rate.
+        window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
         animal_id (str): The animal ID to use, in case of multi-animal projects.
-        samples (int): Time chunks samples to take to reduce computational time. Defaults to the minimum between
-        10000 and the number of available chunks.
+        samples (int): Time chunks samples to take to reduce computational time. Defaults to the minimum between 10000 and the number of available chunks.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
-        kin_derivative: The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
-        include_distances: Whether to include distances in the alignment. kin_derivative is taken into account.
-        include_angles: Whether to include angles in the alignment. kin_derivative is taken into account.
-        include_areas: Whether to include areas in the alignment. kin_derivative is taken into account.
-        aggregate: aggregation mode. Can be either "mean" (computationally cheapest), just use the average per feature,
-        or "seglearn" which runs a thorough feature extraction and selection pipeline on each time series.
+        kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
+        include_distances (bool): Whether to include distances in the alignment. kin_derivative is taken into account.
+        include_angles (bool): Whether to include angles in the alignment. kin_derivative is taken into account.
+        include_areas (bool): Whether to include areas in the alignment. kin_derivative is taken into account.
+        aggregate (str): aggregation mode. Can be either "mean" (computationally cheapest), just use the average per feature, or "seglearn" which runs a thorough feature extraction and selection pipeline on each time series.
 
     Returns:
         A dataframe of kinematic features, of shape chunks by features.
@@ -959,8 +909,7 @@ def train_supervised_cluster_detectors(
         verbose (int): verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).
 
     Returns:
-        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats
-        to cluster assignments. Useful to run the SHAP explainability pipeline.
+        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats to cluster assignments. Useful to run the SHAP explainability pipeline.
         cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
 
@@ -1023,10 +972,8 @@ def explain_clusters(
 
     Args:
         chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
-        np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
-        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats
-        to cluster assignments.
+        full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats to cluster assignments.
         samples (int): number of samples to draw from the original chunk_stats dataset.
 
     Returns:

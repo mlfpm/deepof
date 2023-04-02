@@ -116,22 +116,18 @@ class Project:
         Args:
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
-            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts.
-            Recommended, but slow.
+            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended if several animals are present, but slower.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             interpolate_outliers (bool): whether to interpolate missing data.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
-            model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the
-            documentation).
+            model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
             project_name (str): name of the current project.
             project_path (str): path to the folder containing the DLC output data.
-            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your
-            project path.
-            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your
-            project path.
+            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
+            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
             video_format (str): video format. Defaults to '.mp4'.
@@ -912,19 +908,14 @@ class Coordinates:
         """Return a table_dict object with the coordinates of each animal as values.
 
         Args:
-            center (str): Name of the body part to which the positions will be centered. If false,
-            the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
             polar (bool) States whether the coordinates should be converted to polar values.
-            speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2,
-            jerk if 3, etc.
-            align (str): Selects the body part to which later processes will align the frames with
-            (see preprocess in table_dict documentation).
-            align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the
-            selected body part with the y-axis, for all timepoints (default).
+            speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
+            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
+            align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through
-            the training dataset. This can be used for regularising the latent space based on already known traits.
+            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
 
         Returns:
             table_dict: A table_dict object containing the coordinates of each animal as values.
@@ -1082,8 +1073,7 @@ class Coordinates:
         Args:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
-            filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations
-            are kept. Otherwise, all distances between bodyparts are returned.
+            filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
             propagate_annotations (Dict): A dictionary of annotations to propagate.
 
@@ -1217,8 +1207,7 @@ class Coordinates:
 
         Args:
             speed (int): The derivative to use for speed.
-            selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals.
-            declared in self._animal_ids.
+            selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
 
         Returns:
             table_dict: A table_dict object with the areas of the body parts animal as values.
@@ -1333,17 +1322,12 @@ class Coordinates:
         """Generate a dataset with all specified features.
 
         Args:
-            animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal
-            graph.
-            precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds
-            it on the spot.
-            center (str): Name of the body part to which the positions will be centered. If false,
-            raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
+            animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal graph.
+            precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
+            center (str): Name of the body part to which the positions will be centered. If false, raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
             polar (bool) States whether the coordinates should be converted to polar values.
-            align (str): Selects the body part to which later processes will align the frames with
-            (see preprocess in table_dict documentation).
-            preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and
-            distance-weighted adjacency matrices on the raw data are returned.
+            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
+            preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -1475,12 +1459,9 @@ class Coordinates:
 
         Args:
             params (Dict): A dictionary with the parameters to use for the pipeline. If unsure, leave empty.
-            video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to
-            "all", it will output all videos. False by default.
-            frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per
-            video to output.
-            debug (bool): Only applies if video_output is not False. If True, all videos will include debug information,
-            such as the detected arena and the preprocessed tracking tags.
+            video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to "all", it will output all videos. False by default.
+            frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per video to output.
+            debug (bool): Only applies if video_output is not False. If True, all videos will include debug information, such as the detected arena and the preprocessed tracking tags.
             n_jobs (int): Number of jobs to use for parallel processing.
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
 
@@ -1609,30 +1590,25 @@ class Coordinates:
             encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
             batch_size (int): Batch size for training.
             latent_dim (int): Dimention size of the latent space.
-            epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model
-            will stop training when validation loss stops decreasing.
+            epochs (int): Maximum number of epochs to train the model. Actual training might be shorter, as the model will stop training when validation loss stops decreasing.
             log_history (bool): Whether to log the history of the model to TensorBoard.
             log_hparams (bool): Whether to log the hyperparameters of the model to TensorBoard.
             n_components (int): Number of latent clusters for the embedding model to use.
-            kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VaDE and VQVAE models which
-            penalizes the correlation between the dimensions in the latent space.
+            kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VaDE and VQVAE models which penalizes the correlation between the dimensions in the latent space.
             temperature (float): temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.
             contrastive_similarity_function (str): similarity function between positive and negative pairs. Must be one of 'cosine' (default), 'euclidean', 'dot', and 'edit'.
             contrastive_loss_function (str): contrastive loss function. Must be one of 'nce' (default), 'dcl', 'fc', and 'hard_dcl'. See specific documentation for details.
             beta (float): Beta (concentration) parameter for the hard_dcl contrastive loss. Higher values lead to 'harder' negative samples.
             tau (float): Tau parameter for the dcl and hard_dcl contrastive losses, indicating positive class probability.
             output_path (str): Path to save the trained model and all log files.
-            pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not,
-            must be the path to a saved model.
+            pretrained (str): Whether to load a pretrained model. If False, model is trained from scratch. If not, must be the path to a saved model.
             save_checkpoints (bool): Whether to save checkpoints of the model during training. Defaults to False.
             save_weights (bool): Whether to save the weights of the model during training. Defaults to True.
-            input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict
-            for more details.
+            input_type (str): Type of the preprocessed_object passed as the first parameter. See deepof.data.TableDict for more details.
             run (int): Run number for the model. Used to save the model and log files. Optional.
             kl_annealing_mode (str): Mode of the KL annealing. Must be one of "linear", or "sigmoid".
             kl_warmup (int): Number of epochs to warm up the KL annealing.
-            reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
-            minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+            reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
             interaction_regularization (float): weight of the interaction regularization term for all encoders.
             **kwargs: Additional keyword arguments to pass to the model.
@@ -1741,10 +1717,8 @@ class TableDict(dict):
             center (str): Type of the center. Handled internally.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
-            propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the
-            transformed dataset.
-            propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations
-            of the individual experiments are propagated to the dataset.
+            propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the transformed dataset.
+            propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations of the individual experiments are propagated to the dataset.
 
         """
         super().__init__(tabs)
@@ -1809,9 +1783,8 @@ class TableDict(dict):
 
         Args:
             projection_type (str): Projection to be used.
-            n_components: Number of components to project to.
-            kernel: Kernel to be used for the random and PCA algorithms.
-            perplexity: Perplexity parameter for the t-SNE algorithm.
+            n_components (int): Number of components to project to.
+            kernel (str): Kernel to be used for the random and PCA algorithms.
 
         Returns:
             tuple: Tuple containing projected data and projection type.
@@ -1896,8 +1869,7 @@ class TableDict(dict):
         Leave labels untouched if present.
 
         Args:
-            selected_id (str): select a single animal on multi animal settings. Defaults to None
-            (all animals are processed).
+            selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
 
         Returns:
             table_dict: Filtered TableDict object, keeping only the selected animal.
@@ -2084,39 +2056,24 @@ class TableDict(dict):
         Capable of returning training and test sets ready for model training.
 
         Args:
-            automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the
-            data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are
-            appiled.
-            handle_ids (str): indicates the default action to handle multiple animals in the TableDict object. Must be
-            one of "concat" (body parts from different animals are treated as features) and "split" (different sliding windows
-            are created for each animal).
-            window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False,
-            specifies the size of the sliding window to pass through the data to generate training instances.
-            window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False,
-            specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates
-            a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
+            automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are appiled.
+            handle_ids (str): indicates the default action to handle multiple animals in the TableDict object. Must be one of "concat" (body parts from different animals are treated as features) and "split" (different sliding windows are created for each animal).
+            window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False, specifies the size of the sliding window to pass through the data to generate training instances.
+            window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
             scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
             pretrained_scaler (Any): Pre-fit global scaler, trained on the whole dataset. Useful to process single videos.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
-            filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to
-            get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
-            interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be
-            interpolated after normalization. Only used if scale is set to "standard".
+            filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
+            interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be interpolated after normalization. Only used if scale is set to "standard".
             precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
 
         Returns:
-            X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
-            generated from all training videos.
-            y_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels)
-            generated from all training videos. Note that no labels are use by default in the fully
-            unsupervised pipeline (in which case this is an empty array).
-            X_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features)
-            generated from all test videos (0 by default).
-            y_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels)
-            generated from all test videos. Note that no labels are use by default in the fully
-            unsupervised pipeline (in which case this is an empty array).
+            X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features) generated from all training videos.
+            y_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels) generated from all training videos. Note that no labels are use by default in the fully unsupervised pipeline (in which case this is an empty array).
+            X_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features) generated from all test videos (0 by default).
+            y_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels) generated from all test videos. Note that no labels are use by default in the fully unsupervised pipeline (in which case this is an empty array).
         """
         # Create a temporary copy of the current TableDict object,
         # to avoid modifying it in place

@@ -52,16 +52,14 @@ def get_recurrent_encoder(
     one of the provided structured latent spaces.
 
     Args:
-        - input_shape (tuple): shape of the node features for the input data. Should be time x nodes x features.
-        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers.
-        Should be time x edges x features.
-        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
-        - latent_dim (int): dimension of the latent space.
-        - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-        - gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
-        - bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
-        - interaction_regularization (float): Regularization parameter for the interaction features.
+        input_shape (tuple): shape of the node features for the input data. Should be time x nodes x features.
+        edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
+        latent_dim (int): dimension of the latent space.
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+        gru_unroll (bool): whether to unroll the GRU layers. Defaults to False.
+        bidirectional_merge (str): how to merge the forward and backward GRU layers. Defaults to "concat".
+        interaction_regularization (float): Regularization parameter for the interaction features.
 
     Returns:
         keras.Model: a keras model that can be trained to encode motion tracking instances into a vector.
@@ -172,6 +170,7 @@ def get_recurrent_decoder(
     Returns:
         keras.Model: a keras model that can be trained to decode the latent space into a series of motion tracking
         sequences.
+
     """
     # Define and instantiate generator
     g = Input(shape=latent_dim)  # Decoder input, shaped as the latent space
@@ -244,25 +243,25 @@ def get_TCN_encoder(
     paper for more details: https://arxiv.org/pdf/1803.01271.pdf
 
     Args:
-        - input_shape: shape of the input data
-        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
-        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
-        - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-        - latent_dim: dimensionality of the latent space
-        - conv_filters: number of filters in the TCN layers
-        - kernel_size: size of the convolutional kernels
-        - conv_stacks: number of TCN layers
-        - conv_dilations: list of dilation factors for each TCN layer
-        - padding: padding mode for the TCN layers
-        - use_skip_connections: whether to use skip connections between TCN layers
-        - dropout_rate: dropout rate for the TCN layers
-        - activation: activation function for the TCN layers
-        - interaction_regularization (float): Regularization parameter for the interaction features
+        input_shape: shape of the input data
+        edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+        latent_dim: dimensionality of the latent space
+        conv_filters: number of filters in the TCN layers
+        kernel_size: size of the convolutional kernels
+        conv_stacks: number of TCN layers
+        conv_dilations: list of dilation factors for each TCN layer
+        padding: padding mode for the TCN layers
+        use_skip_connections: whether to use skip connections between TCN layers
+        dropout_rate: dropout rate for the TCN layers
+        activation: activation function for the TCN layers
+        interaction_regularization (float): Regularization parameter for the interaction features
 
     Returns:
         keras.Model: a keras model that can be trained to encode a sequence of motion tracking instances into a latent
         space using temporal convolutional networks.
+
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
@@ -391,20 +390,21 @@ def get_TCN_decoder(
     the following paper for more details: https://arxiv.org/pdf/1803.01271.pdf,
 
     Args:
-        - input_shape: shape of the input data
-        - latent_dim: dimensionality of the latent space
-        - conv_filters: number of filters in the TCN layers
-        - kernel_size: size of the convolutional kernels
-        - conv_stacks: number of TCN layers
-        - conv_dilations: list of dilation factors for each TCN layer
-        - padding: padding mode for the TCN layers
-        - use_skip_connections: whether to use skip connections between TCN layers
-        - dropout_rate: dropout rate for the TCN layers
-        - activation: activation function for the TCN layers
+        input_shape: shape of the input data
+        latent_dim: dimensionality of the latent space
+        conv_filters: number of filters in the TCN layers
+        kernel_size: size of the convolutional kernels
+        conv_stacks: number of TCN layers
+        conv_dilations: list of dilation factors for each TCN layer
+        padding: padding mode for the TCN layers
+        use_skip_connections: whether to use skip connections between TCN layers
+        dropout_rate: dropout rate for the TCN layers
+        activation: activation function for the TCN layers
 
     Returns:
         keras.Model: a keras model that can be trained to decode a latent space into a sequence of motion tracking
         instances using temporal convolutional networks.
+
     """
     # Define and instantiate generator
     g = Input(shape=latent_dim)  # Decoder input, shaped as the latent space
@@ -460,17 +460,17 @@ def get_transformer_encoder(
     and https://arxiv.org/abs/1711.03905.
 
     Args:
-        - input_shape (tuple): shape of the input data
-        - edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
-        - adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
-        - latent_dim (int): dimensionality of the latent space
-        - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-        - num_layers (int): number of transformer layers to include
-        - num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
-        - dff (int): dimensionality of the token embeddings
-        - dropout_rate (float): dropout rate
-        - interaction_regularization (float): regularization parameter for the interaction features
+        input_shape (tuple): shape of the input data
+        edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
+        adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
+        latent_dim (int): dimensionality of the latent space
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+        num_layers (int): number of transformer layers to include
+        num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
+        dff (int): dimensionality of the token embeddings
+        dropout_rate (float): dropout rate
+        interaction_regularization (float): regularization parameter for the interaction features
+
     """
     # Define feature and adjacency inputs
     x = Input(shape=input_shape)
@@ -607,6 +607,7 @@ def get_transformer_decoder(
         num_heads (int): number of heads of the multi-head-attention layers used on the transformer encoder
         dff (int): dimensionality of the token embeddings
         dropout_rate (float): dropout rate
+
     """
     x = tf.keras.layers.Input(input_shape)
     g = tf.keras.layers.Input([latent_dim])
@@ -668,6 +669,7 @@ class VectorQuantizer(tf.keras.models.Model):
             beta (float): beta value for the loss function
             kmeans_loss (float): regularization parameter for the Gram matrix
             **kwargs: additional arguments for the parent class
+
         """
         super(VectorQuantizer, self).__init__(**kwargs)
         self.embedding_dim = embedding_dim
@@ -740,8 +742,7 @@ class VectorQuantizer(tf.keras.models.Model):
 
         Args:
             flattened_inputs (tf.Tensor): flattened input tensor (encoder output)
-            return_soft_counts (bool): whether to return soft counts based on the distance to the codes, instead of
-            the code indices
+            return_soft_counts (bool): whether to return soft counts based on the distance to the codes, instead of the code indices
 
         Returns:
             encoding_indices (tf.Tensor): code indices tensor with cluster assignments.
@@ -783,25 +784,23 @@ def get_vqvae(
     """Build a Vector-Quantization variational autoencoder (VQ-VAE) model, adapted to the DeepOF setting.
 
     Args:
-        - input_shape (tuple): shape of the input to the encoder.
-        - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
-        - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-        - latent_dim (int): dimension of the latent space.
-        - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-        as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-        - n_components (int): number of embeddings in the embedding layer.
-        - beta (float): beta parameter of the VQ loss.
-        - kmeans_loss (float): regularization parameter for the Gram matrix.
-        - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
-        - interaction_regularization (float): Regularization parameter for the interaction features.
+        input_shape (tuple): shape of the input to the encoder.
+        edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+        adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+        latent_dim (int): dimension of the latent space.
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+        n_components (int): number of embeddings in the embedding layer.
+        beta (float): beta parameter of the VQ loss.
+        kmeans_loss (float): regularization parameter for the Gram matrix.
+        encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+        interaction_regularization (float): Regularization parameter for the interaction features.
 
     Returns:
-        - encoder (tf.keras.Model): connected encoder of the VQ-VAE model.
-        Outputs a vector of shape (latent_dim,).
-        - decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-        - grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model.
-        Outputs cluster indices of shape (batch_size,).
-        - vqvae (tf.keras.Model): complete VQ VAE model.
+        encoder (tf.keras.Model): connected encoder of the VQ-VAE model. Outputs a vector of shape (latent_dim,).
+        decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+        grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model. Outputs cluster indices of shape (batch_size,).
+        vqvae (tf.keras.Model): complete VQ VAE model.
+
     """
     vq_layer = VectorQuantizer(
         n_components,
@@ -895,6 +894,7 @@ class VQVAE(tf.keras.models.Model):
             encoder_type (str): Type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
             interaction_regularization (float): Regularization parameter for the interaction features.
             **kwargs: Additional keyword arguments.
+
         """
         super(VQVAE, self).__init__(**kwargs)
         self.seq_shape = input_shape
@@ -1113,6 +1113,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
     with a provided number of components, with means, covariances and weights.
     Implementation based on VaDE (https://arxiv.org/abs/1611.05148)
     and VaDE-SC (https://openreview.net/forum?id=RQ428ZptQfU).
+
     """
 
     def __init__(
@@ -1145,6 +1146,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             kmeans_loss (float): weight of the Gram matrix regularization loss.
             reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
             **kwargs: keyword arguments passed to the parent class
+
         """
         super(GaussianMixtureLatent, self).__init__(**kwargs)
         self.seq_shape = input_shape
@@ -1324,28 +1326,27 @@ def get_vade(
     """Build a Gaussian mixture variational autoencoder (VaDE) model, adapted to the DeepOF setting.
 
     Args:
-            - input_shape (tuple): shape of the input data.
-            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
-            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-            - latent_dim (int): dimensionality of the latent space.
-            - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-            - n_components (int): number of components in the Gaussian mixture.
-            - batch_size (int): batch size for training.
-            - kl_warmup: Number of iterations during which to warm up the KL divergence.
-            - kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
-            - mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
-            - kmeans_loss (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.
-            - reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
-            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
-            - interaction_regularization (float): weight of the interaction regularization term.
+        input_shape (tuple): shape of the input data.
+        edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+        adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+        latent_dim (int): dimensionality of the latent space.
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+        n_components (int): number of components in the Gaussian mixture.
+        batch_size (int): batch size for training.
+        kl_warmup (int): Number of iterations during which to warm up the KL divergence.
+        kl_annealing_mode (str): mode to use for annealing the KL divergence. Must be one of "linear" and "sigmoid".
+        mc_kl (int): number of Monte Carlo samples to use for computing the KL divergence.
+        kmeans_loss (float): weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.
+        reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
+        encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+        interaction_regularization (float): weight of the interaction regularization term.
 
     Returns:
-        - encoder (tf.keras.Model): connected encoder of the VQ-VAE model. Outputs a vector of shape (latent_dim,).
-        - decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-        - grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,)
-        for each training instance, corresponding to the soft counts for each cluster.
-        - vade (tf.keras.Model): complete VaDE model
+        encoder (tf.keras.Model): connected encoder of the VQ-VAE model. Outputs a vector of shape (latent_dim,).
+        decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+        grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,) for each training instance, corresponding to the soft counts for each cluster.
+        vade (tf.keras.Model): complete VaDE model
+
     """
     if encoder_type == "recurrent":
         encoder = get_recurrent_encoder(
@@ -1429,14 +1430,14 @@ class Classifier(tf.keras.Model):
         """Initialize a classifier model.
 
         Args:
-            - input_shape (tuple): shape of the input data.
-            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
-            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-            - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-            - batch_size (int): batch size for training.
-            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
-            - bias_initializer (float): value to initialize the bias of the last layer to (default: 0.0).
+            input_shape (tuple): shape of the input data.
+            edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+            batch_size (int): batch size for training.
+            encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            bias_initializer (float): value to initialize the bias of the last layer to (default: 0.0).
+
         """
         super().__init__(**kwargs)
 
@@ -1517,24 +1518,23 @@ class VaDE(tf.keras.models.Model):
         """Init a VaDE model.
 
         Args:
-            - input_shape (tuple): Shape of the input to the full model.
-            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
-            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-            - batch_size (int): Batch size for training.
-            - latent_dim (int): Dimensionality of the latent space.
-            - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-            - kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
-            - kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
-            - montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
-            - n_components (int): Number of mixture components in the latent space.
-            - kmeans_loss (float): weight of the gram matrix regularization loss.
-            - reg_cat_clusters (bool): whether to use the penalized uneven cluster membership in the latent space, by
-            minimizing the KL divergence between cluster membership and a uniform categorical distribution.
-            - reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
-            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
-            - interaction_regularization (float): Regularization parameter for the interaction features.
-            - **kwargs: Additional keyword arguments.
+            input_shape (tuple): Shape of the input to the full model.
+            edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            batch_size (int): Batch size for training.
+            latent_dim (int): Dimensionality of the latent space.
+            use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+            kl_annealing_mode (str): Annealing mode for KL annealing. Can be one of 'linear' and 'sigmoid'.
+            kl_warmup_epochs (int): Number of epochs to warmup KL annealing.
+            montecarlo_kl (int): Number of Monte Carlo samples for KL divergence.
+            n_components (int): Number of mixture components in the latent space.
+            kmeans_loss (float): weight of the gram matrix regularization loss.
+            reg_cat_clusters (bool): whether to use the penalized uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+            reg_cluster_variance (bool): whether to penalize uneven cluster variances in the latent space.
+            encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            interaction_regularization (float): Regularization parameter for the interaction features.
+            **kwargs: Additional keyword arguments.
+
         """
         super(VaDE, self).__init__(**kwargs)
         self.seq_shape = input_shape
@@ -1840,20 +1840,20 @@ class Contrastive(tf.keras.models.Model):
         """Init a self-supervised Contrastive embedding model.
 
         Args:
-            - input_shape (tuple): Shape of the input to the full model.
-            - edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
-            - adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-            - encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
-            - latent_dim (int): Dimensionality of the latent space.
-            - use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds
-            as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
-            - temperature (float):
-            - similarity_function (str):
-            - loss_function (str):
-            - beta (float):
-            - tau (float):
-            - interaction_regularization (float): Regularization parameter for the interaction features.
-            - **kwargs: Additional keyword arguments.
+            input_shape (tuple): Shape of the input to the full model.
+            edge_feature_shape (tuple): shape of the edge feature matrix used for graph representations.
+            adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            encoder_type (str): type of encoder to use. Can be set to "recurrent" (default), "TCN", or "transformer".
+            latent_dim (int): Dimensionality of the latent space.
+            use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
+            temperature (float):
+            similarity_function (str):
+            loss_function (str):
+            beta (float):
+            tau (float):
+            interaction_regularization (float): Regularization parameter for the interaction features.
+            **kwargs: Additional keyword arguments.
+
         """
         super(Contrastive, self).__init__(**kwargs)
         self.seq_shape = input_shape

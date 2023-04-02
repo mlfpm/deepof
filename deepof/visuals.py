@@ -51,8 +51,7 @@ def plot_arena(
 
     Args:
         coordinates (coordinates): deepof Coordinates object.
-        center (str): Name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         color (str): color of the displayed arena.
         ax (Any): axes where to plot the arena.
         i (Union[int, str]): index of the animal to plot.
@@ -124,16 +123,14 @@ def heatmap(
     If more than one bodypart is passed, it returns one subplot for each.
 
     Args:
-        dframe (pandas.DataFrame): table_dict value with info to plot
-        bodyparts (List): bodyparts to represent (at least 1)
+        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1)
         xlim (float): limits of the x-axis
         ylim (float): limits of the y-axis
         title (str): title of the figure
         mask (np.ndarray): mask to apply to the heatmap across time
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-        new figure will be created.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
@@ -251,13 +248,10 @@ def plot_heatmaps(
     Args:
         coordinates (coordinates): deepof Coordinates object.
         bodyparts (list): list of body parts to plot.
-        center (str): Name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with
-        (see preprocess in table_dict documentation).
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
-        condition_value (str): Experimental condition value to plot. If available, it filters the
-        experiments to keep only those whose condition value matches the given string in the provided exp_condition.
+        condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
@@ -266,8 +260,7 @@ def plot_heatmaps(
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         dpi (int): resolution of the figure.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-        a new figure will be created.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
 
     Returns:
@@ -355,8 +348,7 @@ def plot_gantt(
         coordinates (project): deepOF project where the data is stored.
         experiment_id (str): Name of the experiment to display.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        supervised_annotations (table_dict): table dict with supervised annotations per video.
-        new figure will be created.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -519,18 +511,14 @@ def plot_enrichment(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
-        plot_proportions (bool): if supervised annotations are provided, display only traits that are measured
-        as proportions instead of real values. Useful to visualize traits with different scales.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
-        available is used.
-        exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order
-        is determined by the order of the keys in the table dict.
+        plot_proportions (bool): if supervised annotations are provided, display only traits that are measured as proportions instead of real values. Useful to visualize traits with different scales.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         precomputed (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        add_stats (bool): whether to add stats to the plots. Defaults to True.
-        may hurt performance.
+        add_stats (bool): whether to add stats to the plots. Defaults to True. may hurt performance.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -698,11 +686,9 @@ def plot_transitions(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
-        available is used.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         bin_size (int): bin size for time filtering.
-        bin_index (int): index of the bin of size bin_size to select along the time dimension.
-        new figure will be created.
+        bin_index (int): index of the bin of size bin_size to select along the time dimension. new figure will be created.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
         cluster (bool): If True (default) rows and columns on heatmaps are hierarchically clustered.
@@ -856,14 +842,12 @@ def plot_stationary_entropy(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
-        available is used.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         add_stats (bool): whether to add stats to the plots. Defaults to True.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-        new figure will be created.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -1073,21 +1057,17 @@ def plot_embeddings(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one
-        available is used.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
-        samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which
-        may hurt performance.
+        samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
-        show_break_size_as_radius (bool): Only usable when embeddings come from a model using changepoint detection. If True,
-        the size of each chunk is depicted as the radius of each dot.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided,
-        new figure will be created.
+        show_break_size_as_radius (bool): Only usable when embeddings come from a model using changepoint detection. If True, the size of each chunk is depicted as the radius of each dot.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -1516,26 +1496,19 @@ def animate_skeleton(
         coordinates (coordinates): deepof Coordinates object.
         experiment_id (str): Name of the experiment to display.
         animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false,
-        the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with
-        (see preprocess in table_dict documentation).
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data.
-        If provided together with selected_cluster, only instances of the specified component are returned.
-        Defaults to None.
-        only instances of the specified component are returned. Defaults to None.
-        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation
-        shows a parallel animation showing the currently selected embedding, colored by cluster if cluster_assignments
-        are available.
+        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
+        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more
-        than one animal in the representation, False otherwise.
+        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
         save (str): name of the file where to save the produced animation.
         dpi (int): dots per inch of the figure to create.
+
     """
     # Get and process data to plot from coordinates object
     (
@@ -1755,7 +1728,7 @@ def plot_cluster_detection_performance(
         cluster_gbm_performance (dict): cross-validated dictionary containing trained estimators and performance metrics.
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
-        save: name of the file where to save the produced figure.
+        save (bool): name of the file where to save the produced figure.
         visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
         ax (plt.Axes): axis where to plot the figure. If None, a new figure is created.
 
@@ -1874,8 +1847,7 @@ def plot_shap_swarm_per_cluster(
         coordinates (coordinates): deepOF project where the data is stored.
         data_to_explain (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
         shap_values (list): shap_values per cluster.
-        cluster: cluster to plot. If "all" (default) global feature importance
-        across all clusters is depicted in a bar chart.
+        cluster (int): cluster to plot. If "all" (default) global feature importance across all clusters is depicted in a bar chart.
         max_display (int): maximum number of features to display.
         save (str): if provided, saves the figure to the specified file.
         show (bool): if True, shows the figure.
@@ -2149,8 +2121,7 @@ def export_annotated_video(
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
-        exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported.
-        If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
+        exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
@@ -2285,6 +2256,7 @@ def plot_distance_between_conditions(
         n_jobs (int): number of jobs to use for the distance calculation.
         save (bool): if True, saves the figure to the project directory.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+
     """
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
@@ -2588,17 +2560,12 @@ def annotate_video(
 ) -> True:
     """Render a version of the input video with all supervised taggings in place.
 
-    Parameters:
-        - coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information
-        - debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in
-        the output video
-        - vid_index: for internal usage only; index of the video to tag in coordinates._videos
-        - frame_limit (float): limit the number of frames to output. Generates all annotated frames by default
-        - params (dict): dictionary to overwrite the default values of the hyperparameters of the functions
-        that the supervised pose estimation utilizes.
-
-    Returns:
-        True
+    Args:
+        coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
+        debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
+        vid_index: for internal usage only; index of the video to tag in coordinates._videos.
+        frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
+        params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
 
     """
     # Extract useful information from coordinates object
