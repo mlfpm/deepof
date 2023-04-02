@@ -83,20 +83,18 @@ def close_double_contact(
     """Return a boolean array that's True if the specified body parts are closer than tol.
 
     Parameters:
-        - pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable
-        to two-animal experiments.
-        - left1 (string): First contact point of animal 1
-        - left2 (string): Second contact point of animal 1
-        - right1 (string): First contact point of animal 2
-        - right2 (string): Second contact point of animal 2
-        - tol (float): maximum distance for which a contact is reported
-        - arena_abs (int): length in mm of the diameter of the real arena
-        - arena_rel (int): length in pixels of the diameter of the arena in the video
-        - rev (bool): reverses the default behaviour (nose2tail contact for both mice)
+        pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable to two-animal experiments.
+        left1 (string): First contact point of animal 1
+        left2 (string): Second contact point of animal 1
+        right1 (string): First contact point of animal 2
+        right2 (string): Second contact point of animal 2
+        tol (float): maximum distance for which a contact is reported
+        arena_abs (int): length in mm of the diameter of the real arena
+        arena_rel (int): length in pixels of the diameter of the arena in the video
+        rev (bool): reverses the default behaviour (nose2tail contact for both mice)
 
     Returns:
-        - double_contact (np.array): True if the distance between the two specified points
-        is less than tol, False otherwise
+        double_contact (np.array): True if the distance between the two specified points is less than tol, False otherwise
 
     """
     if rev:
@@ -167,8 +165,7 @@ def climb_wall(
         centered_data (bool): indicates whether the input data is centered
 
     Returns:
-        climbing (np.array): boolean array. True if selected animal
-        is climbing the walls of the arena
+        climbing (np.array): boolean array. True if selected animal is climbing the walls of the arena
 
     """
     nose = pos_dict[nose]
@@ -227,8 +224,7 @@ def sniff_object(
         tol_speed (float): minimum speed to report a hit.
 
     Returns:
-        sniffing (np.array): boolean array. True if selected animal
-        is sniffing the selected object
+        sniffing (np.array): boolean array. True if selected animal is sniffing the selected object
 
     """
     nose, nosing = pos_dict[nose], True
@@ -444,8 +440,7 @@ def get_hparameters(hparams: dict = {}) -> dict:
         hparams (dict): dictionary containing hyperparameters to overwrite
 
     Returns:
-        defaults (dict): dictionary with overwritten parameters. Those not
-        specified in the input retain their default values
+        defaults (dict): dictionary with overwritten parameters. Those not specified in the input retain their default values
 
     """
     defaults = {
@@ -475,8 +470,7 @@ def frame_corners(w, h, corners: dict = {}):
         corners (dict): dictionary containing corners to overwrite
 
     Returns:
-        defaults (dict): dictionary with overwriten parameters. Those not
-        specified in the input retain their default values
+        defaults (dict): dictionary with overwriten parameters. Those not specified in the input retain their default values
 
     """
     defaults = {
@@ -517,12 +511,10 @@ def supervised_tagging(
         full_features (dict): dictionary with
         video (str): string name of the experiment to tag
         trained_model_path (str): path indicating where all pretrained models are located
-        params (dict): dictionary to overwrite the default values of the parameters of the functions
-        that the rule-based pose estimation utilizes. See documentation for details.
+        params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
 
     Returns:
-        tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each
-        value is a boolean indicating trait detection at a given time
+        tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time
 
     """
     # Load pre-trained models for ML annotated traits

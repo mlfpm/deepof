@@ -278,15 +278,17 @@ def hard_loss(
     return loss, mean_sim, mean_neg
 
 
-def compute_kmeans_loss(latent_means, weight=1.0, batch_size=64):  # pragma: no cover
+def compute_kmeans_loss(
+    latent_means: tf.Tensor, weight: float = 1.0, batch_size: int = 64
+):  # pragma: no cover
     """Add a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent space.
 
     Based on https://arxiv.org/pdf/1610.04794.pdf, and https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
 
     Args:
-        latent_means: tensor containing the means of the latent distribution
-        weight: weight of the Gram loss in the total loss function
-        batch_size: batch size of the data to compute the kmeans loss for.
+        latent_means (tf.Tensor): tensor containing the means of the latent distribution
+        weight (float): weight of the Gram loss in the total loss function
+        batch_size (int): batch size of the data to compute the kmeans loss for.
 
     Returns:
         tf.Tensor: kmeans loss
@@ -340,7 +342,7 @@ def compute_shannon_entropy(tensor):  # pragma: no cover
 
 
 def plot_lr_vs_loss(rates, losses):  # pragma: no cover
-    """Plot learing rate versus the loss function of the model.
+    """Plot learning rate versus the loss function of the model.
 
     Args:
         rates (np.ndarray): array containing the learning rates to plot in the x-axis
@@ -566,8 +568,7 @@ def cluster_frequencies_regularizer(
     Args:
         soft_counts (tf.Tensor): soft counts per cluster
         k (int): number of clusters
-        n_samples (int): number of samples to draw from the categorical distribution
-        modeling cluster assignments.
+        n_samples (int): number of samples to draw from the categorical distribution modeling cluster assignments.
 
     """
     hard_counts = get_hard_counts(soft_counts)
@@ -785,8 +786,7 @@ class ClusterControl(tf.keras.layers.Layer):
             n_components (int): number of components in the latent Gaussian Mixture
             encoding_dim (int): dimension of the latent Gaussian Mixture
             k (int): number of nearest components of the latent Gaussian Mixture to consider
-            loss_weight (float): weight of the regularization penalty applied to the local entropy of each
-            training instance
+            loss_weight (float): weight of the regularization penalty applied to the local entropy of each training instance
             *args: additional positional arguments
             **kwargs: additional keyword arguments
 
@@ -840,6 +840,7 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
             num_heads: number of heads of the multi-head-attention layers
             dff: dimensionality of the embeddings
             rate: dropout rate
+
         """
         super(TransformerEncoderLayer, self).__init__()
 
@@ -890,6 +891,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
             num_heads: number of heads of the multi-head-attention layers
             dff: dimensionality of the embeddings
             rate: dropout rate
+
         """
         super(TransformerDecoderLayer, self).__init__()
 
@@ -976,6 +978,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
             dff: dimensionality of the token embeddings
             maximum_position_encoding: maximum time series length
             rate: dropout rate
+
         """
         super(TransformerEncoder, self).__init__()
 
@@ -1017,6 +1020,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
     Based on https://www.tensorflow.org/text/tutorials/transformer.
     Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
     and https://arxiv.org/abs/1711.03905.
+
     """
 
     def __init__(
@@ -1039,6 +1043,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
             dff: dimensionality of the token embeddings
             maximum_position_encoding: maximum time series length
             rate: dropout rate
+
         """
         super(TransformerDecoder, self).__init__()
 
@@ -1161,8 +1166,7 @@ def embedding_model_fitting(
         coordinates (np.ndarray): Coordinates of the data.
         preprocessed_object (tuple): Tuple containing the preprocessed data.
         adjacency_matrix (np.ndarray): adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
-        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
-        and contrastive.
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE, and contrastive.
         encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
         batch_size (int): Batch size to use for training.
         latent_dim (int): Encoding size to use for training.
@@ -1171,8 +1175,7 @@ def embedding_model_fitting(
         log_hparams (bool): Whether to log the hyperparameters used for training.
         n_components (int): Number of components to fit to the data.
         output_path (str): Path to the output directory.
-        kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which
-        penalizes the correlation between the dimensions in the latent space.
+        kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which penalizes the correlation between the dimensions in the latent space.
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
@@ -1183,8 +1186,7 @@ def embedding_model_fitting(
         # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
         kl_warmup (int): Number of epochs during which KL is annealed.
-        reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by
-        minimizing the KL divergence between cluster membership and a uniform categorical distribution.
+        reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.
         recluster (bool): Whether to recluster the data after each training using a Gaussian Mixture Model.
 
         # Contrastive Model specific parameters
@@ -1463,11 +1465,9 @@ def embedding_per_video(
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
-        scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False.
-        Use the same that was used when training the original model.
+        scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
-        ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks
-        per experiment) or not (an all-ones vector per experiment is returned).
+        ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
 
@@ -1536,13 +1536,11 @@ def tune_search(
         preprocessed_object (tf.data.Dataset): Dataset object for training and validation.
         adjacency_matrix (np.ndarray): Adjacency matrix for the graph.
         encoding_size (int): Size of the encoding layer.
-        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,
-        and Contrastive.
+        embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE, and Contrastive.
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
-        kmeans_loss (float): Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation
-        between dimensions in the latent space.
+        kmeans_loss (float): Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation between dimensions in the latent space.
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
         batch_size (int): Batch size to use.

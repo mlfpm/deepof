@@ -231,8 +231,7 @@ def compute_dist(
     """Return a pandas.DataFrame with the scaled distances between a pair of body parts.
 
     Args:
-        pair_array (numpy.array): np.array of shape N * 4 containing X, y positions.
-        over time for a given pair of body parts.
+        pair_array (numpy.array): np.array of shape N * 4 containing X, y positions over time for a given pair of body parts.
         arena_abs (int): Diameter of the real arena in cm.
         arena_rel (int): Diameter of the captured arena in pixels.
 
@@ -254,8 +253,7 @@ def bpart_distance(
     """Return a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
     Args:
-        dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions
-        over time for a given set of bp body parts.
+        dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions over time for a given set of bp body parts.
         arena_abs (int): Diameter of the real arena in cm.
         arena_rel (int): Diameter of the captured arena in pixels.
 
@@ -376,8 +374,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     Args:
         data (numpy.ndarray): 3D array containing positions of body parts over time, where
         shape is N (sliding window instances) * m (sliding window size) * l (features)
-        mode (string): Specifies if *all* instances of each sliding window get
-        aligned, or only the *center*
+        mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
 
     Returns:
         aligned_trajs (np.ndarray): 2D aligned positions over time.
@@ -485,7 +482,9 @@ def scale_animal(feature_array: np.ndarray, scale: str):
     return normalized_array
 
 
-def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
+def kleinberg(
+    offsets: list, s: float = np.e, gamma: float = 1.0, n=None, T=None, k=None
+):
     """Apply Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
     The algorithm models activity bursts in a time series as an
@@ -494,13 +493,11 @@ def kleinberg(offsets, s=np.e, gamma=1.0, n=None, T=None, k=None):
     Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
     and adapted for dependency compatibility reasons.
 
-    Input:
-        offsets: a list of time offsets (numeric)
-        s: the base of the exponential distribution that is used for modeling
-        the event frequencies
-        gamma: coefficient for the transition costs between states
-        n, T: to have a fixed cost function (not dependent of the given offsets).
-        Which is needed if you want to compare bursts for different inputs.
+    Args:
+        offsets (list): a list of time offsets (numeric)
+        s (float): the base of the exponential distribution that is used for modeling the event frequencies
+        gamma (float): coefficient for the transition costs between states
+        n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         k: maximum burst level
 
     """
@@ -680,7 +677,7 @@ def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
 
 
 def rolling_window(
-    a: np.array,
+    a: np.ndarray,
     window_size: int,
     window_step: int,
     automatic_changepoints: str = False,
@@ -692,10 +689,8 @@ def rolling_window(
         a (np.ndarray): N (instances) * m (features) shape
         window_size (int): Size of the window to apply
         window_step (int): Step of the window to apply
-        automatic_changepoints (str): Changepoint detection algorithm to apply.
-        If False, applies a fixed sliding window.
-        precomputed_breaks (np.ndarray): Precomputed breaks to use, bypassing the changepoint detection algorithm.
-        None by default (break points are computed).
+        automatic_changepoints (str): Changepoint detection algorithm to apply. If False, applies a fixed sliding window.
+        precomputed_breaks (np.ndarray): Precomputed breaks to use, bypassing the changepoint detection algorithm. None by default (break points are computed).
 
     Returns:
         rolled_a (np.ndarray): N (sliding window instances) * l (sliding window size) * m (features)
@@ -747,14 +742,9 @@ def rupture_per_experiment(
         table_dict (deepof.data.table_dict): table_dict with all experiments.
         to_rupture (np.ndarray): Array with dataset to rupture.
         rupture_indices (list): Indices of tables to rupture. Useful to select training and test sets.
-        automatic_changepoints (str): Rupture method to apply.
-        If false, a sliding window of window_length * window_size is obtained.
-        If one of "l1", "l2" or "rbf", different automatic change point detection algorithms are applied
-        on each independent experiment.
-        window_size (int): If automatic_changepoints is False, specifies the length of the sliding window.
-        If not, it determines the minimum size of the obtained time series breaks.
-        window_step (int): If automatic_changepoints is False, specifies the stride of the sliding window.
-        If not, it determines the minimum step size of the obtained time series breaks.
+        automatic_changepoints (str): Rupture method to apply. If false, a sliding window of window_length * window_size is obtained. If one of "l1", "l2" or "rbf", different automatic change point detection algorithms are applied on each independent experiment.
+        window_size (int): If automatic_changepoints is False, specifies the length of the sliding window. If not, it determines the minimum size of the obtained time series breaks.
+        window_step (int): If automatic_changepoints is False, specifies the stride of the sliding window. If not, it determines the minimum step size of the obtained time series breaks.
         precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
 
     Returns:
@@ -825,10 +815,8 @@ def smooth_mult_trajectory(
 
     Args:
         series (numpy.ndarray): 1D trajectory array with N (instances)
-        alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial and the window
-        length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse fit, hence more smoothing.
-        w_length (int): Length of the sliding window to which the filter fit. Higher values yield a coarser fit,
-        hence more smoothing.
+        alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial and the window length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse fit, hence more smoothing.
+        w_length (int): Length of the sliding window to which the filter fit. Higher values yield a coarser fit, hence more smoothing.
 
     Returns:
         smoothed_series (np.ndarray): smoothed version of the input, with equal shape
@@ -1060,13 +1048,14 @@ def automatically_recognize_arena(
 
     Returns:
         arena (np.ndarray): 1D-array containing information about the arena.
-        "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
-        "circular-manual" (3-element-array) -> x-y position of the center and the radius.
-        "polygon-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
         h (int): Height of the video in pixels.
         w (int): Width of the video in pixels.
 
     """
+    # "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
+    # "circular-manual" (3-element-array) -> x-y position of the center and the radius.
+    # "polygon-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
+
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     if tables is not None:
@@ -1246,10 +1235,10 @@ def extract_polygonal_arena_coordinates(
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
 
     Args:
-        video_path: Path to the video file.
-        arena_type: Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
-        video_index: Index of the current video in the list of videos.
-        videos: List of videos to be processed.
+        video_path (str): Path to the video file.
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        video_index (int): Index of the current video in the list of videos.
+        videos (list): List of videos to be processed.
 
     Returns:
         np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
@@ -1274,7 +1263,7 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
     """Fit an ellipse to the provided polygon.
 
     Args:
-        polygon: List of (x,y) coordinates of the corners of the polygon.
+        polygon (list): List of (x,y) coordinates of the corners of the polygon.
 
     Returns:
         tuple: (x,y) coordinates of the center of the ellipse.
@@ -1343,8 +1332,7 @@ def rolling_speed(
         window (int): Number of frames to average over.
         rounds (int): Float rounding decimals.
         deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
-        center (str): For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames
-        to a specific body part.
+        center (str): For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames to a specific body part.
         shift (int): Window shift for rolling speed calculation.
         typ (str): Type of dataset. Intended for internal usage only.
 
@@ -1451,8 +1439,7 @@ def gmm_compute(x: np.array, n_components: int, cv_type: str) -> list:
     Args:
         x (numpy.ndarray): Data matrix to train the model
         n_components (int): Number of Gaussian components to use
-        cv_type (str): Covariance matrix type to use.
-        Must be one of "spherical", "tied", "diag", "full".
+        cv_type (str): Covariance matrix type to use. Must be one of "spherical", "tied", "diag", "full".
 
     Returns:
         - gmm_eval (list): model and associated BIC for downstream selection.
@@ -1491,11 +1478,9 @@ def gmm_model_selection(
         cv_types (tuple): Covariance Matrices to try. All four available by default
 
     Returns:
-        - bic (list): All recorded BIC values for all attempted parameter combinations
-        (useful for plotting)
-        - m_bic(list): All minimum BIC values recorded throughout the process
-        (useful for plottinh)
-        - best_bic_gmm (sklearn.GMM): Unfitted version of the best found model
+        - bic (list): All recorded BIC values for all attempted parameter combinations (useful for plotting).
+        - m_bic(list): All minimum BIC values recorded throughout the process (useful for plottinh).
+        - best_bic_gmm (sklearn.GMM): Unfitted version of the best found model.
 
     """
     # Set the default of n_cores to the most efficient value
@@ -1549,8 +1534,7 @@ def cluster_transition_matrix(
 
     Returns:
         trans_normed (numpy.ndarray / networkx.Graph): Transition matrix as numpy.ndarray or networkx.DiGraph.
-        autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation
-        values on cluster assignment.
+        autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation values on cluster assignment.
     """
     # Stores all possible transitions between clusters
     clusters = [str(i) for i in range(nclusts)]
