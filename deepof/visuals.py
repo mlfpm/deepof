@@ -518,7 +518,7 @@ def plot_enrichment(
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         precomputed (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        add_stats (bool): whether to add stats to the plots. Defaults to True. may hurt performance.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -843,7 +843,7 @@ def plot_stationary_entropy(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        add_stats (bool): whether to add stats to the plots. Defaults to True.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
@@ -1027,6 +1027,126 @@ def _filter_embeddings(
     return embeddings, soft_counts, breaks, supervised_annotations, concat_hue
 
 
+def plot_normative_log_likelihood(
+    coordinates: coordinates,
+    exp_condition: str,
+    embedding_dataset: pd.DataFrame,
+    normative_model: str,
+    ax: Any,
+    add_stats: str,
+    verbose: bool,
+    use_keys: list,
+):
+    """Plot a bar chart with normative log likelihoods per experimental condition, and compute statistics.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        embedding_dataset (pd.DataFrame): global animal embeddings, alongside their respective experimental conditions
+        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
+        ax (plt.AxesSubplot): matplotlib axes where to render the plot
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
+
+    Returns:
+        embedding_dataset (pd.DataFrame): embedding data frame with added normative scores per sample
+
+    """
+    # Fit normative model to animals belonging to the control cohort
+    norm_density = deepof.post_hoc.fit_normative_global_model(
+        embedding_dataset.loc[
+            embedding_dataset["experimental condition"] == normative_model,
+            ["PCA-1", "PCA-2"],
+        ]
+    )
+
+    # Add normative log likelihood to the dataset
+    embedding_dataset["norm_scores"] = norm_density.score_samples(
+        embedding_dataset.loc[:, ["PCA-1", "PCA-2"]].values
+    )
+
+    # Center log likelihood values around the control mean
+    embedding_dataset["norm_scores"] -= embedding_dataset.loc[
+        embedding_dataset["experimental condition"] == normative_model,
+        "norm_scores",
+    ].mean()
+
+    # Add a second axis to the right of the main plot, and show the corresponding bar charts
+    if ax is None:
+        fig, (ax, ax2) = plt.subplots(
+            1, 2, figsize=(12, 6), gridspec_kw={"width_ratios": [3, 1]}
+        )
+
+    elif isinstance(ax, list):
+        ax, ax2 = ax
+
+    else:
+        raise ValueError(
+            "Passing normative_model produces two plots: a scatterplot with a PCA of the embeddings"
+            "themselves, and a barplot depicting the normative likelihood per condition. Instead of"
+            "a single ax, pass a list with two."
+        )
+
+    sns.boxplot(
+        data=embedding_dataset.sort_values(
+            "experimental condition",
+            key=lambda x: x == normative_model,
+            ascending=False,
+        ),
+        x="experimental condition",
+        y="norm_scores",
+        ax=ax2,
+    )
+    sns.stripplot(
+        data=embedding_dataset.sort_values(
+            "experimental condition",
+            key=lambda x: x == normative_model,
+            ascending=False,
+        ),
+        x="experimental condition",
+        y="norm_scores",
+        dodge=True,
+        color="black",
+        ax=ax2,
+    )
+
+    ax2.set_xlabel("")
+    ax2.set_ylabel("centered normative log likelihood")
+
+    # Add statistics
+    if exp_condition is None:
+        exp_conditions = {
+            key: val.iloc[:, 0].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+    else:
+        exp_conditions = {
+            key: val.loc[:, exp_condition].values[0]
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+    pairs = list(combinations(set(exp_conditions.values()), 2))
+    annotator = Annotator(
+        pairs=pairs,
+        data=embedding_dataset,
+        x="experimental condition",
+        y="norm_scores",
+        ax=ax2,
+    )
+    annotator.configure(
+        test=add_stats,
+        verbose=verbose,
+    )
+    annotator.apply_and_annotate()
+
+    embedding_dataset.index = (
+        coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
+    )
+    embedding_dataset.sort_values("experimental condition", inplace=True)
+
+    return embedding_dataset, False, ax
+
+
 def plot_embeddings(
     coordinates: coordinates,
     embeddings: table_dict = None,
@@ -1038,6 +1158,10 @@ def plot_embeddings(
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
+    # Normative modelling
+    normative_model: str = None,
+    add_stats: str = "Mann-Whitney",
+    verbose: bool = False,
     # Visualization design and data parameters
     exp_condition: str = None,
     use_keys: list = None,
@@ -1058,6 +1182,9 @@ def plot_embeddings(
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
@@ -1089,6 +1216,7 @@ def plot_embeddings(
         bin_size,
         bin_index,
     )
+    show = True
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
@@ -1185,10 +1313,17 @@ def plot_embeddings(
             }
         )
 
-        embedding_dataset.index = (
-            coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
-        )
-        embedding_dataset.sort_values("experimental condition", inplace=True)
+        if normative_model:
+            embedding_dataset, show, ax = plot_normative_log_likelihood(
+                coordinates,
+                exp_condition,
+                embedding_dataset,
+                normative_model,
+                ax,
+                add_stats,
+                verbose,
+                use_keys,
+            )
 
     # Plot selected embeddings using the specified settings
     sns.scatterplot(
@@ -1249,7 +1384,7 @@ def plot_embeddings(
         ("un" if sup_annots_to_plot is None else ""),
         ("aggregated " if aggregate_experiments else ""),
     )
-    if ax is not None:
+    if ax is not None or not show:
         ax.set_title(title, fontsize=15)
 
     else:

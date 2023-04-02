@@ -359,11 +359,11 @@ def separation_between_conditions(
     return current_distance
 
 
-def fit_normative_global_model(global_normal_embeddings: table_dict):
+def fit_normative_global_model(global_normal_embeddings: pd.DataFrame):
     """Fit a global model to the normal embeddings.
 
     Args:
-        global_normal_embeddings (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
+        global_normal_embeddings (pd.DataFrame): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
 
     Returns:
         A fitted global model.
@@ -376,12 +376,14 @@ def fit_normative_global_model(global_normal_embeddings: table_dict):
     kde = KernelDensity(kernel="gaussian")
 
     # Perform a grid search to find the optimal bandwidth value
-    grid_search = GridSearchCV(kde, params, cv=10)
-    grid_search.fit(global_normal_embeddings)
+    grid_search = GridSearchCV(
+        kde, params, cv=np.minimum(10, global_normal_embeddings.shape[0])
+    )
+    grid_search.fit(global_normal_embeddings.values)
 
     kd_estimation = KernelDensity(
         kernel="gaussian", bandwidth=grid_search.best_params_["bandwidth"]
-    ).fit(global_normal_embeddings)
+    ).fit(global_normal_embeddings.values)
 
     return kd_estimation
 
