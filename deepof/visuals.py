@@ -340,6 +340,8 @@ def plot_gantt(
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    behaviors_to_plot: list = None,
     save: bool = False,
 ):
     """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
@@ -350,6 +352,8 @@ def plot_gantt(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        behaviors_to_plot (list): list of behaviors to plot. If None, all behaviors are plotted.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -363,15 +367,21 @@ def plot_gantt(
 
     if plot_type == "unsupervised":
         hard_counts = soft_counts[experiment_id].argmax(axis=1)
-        gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
+        n_features = hard_counts.max() + 1
+        if behaviors_to_plot is not None:
+            gantt = np.zeros([len(behaviors_to_plot), hard_counts.shape[0]])
+        else:
+            gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
 
     elif plot_type == "supervised":
-        row_shape = supervised_annotations[experiment_id].shape[1] - len(
-            [
-                col
-                for col in supervised_annotations[experiment_id].columns
-                if "speed" in col
-            ]
+        behavior_ids = [
+            col
+            for col in supervised_annotations[experiment_id].columns
+            if "speed" not in col
+        ]
+        n_features = behavior_ids
+        row_shape = (
+            len(behavior_ids) if behaviors_to_plot is None else len(behaviors_to_plot)
         )
         gantt = np.zeros(
             [
@@ -383,7 +393,10 @@ def plot_gantt(
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, : gantt.shape[1]]
-        gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
+        if behaviors_to_plot is not None:
+            gantt = np.zeros([len(behaviors_to_plot), hard_counts.shape[0]])
+        else:
+            gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     colors = np.tile(
         list(sns.color_palette("tab20").as_hex()), int(np.ceil(gantt.shape[0] / 20))
@@ -392,19 +405,34 @@ def plot_gantt(
     # Iterate over unsupervised clusters and plot
     rows = 0
 
-    for cluster, color in zip(range(gantt.shape[0]), colors):
+    for cluster, color in zip(range(n_features), colors):
 
         if plot_type == "unsupervised":
-            gantt[cluster] = hard_counts == cluster
+            if behaviors_to_plot is not None:
+                if cluster not in behaviors_to_plot:
+                    continue
+            gantt[rows] = hard_counts == cluster
         elif plot_type == "supervised":
+            if behaviors_to_plot is not None:
+                if behavior_ids[cluster] not in behaviors_to_plot:
+                    continue
             if "speed" in supervised_annotations[experiment_id].iloc[:, cluster].name:
                 continue
-            gantt[cluster] = supervised_annotations[experiment_id].iloc[:, cluster]
+            gantt[rows] = supervised_annotations[experiment_id].iloc[:, cluster]
 
         gantt_cp = gantt.copy()
-        gantt_cp[[i for i in range(gantt.shape[0]) if i != cluster]] = np.nan
-        plt.axhline(y=cluster, color="k", linewidth=0.5)
+        gantt_cp[[i for i in range(gantt.shape[0]) if i != rows]] = np.nan
+
+        if signal_overlay is not None:
+            standard_signal = (signal_overlay - signal_overlay.min()) / (
+                signal_overlay.max() - signal_overlay.min()
+            )
+            sns.lineplot(
+                x=signal_overlay.index, y=standard_signal + rows, color="black"
+            )
+
         rows += 1
+        plt.axhline(y=rows, color="k", linewidth=0.5)
 
         sns.heatmap(
             data=gantt_cp,
@@ -429,21 +457,27 @@ def plot_gantt(
                 ),
             )
 
+    # Set ticks
+    if plot_type == "unsupervised":
+        behavior_ticks = np.array(
+            [
+                f"Cluster {cluster}"
+                for cluster in range(gantt.shape[0])
+                if behaviors_to_plot is None or cluster in behaviors_to_plot
+            ]
+        )
+    elif plot_type == "supervised":
+        behavior_ticks = (
+            behavior_ids if behaviors_to_plot is None else behaviors_to_plot
+        )
+
     plt.xticks([])
     plt.yticks(
         np.array(range(gantt.shape[0])) + 0.5,
         # Concatenate cluster IDs and checkpoint names if they exist
         np.concatenate(
             [
-                (
-                    np.arange(hard_counts.max() + 1)
-                    if plot_type == "unsupervised"
-                    else [
-                        col
-                        for col in supervised_annotations[experiment_id].columns
-                        if "speed" not in col
-                    ]
-                ),
+                behavior_ticks,
                 np.array(additional_checkpoints.index)
                 if additional_checkpoints is not None
                 else [],

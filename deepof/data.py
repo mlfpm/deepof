@@ -1755,6 +1755,30 @@ class TableDict(dict):
             propagate_annotations=self._propagate_annotations,
         )
 
+    def filter_condition(self, exp_condition: str, exp_value: str) -> table_dict:
+        """Return a subset of the original table_dict object, containing only videos belonging to the specified experimental condition.
+
+        Args:
+            exp_condition (str): experimental condition to filter on.
+            exp_value (str): experimental value to keep.
+
+        Returns:
+            TableDict: Subset of the original table_dict object, containing only the specified keys.
+        """
+        table = deepof.utils.deepcopy(self)
+
+        return TableDict(
+            {
+                k: value
+                for k, value in table.items()
+                if self._exp_conditions[exp_condition] == exp_value
+            },
+            self._type,
+            connectivity=self._connectivity,
+            propagate_labels=self._propagate_labels,
+            propagate_annotations=self._propagate_annotations,
+        )
+
     def _prepare_projection(self) -> np.ndarray:
         """Return a numpy ndarray from the preprocessing of the table_dict object, ready for projection into a lower dimensional space."""
         labels = None
