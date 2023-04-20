@@ -1771,7 +1771,7 @@ class TableDict(dict):
             {
                 k: value
                 for k, value in table.items()
-                if self._exp_conditions[exp_condition] == exp_value
+                if self._exp_conditions[k][exp_condition].values == exp_value
             },
             self._type,
             connectivity=self._connectivity,
