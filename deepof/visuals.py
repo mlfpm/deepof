@@ -903,7 +903,7 @@ def plot_stationary_entropy(
         soft_counts,
         breaks,
         exp_conditions,
-        bin_size=bin_size,
+        bin_size=(bin_size * coordinates._frame_rate if bin_size is not None else None),
         bin_index=bin_index,
         aggregate=False,
         normalize=True,

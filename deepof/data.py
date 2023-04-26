@@ -94,7 +94,7 @@ class Project:
         self,
         animal_ids: List = [""],
         arena: str = "polygonal-manual",
-        enable_iterative_imputation: bool = True,
+        enable_iterative_imputation: bool = 250,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
