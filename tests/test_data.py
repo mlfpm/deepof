@@ -13,6 +13,7 @@ from collections import defaultdict
 from shutil import rmtree
 
 import numpy as np
+import pandas as pd
 import pytest
 import string
 from hypothesis import given
@@ -85,6 +86,42 @@ def test_project_properties():
     assert prun.angles
     prun.angles = False
     assert not prun.angles
+
+
+def test_project_filters():
+    project_path = os.path.join(
+        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+    )
+    if os.path.exists(project_path):
+        rmtree(project_path)
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+    ).create()
+    if os.path.exists(project_path):
+        rmtree(project_path)
+
+    # Update experimental conditions with mock values
+    prun._exp_conditions = {
+        key: pd.DataFrame(
+            {"CSDS": np.random.choice(["Case", "Control"], size=1)[0]}, index=[0]
+        )
+        for key in prun.get_coords().keys()
+    }
+
+    coords = prun.get_coords()
+    assert isinstance(coords.filter_id("B"), dict)
+    assert isinstance(coords.filter_videos(coords.keys()), dict)
+    assert isinstance(coords.filter_condition(exp_filters={"CSDS": "Control"}), dict)
 
 
 @settings(deadline=None)
