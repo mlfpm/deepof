@@ -629,26 +629,23 @@ def plot_enrichment(
     )
 
     if add_stats:
-        if supervised_annotations is None:
-            pairs = list(
-                product(
-                    set(np.concatenate(list(soft_counts.values())).argmax(axis=1)),
-                    set(exp_conditions.values()),
-                )
+        pairs = list(
+            product(
+                set(
+                    np.concatenate(list(soft_counts.values())).argmax(axis=1)
+                    if supervised_annotations is None
+                    else list(supervised_annotations.values())[0].columns
+                ),
+                set(exp_conditions.values()),
             )
-        else:
-            pairs = list(
-                product(
-                    list(supervised_annotations.values())[0].columns,
-                    set(exp_conditions.values()),
-                )
-            )
+        )
         pairs = [
-            list(map(tuple, p))
+            [list(i) for i in list(combinations(list(map(tuple, p)), 2))]
             for p in np.array(pairs)
-            .reshape([-1, 2, len(set(exp_conditions.values()))])
+            .reshape([-1, len(set(exp_conditions.values())), 2])
             .tolist()
         ]
+        pairs = [item for sublist in pairs for item in sublist]
 
         annotator = Annotator(
             ax,
@@ -887,13 +884,16 @@ def plot_stationary_entropy(
     if exp_condition is None:
         exp_conditions = {
             key: val.iloc[:, 0].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
+            for key, val in embeddings._exp_conditions.items()
         }
     else:
         exp_conditions = {
             key: val.loc[:, exp_condition].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
+            for key, val in embeddings._exp_conditions.items()
         }
+
+    soft_counts = soft_counts.filter_videos(embeddings.keys())
+    breaks = breaks.filter_videos(embeddings.keys())
 
     # Get ungrouped entropy scores for the full videos
     ungrouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
@@ -987,13 +987,28 @@ def _filter_embeddings(
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
     # Get experimental conditions per video
+
     if exp_condition is None:
-        exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
+        try:
+            exp_condition = list(embeddings._exp_conditions.values())[0].columns[0]
+        except AttributeError:
+            exp_condition = list(supervised_annotations._exp_conditions.values())[
+                0
+            ].columns[0]
 
     concat_hue = [
         i[exp_condition].values[0]
-        for i in list(coordinates.get_exp_conditions.values())
+        for i in list(
+            (
+                embeddings if embeddings is not None else supervised_annotations
+            )._exp_conditions.values()
+        )
     ]
+    try:
+        soft_counts = soft_counts.filter_videos(embeddings.keys())
+        breaks = breaks.filter_videos(embeddings.keys())
+    except AttributeError:
+        pass
 
     if use_keys is not None:
         try:
@@ -1157,7 +1172,22 @@ def plot_normative_log_likelihood(
             key: val.loc[:, exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
         }
-    pairs = list(combinations(set(exp_conditions.values()), 2))
+
+    embedding_dataset.index = (
+        coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
+    )
+    embedding_dataset.sort_values(
+        "experimental condition",
+        key=lambda x: x == normative_model,
+        ascending=False,
+        inplace=True,
+    )
+
+    pairs = [
+        pair
+        for pair in list(combinations(set(exp_conditions.values()), 2))
+        if normative_model in pair
+    ]
     annotator = Annotator(
         pairs=pairs,
         data=embedding_dataset,
@@ -1170,11 +1200,6 @@ def plot_normative_log_likelihood(
         verbose=verbose,
     )
     annotator.apply_and_annotate()
-
-    embedding_dataset.index = (
-        coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
-    )
-    embedding_dataset.sort_values("experimental condition", inplace=True)
 
     return embedding_dataset, False, ax
 
@@ -1332,9 +1357,8 @@ def plot_embeddings(
                     sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True
                 )
 
-        aggregated_embeddings = aggregated_embeddings.loc[
-            (coordinates.get_exp_conditions.keys() if use_keys is None else use_keys), :
-        ]
+        if use_keys is not None:
+            aggregated_embeddings = aggregated_embeddings.loc[use_keys:]
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
         embedding_dataset = pd.DataFrame(

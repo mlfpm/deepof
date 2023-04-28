@@ -1753,6 +1753,7 @@ class TableDict(dict):
             connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
+            exp_conditions=self._exp_conditions,
         )
 
     def filter_condition(self, exp_filters: dict) -> table_dict:
@@ -1920,6 +1921,7 @@ class TableDict(dict):
             connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
+            exp_conditions=self._exp_conditions,
         )
 
     def merge(self, *args, ignore_index=False):

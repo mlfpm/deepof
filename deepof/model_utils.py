@@ -16,6 +16,7 @@ from tensorflow.keras.layers import (
     TimeDistributed,
 )
 from typing import Tuple, Union, Any, List, NewType
+import deepof.data
 import deepof.hypermodels
 import deepof.models
 import json
@@ -1512,7 +1513,23 @@ def embedding_per_video(
         else:
             breaks[key] = np.ones(soft_counts[key].shape[0]).astype(int)
 
-    return embeddings, soft_counts, breaks
+    return (
+        deepof.data.TableDict(
+            embeddings,
+            typ="unsupervised_embedding",
+            exp_conditions=coordinates.get_exp_conditions,
+        ),
+        deepof.data.TableDict(
+            soft_counts,
+            typ="unsupervised_counts",
+            exp_conditions=coordinates.get_exp_conditions,
+        ),
+        deepof.data.TableDict(
+            breaks,
+            typ="unsupervised_breaks",
+            exp_conditions=coordinates.get_exp_conditions,
+        ),
+    )
 
 
 def tune_search(
