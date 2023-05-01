@@ -26,24 +26,24 @@ compare user-defined experimental groups.
 The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof):
 
 ```bash
-   pip install deepof
+pip install deepof
 ```
 
 Alternatively, you can download our pre-built [Docker image](https://hub.docker.com/repository/docker/lucasmiranda42/deepof),
 which contains all compatible dependencies:
 
 ```bash
-   # download the latest available image
-   docker pull lucasmiranda42/deepof:latest
-   # run the image in interactive mode, enabling you to open python and import deepof
-   docker run -it lucasmiranda42/deepof
+# download the latest available image
+docker pull lucasmiranda42/deepof:latest
+# run the image in interactive mode, enabling you to open python and import deepof
+docker run -it lucasmiranda42/deepof
 ```
 
 Or use [poetry](https://python-poetry.org/):
 
 ```bash
-   # after installing poetry and clonning the DeepOF repository, just run
-   poetry install # from the main directory
+# after installing poetry and clonning the DeepOF repository, just run
+poetry install # from the main directory
 ```
 
 ##### Before we delve in:
@@ -56,14 +56,14 @@ set of labels (which can be found in the full documentation page). A pre-trained
 The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project:
 
 ```python
-   import deepof.data
-   my_deepof_project = deepof.data.Project(
-      project_path=".", # Path where to create project files
-      video_path="/path/to/videos", # Path to DLC tracked videos
-      table_path="/path/to/tables", # Path to DLC output
-      project_name="my_deepof_project", # Name of the current project
-      exp_conditions={exp_ID: exp_condition} # Dictionary containing one or more experimental conditions per provided video
-    )
+import deepof.data
+my_deepof_project = deepof.data.Project(
+  project_path=".", # Path where to create project files
+  video_path="/path/to/videos", # Path to DLC tracked videos
+  table_path="/path/to/tables", # Path to DLC output
+  project_name="my_deepof_project", # Name of the current project
+  exp_conditions={exp_ID: exp_condition} # Dictionary containing one or more experimental conditions per provided video
+)
 ```
 
 This command will create a ```deepof.data.Project``` object storing all the necessary information to start. There are
@@ -74,17 +74,17 @@ the hood (load your data, smooth your trajectories, compute distances, angles, a
 results to disk). The returned object belongs to the ```deepof.data.Coordinates``` class.
 
 ```python
-   my_project = my_project.create(verbose=True)
+my_project = my_project.create(verbose=True)
 ```
 
 Once you have this, you can do several things! But let's first explore how the results of those computations mentioned
 are stored. To extract trajectories, distances, angles and/or areas, you can respectively type:
 
 ```python
-   my_project_coords = my_project.get_coords(center="Center", polar=False, align="Nose", speed=0)
-   my_project_dists  = my_project.get_distances(speed=0)
-   my_project_angles = my_project.get_angles(speed=0)
-   my_project_areas = my_project.get_areas(speed=0)
+my_project_coords = my_project.get_coords(center="Center", polar=False, align="Nose", speed=0)
+my_project_dists  = my_project.get_distances(speed=0)
+my_project_angles = my_project.get_angles(speed=0)
+my_project_areas = my_project.get_areas(speed=0)
 ```
 
 Here, the data are stored as ```deepof.data.table_dict``` instances. These are very similar to python dictionaries
@@ -103,8 +103,8 @@ the ```.supervised_annotation()``` method, and the ```.deep_unsupervised_embeddi
 class, respectively.
 
 ```python
-   supervised_annot = my_project.supervised_annotation()
-   gmvae_embedding  = my_project.deep_unsupervised_embedding()
+supervised_annot = my_project.supervised_annotation()
+gmvae_embedding  = my_project.deep_unsupervised_embedding()
 ```
 
 The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame per experiment containing a series of
