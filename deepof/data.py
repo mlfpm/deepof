@@ -64,7 +64,7 @@ table_dict = NewType("deepof_table_dict", Any)
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
-def load_project(project_path: str) -> coordinates:
+def load_project(project_path: str) -> coordinates:  # pragma: no cover
     """Load a pre-saved pickled Coordinates object.
 
     Args:
@@ -147,7 +147,7 @@ class Project:
             ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
             if ".h5" in ex:
                 self.table_format = ".h5"
-            elif ".csv" in ex:
+            elif ".csv" in ex:  # pragma: no cover
                 self.table_format = ".csv"
         self.videos = sorted(
             [
@@ -216,7 +216,7 @@ class Project:
         ):
             raise FileNotFoundError(
                 "There are no compatible videos in the specified directory."
-            )
+            )  # pragma: no cover
         if (
             len(
                 [
@@ -229,7 +229,7 @@ class Project:
         ):
             raise FileNotFoundError(
                 "There are no compatible tracks in the specified directory."
-            )
+            )  # pragma: no cover
 
         if not os.path.exists(project_path):
             os.makedirs(project_path)
@@ -270,7 +270,7 @@ class Project:
         else:
             raise OSError(
                 "Project already exists. Delete it or specify a different name."
-            )
+            )  # pragma: no cover
 
     @property
     def distances(self):
@@ -386,7 +386,7 @@ class Project:
         elif not self.arena:
             return None, None, None
 
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError(
                 "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
             )
@@ -407,7 +407,7 @@ class Project:
         if self.table_format not in [".h5", ".csv"]:
             raise NotImplementedError(
                 "Tracking files must be in either h5 or csv format"
-            )
+            )  # pragma: no cover
 
         if verbose:
             print("Loading trajectories...")

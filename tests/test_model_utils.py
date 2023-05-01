@@ -17,6 +17,7 @@ from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+from hypothesis.extra.numpy import arrays
 from shutil import rmtree
 
 import deepof.data
@@ -56,6 +57,19 @@ def test_get_callbacks(encoding, k, embedding_model, encoder_type):
     assert np.any(
         [isinstance(i, tf.keras.callbacks.ModelCheckpoint) for i in callbacks]
     )
+
+
+@given(
+    soft_counts=arrays(
+        dtype=np.float64,
+        shape=st.tuples(
+            st.integers(min_value=1, max_value=10), st.integers(min_value=1, max_value=10)
+        ),
+        elements=st.floats(min_value=0, max_value=1)),
+)
+def test_get_hard_counts(soft_counts):
+    hard_counts = deepof.model_utils.get_hard_counts(soft_counts.astype(np.float32))
+    assert isinstance(hard_counts, tf.Tensor)
 
 
 @settings(max_examples=18, deadline=None, suppress_health_check=[HealthCheck.too_slow])

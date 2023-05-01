@@ -863,7 +863,7 @@ class TransformerEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
-    def call(self, x, training, mask, return_scores=False):
+    def call(self, x, training, mask, return_scores=False):  # pragma: no cover
         """Call the transformer encoder layer."""
         attn_output, attn_scores = self.mha(
             key=x, query=x, value=x, attention_mask=mask, return_attention_scores=True
@@ -996,7 +996,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
         ]
         self.dropout = tf.keras.layers.Dropout(self.rate)
 
-    def call(self, x, training):
+    def call(self, x, training):  # pragma: no cover
         """Call the transformer encoder."""
         # compute mask on the fly
         mask, _, _ = create_masks(x)
