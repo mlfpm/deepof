@@ -114,6 +114,16 @@ offer three flavours of deep clustering models), and allow for further analysis 
 That's it for this (very basic) introduction. Check out the tutorials [full documentation](https://deepof.readthedocs.io/en/latest/index.html) for details!
 
 ---
+### Issues
+
+If you encounter any problems while using this package, please open an issue in the [issue tracker](https://github.com/mlfpm/deepof/issues).
+
+---
+### Contributions
+
+We welcome contributions from the community! If you want to contribute to this project, please check out our [contribution guidelines](https://github.com/mlfpm/deepof/blob/master/CONTRIBUTING.md).
+
+---
 
  This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No.  813533
  <div align="center">
