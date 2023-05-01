@@ -58,9 +58,9 @@ There are many ways you can contribute, beyond writing code. If you can write, d
 
 We use the [Black](https://black.readthedocs.io/en/stable/) code formatter for this project. Please ensure your contributions adhere to this standard before submitting a pull request. You can check and format your code using Black:
 
-    ```
-    black your_file.py
-    ```
+ ```
+ black your_file.py
+ ```
 
 Black will automatically format your code to meet the style guide.
 
