@@ -252,6 +252,7 @@ if __name__ == "__main__":
         window_step = args.window_step
         max_epochs = args.max_epochs
         load_project = args.load_project
+        exp_condition_path = args.exp_condition_path
         run = args.run
 
     except TypeError:
