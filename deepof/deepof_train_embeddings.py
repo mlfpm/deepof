@@ -329,7 +329,7 @@ if __name__ == "__main__":
         # Get graph dataset
         (
             preprocessed_object,
-            G,
+            adjacency_matrix,
             to_preprocess,
             global_scaler,
         ) = project_coords.get_graph_dataset(
@@ -344,7 +344,6 @@ if __name__ == "__main__":
             scale="standard",
             shuffle=True,
         )
-        adjacency_matrix = nx.adjacency_matrix(G).todense()
 
         print("Training node set shape:", preprocessed_object[0].shape)
         print("Training edge set shape:", preprocessed_object[1].shape)
