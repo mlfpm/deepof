@@ -213,6 +213,13 @@ if __name__ == "__main__":
         type=int,
         default=0,
     )
+    parser.add_argument(
+        "--exp-condition-path",
+        "-ec",
+        help="If provided, loads the given experimental condition file. None by default.",
+        type=str,
+        default=None,
+    )
 
     args = parser.parse_args()
     current_GMT = time.gmtime()
@@ -260,9 +267,6 @@ if __name__ == "__main__":
         "graph",
     ], "Invalid input type. Type python model_training.py -h for help."
 
-    # Loads model hyperparameters and treatment conditions, if available
-    treatment_dict = deepof.model_utils.load_treatments(train_path)
-
     # Logs hyperparameters  if specified on the --logparam CLI argument
     logparam = {"encoding": encoding_size, "k": n_components}
 
@@ -288,6 +292,10 @@ if __name__ == "__main__":
 
     else:
         project_coords = deepof.data.load_project(load_project)
+
+    # If provided, load experimental conditions
+    if exp_condition_path is not None:
+        project_coords.load_exp_conditions(exp_condition_path)
 
     print("Preprocessing data...")
 
