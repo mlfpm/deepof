@@ -59,13 +59,16 @@ def test_get_callbacks(encoding, k, embedding_model, encoder_type):
     )
 
 
+@settings(deadline=None)
 @given(
     soft_counts=arrays(
         dtype=np.float64,
         shape=st.tuples(
-            st.integers(min_value=1, max_value=10), st.integers(min_value=1, max_value=10)
+            st.integers(min_value=1, max_value=10),
+            st.integers(min_value=1, max_value=10),
         ),
-        elements=st.floats(min_value=0, max_value=1)),
+        elements=st.floats(min_value=0, max_value=1),
+    ),
 )
 def test_get_hard_counts(soft_counts):
     hard_counts = deepof.model_utils.get_hard_counts(soft_counts.astype(np.float32))

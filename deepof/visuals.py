@@ -739,7 +739,7 @@ def plot_transitions(
         soft_counts,
         breaks,
         exp_conditions,
-        bin_size=bin_size,
+        bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
         bin_index=bin_index,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
@@ -980,54 +980,37 @@ def _filter_embeddings(
     soft_counts,
     breaks,
     supervised_annotations,
-    use_keys,
     exp_condition,
     bin_size,
     bin_index,
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
     # Get experimental conditions per video
+    if embeddings is None and supervised_annotations is None:
+        raise ValueError(
+            "Either embeddings, soft_counts, and breaks or supervised_annotations must be provided."
+        )
 
-    if exp_condition is None:
-        try:
+    try:
+        if exp_condition is None:
             exp_condition = list(embeddings._exp_conditions.values())[0].columns[0]
-        except AttributeError:
+
+        concat_hue = [
+            coordinates.get_exp_conditions[i][exp_condition].values[0]
+            for i in list(embeddings.keys())
+        ]
+        soft_counts = soft_counts.filter_videos(embeddings.keys())
+        breaks = breaks.filter_videos(embeddings.keys())
+
+    except AttributeError:
+        if exp_condition is None:
             exp_condition = list(supervised_annotations._exp_conditions.values())[
                 0
             ].columns[0]
 
-    concat_hue = [
-        i[exp_condition].values[0]
-        for i in list(
-            (
-                embeddings if embeddings is not None else supervised_annotations
-            )._exp_conditions.values()
-        )
-    ]
-    try:
-        soft_counts = soft_counts.filter_videos(embeddings.keys())
-        breaks = breaks.filter_videos(embeddings.keys())
-    except AttributeError:
-        pass
-
-    if use_keys is not None:
-        try:
-            try:
-                embeddings = {key: embeddings[key] for key in use_keys}
-                soft_counts = {key: soft_counts[key] for key in use_keys}
-                breaks = {key: breaks[key] for key in use_keys}
-            except AttributeError:
-                supervised_annotations = {
-                    key: supervised_annotations[key] for key in use_keys
-                }
-        except AttributeError:
-            raise ValueError(
-                "Either embeddings, soft_counts, and breaks or supervised_annotations must be provided."
-            )
         concat_hue = [
-            j
-            for i, j in zip(list(coordinates.get_exp_conditions.keys()), concat_hue)
-            if i in use_keys
+            coordinates.get_exp_conditions[i][exp_condition].values[0]
+            for i in list(supervised_annotations.keys())
         ]
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
@@ -1082,7 +1065,6 @@ def plot_normative_log_likelihood(
     ax: Any,
     add_stats: str,
     verbose: bool,
-    use_keys: list,
 ):
     """Plot a bar chart with normative log likelihoods per experimental condition, and compute statistics.
 
@@ -1094,7 +1076,6 @@ def plot_normative_log_likelihood(
         ax (plt.AxesSubplot): matplotlib axes where to render the plot
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
 
     Returns:
         embedding_dataset (pd.DataFrame): embedding data frame with added normative scores per sample
@@ -1173,9 +1154,7 @@ def plot_normative_log_likelihood(
             for key, val in coordinates.get_exp_conditions.items()
         }
 
-    embedding_dataset.index = (
-        coordinates.get_exp_conditions.keys() if use_keys is None else use_keys
-    )
+    embedding_dataset.index = coordinates.get_exp_conditions.keys()
     embedding_dataset.sort_values(
         "experimental condition",
         key=lambda x: x == normative_model,
@@ -1221,7 +1200,6 @@ def plot_embeddings(
     verbose: bool = False,
     # Visualization design and data parameters
     exp_condition: str = None,
-    use_keys: list = None,
     aggregate_experiments: str = False,
     samples: int = 500,
     show_aggregated_density: bool = True,
@@ -1242,7 +1220,6 @@ def plot_embeddings(
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        use_keys (list): list of keys to use for plotting. If None (default), all keys are used.
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
@@ -1268,7 +1245,6 @@ def plot_embeddings(
         copy.deepcopy(soft_counts),
         copy.deepcopy(breaks),
         copy.deepcopy(supervised_annotations),
-        use_keys,
         exp_condition,
         bin_size,
         bin_index,
@@ -1357,9 +1333,6 @@ def plot_embeddings(
                     sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True
                 )
 
-        if use_keys is not None:
-            aggregated_embeddings = aggregated_embeddings.loc[use_keys:]
-
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
         embedding_dataset = pd.DataFrame(
             {
@@ -1378,7 +1351,6 @@ def plot_embeddings(
                 ax,
                 add_stats,
                 verbose,
-                use_keys,
             )
 
     # Plot selected embeddings using the specified settings

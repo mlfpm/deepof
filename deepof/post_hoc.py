@@ -7,9 +7,12 @@
 from catboost import CatBoostClassifier
 from collections import Counter, defaultdict
 from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 from itertools import product
 from joblib import delayed, Parallel
 from multiprocessing import cpu_count
+from pomegranate.distributions import Normal
+from pomegranate.hmm import DenseHMM
 from scipy import stats
 from seglearn import feature_functions
 from seglearn.transform import FeatureRep
@@ -19,15 +22,17 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
-from imblearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tensorflow_probability import distributions as tfd
 from typing import Any, List, NewType, Union
 import numpy as np
+import os
 import ot
 import pandas as pd
+import pickle
 import scipy
 import shap
+import tqdm
 import umap
 
 import deepof.data
@@ -36,6 +41,166 @@ import deepof.data
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
+
+
+def recluster(
+    coordinates: coordinates,
+    embeddings: table_dict,
+    soft_counts: table_dict,
+    min_confidence: float = 0.75,
+    states: Union[str, int] = "aic",
+    pretrained: Union[bool, str] = False,
+    min_states: int = 2,
+    max_states: int = 25,
+    save: bool = True,
+):
+    """
+
+    Args:
+        coordinates: deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        min_confidence (float): minimum confidence the model should assign to a data point for the model to avoid resorting to a uniform prior around it.
+        states: Number of states to use for the HMM. If "aic" or "bic", the number of states is chosen by minimizing the AIC or BIC criteria (respectively) over a predefined range of states.
+        pretrained: Whether to use a pretrained model or not. If True, DeepOF will search for an existing file with the provided parameters. If a string, DeepOF will search for a file with the provided name.
+        min_states: Minimum number of states to use for the HMM if automatic search is enabled.
+        max_states: Maximum number of states to use for the HMM if automatic search is enabled.
+        save: Whether to save the trained model or not.
+
+    Returns:
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time, using the new HMM-based segmentation on the embedding space.
+
+    """
+
+    # Expand dims of each element in the table dict, pad them all to the same length, and concatenate
+    max_len = max([i.shape[0] for i in embeddings.values()])
+    concat_embeddings = np.concatenate(
+        [
+            np.expand_dims(np.pad(i, ((0, max_len - i.shape[0]), (0, 0))), axis=0)
+            for i in embeddings.values()
+        ]
+    )
+
+    # Load Pretrained model if necessary, or train a new one if not
+    if pretrained:  # pragma: no cover
+        if isinstance(pretrained, str):
+            hmm_model = pickle.load(open(pretrained, "rb"))
+        else:
+            hmm_model = pickle.load(
+                open(
+                    os.path.join(
+                        coordinates._project_path,
+                        coordinates._project_name,
+                        "Trained_models",
+                        +"hmm_trained_{}.pkl".format(states),
+                    ),
+                    "rb",
+                )
+            )
+
+    elif soft_counts is not None:
+        concat_soft_counts = np.concatenate(
+            [
+                np.expand_dims(
+                    np.pad(
+                        i,
+                        ((0, max_len - i.shape[0]), (0, 0)),
+                        constant_values=1 / list(soft_counts.values())[0].shape[1],
+                    ),
+                    axis=0,
+                )
+                for i in soft_counts.values()
+            ]
+        )
+        if min_confidence is not None:
+            for st in concat_soft_counts:
+                st[np.where(np.max(st, axis=1) <= min_confidence)[0]] = (
+                    1 / list(soft_counts.values())[0].shape[1]
+                )
+
+        # Initialize the model
+        hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
+
+        # Fit the model
+        hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
+
+    else:
+
+        if isinstance(states, int):
+            # Initialize the model
+            hmm_model = DenseHMM([Normal() for _ in range(states)])
+
+            # Fit the model
+            hmm_model = hmm_model.fit(concat_embeddings)
+
+        elif states in ["aic", "bic"]:
+            # Fit a range of HMMs with different number of states
+            hmm_models = []
+            model_selection = []
+            for i in tqdm.tqdm(range(min_states, max_states + 1)):
+
+                try:
+                    model = DenseHMM([Normal() for _ in range(i)])
+                    model = model.fit(concat_embeddings)
+                    hmm_models.append(model)
+
+                    # Compute AIC and BIC
+                    n_features = concat_embeddings.shape[2]
+                    n_params = i * (
+                        n_features + n_features * (n_features + 1) / 2
+                    ) + i * (i - 1)
+                    log_likelihood = float(
+                        model.log_probability(concat_embeddings).mean()
+                    )
+                    if states == "aic":
+                        model_selection.append(2 * n_params - 2 * log_likelihood)
+                    elif states == "bic":
+                        model_selection.append(
+                            n_params * np.log(concat_embeddings.shape[0])
+                            - 2 * log_likelihood
+                        )
+
+                except np.linalg.LinAlgError:
+                    model_selection.append(np.inf)
+
+            hmm_model = hmm_models[np.argmin(model_selection)]
+
+        else:
+            raise ValueError(
+                "The states argument must be either an integer or one of 'aic' or 'bic'."
+            )
+
+    # Save the best model
+    if save:  # pragma: no cover
+        pickle.dump(
+            hmm_model,
+            open(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Trained_models",
+                    "hmm_trained_{}.pkl".format(states),
+                ),
+                "wb",
+            ),
+        )
+
+    # Predict on each animal experiment
+    soft_counts = hmm_model.predict_proba(concat_embeddings)
+    soft_counts = deepof.data.TableDict(
+        {
+            key: np.array(soft_counts[i][: embeddings[key].shape[0]])
+            for i, key in enumerate(embeddings.keys())
+        },
+        typ="unsupervised_counts",
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+    try:
+        return soft_counts, model_selection
+
+    except UnboundLocalError:
+        return soft_counts
 
 
 def get_time_on_cluster(

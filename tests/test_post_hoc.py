@@ -25,6 +25,62 @@ import deepof.post_hoc
 import deepof.data
 
 
+@settings(deadline=None, max_examples=4)
+@given(states=st.sampled_from([3, "aic", "bic", "priors"]))
+def test_recluster(states):
+
+    project_path = os.path.join(
+        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+    )
+    if os.path.exists(project_path):
+        rmtree(project_path)
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_single_topview",
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_single_topview",
+            "Tables",
+        ),
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        animal_ids=[""],
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create()
+    rmtree(project_path)
+
+    # Define a test embedding dictionary
+    embedding = {i: tf.random.normal(shape=(1000, 10)) for i in range(10)}
+
+    if states == "priors":
+        # Define a test matrix of soft counts
+        soft_counts = {}
+        for i in range(10):
+            counts = np.random.normal(size=(1000, 10))
+            soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    else:
+        soft_counts = None
+
+    deepof.post_hoc.recluster(
+        prun,
+        embedding,
+        soft_counts,
+        states=states,
+        save=False,
+    )
+
+
 def test_get_time_on_cluster():
 
     # Define a test matrix of soft counts
@@ -46,7 +102,7 @@ def test_get_time_on_cluster():
 @given(reduce_dim=st.booleans(), agg=st.sampled_from(["mean", "median"]))
 def test_get_aggregated_embedding(reduce_dim, agg):
 
-    # Define a test embedding dixtionary
+    # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
 
     aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
@@ -63,7 +119,7 @@ def test_get_aggregated_embedding(reduce_dim, agg):
 )
 def test_select_time_bin(bin_size, bin_index, supervised):
 
-    # Define a test embedding dixtionary
+    # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     if supervised:
         embedding = {i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}
@@ -104,7 +160,7 @@ def test_select_time_bin(bin_size, bin_index, supervised):
 )
 def test_condition_distance_binning(scan_mode, agg, metric):
 
-    # Define a test embedding dixtionary
+    # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
@@ -159,7 +215,7 @@ def test_fit_normative_global_model(input_data):
 )
 def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
-    # Define a test embedding dixtionary
+    # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
@@ -216,7 +272,7 @@ def test_compute_transition_matrix_per_condition(
     bin_size, aggregate, normalize, steady_state_entropy
 ):
 
-    # Define a test embedding dixtionary
+    # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
