@@ -25,7 +25,7 @@ import deepof.post_hoc
 import deepof.data
 
 
-@settings(deadline=None, max_examples=4)
+@settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
 
@@ -61,13 +61,13 @@ def test_recluster(states):
     rmtree(project_path)
 
     # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(1000, 10)) for i in range(10)}
+    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
 
     if states == "priors":
         # Define a test matrix of soft counts
         soft_counts = {}
         for i in range(10):
-            counts = np.random.normal(size=(1000, 10))
+            counts = np.abs(np.random.normal(size=(100, 2)))
             soft_counts[i] = counts / counts.sum(axis=1)[:, None]
     else:
         soft_counts = None
@@ -77,6 +77,8 @@ def test_recluster(states):
         embedding,
         soft_counts,
         states=states,
+        min_states=2,
+        max_states=3,
         save=False,
     )
 
