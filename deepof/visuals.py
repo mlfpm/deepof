@@ -5,7 +5,8 @@ import collections
 # encoding: utf-8
 # module deepof
 
-from collections import defaultdict, Sequence
+from collections import defaultdict
+from collections.abc import Sequence
 from itertools import cycle, product, combinations
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap

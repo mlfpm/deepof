@@ -3488,14 +3488,12 @@ six = ">=1.5.2"
 [[package]]
 name = "pomegranate"
 version = "1.0.0"
-description = "A PyTorch implementation of probabilistic models."
+description = ""
 category = "main"
 optional = false
 python-versions = "*"
-files = [
-    {file = "pomegranate-1.0.0-py3-none-any.whl", hash = "sha256:2afb6948c709e49889f1e2d2d0313c9d4866c19491f17c8113a17d580021355f"},
-    {file = "pomegranate-1.0.0.tar.gz", hash = "sha256:57dc6d6355f77de34d218a49f88451b91c5364ee50bbb77efee04fcddb04a02f"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 apricot-select = ">=0.6.1"
@@ -3504,6 +3502,12 @@ numpy = ">=1.22.2"
 scikit-learn = ">=1.0.2"
 scipy = ">=1.6.2"
 torch = ">=1.9.0"
+
+[package.source]
+type = "git"
+url = "https://git@github.com/jmschrei/pomegranate.git"
+reference = "HEAD"
+resolved_reference = "f0b966e8fb0d6cf27b0d83a6f826d739751d91d4"
 
 [[package]]
 name = "pot"
@@ -5906,4 +5910,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "7a5aa473a4c40b2cf284f6e080d26834ff4e3b328ddef3910a0fe92229266da8"
+content-hash = "6fb9818a07e5ad505d8d4fcca866a51d03547b79016e608fbd5dfbb5dc9fcfb8"

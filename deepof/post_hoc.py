@@ -43,10 +43,53 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
+def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
+    """Auxiliary function for fitting a range of HMMs with different number of states.
+
+    Args:
+        concat_embeddings (np.ndarray): Concatenated embeddings across all animal experiments.
+        states (str): Whether to use AIC or BIC to select the number of states.
+        min_states (int): Minimum number of states to use for the HMM.
+        max_states (int): Maximum number of states to use for the HMM.
+
+    """
+    hmm_models = []
+    model_selection = []
+    for i in tqdm.tqdm(range(min_states, max_states + 1)):
+
+        try:
+            model = DenseHMM([Normal() for _ in range(i)])
+            model = model.fit(concat_embeddings)
+            hmm_models.append(model)
+
+            # Compute AIC and BIC
+            n_features = concat_embeddings.shape[2]
+            n_params = i * (n_features + n_features * (n_features + 1) / 2) + i * (
+                i - 1
+            )
+            log_likelihood = float(model.log_probability(concat_embeddings).mean())
+            if states == "aic":
+                model_selection.append(2 * n_params - 2 * log_likelihood)
+            elif states == "bic":
+                model_selection.append(
+                    n_params * np.log(concat_embeddings.shape[0]) - 2 * log_likelihood
+                )
+
+        except np.linalg.LinAlgError:
+            model_selection.append(np.inf)
+
+    if states in ["aic", "bic"]:
+        hmm_model = hmm_models[np.argmin(model_selection)]
+    else:
+        hmm_model = hmm_models[0]
+
+    return hmm_model, model_selection
+
+
 def recluster(
     coordinates: coordinates,
     embeddings: table_dict,
-    soft_counts: table_dict,
+    soft_counts: table_dict = None,
     min_confidence: float = 0.75,
     states: Union[str, int] = "aic",
     pretrained: Union[bool, str] = False,
@@ -73,6 +116,7 @@ def recluster(
     """
 
     # Expand dims of each element in the table dict, pad them all to the same length, and concatenate
+    model_selection = []
     max_len = max([i.shape[0] for i in embeddings.values()])
     concat_embeddings = np.concatenate(
         [
@@ -127,48 +171,12 @@ def recluster(
     else:
 
         if isinstance(states, int):
-            # Initialize the model
-            hmm_model = DenseHMM([Normal() for _ in range(states)])
+            min_states = max_states = states
 
-            # Fit the model
-            hmm_model = hmm_model.fit(concat_embeddings)
-
-        elif states in ["aic", "bic"]:
-            # Fit a range of HMMs with different number of states
-            hmm_models = []
-            model_selection = []
-            for i in tqdm.tqdm(range(min_states, max_states + 1)):
-
-                try:
-                    model = DenseHMM([Normal() for _ in range(i)])
-                    model = model.fit(concat_embeddings)
-                    hmm_models.append(model)
-
-                    # Compute AIC and BIC
-                    n_features = concat_embeddings.shape[2]
-                    n_params = i * (
-                        n_features + n_features * (n_features + 1) / 2
-                    ) + i * (i - 1)
-                    log_likelihood = float(
-                        model.log_probability(concat_embeddings).mean()
-                    )
-                    if states == "aic":
-                        model_selection.append(2 * n_params - 2 * log_likelihood)
-                    elif states == "bic":
-                        model_selection.append(
-                            n_params * np.log(concat_embeddings.shape[0])
-                            - 2 * log_likelihood
-                        )
-
-                except np.linalg.LinAlgError:
-                    model_selection.append(np.inf)
-
-            hmm_model = hmm_models[np.argmin(model_selection)]
-
-        else:
-            raise ValueError(
-                "The states argument must be either an integer or one of 'aic' or 'bic'."
-            )
+        # Fit a range of HMMs with different number of states
+        hmm_model, model_selection = _fit_hmm_range(
+            concat_embeddings, states, min_states, max_states
+        )
 
     # Save the best model
     if save:  # pragma: no cover
@@ -196,11 +204,10 @@ def recluster(
         exp_conditions=coordinates.get_exp_conditions,
     )
 
-    try:
+    if len(model_selection) > 0:
         return soft_counts, model_selection
 
-    except UnboundLocalError:
-        return soft_counts
+    return soft_counts
 
 
 def get_time_on_cluster(
