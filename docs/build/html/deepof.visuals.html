@@ -58,6 +58,7 @@
 <li><a class="reference internal" href="#deepof.visuals.plot_enrichment"><code class="docutils literal notranslate"><span class="pre">plot_enrichment()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.visuals.plot_transitions"><code class="docutils literal notranslate"><span class="pre">plot_transitions()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.visuals.plot_stationary_entropy"><code class="docutils literal notranslate"><span class="pre">plot_stationary_entropy()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.visuals.plot_normative_log_likelihood"><code class="docutils literal notranslate"><span class="pre">plot_normative_log_likelihood()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.visuals.plot_embeddings"><code class="docutils literal notranslate"><span class="pre">plot_embeddings()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.visuals.animate_skeleton"><code class="docutils literal notranslate"><span class="pre">animate_skeleton()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.visuals.plot_cluster_detection_performance"><code class="docutils literal notranslate"><span class="pre">plot_cluster_detection_performance()</span></code></a></li>
@@ -132,8 +133,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepof Coordinates object.</p></li>
-<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false,</p></li>
-<li><p><strong>'arena'</strong> (<em>the raw data is returned; if</em>) – </p></li>
+<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false, the raw data is returned; if ‘arena’ (default), coordinates are centered in the pitch.</p></li>
 <li><p><strong>color</strong> (<em>str</em>) – color of the displayed arena.</p></li>
 <li><p><strong>ax</strong> (<em>Any</em>) – axes where to plot the arena.</p></li>
 <li><p><strong>i</strong> (<em>Union</em><em>[</em><em>int</em><em>, </em><em>str</em><em>]</em>) – index of the animal to plot.</p></li>
@@ -150,16 +150,14 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dframe</strong> (<em>pandas.DataFrame</em>) – table_dict value with info to plot</p></li>
-<li><p><strong>bodyparts</strong> (<em>List</em>) – bodyparts to represent (at least 1)</p></li>
+<li><p><strong>dframe</strong> (<em>pandas.DataFrame</em>) – table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1)</p></li>
 <li><p><strong>xlim</strong> (<em>float</em>) – limits of the x-axis</p></li>
 <li><p><strong>ylim</strong> (<em>float</em>) – limits of the y-axis</p></li>
 <li><p><strong>title</strong> (<em>str</em>) – title of the figure</p></li>
 <li><p><strong>mask</strong> (<em>np.ndarray</em>) – mask to apply to the heatmap across time</p></li>
 <li><p><strong>save</strong> (<em>str</em>) – if provided, saves the figure to the specified file.</p></li>
 <li><p><strong>dpi</strong> (<em>int</em>) – dots per inch of the figure to create.</p></li>
-<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided,</p></li>
-<li><p><strong>created.</strong> (<em>new figure will be</em>) – </p></li>
+<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided, new figure will be created.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -180,13 +178,10 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepof Coordinates object.</p></li>
 <li><p><strong>bodyparts</strong> (<em>list</em>) – list of body parts to plot.</p></li>
-<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false,</p></li>
-<li><p><strong>'arena'</strong> (<em>the raw data is returned; if</em>) – </p></li>
-<li><p><strong>align</strong> (<em>str</em>) – Selects the body part to which later processes will align the frames with</p></li>
-<li><p><strong>documentation</strong><strong>)</strong><strong>.</strong> (<em>(</em><em>see preprocess in table_dict</em>) – </p></li>
+<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false, the raw data is returned; if ‘arena’ (default), coordinates are centered in the pitch.</p></li>
+<li><p><strong>align</strong> (<em>str</em>) – Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).</p></li>
 <li><p><strong>exp_condition</strong> (<em>str</em>) – Experimental condition to plot base filters on.</p></li>
-<li><p><strong>condition_value</strong> (<em>str</em>) – Experimental condition value to plot. If available, it filters the</p></li>
-<li><p><strong>exp_condition.</strong> (<em>experiments to keep only those whose condition value matches the given string in the provided</em>) – </p></li>
+<li><p><strong>condition_value</strong> (<em>str</em>) – Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.</p></li>
 <li><p><strong>display_arena</strong> (<em>bool</em>) – whether to plot a dashed line with an overlying arena perimeter. Defaults to True.</p></li>
 <li><p><strong>xlim</strong> (<em>float</em>) – x-axis limits.</p></li>
 <li><p><strong>ylim</strong> (<em>float</em>) – y-axis limits.</p></li>
@@ -195,8 +190,7 @@
 <li><p><strong>bin_size</strong> (<em>int</em>) – bin size for time filtering.</p></li>
 <li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension.</p></li>
 <li><p><strong>dpi</strong> (<em>int</em>) – resolution of the figure.</p></li>
-<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided,</p></li>
-<li><p><strong>created.</strong> (<em>a new figure will be</em>) – </p></li>
+<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided, a new figure will be created.</p></li>
 <li><p><strong>show</strong> (<em>bool</em>) – whether to show the created figure. If False, returns al axes.</p></li>
 </ul>
 </dd>
@@ -211,7 +205,7 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.visuals.plot_gantt">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_gantt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_checkpoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.visuals.plot_gantt" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_gantt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_checkpoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_overlay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Series</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">behaviors_to_plot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.visuals.plot_gantt" title="Permalink to this definition"></a></dt>
 <dd><p>Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -219,9 +213,10 @@
 <li><p><strong>coordinates</strong> (<em>project</em>) – deepOF project where the data is stored.</p></li>
 <li><p><strong>experiment_id</strong> (<em>str</em>) – Name of the experiment to display.</p></li>
 <li><p><strong>soft_counts</strong> (<em>table_dict</em>) – table dict with soft cluster assignments per animal experiment across time.</p></li>
-<li><p><strong>supervised_annotations</strong> (<em>table_dict</em>) – table dict with supervised annotations per video.</p></li>
-<li><p><strong>created.</strong> (<em>new figure will be</em>) – </p></li>
+<li><p><strong>supervised_annotations</strong> (<em>table_dict</em>) – table dict with supervised annotations per video. new figure will be created.</p></li>
 <li><p><strong>additional_checkpoints</strong> (<em>pd.DataFrame</em>) – table with additional checkpoints to plot.</p></li>
+<li><p><strong>signal_overlay</strong> (<em>pd.Series</em>) – overlays a continuous signal with all selected behaviors. None by default.</p></li>
+<li><p><strong>behaviors_to_plot</strong> (<em>list</em>) – list of behaviors to plot. If None, all behaviors are plotted.</p></li>
 <li><p><strong>save</strong> (<em>bool</em>) – Saves a time-stamped vectorized version of the figure if True.</p></li>
 </ul>
 </dd>
@@ -240,18 +235,14 @@
 <li><p><strong>soft_counts</strong> (<em>table_dict</em>) – table dict with soft cluster assignments per animal experiment across time.</p></li>
 <li><p><strong>breaks</strong> (<em>table_dict</em>) – table dict with changepoint detection breaks per experiment.</p></li>
 <li><p><strong>supervised_annotations</strong> (<em>table_dict</em>) – table dict with supervised annotations per animal experiment across time.</p></li>
-<li><p><strong>plot_proportions</strong> (<em>bool</em>) – if supervised annotations are provided, display only traits that are measured</p></li>
-<li><p><strong>scales.</strong> (<em>as proportions instead</em><em> of </em><em>real values. Useful to visualize traits with different</em>) – </p></li>
-<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one</p></li>
-<li><p><strong>used.</strong> (<em>available is</em>) – </p></li>
-<li><p><strong>exp_condition_order</strong> (<em>list</em>) – Order in which to plot experimental conditions. If None (default), the order</p></li>
-<li><p><strong>dict.</strong> (<em>is determined by the order</em><em> of </em><em>the keys in the table</em>) – </p></li>
+<li><p><strong>plot_proportions</strong> (<em>bool</em>) – if supervised annotations are provided, display only traits that are measured as proportions instead of real values. Useful to visualize traits with different scales.</p></li>
+<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one available is used.</p></li>
+<li><p><strong>exp_condition_order</strong> (<em>list</em>) – Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.</p></li>
 <li><p><strong>min_confidence</strong> (<em>float</em>) – minimum confidence in cluster assignments used for quality control filtering.</p></li>
 <li><p><strong>bin_size</strong> (<em>int</em>) – bin size for time filtering.</p></li>
 <li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension.</p></li>
 <li><p><strong>precomputed</strong> (<em>np.ndarray</em>) – precomputed time bins. If provided, bin_size and bin_index are ignored.</p></li>
-<li><p><strong>add_stats</strong> (<em>bool</em>) – whether to add stats to the plots. Defaults to True.</p></li>
-<li><p><strong>performance.</strong> (<em>may hurt</em>) – </p></li>
+<li><p><strong>add_stats</strong> (<em>str</em>) – test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.</p></li>
 <li><p><strong>verbose</strong> (<em>bool</em>) – if True, prints test results and p-value cutoffs. False by default.</p></li>
 <li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided, new figure will be created.</p></li>
 <li><p><strong>save</strong> (<em>bool</em>) – Saves a time-stamped vectorized version of the figure if True.</p></li>
@@ -272,11 +263,9 @@
 <li><p><strong>embeddings</strong> (<em>table_dict</em>) – table dict with neural embeddings per animal experiment across time.</p></li>
 <li><p><strong>soft_counts</strong> (<em>table_dict</em>) – table dict with soft cluster assignments per animal experiment across time.</p></li>
 <li><p><strong>breaks</strong> (<em>table_dict</em>) – table dict with changepoint detection breaks per experiment.</p></li>
-<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one</p></li>
-<li><p><strong>used.</strong> (<em>available is</em>) – </p></li>
+<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one available is used.</p></li>
 <li><p><strong>bin_size</strong> (<em>int</em>) – bin size for time filtering.</p></li>
-<li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension.</p></li>
-<li><p><strong>created.</strong> (<em>new figure will be</em>) – </p></li>
+<li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension. new figure will be created.</p></li>
 <li><p><strong>visualization</strong> (<em>str</em>) – visualization mode. Can be either ‘networks’, or ‘heatmaps’.</p></li>
 <li><p><strong>silence_diagonal</strong> (<em>bool</em>) – If True, diagonals are set to zero.</p></li>
 <li><p><strong>cluster</strong> (<em>bool</em>) – If True (default) rows and columns on heatmaps are hierarchically clustered.</p></li>
@@ -298,14 +287,12 @@
 <li><p><strong>embeddings</strong> (<em>table_dict</em>) – table dict with neural embeddings per animal experiment across time.</p></li>
 <li><p><strong>soft_counts</strong> (<em>table_dict</em>) – table dict with soft cluster assignments per animal experiment across time.</p></li>
 <li><p><strong>breaks</strong> (<em>table_dict</em>) – table dict with changepoint detection breaks per experiment.</p></li>
-<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one</p></li>
-<li><p><strong>used.</strong> (<em>available is</em>) – </p></li>
-<li><p><strong>add_stats</strong> (<em>bool</em>) – whether to add stats to the plots. Defaults to True.</p></li>
+<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one available is used.</p></li>
+<li><p><strong>add_stats</strong> (<em>str</em>) – test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.</p></li>
 <li><p><strong>bin_size</strong> (<em>int</em>) – bin size for time filtering.</p></li>
 <li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension.</p></li>
 <li><p><strong>verbose</strong> (<em>bool</em>) – if True, prints test results and p-value cutoffs. False by default.</p></li>
-<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided,</p></li>
-<li><p><strong>created.</strong> (<em>new figure will be</em>) – </p></li>
+<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided, new figure will be created.</p></li>
 <li><p><strong>save</strong> (<em>bool</em>) – Saves a time-stamped vectorized version of the figure if True.</p></li>
 </ul>
 </dd>
@@ -313,8 +300,33 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="deepof.visuals.plot_normative_log_likelihood">
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_normative_log_likelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normative_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.visuals.plot_normative_log_likelihood" title="Permalink to this definition"></a></dt>
+<dd><p>Plot a bar chart with normative log likelihoods per experimental condition, and compute statistics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepOF project where the data is stored.</p></li>
+<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one available is used.</p></li>
+<li><p><strong>embedding_dataset</strong> (<em>pd.DataFrame</em>) – global animal embeddings, alongside their respective experimental conditions</p></li>
+<li><p><strong>normative_model</strong> (<em>str</em>) – Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via <a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs (see full documentation for details).</p></li>
+<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – matplotlib axes where to render the plot</p></li>
+<li><p><strong>add_stats</strong> (<em>str</em>) – test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – if True, prints test results and p-value cutoffs. False by default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>embedding data frame with added normative scores per sample</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>embedding_dataset (pd.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="deepof.visuals.plot_embeddings">
-<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_confidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_experiments</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_aggregated_density</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colour_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cluster'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_break_size_as_radius</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.visuals.plot_embeddings" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.visuals.</span></span><span class="sig-name descname"><span class="pre">plot_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">soft_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supervised_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">deepof_table_dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_confidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normative_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Mann-Whitney'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_experiments</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_aggregated_density</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colour_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cluster'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_break_size_as_radius</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.visuals.plot_embeddings" title="Permalink to this definition"></a></dt>
 <dd><p>Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -324,21 +336,19 @@
 <li><p><strong>soft_counts</strong> (<em>table_dict</em>) – table dict with soft cluster assignments per animal experiment across time.</p></li>
 <li><p><strong>breaks</strong> (<em>table_dict</em>) – table dict with changepoint detection breaks per experiment.</p></li>
 <li><p><strong>supervised_annotations</strong> (<em>table_dict</em>) – table dict with supervised annotations per experiment.</p></li>
-<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one</p></li>
-<li><p><strong>used.</strong> (<em>available is</em>) – </p></li>
-<li><p><strong>use_keys</strong> (<em>list</em>) – list of keys to use for plotting. If None (default), all keys are used.</p></li>
+<li><p><strong>exp_condition</strong> (<em>str</em>) – Name of the experimental condition to use when plotting. If None (default) the first one available is used.</p></li>
+<li><p><strong>normative_model</strong> (<em>str</em>) – Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via <a href="#id3"><span class="problematic" id="id4">**</span></a>kwargs (see full documentation for details).</p></li>
+<li><p><strong>add_stats</strong> (<em>str</em>) – test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – if True, prints test results and p-value cutoffs. False by default.</p></li>
 <li><p><strong>min_confidence</strong> (<em>float</em>) – minimum confidence in cluster assignments used for quality control filtering.</p></li>
 <li><p><strong>bin_size</strong> (<em>int</em>) – bin size for time filtering.</p></li>
 <li><p><strong>bin_index</strong> (<em>int</em>) – index of the bin of size bin_size to select along the time dimension.</p></li>
 <li><p><strong>aggregate_experiments</strong> (<em>str</em>) – Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).</p></li>
-<li><p><strong>samples</strong> (<em>int</em>) – Number of samples to take from the time embeddings. None leads to plotting all time-points, which</p></li>
-<li><p><strong>performance.</strong> (<em>may hurt</em>) – </p></li>
+<li><p><strong>samples</strong> (<em>int</em>) – Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.</p></li>
 <li><p><strong>show_aggregated_density</strong> (<em>bool</em>) – if True, a density plot is added to the aggregated embeddings.</p></li>
 <li><p><strong>colour_by</strong> (<em>str</em>) – hue by which to colour the embeddings. Can be one of ‘cluster’ (default), ‘exp_condition’, or ‘exp_id’.</p></li>
-<li><p><strong>show_break_size_as_radius</strong> (<em>bool</em>) – Only usable when embeddings come from a model using changepoint detection. If True,</p></li>
-<li><p><strong>dot.</strong> (<em>the size</em><em> of </em><em>each chunk is depicted as the radius</em><em> of </em><em>each</em>) – </p></li>
-<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided,</p></li>
-<li><p><strong>created.</strong> (<em>new figure will be</em>) – </p></li>
+<li><p><strong>show_break_size_as_radius</strong> (<em>bool</em>) – Only usable when embeddings come from a model using changepoint detection. If True, the size of each chunk is depicted as the radius of each dot.</p></li>
+<li><p><strong>ax</strong> (<em>plt.AxesSubplot</em>) – axes where to plot the current figure. If not provided, new figure will be created.</p></li>
 <li><p><strong>save</strong> (<em>bool</em>) – Saves a time-stamped vectorized version of the figure if True.</p></li>
 </ul>
 </dd>
@@ -355,27 +365,16 @@
 <li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepof Coordinates object.</p></li>
 <li><p><strong>experiment_id</strong> (<em>str</em>) – Name of the experiment to display.</p></li>
 <li><p><strong>animal_id</strong> (<em>list</em>) – ID list of animals to display. If None (default) it shows all animals.</p></li>
-<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false,</p></li>
-<li><p><strong>'arena'</strong> (<em>the raw data is returned; if</em>) – </p></li>
-<li><p><strong>align</strong> (<em>str</em>) – Selects the body part to which later processes will align the frames with</p></li>
-<li><p><strong>documentation</strong><strong>)</strong><strong>.</strong> (<em>(</em><em>see preprocess in table_dict</em>) – </p></li>
+<li><p><strong>center</strong> (<em>str</em>) – Name of the body part to which the positions will be centered. If false, the raw data is returned; if ‘arena’ (default), coordinates are centered in the pitch.</p></li>
+<li><p><strong>align</strong> (<em>str</em>) – Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).</p></li>
 <li><p><strong>frame_limit</strong> (<em>int</em>) – Number of frames to plot. If None, the entire video is rendered.</p></li>
 <li><p><strong>min_confidence</strong> (<em>float</em>) – Minimum confidence threshold to render a cluster assignment bout.</p></li>
 <li><p><strong>min_bout_duration</strong> (<em>int</em>) – Minimum number of frames to render a cluster assignment bout.</p></li>
-<li><p><strong>cluster_assignments</strong> (<em>colored by cluster if</em>) – contain sorted cluster assignments for all instances in data.</p></li>
-<li><p><strong>selected_cluster</strong> (<em>int</em>) – </p></li>
-<li><p><strong>returned.</strong> (<em>only instances</em><em> of </em><em>the specified component are</em>) – </p></li>
-<li><p><strong>None.</strong> (<em>only instances</em><em> of </em><em>the specified component are returned. Defaults to</em>) – </p></li>
-<li><p><strong>None.</strong> – </p></li>
-<li><p><strong>embedding</strong> (<em>shows a parallel animation showing the currently selected</em>) – UMAP 2D embedding of the datapoints provided. If not None, a second animation</p></li>
-<li><p><strong>embedding</strong> – </p></li>
-<li><p><strong>cluster_assignments</strong> – </p></li>
-<li><p><strong>available.</strong> (<em>are</em>) – </p></li>
-<li><p><strong>selected_cluster</strong> – cluster to filter. If provided together with cluster_assignments,</p></li>
+<li><p><strong>cluster_assignments</strong> (<em>np.ndarray</em>) – contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.</p></li>
+<li><p><strong>embedding</strong> (<em>Union</em><em>[</em><em>List</em><em>, </em><em>np.ndarray</em><em>]</em>) – UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.</p></li>
+<li><p><strong>selected_cluster</strong> (<em>int</em>) – cluster to filter. If provided together with cluster_assignments,</p></li>
 <li><p><strong>display_arena</strong> (<em>bool</em>) – whether to plot a dashed line with an overlying arena perimeter. Defaults to True.</p></li>
-<li><p><strong>legend</strong> (<em>bool</em>) – whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more</p></li>
-<li><p><strong>representation</strong> (<em>than one animal in the</em>) – </p></li>
-<li><p><strong>otherwise.</strong> (<em>False</em>) – </p></li>
+<li><p><strong>legend</strong> (<em>bool</em>) – whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.</p></li>
 <li><p><strong>save</strong> (<em>str</em>) – name of the file where to save the produced animation.</p></li>
 <li><p><strong>dpi</strong> (<em>int</em>) – dots per inch of the figure to create.</p></li>
 </ul>
@@ -396,7 +395,7 @@
 <li><p><strong>cluster_gbm_performance</strong> (<em>dict</em>) – cross-validated dictionary containing trained estimators and performance metrics.</p></li>
 <li><p><strong>hard_counts</strong> (<em>np.ndarray</em>) – cluster assignments for the corresponding ‘chunk_stats’ table.</p></li>
 <li><p><strong>groups</strong> (<em>list</em>) – cross-validation indices. Data from the same animal are never shared between train and test sets.</p></li>
-<li><p><strong>save</strong> – name of the file where to save the produced figure.</p></li>
+<li><p><strong>save</strong> (<em>bool</em>) – name of the file where to save the produced figure.</p></li>
 <li><p><strong>visualization</strong> (<em>str</em>) – plot to render. Must be one of ‘confusion_matrix’, or ‘balanced_accuracy’.</p></li>
 <li><p><strong>ax</strong> (<em>plt.Axes</em>) – axis where to plot the figure. If None, a new figure is created.</p></li>
 </ul>
@@ -414,8 +413,7 @@
 <li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepOF project where the data is stored.</p></li>
 <li><p><strong>data_to_explain</strong> (<em>pd.DataFrame</em>) – table with descriptive statistics for a series of sequences (‘chunks’).</p></li>
 <li><p><strong>shap_values</strong> (<em>list</em>) – shap_values per cluster.</p></li>
-<li><p><strong>cluster</strong> – cluster to plot. If “all” (default) global feature importance</p></li>
-<li><p><strong>chart.</strong> (<em>across all clusters is depicted in a bar</em>) – </p></li>
+<li><p><strong>cluster</strong> (<em>int</em>) – cluster to plot. If “all” (default) global feature importance across all clusters is depicted in a bar chart.</p></li>
 <li><p><strong>max_display</strong> (<em>int</em>) – maximum number of features to display.</p></li>
 <li><p><strong>save</strong> (<em>str</em>) – if provided, saves the figure to the specified file.</p></li>
 <li><p><strong>show</strong> (<em>bool</em>) – if True, shows the figure.</p></li>
@@ -499,9 +497,7 @@
 <li><p><strong>min_confidence</strong> (<em>float</em>) – minimum confidence threshold for a frame to be considered part of a cluster.</p></li>
 <li><p><strong>min_bout_duration</strong> (<em>int</em>) – Minimum number of frames to render a cluster assignment bout.</p></li>
 <li><p><strong>frame_limit_per_video</strong> (<em>int</em>) – number of frames to render per video. If None, all frames are included for all videos.</p></li>
-<li><p><strong>exp_conditions</strong> (<em>dict</em>) – if provided, data coming from a particular condition is used. If not, all conditions are exported.</p></li>
-<li><p><strong>provided</strong> (<em>If a dictionary with more than one entry is</em>) – </p></li>
-<li><p><strong>conditions</strong> (<em>the intersection</em><em> of </em><em>all</em>) – </p></li>
+<li><p><strong>exp_conditions</strong> (<em>dict</em>) – if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.</p></li>
 <li><p><strong>cluster_names</strong> (<em>dict</em>) – dictionary with user-defined names for each cluster (useful to output interpretation).</p></li>
 </ul>
 </dd>
@@ -546,17 +542,12 @@ Useful, for example, to measure habituation over time.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>coordinates</strong> (<em>-</em>) – coordinates object containing the project information</p></li>
-<li><p><strong>debug</strong> (<em>-</em>) – if True, several debugging attributes (such as used body parts and arena) are plotted in</p></li>
-<li><p><strong>video</strong> (<em>the output</em>) – </p></li>
-<li><p><strong>vid_index</strong> (<em>-</em>) – for internal usage only; index of the video to tag in coordinates._videos</p></li>
-<li><p><strong>frame_limit</strong> (<em>-</em>) – limit the number of frames to output. Generates all annotated frames by default</p></li>
-<li><p><strong>params</strong> (<em>-</em>) – dictionary to overwrite the default values of the hyperparameters of the functions</p></li>
-<li><p><strong>utilizes.</strong> (<em>that the supervised pose estimation</em>) – </p></li>
+<li><p><strong>coordinates</strong> (<em>deepof.preprocessing.coordinates</em>) – coordinates object containing the project information.</p></li>
+<li><p><strong>debug</strong> (<em>bool</em>) – if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.</p></li>
+<li><p><strong>vid_index</strong> – for internal usage only; index of the video to tag in coordinates._videos.</p></li>
+<li><p><strong>frame_limit</strong> (<em>float</em>) – limit the number of frames to output. Generates all annotated frames by default.</p></li>
+<li><p><strong>params</strong> (<em>dict</em>) – dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>True</p>
 </dd>
 </dl>
 </dd></dl>

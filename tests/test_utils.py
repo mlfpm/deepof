@@ -346,7 +346,7 @@ def test_interpolate_outliers(mode):
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create()
+    ).create(force=True)
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"

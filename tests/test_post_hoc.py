@@ -29,12 +29,6 @@ import deepof.data
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -57,8 +51,12 @@ def test_recluster(states):
         animal_ids=[""],
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create()
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
@@ -327,12 +325,6 @@ def test_compute_transition_matrix_per_condition(
 )
 def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_{}_topview".format(mode), "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
@@ -358,8 +350,16 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create()
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "deepof_project",
+        )
+    )
 
     # get breaks
     breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
@@ -408,12 +408,7 @@ def test_chunk_summary_statistics():
 )
 def test_shap_pipeline(mode, sampler):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_{}_topview".format(mode), "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
+    np.random.seed(42)
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
@@ -439,8 +434,16 @@ def test_shap_pipeline(mode, sampler):
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create()
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "deepof_project",
+        )
+    )
 
     # get breaks and soft_counts
     breaks = {}

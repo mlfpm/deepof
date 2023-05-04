@@ -87,12 +87,6 @@ def test_model_embedding_fitting(
     use_graph,
 ):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -104,8 +98,12 @@ def test_model_embedding_fitting(
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
-    ).create()
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.array([20, 1]).astype(float)

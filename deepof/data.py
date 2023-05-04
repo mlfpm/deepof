@@ -18,6 +18,7 @@ from collections import defaultdict
 from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from shapely.geometry import Polygon
+from shutil import rmtree
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -718,7 +719,7 @@ class Project:
 
         return areas_dict
 
-    def create(self, verbose: bool = True) -> coordinates:
+    def create(self, verbose: bool = True, force: bool = False) -> coordinates:
         """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
@@ -730,6 +731,10 @@ class Project:
         """
         if verbose:
             print("Setting up project directories...")
+
+        if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
+            rmtree(os.path.join(self.project_path, self.project_name))
+
         self.set_up_project_directory()
         self.frame_rate = int(
             np.round(

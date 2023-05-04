@@ -30,12 +30,6 @@ import deepof.utils
 )
 def test_project_init(table_type):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", f"test_{table_type[1:]}"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -56,7 +50,15 @@ def test_project_init(table_type):
 
     prun = prun.create()
     assert isinstance(prun, deepof.data.Coordinates)
-    rmtree(project_path)
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_single_topview",
+            f"test_{table_type[1:]}",
+        )
+    )
 
 
 def test_project_properties():
@@ -89,11 +91,7 @@ def test_project_properties():
 
 
 def test_project_filters():
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
+
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -106,9 +104,12 @@ def test_project_filters():
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
-    ).create()
-    if os.path.exists(project_path):
-        rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     # Update experimental conditions with mock values
     prun._exp_conditions = {
@@ -200,12 +201,6 @@ def test_run(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -222,19 +217,17 @@ def test_run(nodes, ego):
 
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.create(verbose=True)
-    rmtree(project_path)
+    prun = prun.create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     assert isinstance(prun, deepof.data.Coordinates)
 
 
 def test_get_supervised_annotation():
-
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -249,8 +242,12 @@ def test_get_supervised_annotation():
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
-    ).create()
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     prun = prun.supervised_annotation()
 
@@ -279,17 +276,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
     else:
         animal_ids = [""]
 
-    project_path = os.path.join(
-        ".",
-        "tests",
-        "test_examples",
-        "test_{}_topview".format(mode),
-        f"deepof_project_{random_id}",
-    )
-
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
@@ -314,8 +300,16 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
         prun.distances = nodes
         prun.ego = ego
 
-    prun = prun.create(verbose=False)
-    rmtree(project_path)
+    prun = prun.create(force=True)
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            f"deepof_project_{random_id}",
+        )
+    )
 
     center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
@@ -409,16 +403,6 @@ def test_get_graph_dataset(mode, sampler, random_id):
     else:
         animal_ids = [""]
 
-    project_path = os.path.join(
-        ".",
-        "tests",
-        "test_examples",
-        "test_{}_topview".format(mode),
-        f"deepof_project_{random_id}",
-    )
-
-    if os.path.exists(project_path):
-        rmtree(project_path)
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
@@ -435,8 +419,16 @@ def test_get_graph_dataset(mode, sampler, random_id):
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
-    ).create(verbose=False)
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            f"deepof_project_{random_id}",
+        )
+    )
 
     graph_dset, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),

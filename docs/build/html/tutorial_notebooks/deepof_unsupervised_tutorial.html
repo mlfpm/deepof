@@ -426,7 +426,6 @@ div.rendered_html tbody tr:hover {
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">display</span>
-<span class="kn">from</span> <span class="nn">ipywidgets</span> <span class="kn">import</span> <span class="n">interact</span>
 <span class="kn">from</span> <span class="nn">networkx</span> <span class="kn">import</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">draw</span>
 <span class="kn">import</span> <span class="nn">deepof.visuals</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
@@ -447,7 +446,7 @@ underlying patterns and behaviors of your mice, which can ultimately help you ma
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load a previously saved project</span>
-<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/&quot;</span><span class="p">)</span>
+<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -462,7 +461,7 @@ these parameters, although default values should work well in most cases.</p>
 pipeline enables the joint embedding of multiple animals: when more than one mouse is present, all nose-nose, nose-tail, and tail-tail distances are included in the graph, and annotated with their respective distances.</p>
 <img alt="unsupervised_processing" src="../_images/deepof_unsupervised_processing.png" />
 <p>Let’s see how we can generate datasets with and without graphs:</p>
-<p>Let’s start simple: we can omit the graph representations and generate DeepOF-ready datasets by running the .preprocess() method on any TabDict object (TabDict are the dictionary-like structures that we saw in the first tutorial).</p>
+<p>Let’s start simple: we can omit the graph representations and generate DeepOF-ready datasets by running the <code class="docutils literal notranslate"><span class="pre">.preprocess()</span></code> method on any TabDict object (TabDict are the dictionary-like structures that we saw in the first tutorial).</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
@@ -479,7 +478,7 @@ pipeline enables the joint embedding of multiple animals: when more than one mou
 </div>
 </div>
 <p>The first thing to notice here is that we’re only passing the coordinates as input (no speed, no distances). While a merged object can be passed in theory to get embeddings that carry other signals (see tutorial on preprocessing), that often leads in practice to unstable training (at least in our experiments). So let’s continue with coordinates only!</p>
-<p>Next, you may have already seen that the .preprocess() method returns two objects, the preprocessed coordinates, and a global scaler. Let’s explore these in more detail.</p>
+<p>Next, you may have already seen that the <code class="docutils literal notranslate"><span class="pre">.preprocess()</span></code> method returns two objects, the preprocessed coordinates, and a global scaler. Let’s explore these in more detail.</p>
 <p>Upon exploring, we see that preprocessed_coords is a tuple containing four numpy arrays. These correspond to training and validation features (X) and label (y) datasets, respectively. Labels in the unsupervised pipeline are beyond the scope of this tutorial, which only deals with purely unsupervised models.</p>
 <p>Focusing on the features, then, let’s explore their shapes:</p>
 <div class="nbinput docutils container">
@@ -503,7 +502,7 @@ Features in the validation set have shape (14975, 25, 22)
 <p>The first axis in these shapes corresponds to the number of sliding windows per dataset (we have 6 videos in total in this tutorial, and one has been assigned to the validation set. Note that’s important to split videos (and not sliding window instances) to have truly independent training and validation data.</p>
 <p>The other two axes relate to sliding window size (same as the frame rate of the provided videos, by default, so each sliding window includes a second of data), and the number of features (11 body parts, <em>x</em> and <em>y</em> coordinates).</p>
 <p>To understand the global_scaler object, let’s first briefly review how DeepOF normalizes data. First, data coming from each video are normalized independently in both training and validation sets, which helps correct for differences in body size. All videos in the training set are then scaled together, and the fitted global_scaler is then returned for further processing as we’ll see below.</p>
-<p>Next, let’s generate a graph-based dataset and understand its output. To do this, we can preprocess our coordinates directly (no need to create the feature objects by ourselves) using the .get_graph_dataset() method. Under the hood, DeepOF will create a TableDict object containing centered and aligned coordinates, speeds, and distances corresponding to the edges of the aforementioned graph. Let’s see it in action:</p>
+<p>Next, let’s generate a graph-based dataset and understand its output. To do this, we can preprocess our coordinates directly (no need to create the feature objects by ourselves) using the <code class="docutils literal notranslate"><span class="pre">.get_graph_dataset()</span></code> method. Under the hood, DeepOF will create a TableDict object containing centered and aligned coordinates, speeds, and distances corresponding to the edges of the aforementioned graph. Let’s see it in action:</p>
 <p><strong>NOTE</strong>: the embeddings we use throughout this tutorial are single-animal by default. This is controlled by the ‘animal_id’ parameter in the method call below. If you’d like to try how multi-animal data is processed, comment the parameter out. Processing is quite similar, but the graph is larger as it will include both animals, as well as the distances between them.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
@@ -619,7 +618,7 @@ structure is imposed in the latent space that forms in between, so that embeddin
 <p>For now, let’s just say that VaDE models are a lot more stable (at least in our experiments) when working with graph input, so we’ve assigned them as default. You can still try the VQVAE models with your data if you’d like, though!</p>
 <img alt="unsupervised_models" src="../_images/deepof_unsupervised_models.png" />
 <p>The third class of models (not included for now in this tutorial) use a different architecture altogether, which is based in <a class="reference external" href="https://lilianweng.github.io/posts/2021-05-31-contrastive/">contrastive learning</a>. This produces embeddings without the need for a decoder, but clustering must be conducted post-hoc, which has some disadvantages.</p>
-<p>With all of this in mind, let’s see how this works in practice. To train a model, you need to call the .deep_unsupervised_embedding() method on your coordinates. Some parameters we should take into account when doing so are:</p>
+<p>With all of this in mind, let’s see how this works in practice. To train a model, you need to call the <code class="docutils literal notranslate"><span class="pre">.deep_unsupervised_embedding()</span></code> method on your coordinates. Some parameters we should take into account when doing so are:</p>
 <ul class="simple">
 <li><p>preprocessed_object, which corresponds to the dataset tuples generated above (either preprocessed_coords or graph_preprocessed_coords, for matrix and graph input respectively).</p></li>
 <li><p>adjacency_matrix, required for graph input.</p></li>
@@ -644,7 +643,7 @@ structure is imposed in the latent space that forms in between, so that embeddin
     <span class="n">epochs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
     <span class="n">encoder_type</span><span class="o">=</span><span class="s2">&quot;recurrent&quot;</span><span class="p">,</span> <span class="c1"># Can also be set to &#39;TCN&#39; and &#39;transformer&#39;</span>
     <span class="n">n_components</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-    <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">latent_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
     <span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
     <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="c1"># Set to True to follow the training loop</span>
     <span class="n">interaction_regularization</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
@@ -655,11 +654,11 @@ structure is imposed in the latent space that forms in between, so that embeddin
 </div>
 <p>While we won’t explore the models themselves in detail in this tutorial, some hints you may want to try on your own are:</p>
 <ul class="simple">
-<li><p>trained_model.summary() will print a detailed description of the trained model and its parameters</p></li>
-<li><p>trained_model.encoder() will encode data to the latent space</p></li>
-<li><p>trained_model.grouper() will retrieve the clustering output</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trained_model.summary()</span></code> will print a detailed description of the trained model and its parameters</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trained_model.encoder()</span></code> will encode data to the latent space</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trained_model.grouper()</span></code> will retrieve the clustering output</p></li>
 </ul>
-<p>Once we have a trained model, it’s time to finally get our embeddings! This can be done using the deepof.model_utils.embedding_per_video() function. This will return TableDict objects containing the embeddings, soft_counts, and breaks per experiment. These are:</p>
+<p>Once we have a trained model, it’s time to finally get our embeddings! This can be done using the <code class="docutils literal notranslate"><span class="pre">deepof.model_utils.embedding_per_video()</span></code> function. This will return TableDict objects containing the embeddings, soft_counts, and breaks per experiment. These are:</p>
 <ul class="simple">
 <li><p>embeddings: a TableDict object containing embdings per time point per experiment.</p></li>
 <li><p>soft_counts: soft cluster assignments per video. The values per time point can be interpreted as the probability the model assigns to each cluster. The cluster with maximum probability will be assigned in the end. This soft clustering approach allows us to filter time points with low confidence, as we’ll see.</p></li>
@@ -682,19 +681,18 @@ structure is imposed in the latent space that forms in between, so that embeddin
 </div>
 <p>As the training set in this tutorial is quite small, we’ll load embeddings from a model trained on the full dataset of 53 videos for the rest of the presented analyses. Feel free to try the remaining cells with your trained model by skipping the cell below, though!</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[67]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # Load results</span>
-<span class="kn">import</span> <span class="nn">pickle</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load results</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span>
+    <span class="s2">&quot;./tutorial_files/Trained_weights/deepof_coordinates.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+    <span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span>
     <span class="s2">&quot;./tutorial_files/Trained_weights/deepof_unsupervised_sa_VaDE_encoder_recurrent_encodings_input=graph_k=10_latdim=8_changepoints_False_kmeans_loss=0.0.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
     <span class="n">embeddings</span><span class="p">,</span> <span class="n">soft_counts</span><span class="p">,</span> <span class="n">breaks</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
-
-<span class="n">embeddings</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-<span class="n">soft_counts</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">soft_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-<span class="n">breaks</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">soft_counts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">soft_counts</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
 </pre></div>
 </div>
 </div>
@@ -702,7 +700,7 @@ structure is imposed in the latent space that forms in between, so that embeddin
 </section>
 <section id="Visualizing-temporal-and-global-embeddings">
 <h3>Visualizing temporal and global embeddings<a class="headerlink" href="#Visualizing-temporal-and-global-embeddings" title="Permalink to this heading"></a></h3>
-<p>The first thing we can do is to visualize the cluster space. If you went through the tutorial on supervised analysis, you’re already familiar with the deepof.visuals.plot_embeddings() function. Here we’ll run it again, with slightly different parameters (passing embeddings, soft_counts, and breaks instead of the supervised annotations). As in the previous tutorial, all figures shown in the documentation version of this tutorial were produced using the full 53 animal dataset.</p>
+<p>The first thing we can do is to visualize the cluster space. If you went through the tutorial on supervised analysis, you’re already familiar with the <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_embeddings()</span></code> function. Here we’ll run it again, with slightly different parameters (passing embeddings, soft_counts, and breaks instead of the supervised annotations). As in the previous tutorial, all figures shown in the documentation version of this tutorial were produced using the full 53 animal dataset.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
@@ -784,7 +782,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 </section>
 <section id="Global-separation-dynamics">
 <h3>Global separation dynamics<a class="headerlink" href="#Global-separation-dynamics" title="Permalink to this heading"></a></h3>
-<p>Next, let’s quantify the distance between our experimental distributions. To measure how far the behavior of stressed animals is from that of controls, we’ll use the <a class="reference external" href="http://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/">Wasserstein distance</a> between the distributions shown on the right panel of the figure above. Moreover, we’ll see how that distance evolves over time. To this end, we can use the deepof.visuals.plot_distance_between_conditions() function.</p>
+<p>Next, let’s quantify the distance between our experimental distributions. To measure how far the behavior of stressed animals is from that of controls, we’ll use the <a class="reference external" href="http://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/">Wasserstein distance</a> between the distributions shown on the right panel of the figure above. Moreover, we’ll see how that distance evolves over time. To this end, we can use the <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_distance_between_conditions()</span></code> function.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
@@ -941,7 +939,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 </section>
 <section id="Exploring-cluster-dynamics-across-conditions">
 <h3>Exploring cluster dynamics across conditions<a class="headerlink" href="#Exploring-cluster-dynamics-across-conditions" title="Permalink to this heading"></a></h3>
-<p>Aside from exploring cluster enrichment, DeepOF provides tools to gain insight into cluster dynamics. That is, how transitions between different clusters look like. For example, we can have a look at the transition matrices per condition with deepof.visuals.plot_transitions():</p>
+<p>Aside from exploring cluster enrichment, DeepOF provides tools to gain insight into cluster dynamics. That is, how transitions between different clusters look like. For example, we can have a look at the transition matrices per condition with <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_transitions()</span></code>:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
@@ -1008,7 +1006,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 </div>
 <p>We can see how clusters 2, 3, 4, 7, and 8 form a tight cluster for non-stressed animals, whereas 0, 1, 5, and 9 do so for stressed animals. Interestingly, cluster 6 seems to act like a bridge in both cases. This means that transitions between clusters enriched in a certain condition are indeed more common than transitions between clusters enriched across conditions.</p>
 <p>Moreover, we can explore how the overall behavioral entropy (which measures how predictable behavior for a given animal is) compares across experimental conditions. To obtain these values, DeepOF runs a set of simulations on the transition matrices depicted above, until the population of clusters converges to a stationary distribution. Entropy is then computed on this distribution for each animal, and the obtained values per condition are compared. The function that allows users to run this
-analysis is deepof.visuals.plot_stationary_entropy(), and it’s executed as in the cell below:</p>
+analysis is <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_stationary_entropy()</span></code>, and it’s executed as in the cell below:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
 </pre></div>
@@ -1042,7 +1040,7 @@ analysis is deepof.visuals.plot_stationary_entropy(), and it’s executed as in 
 <p>To interpret cluster assignments, DeepOF relies on two complementary approaches. The first one is to train a set of supervised classifiers that can predict cluster assignments given a set of features describing the sliding window input, such as distances, speeds, and areas of different body parts and regions, as well as the supervised annotators we generated in the last tutorial (if provided). For a more detailed description of the included features, refer to either the main DeepOF paper or the
 full API reference.</p>
 <p>There are three steps in the cluster interpretation pipeline: feature extraction, classifier training, and SHAP value computation.</p>
-<p>Let’s start with feature extraction, which is computed using deepof.post_hoc.annotate_time_chunks():</p>
+<p>Let’s start with feature extraction, which is computed using <code class="docutils literal notranslate"><span class="pre">deepof.post_hoc.annotate_time_chunks()</span></code>:</p>
 <p><strong>NOTE</strong>: the function below can require a significant amount of memory to run, especially in multi-animal settings. Try to use a work station, if possible.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
@@ -1420,7 +1418,8 @@ array([5, 9, 1, ..., 3, 9, 9])
 </pre></div></div>
 </div>
 <p>Finally, the third one refers to the breaks per sample, as described before.</p>
-<p>Let’s now train a multi-output <a class="reference external" href="https://catboost.ai/en/docs/concepts/python-installation">gradient boosting machine</a> to map between features and labels. DeepOF relies on the deepof.post_hoc.train_supervised_cluster_detectors() function, which by default runs a <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html">stratified cross-validation</a> loop to check how generalizable the obtained results are within the dataset. We’ll run it with 10 folds:</p>
+<p>Let’s now train a multi-output <a class="reference external" href="https://catboost.ai/en/docs/concepts/python-installation">gradient boosting machine</a> to map between features and labels. DeepOF relies on the <code class="docutils literal notranslate"><span class="pre">deepof.post_hoc.train_supervised_cluster_detectors()</span></code> function, which by default runs a <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html">stratified cross-validation</a> loop to check how generalizable the obtained results are within the dataset. We’ll run it with 10
+folds:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
 </pre></div>
@@ -1531,7 +1530,7 @@ a measure of similarity behind the underlying behaviors.</p>
 </pre></div>
 </div>
 </div>
-<p>The function returns the SHAP values (a detailed explanation of which is beyond the scope of this tutorial, although we will explain how to interpret them), the explainer object, and a formatted version of the same data frame with features we saw before. Next, let’s visualize and interpret the results, using deepof.visuals.plot_shap_swarm_per_cluster():</p>
+<p>The function returns the SHAP values (a detailed explanation of which is beyond the scope of this tutorial, although we will explain how to interpret them), the explainer object, and a formatted version of the same data frame with features we saw before. Next, let’s visualize and interpret the results, using <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_shap_swarm_per_cluster()</span></code>:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
 </pre></div>
@@ -3322,8 +3321,8 @@ AAAAAQAAAABMYXZmNTkuMjcuMTAw
   Your browser does not support the video tag.
 </video></div>
 </div>
-<p>Moreover, deepof.visuals.export_annotated_video() can output direct samples taken from the dataset into a real video. The function will concatenate samples from all available experiments, and generate a video with samples from each cluster. The parameter frame_limit_per_video controls how many frames per video should be included (to prevent the output from ending up being too large, especially in big datasets). Let’s indeed run it, and load some samples from cluster 1 and into the notebook! The
-legend below shows the experiment from which each sample was taken.</p>
+<p>Moreover, <code class="docutils literal notranslate"><span class="pre">deepof.visuals.export_annotated_video()</span></code> can output direct samples taken from the dataset into a real video. The function will concatenate samples from all available experiments, and generate a video with samples from each cluster. The parameter frame_limit_per_video controls how many frames per video should be included (to prevent the output from ending up being too large, especially in big datasets). Let’s indeed run it, and load some samples from cluster 1 and into the notebook!
+The legend below shows the experiment from which each sample was taken.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
 </pre></div>
@@ -3337,7 +3336,7 @@ legend below shows the experiment from which each sample was taken.</p>
 </pre></div>
 </div>
 </div>
-<p><img alt="f14d839fdb15410f8700f749bf1517f7" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
+<p><img alt="a71e7611a9a14b4185c272143a875020" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
 </section>
 <section id="Wrapping-up">
 <h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>

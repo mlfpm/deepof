@@ -168,9 +168,9 @@
     text-align: unset;
 }
 </style>
-<section id="deepof-model-utils-module">
-<h1>deepof.model_utils module<a class="headerlink" href="#deepof-model-utils-module" title="Permalink to this heading"></a></h1>
-<span class="target" id="module-deepof.model_utils"></span><p>Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels.</p>
+<section id="module-deepof.model_utils">
+<span id="deepof-model-utils-module"></span><h1>deepof.model_utils module<a class="headerlink" href="#module-deepof.model_utils" title="Permalink to this heading"></a></h1>
+<p>Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.select_contrastive_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">select_contrastive_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">future</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nce'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tau</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elimination_topk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.select_contrastive_loss" title="Permalink to this definition"></a></dt>
@@ -218,15 +218,15 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.compute_kmeans_loss">
-<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_kmeans_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latent_means</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">64</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_kmeans_loss" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">compute_kmeans_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latent_means</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.compute_kmeans_loss" title="Permalink to this definition"></a></dt>
 <dd><p>Add a penalty to the singular values of the Gram matrix of the latent means. It helps disentangle the latent space.</p>
 <p>Based on <a class="reference external" href="https://arxiv.org/pdf/1610.04794.pdf">https://arxiv.org/pdf/1610.04794.pdf</a>, and <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3">https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3</a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>latent_means</strong> – tensor containing the means of the latent distribution</p></li>
-<li><p><strong>weight</strong> – weight of the Gram loss in the total loss function</p></li>
-<li><p><strong>batch_size</strong> – batch size of the data to compute the kmeans loss for.</p></li>
+<li><p><strong>latent_means</strong> (<em>tf.Tensor</em>) – tensor containing the means of the latent distribution</p></li>
+<li><p><strong>weight</strong> (<em>float</em>) – weight of the Gram loss in the total loss function</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size of the data to compute the kmeans loss for.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -279,7 +279,7 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.model_utils.plot_lr_vs_loss">
 <span class="sig-prename descclassname"><span class="pre">deepof.model_utils.</span></span><span class="sig-name descname"><span class="pre">plot_lr_vs_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">losses</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.model_utils.plot_lr_vs_loss" title="Permalink to this definition"></a></dt>
-<dd><p>Plot learing rate versus the loss function of the model.</p>
+<dd><p>Plot learning rate versus the loss function of the model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -419,8 +419,7 @@ the future into account.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>soft_counts</strong> (<em>tf.Tensor</em>) – soft counts per cluster</p></li>
 <li><p><strong>k</strong> (<em>int</em>) – number of clusters</p></li>
-<li><p><strong>n_samples</strong> (<em>int</em>) – number of samples to draw from the categorical distribution</p></li>
-<li><p><strong>assignments.</strong> (<em>modeling cluster</em>) – </p></li>
+<li><p><strong>n_samples</strong> (<em>int</em>) – number of samples to draw from the categorical distribution modeling cluster assignments.</p></li>
 </ul>
 </dd>
 </dl>
@@ -568,8 +567,7 @@ penalty to the loss function which attempts to maximize the number of populated 
 <li><p><strong>n_components</strong> (<em>int</em>) – number of components in the latent Gaussian Mixture</p></li>
 <li><p><strong>encoding_dim</strong> (<em>int</em>) – dimension of the latent Gaussian Mixture</p></li>
 <li><p><strong>k</strong> (<em>int</em>) – number of nearest components of the latent Gaussian Mixture to consider</p></li>
-<li><p><strong>loss_weight</strong> (<em>float</em>) – weight of the regularization penalty applied to the local entropy of each</p></li>
-<li><p><strong>instance</strong> (<em>training</em>) – </p></li>
+<li><p><strong>loss_weight</strong> (<em>float</em>) – weight of the regularization penalty applied to the local entropy of each training instance</p></li>
 <li><p><strong>*args</strong> – additional positional arguments</p></li>
 <li><p><strong>**kwargs</strong> – additional keyword arguments</p></li>
 </ul>
@@ -745,8 +743,7 @@ metrics (list): List containing the metrics to log in tensorboard.</p>
 <li><p><strong>coordinates</strong> (<em>np.ndarray</em>) – Coordinates of the data.</p></li>
 <li><p><strong>preprocessed_object</strong> (<em>tuple</em>) – Tuple containing the preprocessed data.</p></li>
 <li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>embedding_model</strong> (<em>str</em>) – Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,</p></li>
-<li><p><strong>contrastive.</strong> (<em>and</em>) – </p></li>
+<li><p><strong>embedding_model</strong> (<em>str</em>) – Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE, and contrastive.</p></li>
 <li><p><strong>encoder_type</strong> (<em>str</em>) – Encoder architecture to use. Must be one of “recurrent”, “TCN”, and “transformer”.</p></li>
 <li><p><strong>batch_size</strong> (<em>int</em>) – Batch size to use for training.</p></li>
 <li><p><strong>latent_dim</strong> (<em>int</em>) – Encoding size to use for training.</p></li>
@@ -755,8 +752,7 @@ metrics (list): List containing the metrics to log in tensorboard.</p>
 <li><p><strong>log_hparams</strong> (<em>bool</em>) – Whether to log the hyperparameters used for training.</p></li>
 <li><p><strong>n_components</strong> (<em>int</em>) – Number of components to fit to the data.</p></li>
 <li><p><strong>output_path</strong> (<em>str</em>) – Path to the output directory.</p></li>
-<li><p><strong>kmeans_loss</strong> (<em>float</em>) – Weight of the gram loss, which adds a regularization term to VQVAE models which</p></li>
-<li><p><strong>space.</strong> (<em>penalizes the correlation between the dimensions in the latent</em>) – </p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – Weight of the gram loss, which adds a regularization term to VQVAE models which penalizes the correlation between the dimensions in the latent space.</p></li>
 <li><p><strong>pretrained</strong> (<em>str</em>) – Path to the pretrained weights to use for the autoencoder.</p></li>
 <li><p><strong>save_checkpoints</strong> (<em>bool</em>) – Whether to save checkpoints during training.</p></li>
 <li><p><strong>save_weights</strong> (<em>bool</em>) – Whether to save the weights of the autoencoder after training.</p></li>
@@ -766,8 +762,7 @@ metrics (list): List containing the metrics to log in tensorboard.</p>
 <li><p><strong>parameters</strong> (<em># Contrastive Model specific</em>) – </p></li>
 <li><p><strong>kl_annealing_mode</strong> (<em>str</em>) – Mode to use for KL annealing. Must be one of “linear” (default), or “sigmoid”.</p></li>
 <li><p><strong>kl_warmup</strong> (<em>int</em>) – Number of epochs during which KL is annealed.</p></li>
-<li><p><strong>reg_cat_clusters</strong> (<em>bool</em>) – whether to penalize uneven cluster membership in the latent space, by</p></li>
-<li><p><strong>distribution.</strong> (<em>minimizing the KL divergence between cluster membership and a uniform categorical</em>) – </p></li>
+<li><p><strong>reg_cat_clusters</strong> (<em>bool</em>) – whether to penalize uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.</p></li>
 <li><p><strong>recluster</strong> (<em>bool</em>) – Whether to recluster the data after each training using a Gaussian Mixture Model.</p></li>
 <li><p><strong>parameters</strong> – </p></li>
 <li><p><strong>temperature</strong> (<em>float</em>) – temperature parameter for the contrastive loss functions. Higher values put harsher penalties on negative pair similarity.</p></li>
@@ -792,11 +787,9 @@ metrics (list): List containing the metrics to log in tensorboard.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>coordinates</strong> (<em>coordinates</em>) – deepof.Coordinates object for the project at hand.</p></li>
 <li><p><strong>to_preprocess</strong> (<em>table_dict</em>) – dictionary with (merged) features to process.</p></li>
-<li><p><strong>scale</strong> (<em>str</em>) – The type of scaler to use within animals. Defaults to ‘standard’, but can be changed to ‘minmax’, ‘robust’, or False.</p></li>
-<li><p><strong>model.</strong> (<em>Use the same that was used when training the original</em>) – </p></li>
+<li><p><strong>scale</strong> (<em>str</em>) – The type of scaler to use within animals. Defaults to ‘standard’, but can be changed to ‘minmax’, ‘robust’, or False. Use the same that was used when training the original model.</p></li>
 <li><p><strong>animal_id</strong> (<em>str</em>) – if more than one animal is present, provide the ID(s) of the animal(s) to include.</p></li>
-<li><p><strong>ruptures</strong> (<em>bool</em>) – Whether to compute the breaks based on ruptures (with the length of all retrieved chunks</p></li>
-<li><p><strong>not</strong> (<em>per experiment</em><em>) </em><em>or</em>) – </p></li>
+<li><p><strong>ruptures</strong> (<em>bool</em>) – Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).</p></li>
 <li><p><strong>global_scaler</strong> (<em>Any</em>) – trained global scaler produced when processing the original dataset.</p></li>
 <li><p><strong>model</strong> (<em>tf.keras.models.Model</em>) – trained deepof unsupervised model to run inference with.</p></li>
 </ul>
@@ -822,13 +815,11 @@ breaks (table_dict): breaks per experiment.</p>
 <li><p><strong>preprocessed_object</strong> (<em>tf.data.Dataset</em>) – Dataset object for training and validation.</p></li>
 <li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – Adjacency matrix for the graph.</p></li>
 <li><p><strong>encoding_size</strong> (<em>int</em>) – Size of the encoding layer.</p></li>
-<li><p><strong>embedding_model</strong> (<em>str</em>) – Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE,</p></li>
-<li><p><strong>Contrastive.</strong> (<em>and</em>) – </p></li>
+<li><p><strong>embedding_model</strong> (<em>str</em>) – Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE, and Contrastive.</p></li>
 <li><p><strong>hypertun_trials</strong> (<em>int</em>) – Number of hypertuning trials to run.</p></li>
 <li><p><strong>hpt_type</strong> (<em>str</em>) – Type of hypertuning to run. Must be one of “hyperband” or “bayesian”.</p></li>
 <li><p><strong>k</strong> (<em>int</em>) – Number of clusters on the latent space.</p></li>
-<li><p><strong>kmeans_loss</strong> (<em>float</em>) – Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation</p></li>
-<li><p><strong>space.</strong> (<em>between dimensions in the latent</em>) – </p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation between dimensions in the latent space.</p></li>
 <li><p><strong>project_name</strong> (<em>str</em>) – Name of the project.</p></li>
 <li><p><strong>callbacks</strong> (<em>List</em>) – List of callbacks to use.</p></li>
 <li><p><strong>batch_size</strong> (<em>int</em>) – Batch size to use.</p></li>

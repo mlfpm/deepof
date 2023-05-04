@@ -129,7 +129,7 @@
    "outputs": [],
    "source": [
     "# Load a previously saved project\n",
-    "my_deepof_project = deepof.data.load_project(\"./tutorial_files/tutorial_project/\")"
+    "my_deepof_project = deepof.data.load_project(\"./tutorial_files/tutorial_project\")"
    ]
   },
   {
@@ -173,7 +173,7 @@
    "id": "b6c3b1c9",
    "metadata": {},
    "source": [
-    "Running the pipeline is as simple as executing the .supervised_annotation() method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let's run it and see what happens:"
+    "Running the pipeline is as simple as executing the `.supervised_annotation()` method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let's run it and see what happens:"
    ]
   },
   {
@@ -669,7 +669,7 @@
    "id": "35e9c32f",
    "metadata": {},
    "source": [
-    "The simplest (but quite powerful) thing to do is to test for enrichment across traits. We can compute all statistics and plot the results using the deepof.visuals.plot_enrichment() function. The code below creates a figure with two plots with different scales (one for speed and one for everything else, given the differences in y-axis values)."
+    "The simplest (but quite powerful) thing to do is to test for enrichment across traits. We can compute all statistics and plot the results using the `deepof.visuals.plot_enrichment()` function. The code below creates a figure with two plots with different scales (one for speed and one for everything else, given the differences in y-axis values)."
    ]
   },
   {
@@ -734,7 +734,7 @@
    "id": "169d717c",
    "metadata": {},
    "source": [
-    "We see DeepOF reports significant differences for many of these traits! If you'd like to print a detailed statistical summary, you can set the 'verbose' parameter to True in deepof.visuals.plot_enrichment().\n",
+    "We see DeepOF reports significant differences for many of these traits! If you'd like to print a detailed statistical summary, you can set the 'verbose' parameter to True in `deepof.visuals.plot_enrichment()`.\n",
     "\n",
     "In the figures, you see all tagged traits in the X-axis, and the frames per video in the y-axis. Bars represent averages, and error bars standard deviations. By default, DeepOF runs a Mann-Whitney U non-parametric test on the means per test, and controls for multiple testing using Benjamini-Hochberg's method. For details on how to change both the tests to run and the multiple testing parameters, feel free to check the full API reference or the function docstring."
    ]
@@ -834,7 +834,7 @@
    "id": "00a3f92b",
    "metadata": {},
    "source": [
-    "An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We'll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the deepof.visuals.plot_embeddings() function.\n",
+    "An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We'll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the `deepof.visuals.plot_embeddings()` function.\n",
     "\n",
     "Moreover, we can also restrict the analysis over time. Let's compare, again, the whole data to the first two minutes:"
    ]

@@ -424,7 +424,7 @@ div.rendered_html tbody tr:hover {
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load a previously saved project</span>
-<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/&quot;</span><span class="p">)</span>
+<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -434,7 +434,7 @@ div.rendered_html tbody tr:hover {
 <h3>Running the supervised annotation pipeline<a class="headerlink" href="#Running-the-supervised-annotation-pipeline" title="Permalink to this heading"></a></h3>
 <p>The supervised pipeline within DeepOF aims at providing simple but generalizable annotators for a variety of single and dyadic traits (as depicted in the figure below). Each of these traits is tagged independently, which means that more than one label can be applied per time point!</p>
 <img alt="supervised" src="../_images/deepof_supervised.png" />
-<p>Running the pipeline is as simple as executing the .supervised_annotation() method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let’s run it and see what happens:</p>
+<p>Running the pipeline is as simple as executing the <code class="docutils literal notranslate"><span class="pre">.supervised_annotation()</span></code> method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let’s run it and see what happens:</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
@@ -778,7 +778,7 @@ div.rendered_html tbody tr:hover {
 </section>
 <section id="Exploring-trait-enrichment-across-conditions.">
 <h3>Exploring trait enrichment across conditions.<a class="headerlink" href="#Exploring-trait-enrichment-across-conditions." title="Permalink to this heading"></a></h3>
-<p>The simplest (but quite powerful) thing to do is to test for enrichment across traits. We can compute all statistics and plot the results using the deepof.visuals.plot_enrichment() function. The code below creates a figure with two plots with different scales (one for speed and one for everything else, given the differences in y-axis values).</p>
+<p>The simplest (but quite powerful) thing to do is to test for enrichment across traits. We can compute all statistics and plot the results using the <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_enrichment()</span></code> function. The code below creates a figure with two plots with different scales (one for speed and one for everything else, given the differences in y-axis values).</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
@@ -825,7 +825,7 @@ div.rendered_html tbody tr:hover {
 <img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" />
 </div>
 </div>
-<p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in deepof.visuals.plot_enrichment().</p>
+<p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_enrichment()</span></code>.</p>
 <p>In the figures, you see all tagged traits in the X-axis, and the frames per video in the y-axis. Bars represent averages, and error bars standard deviations. By default, DeepOF runs a Mann-Whitney U non-parametric test on the means per test, and controls for multiple testing using Benjamini-Hochberg’s method. For details on how to change both the tests to run and the multiple testing parameters, feel free to check the full API reference or the function docstring.</p>
 <p>Most functions within DeepOF allow the user to restrict the data to certain periods of time. This can be useful to quantify habituation, for example (as we’ll see), or to explore how the retrieved patterns interact with timed environmental cues (such as tones, experimental actions, etc.).</p>
 <p>To see how this works in the context of supervised annotation enrichment, let’s generate the same figure as above, but for the first two minutes of data only:</p>
@@ -885,7 +885,7 @@ div.rendered_html tbody tr:hover {
 </section>
 <section id="PCA-embedding-of-supervised-traits">
 <h3>PCA embedding of supervised traits<a class="headerlink" href="#PCA-embedding-of-supervised-traits" title="Permalink to this heading"></a></h3>
-<p>An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We’ll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the deepof.visuals.plot_embeddings() function.</p>
+<p>An often useful way of looking at multivariate data (such as the annotation vectors we just generated) is to project them in the lower-dimensional space. We’ll explore more sophisticated ways of doing that in the next tutorial, but for now we can just run these vectors through PCA. DeepOF allows us to do this with the <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_embeddings()</span></code> function.</p>
 <p>Moreover, we can also restrict the analysis over time. Let’s compare, again, the whole data to the first two minutes:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:

@@ -61,6 +61,7 @@ sphinx-rtd-theme = "^1.0.0"
 jupyter = "^1.0.0"
 pydocstyle = "^6.1.1"
 jupyter-sphinx = "^0.4.0"
+deptry = "^0.8.0"
 
 [build-system]
 requires = ["poetry==1.4.1"]

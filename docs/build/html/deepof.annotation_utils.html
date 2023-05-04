@@ -117,9 +117,9 @@
     text-align: unset;
 }
 </style>
-<section id="deepof-annotation-utils-module">
-<h1>deepof.annotation_utils module<a class="headerlink" href="#deepof-annotation-utils-module" title="Permalink to this heading"></a></h1>
-<span class="target" id="module-deepof.annotation_utils"></span><p>Functions and general utilities for supervised pose estimation. See documentation for details.</p>
+<section id="module-deepof.annotation_utils">
+<span id="deepof-annotation-utils-module"></span><h1>deepof.annotation_utils module<a class="headerlink" href="#module-deepof.annotation_utils" title="Permalink to this heading"></a></h1>
+<p>Functions and general utilities for supervised pose estimation. See documentation for details.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.annotation_utils.close_single_contact">
 <span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">close_single_contact</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_abs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_rel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.annotation_utils.close_single_contact" title="Permalink to this definition"></a></dt>
@@ -151,27 +151,22 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pos_dframe</strong> (<em>-</em>) – DLC output as pandas.DataFrame; only applicable</p></li>
-<li><p><strong>experiments.</strong> (<em>to two-animal</em>) – </p></li>
-<li><p><strong>left1</strong> (<em>-</em>) – First contact point of animal 1</p></li>
-<li><p><strong>left2</strong> (<em>-</em>) – Second contact point of animal 1</p></li>
-<li><p><strong>right1</strong> (<em>-</em>) – First contact point of animal 2</p></li>
-<li><p><strong>right2</strong> (<em>-</em>) – Second contact point of animal 2</p></li>
-<li><p><strong>tol</strong> (<em>-</em>) – maximum distance for which a contact is reported</p></li>
-<li><p><strong>arena_abs</strong> (<em>-</em>) – length in mm of the diameter of the real arena</p></li>
-<li><p><strong>arena_rel</strong> (<em>-</em>) – length in pixels of the diameter of the arena in the video</p></li>
-<li><p><strong>rev</strong> (<em>-</em>) – reverses the default behaviour (nose2tail contact for both mice)</p></li>
+<li><p><strong>pos_dframe</strong> (<em>pandas.DataFrame</em>) – DLC output as pandas.DataFrame; only applicable to two-animal experiments.</p></li>
+<li><p><strong>left1</strong> (<em>string</em>) – First contact point of animal 1</p></li>
+<li><p><strong>left2</strong> (<em>string</em>) – Second contact point of animal 1</p></li>
+<li><p><strong>right1</strong> (<em>string</em>) – First contact point of animal 2</p></li>
+<li><p><strong>right2</strong> (<em>string</em>) – Second contact point of animal 2</p></li>
+<li><p><strong>tol</strong> (<em>float</em>) – maximum distance for which a contact is reported</p></li>
+<li><p><strong>arena_abs</strong> (<em>int</em>) – length in mm of the diameter of the real arena</p></li>
+<li><p><strong>arena_rel</strong> (<em>int</em>) – length in pixels of the diameter of the arena in the video</p></li>
+<li><p><strong>rev</strong> (<em>bool</em>) – reverses the default behaviour (nose2tail contact for both mice)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>True if the distance between the two specified points
-is less than tol, False otherwise</p>
+<dd class="field-even"><p>True if the distance between the two specified points is less than tol, False otherwise</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>double_contact (np.array)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>double_contact (np.array)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -206,8 +201,7 @@ are outside the ellipse denoted by e_center, e_axes and e_angle, with a certain 
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>boolean array. True if selected animal
-is climbing the walls of the arena</p>
+<dd class="field-even"><p>boolean array. True if selected animal is climbing the walls of the arena</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>climbing (np.array)</p>
@@ -235,8 +229,7 @@ is climbing the walls of the arena</p>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>boolean array. True if selected animal
-is sniffing the selected object</p>
+<dd class="field-even"><p>boolean array. True if selected animal is sniffing the selected object</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>sniffing (np.array)</p>
@@ -357,8 +350,7 @@ tol (float) Maximum distance for which True is returned</p>
 <dd class="field-odd"><p><strong>hparams</strong> (<em>dict</em>) – dictionary containing hyperparameters to overwrite</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>dictionary with overwritten parameters. Those not
-specified in the input retain their default values</p>
+<dd class="field-even"><p>dictionary with overwritten parameters. Those not specified in the input retain their default values</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>defaults (dict)</p>
@@ -379,8 +371,7 @@ specified in the input retain their default values</p>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>dictionary with overwriten parameters. Those not
-specified in the input retain their default values</p>
+<dd class="field-even"><p>dictionary with overwriten parameters. Those not specified in the input retain their default values</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>defaults (dict)</p>
@@ -404,13 +395,11 @@ specified in the input retain their default values</p>
 <li><p><strong>full_features</strong> (<em>dict</em>) – dictionary with</p></li>
 <li><p><strong>video</strong> (<em>str</em>) – string name of the experiment to tag</p></li>
 <li><p><strong>trained_model_path</strong> (<em>str</em>) – path indicating where all pretrained models are located</p></li>
-<li><p><strong>params</strong> (<em>dict</em>) – dictionary to overwrite the default values of the parameters of the functions</p></li>
-<li><p><strong>details.</strong> (<em>that the rule-based pose estimation utilizes. See documentation for</em>) – </p></li>
+<li><p><strong>params</strong> (<em>dict</em>) – dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>table with traits as columns and frames as rows. Each
-value is a boolean indicating trait detection at a given time</p>
+<dd class="field-even"><p>table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>tag_df (pandas.DataFrame)</p>

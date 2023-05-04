@@ -104,12 +104,6 @@ def test_climb_wall(center, axes, angle, tol):
     tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
     tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = (
         deepof.data.Project(
             project_path=os.path.join(
@@ -126,10 +120,14 @@ def test_climb_wall(center, axes, angle, tol):
             video_format=".mp4",
             table_format=".h5",
         )
-        .create(verbose=True)
+        .create(force=True)
         .get_coords()
     )
-    rmtree(project_path)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     climb1 = deepof.annotation_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
@@ -158,12 +156,6 @@ def test_climb_wall(center, axes, angle, tol):
 @given(animal_id=st.one_of(st.just("B"), st.just("W")))
 def test_single_animal_traits(animal_id):
 
-    project_path = os.path.join(
-        ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
-    )
-    if os.path.exists(project_path):
-        rmtree(project_path)
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         video_path=os.path.join(
@@ -178,8 +170,12 @@ def test_single_animal_traits(animal_id):
         video_format=".mp4",
         table_format=".h5",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(verbose=True)
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
+        )
+    )
 
     features = {
         _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -325,9 +321,6 @@ def test_rule_based_tagging(multi_animal, video_output):
         "test_examples",
         "test_{}_topview".format("multi" if multi_animal else "single"),
     )
-    project_path = os.path.join(path, "deepof_project")
-    if os.path.exists(project_path):
-        rmtree(project_path)
 
     prun = deepof.data.Project(
         project_path=path,
@@ -339,8 +332,8 @@ def test_rule_based_tagging(multi_animal, video_output):
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(verbose=True)
-    rmtree(project_path)
+    ).create(force=True)
+    rmtree(os.path.join(path, "deepof_project"))
 
     hardcoded_tags = prun.supervised_annotation(
         video_output=video_output, frame_limit=50, debug=True

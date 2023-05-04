@@ -173,18 +173,14 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the node features for the input data. Should be time x nodes x features.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers.</p></li>
-<li><p><strong>features.</strong> (<em>Should be time x edges x</em>) – </p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimension of the latent space.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>gru_unroll</strong> (<em>-</em>) – whether to unroll the GRU layers. Defaults to False.</p></li>
-<li><p><strong>bidirectional_merge</strong> (<em>-</em>) – how to merge the forward and backward GRU layers. Defaults to “concat”.</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the node features for the input data. Should be time x nodes x features.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>gru_unroll</strong> (<em>bool</em>) – whether to unroll the GRU layers. Defaults to False.</p></li>
+<li><p><strong>bidirectional_merge</strong> (<em>str</em>) – how to merge the forward and backward GRU layers. Defaults to “concat”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -232,23 +228,20 @@ paper for more details: <a class="reference external" href="https://arxiv.org/pd
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
-<li><p><strong>conv_filters</strong> (<em>-</em>) – number of filters in the TCN layers</p></li>
-<li><p><strong>kernel_size</strong> (<em>-</em>) – size of the convolutional kernels</p></li>
-<li><p><strong>conv_stacks</strong> (<em>-</em>) – number of TCN layers</p></li>
-<li><p><strong>conv_dilations</strong> (<em>-</em>) – list of dilation factors for each TCN layer</p></li>
-<li><p><strong>padding</strong> (<em>-</em>) – padding mode for the TCN layers</p></li>
-<li><p><strong>use_skip_connections</strong> (<em>-</em>) – whether to use skip connections between TCN layers</p></li>
-<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate for the TCN layers</p></li>
-<li><p><strong>activation</strong> (<em>-</em>) – activation function for the TCN layers</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features</p></li>
+<li><p><strong>input_shape</strong> – shape of the input data</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>latent_dim</strong> – dimensionality of the latent space</p></li>
+<li><p><strong>conv_filters</strong> – number of filters in the TCN layers</p></li>
+<li><p><strong>kernel_size</strong> – size of the convolutional kernels</p></li>
+<li><p><strong>conv_stacks</strong> – number of TCN layers</p></li>
+<li><p><strong>conv_dilations</strong> – list of dilation factors for each TCN layer</p></li>
+<li><p><strong>padding</strong> – padding mode for the TCN layers</p></li>
+<li><p><strong>use_skip_connections</strong> – whether to use skip connections between TCN layers</p></li>
+<li><p><strong>dropout_rate</strong> – dropout rate for the TCN layers</p></li>
+<li><p><strong>activation</strong> – activation function for the TCN layers</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -271,16 +264,16 @@ the following paper for more details: <a class="reference external" href="https:
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
-<li><p><strong>conv_filters</strong> (<em>-</em>) – number of filters in the TCN layers</p></li>
-<li><p><strong>kernel_size</strong> (<em>-</em>) – size of the convolutional kernels</p></li>
-<li><p><strong>conv_stacks</strong> (<em>-</em>) – number of TCN layers</p></li>
-<li><p><strong>conv_dilations</strong> (<em>-</em>) – list of dilation factors for each TCN layer</p></li>
-<li><p><strong>padding</strong> (<em>-</em>) – padding mode for the TCN layers</p></li>
-<li><p><strong>use_skip_connections</strong> (<em>-</em>) – whether to use skip connections between TCN layers</p></li>
-<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate for the TCN layers</p></li>
-<li><p><strong>activation</strong> (<em>-</em>) – activation function for the TCN layers</p></li>
+<li><p><strong>input_shape</strong> – shape of the input data</p></li>
+<li><p><strong>latent_dim</strong> – dimensionality of the latent space</p></li>
+<li><p><strong>conv_filters</strong> – number of filters in the TCN layers</p></li>
+<li><p><strong>kernel_size</strong> – size of the convolutional kernels</p></li>
+<li><p><strong>conv_stacks</strong> – number of TCN layers</p></li>
+<li><p><strong>conv_dilations</strong> – list of dilation factors for each TCN layer</p></li>
+<li><p><strong>padding</strong> – padding mode for the TCN layers</p></li>
+<li><p><strong>use_skip_connections</strong> – whether to use skip connections between TCN layers</p></li>
+<li><p><strong>dropout_rate</strong> – dropout rate for the TCN layers</p></li>
+<li><p><strong>activation</strong> – activation function for the TCN layers</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -303,19 +296,16 @@ and <a class="reference external" href="https://arxiv.org/abs/1711.03905">https:
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>num_layers</strong> (<em>-</em>) – number of transformer layers to include</p></li>
-<li><p><strong>num_heads</strong> (<em>-</em>) – number of heads of the multi-head-attention layers used on the transformer encoder</p></li>
-<li><p><strong>dff</strong> (<em>-</em>) – dimensionality of the token embeddings</p></li>
-<li><p><strong>dropout_rate</strong> (<em>-</em>) – dropout rate</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – regularization parameter for the interaction features</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>num_layers</strong> (<em>int</em>) – number of transformer layers to include</p></li>
+<li><p><strong>num_heads</strong> (<em>int</em>) – number of heads of the multi-head-attention layers used on the transformer encoder</p></li>
+<li><p><strong>dff</strong> (<em>int</em>) – dimensionality of the token embeddings</p></li>
+<li><p><strong>dropout_rate</strong> (<em>float</em>) – dropout rate</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – regularization parameter for the interaction features</p></li>
 </ul>
 </dd>
 </dl>
@@ -392,8 +382,7 @@ Implementation based on <a class="reference external" href="https://keras.io/exa
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>flattened_inputs</strong> (<em>tf.Tensor</em>) – flattened input tensor (encoder output)</p></li>
-<li><p><strong>return_soft_counts</strong> (<em>bool</em>) – whether to return soft counts based on the distance to the codes, instead of</p></li>
-<li><p><strong>indices</strong> (<em>the code</em>) – </p></li>
+<li><p><strong>return_soft_counts</strong> (<em>bool</em>) – whether to return soft counts based on the distance to the codes, instead of the code indices</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -414,34 +403,26 @@ Implementation based on <a class="reference external" href="https://keras.io/exa
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input to the encoder.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimension of the latent space.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>n_components</strong> (<em>-</em>) – number of embeddings in the embedding layer.</p></li>
-<li><p><strong>beta</strong> (<em>-</em>) – beta parameter of the VQ loss.</p></li>
-<li><p><strong>kmeans_loss</strong> (<em>-</em>) – regularization parameter for the Gram matrix.</p></li>
-<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input to the encoder.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimension of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of embeddings in the embedding layer.</p></li>
+<li><p><strong>beta</strong> (<em>float</em>) – beta parameter of the VQ loss.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – regularization parameter for the Gram matrix.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>connected encoder of the VQ-VAE model.
-Outputs a vector of shape (latent_dim,).
-- decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-- grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model.
-Outputs cluster indices of shape (batch_size,).
-- vqvae (tf.keras.Model): complete VQ VAE model.</p>
+<dd class="field-even"><p>connected encoder of the VQ-VAE model. Outputs a vector of shape (latent_dim,).
+decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+grouper (tf.keras.Model): connected embedder layer of the VQ-VAE model. Outputs cluster indices of shape (batch_size,).
+vqvae (tf.keras.Model): complete VQ VAE model.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>encoder (tf.keras.Model)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>encoder (tf.keras.Model)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -547,37 +528,30 @@ and VaDE-SC (<a class="reference external" href="https://openreview.net/forum?id
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – dimensionality of the latent space.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>n_components</strong> (<em>-</em>) – number of components in the Gaussian mixture.</p></li>
-<li><p><strong>batch_size</strong> (<em>-</em>) – batch size for training.</p></li>
-<li><p><strong>kl_warmup</strong> (<em>-</em>) – Number of iterations during which to warm up the KL divergence.</p></li>
-<li><p><strong>kl_annealing_mode</strong> (<em>-</em>) – mode to use for annealing the KL divergence. Must be one of “linear” and “sigmoid”.</p></li>
-<li><p><strong>mc_kl</strong> (<em>-</em>) – number of Monte Carlo samples to use for computing the KL divergence.</p></li>
-<li><p><strong>kmeans_loss</strong> (<em>-</em>) – weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.</p></li>
-<li><p><strong>reg_cluster_variance</strong> (<em>-</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
-<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – weight of the interaction regularization term.</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – number of components in the Gaussian mixture.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
+<li><p><strong>kl_warmup</strong> (<em>int</em>) – Number of iterations during which to warm up the KL divergence.</p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>str</em>) – mode to use for annealing the KL divergence. Must be one of “linear” and “sigmoid”.</p></li>
+<li><p><strong>mc_kl</strong> (<em>int</em>) – number of Monte Carlo samples to use for computing the KL divergence.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – weight of the Gram matrix loss as described in deepof.model_utils.compute_kmeans_loss.</p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>bool</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – weight of the interaction regularization term.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>connected encoder of the VQ-VAE model. Outputs a vector of shape (latent_dim,).
-- decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
-- grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,)
-for each training instance, corresponding to the soft counts for each cluster.
-- vade (tf.keras.Model): complete VaDE model</p>
+decoder (tf.keras.Model): connected decoder of the VQ-VAE model.
+grouper (tf.keras.Model): deep clustering branch of the VQ-VAE model. Outputs a vector of shape (n_components,) for each training instance, corresponding to the soft counts for each cluster.
+vade (tf.keras.Model): complete VaDE model</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>encoder (tf.keras.Model)</p></li>
-</ul>
-</p>
+<dd class="field-odd"><p>encoder (tf.keras.Model)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -594,16 +568,13 @@ for each training instance, corresponding to the soft counts for each cluster.
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – shape of the input data.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>batch_size</strong> (<em>-</em>) – batch size for training.</p></li>
-<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
-<li><p><strong>bias_initializer</strong> (<em>-</em>) – value to initialize the bias of the last layer to (default: 0.0).</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – shape of the input data.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – batch size for training.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>bias_initializer</strong> (<em>float</em>) – value to initialize the bias of the last layer to (default: 0.0).</p></li>
 </ul>
 </dd>
 </dl>
@@ -638,27 +609,22 @@ for each training instance, corresponding to the soft counts for each cluster.
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – Shape of the input to the full model.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>batch_size</strong> (<em>-</em>) – Batch size for training.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – Dimensionality of the latent space.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>kl_annealing_mode</strong> (<em>-</em>) – Annealing mode for KL annealing. Can be one of ‘linear’ and ‘sigmoid’.</p></li>
-<li><p><strong>kl_warmup_epochs</strong> (<em>-</em>) – Number of epochs to warmup KL annealing.</p></li>
-<li><p><strong>montecarlo_kl</strong> (<em>-</em>) – Number of Monte Carlo samples for KL divergence.</p></li>
-<li><p><strong>n_components</strong> (<em>-</em>) – Number of mixture components in the latent space.</p></li>
-<li><p><strong>kmeans_loss</strong> (<em>-</em>) – weight of the gram matrix regularization loss.</p></li>
-<li><p><strong>reg_cat_clusters</strong> (<em>-</em>) – whether to use the penalized uneven cluster membership in the latent space, by</p></li>
-<li><p><strong>distribution.</strong> (<em>minimizing the KL divergence between cluster membership and a uniform categorical</em>) – </p></li>
-<li><p><strong>reg_cluster_variance</strong> (<em>-</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
-<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
-<li><p><strong>**kwargs</strong> (<em>-</em>) – <p>Additional keyword arguments.</p>
-</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – Shape of the input to the full model.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em>) – Batch size for training.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – Dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>kl_annealing_mode</strong> (<em>str</em>) – Annealing mode for KL annealing. Can be one of ‘linear’ and ‘sigmoid’.</p></li>
+<li><p><strong>kl_warmup_epochs</strong> (<em>int</em>) – Number of epochs to warmup KL annealing.</p></li>
+<li><p><strong>montecarlo_kl</strong> (<em>int</em>) – Number of Monte Carlo samples for KL divergence.</p></li>
+<li><p><strong>n_components</strong> (<em>int</em>) – Number of mixture components in the latent space.</p></li>
+<li><p><strong>kmeans_loss</strong> (<em>float</em>) – weight of the gram matrix regularization loss.</p></li>
+<li><p><strong>reg_cat_clusters</strong> (<em>bool</em>) – whether to use the penalized uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.</p></li>
+<li><p><strong>reg_cluster_variance</strong> (<em>bool</em>) – whether to penalize uneven cluster variances in the latent space.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments.</p></li>
 </ul>
 </dd>
 </dl>
@@ -720,23 +686,19 @@ for each training instance, corresponding to the soft counts for each cluster.
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_shape</strong> (<em>-</em>) – Shape of the input to the full model.</p></li>
-<li><p><strong>edge_feature_shape</strong> (<em>-</em>) – shape of the edge feature matrix used for graph representations.</p></li>
-<li><p><strong>adjacency_matrix</strong> (<em>-</em>) – adjacency matrix of the connectivity graph to use.</p></li>
-<li><p><strong>encoder_type</strong> (<em>-</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
-<li><p><strong>latent_dim</strong> (<em>-</em>) – Dimensionality of the latent space.</p></li>
-<li><p><strong>use_gnn</strong> (<em>-</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds</p></li>
-<li><p><strong>attributes</strong> (<em>as node</em>) – </p></li>
-<li><p><strong>False</strong> (<em>and distances as edge attributes. If</em>) – </p></li>
-<li><p><strong>input.</strong> (<em>a regular 3D tensor is used as</em>) – </p></li>
-<li><p><strong>temperature</strong> (<em>-</em>) – </p></li>
-<li><p><strong>similarity_function</strong> (<em>-</em>) – </p></li>
-<li><p><strong>loss_function</strong> (<em>-</em>) – </p></li>
-<li><p><strong>beta</strong> (<em>-</em>) – </p></li>
-<li><p><strong>tau</strong> (<em>-</em>) – </p></li>
-<li><p><strong>interaction_regularization</strong> (<em>-</em>) – Regularization parameter for the interaction features.</p></li>
-<li><p><strong>**kwargs</strong> (<em>-</em>) – <p>Additional keyword arguments.</p>
-</p></li>
+<li><p><strong>input_shape</strong> (<em>tuple</em>) – Shape of the input to the full model.</p></li>
+<li><p><strong>edge_feature_shape</strong> (<em>tuple</em>) – shape of the edge feature matrix used for graph representations.</p></li>
+<li><p><strong>adjacency_matrix</strong> (<em>np.ndarray</em>) – adjacency matrix of the connectivity graph to use.</p></li>
+<li><p><strong>encoder_type</strong> (<em>str</em>) – type of encoder to use. Can be set to “recurrent” (default), “TCN”, or “transformer”.</p></li>
+<li><p><strong>latent_dim</strong> (<em>int</em>) – Dimensionality of the latent space.</p></li>
+<li><p><strong>use_gnn</strong> (<em>bool</em>) – If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.</p></li>
+<li><p><strong>temperature</strong> (<em>float</em>) – </p></li>
+<li><p><strong>similarity_function</strong> (<em>str</em>) – </p></li>
+<li><p><strong>loss_function</strong> (<em>str</em>) – </p></li>
+<li><p><strong>beta</strong> (<em>float</em>) – </p></li>
+<li><p><strong>tau</strong> (<em>float</em>) – </p></li>
+<li><p><strong>interaction_regularization</strong> (<em>float</em>) – Regularization parameter for the interaction features.</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments.</p></li>
 </ul>
 </dd>
 </dl>

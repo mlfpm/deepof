@@ -58,6 +58,7 @@
 <li><a class="reference internal" href="#Loading-a-previously-generated-project">Loading a previously generated project</a></li>
 <li><a class="reference internal" href="#Interacting-with-your-project:-generating-coordinates,-distances,-angles,-and-areas.">Interacting with your project: generating coordinates, distances, angles, and areas.</a></li>
 <li><a class="reference internal" href="#Loading-experimental-conditions">Loading experimental conditions</a></li>
+<li><a class="reference internal" href="#Filtering-DeepOF-objects">Filtering DeepOF objects</a></li>
 <li><a class="reference internal" href="#Basic-visual-exploration">Basic visual exploration</a></li>
 <li><a class="reference internal" href="#What’s-next">What’s next</a></li>
 </ul>
@@ -371,6 +372,15 @@ div.rendered_html tbody tr:hover {
 </style>
 <section id="Formatting-your-data:-feature-extraction-from-motion-tracking-output">
 <h1>Formatting your data: feature extraction from motion tracking output<a class="headerlink" href="#Formatting-your-data:-feature-extraction-from-motion-tracking-output" title="Permalink to this heading"></a></h1>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
+<span class="o">%</span><span class="k">autoreload</span> 2
+</pre></div>
+</div>
+</div>
 <p><a class="reference external" href="https://colab.research.google.com/github/lucasmiranda42/deepof/blob/master/docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" /></a></p>
 <section id="What-we’ll-cover:">
 <h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
@@ -381,7 +391,7 @@ div.rendered_html tbody tr:hover {
 <li><p>Exploratory visualizations: heatmaps and processed animations.</p></li>
 </ul>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
@@ -395,8 +405,8 @@ div.rendered_html tbody tr:hover {
 </div>
 </div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, pandas to load data frames, and the data entry API within DeepOF, located in deepof.data</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
@@ -406,9 +416,17 @@ div.rendered_html tbody tr:hover {
 </pre></div>
 </div>
 </div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+</pre></div></div>
+</div>
 <p>We’ll also need some plotting gear:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.visuals</span>
@@ -429,20 +447,20 @@ div.rendered_html tbody tr:hover {
 </ul>
 <p>The dataset used in this tutorial is a subset of the social interaction (SI) dataset used in DeepOF’s original paper. It contains six 10-minute-long videos with two animals (a C57Bl6 and a CD1) tracked in a round arena. Three of the C57Bl6 mice have been exposed to chronic social defeat stress (CSDS).</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
-                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files&quot;</span><span class="p">),</span>
-                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Videos/&quot;</span><span class="p">),</span>
-                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Tables/&quot;</span><span class="p">),</span>
-                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;tutorial_project&quot;</span><span class="p">,</span>
-                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;circular-manual&quot;</span><span class="p">,</span>
-                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;W&quot;</span><span class="p">],</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Desktop/&quot;</span><span class="p">),</span>
+                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Downloads/Veronika/Videos/&quot;</span><span class="p">),</span>
+                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Downloads/Veronika/Tables/&quot;</span><span class="p">),</span>
+                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;Veronika_debug&quot;</span><span class="p">,</span>
+                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;polygonal-manual&quot;</span><span class="p">,</span>
+                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">],</span>
                 <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;.mp4&quot;</span><span class="p">,</span>
-                <span class="n">exclude_bodyparts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Tail_1&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_2&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_tip&quot;</span><span class="p">],</span>
                 <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
-                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                <span class="n">exclude_bodyparts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Tail_1&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_2&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_tip&quot;</span><span class="p">],</span>
+                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                 <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                 <span class="n">exp_conditions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span>
@@ -460,14 +478,223 @@ div.rendered_html tbody tr:hover {
 <li><p>exp_conditions: dictionary with a video IDs as keys, and data frames with all experimental conditions as values. DeepOF will use this information to enable all sorts of comparisons between conditions, as we will see in the following tutorials. We’ll leave it blank for now and update it afterwards.</p></li>
 </ul>
 <p>For more details, feel free to visit the full API reference.</p>
-<p>Let’s then create our first project, by running the .create() method in our newly created object:</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<p>Let’s then create our first project, by running the <code class="docutils literal notranslate"><span class="pre">.create()</span></code> method in our newly created object:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Setting up project directories...
+Loading trajectories...
+Smoothing trajectories...
+Interpolating outliers...
+Iterative imputation of ocluded bodyparts...
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+[IterativeImputer] Early stopping criterion not reached.
+No accelerated colorspace conversion found from yuv420p to rgb24.
+ (repeated 663 more times)
+No accelerated colorspace conversion found from yuv420p to rgb24.
+No accelerated colorspace conversion found from yuv420p to rgb24.
+No accelerated colorspace conversion found from yuv420p to rgb24.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Detecting arena...
+Computing distances...
+Computing angles...
+Computing areas...
+Done!
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_quality</span><span class="p">()[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[&lt;matplotlib.lines.Line2D at 0x2f813ee50&gt;]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_16_1.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_16_1.png" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;short_49+51_HFD&#39;:                       0_Center             0_Left_bhip              \
+                              x           y           x           y
+ 00:00:00            273.822734  229.563703  276.485967  237.500175
+ 00:00:00.066629650  273.822734  229.563703  276.485967  237.500175
+ 00:00:00.133259300  273.822734  229.563703  276.485967  237.500175
+ 00:00:00.199888950  273.822734  229.563703  276.485967  237.500175
+ 00:00:00.266518600  273.822734  229.563703  276.485967  237.500175
+ ...                        ...         ...         ...         ...
+ 00:01:59.666851749  165.480998  342.408999  199.296997  323.783998
+ 00:01:59.733481399  165.508998  342.359998  199.269997  323.730998
+ 00:01:59.800111049  155.875996  345.957997  187.769992  330.562995
+ 00:01:59.866740699  155.875996  345.957997  187.769992  330.562995
+ 00:01:59.933370349  155.875996  345.957997  187.769992  330.562995
+
+                     0_Left_ear             0_Left_fhip              \
+                              x           y           x           y
+ 00:00:00            265.780298  226.784523  267.746368  227.323413
+ 00:00:00.066629650  265.780298  226.784523  267.746368  227.323413
+ 00:00:00.133259300  265.780298  226.784523  267.746368  227.323413
+ 00:00:00.199888950  265.780298  226.784523  267.746368  227.323413
+ 00:00:00.266518600  265.780298  226.784523  267.746368  227.323413
+ ...                        ...         ...         ...         ...
+ 00:01:59.666851749  153.101000  394.678001  169.142995  380.319998
+ 00:01:59.733481399  153.129999  394.670001  169.119994  380.305998
+ 00:01:59.800111049  143.654995  398.379002  162.630990  383.877996
+ 00:01:59.866740699  143.654995  398.379002  162.630990  383.877996
+ 00:01:59.933370349  143.654995  398.379002  162.630990  383.877996
+
+                         0_Nose              ... 1_Right_ear              \
+                              x           y  ...           x           y
+ 00:00:00            264.077743  229.099265  ...  295.765515  291.002972
+ 00:00:00.066629650  264.077743  229.099265  ...  295.765515  291.002972
+ 00:00:00.133259300  264.077743  229.099265  ...  295.765515  291.002972
+ 00:00:00.199888950  264.077743  229.099265  ...  295.765515  291.002972
+ 00:00:00.266518600  264.077743  229.099265  ...  295.765515  291.002972
+ ...                        ...         ...  ...         ...         ...
+ 00:01:59.666851749  133.923997  411.044001  ...  296.256776  288.882432
+ 00:01:59.733481399  134.068997  411.017001  ...  296.239543  288.880258
+ 00:01:59.800111049  125.752989  414.282002  ...  295.648320  288.325880
+ 00:01:59.866740699  125.752989  414.282002  ...  295.648320  288.325880
+ 00:01:59.933370349  125.752989  414.282002  ...  295.648320  288.325880
+
+                    1_Right_fhip               1_Spine_1              \
+                               x           y           x           y
+ 00:00:00             290.248332  286.885705  296.105798  281.118480
+ 00:00:00.066629650   290.248332  286.885705  296.105798  281.118480
+ 00:00:00.133259300   290.248332  286.885705  296.105798  281.118480
+ 00:00:00.199888950   290.248332  286.885705  296.105798  281.118480
+ 00:00:00.266518600   290.248332  286.885705  296.105798  281.118480
+ ...                         ...         ...         ...         ...
+ 00:01:59.666851749   290.049863  284.751645  293.163093  281.174475
+ 00:01:59.733481399   290.026731  284.739534  293.165345  281.169152
+ 00:01:59.800111049   289.790880  284.072332  292.524366  280.364886
+ 00:01:59.866740699   289.790880  284.072332  292.524366  280.364886
+ 00:01:59.933370349   289.790880  284.072332  292.524366  280.364886
+
+                      1_Spine_2             1_Tail_base
+                              x           y           x           y
+ 00:00:00            286.920161  271.174833  285.515194  272.208189
+ 00:00:00.066629650  286.920161  271.174833  285.515194  272.208189
+ 00:00:00.133259300  286.920161  271.174833  285.515194  272.208189
+ 00:00:00.199888950  286.920161  271.174833  285.515194  272.208189
+ 00:00:00.266518600  286.920161  271.174833  285.515194  272.208189
+ ...                        ...         ...         ...         ...
+ 00:01:59.666851749  286.214627  274.101377  288.574965  276.290297
+ 00:01:59.733481399  286.234537  274.117807  288.578998  276.360892
+ 00:01:59.800111049  286.354078  273.509554  289.432576  276.058061
+ 00:01:59.866740699  286.354078  273.509554  289.432576  276.058061
+ 00:01:59.933370349  286.354078  273.509554  289.432576  276.058061
+
+ [1801 rows x 44 columns]}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sa</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+  0%|                                                                                                                                                                                  | 0/1 [00:00&lt;?, ?it/s]Trying to unpickle estimator StandardScaler from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator NearestNeighbors from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator DummyClassifier from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator DecisionTreeRegressor from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator GradientBoostingClassifier from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator StandardScaler from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator DummyClassifier from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator DecisionTreeRegressor from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+No accelerated colorspace conversion found from yuv420p to rgb24.
+ (repeated 437 more times)
+Trying to unpickle estimator GradientBoostingClassifier from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+Trying to unpickle estimator Pipeline from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:01&lt;00:00,  1.36s/it]
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sa</span><span class="p">[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">][</span><span class="s2">&quot;nose2nose&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">sa</span><span class="p">[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">][</span><span class="s2">&quot;nose2nose&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+00:00:39.911160466    1.0
+00:00:39.977790116    1.0
+00:00:40.044419766    1.0
+00:00:40.111049416    1.0
+00:01:11.960022209    1.0
+00:01:12.026651860    1.0
+Name: nose2nose, dtype: float64
+</pre></div></div>
 </div>
 <p>As you will see, this organizes all required file into a folder in the specified path. Moreover, some processing steps are computed on the go, such as distances, angles and areas. This makes it easier for DeepOF to load all required features later on, without the need to compute them every time.</p>
 <p>In addition, if “circular-manual” or “polygonal-manual” were selected in the ‘arena’ parameter, a GUI will pop up in the “detecting arena” step.</p>
@@ -481,11 +708,11 @@ div.rendered_html tbody tr:hover {
 <h3>Loading a previously generated project<a class="headerlink" href="#Loading-a-previously-generated-project" title="Permalink to this heading"></a></h3>
 <p>Once you ran your project at least once, it can be loaded without much effort from the path you specified in the first place (plus the project name -deepof_project, if you didn’t specify otherwise-).</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load a previously saved project</span>
-<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/&quot;</span><span class="p">)</span>
+<span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -495,7 +722,7 @@ div.rendered_html tbody tr:hover {
 <p>That’s it for basic project creation. We now have a DeepOF project up and running! Before ending the tutorial, however, let’s explore the object that the commands above produced.</p>
 <p>For starters, if we print it, we see it’s a DeepOF analysis of 6 videos. Furthermore, the object belongs to a custom class within DeepOF, called Coordinates. This class allows the package to store all sorts of relevant information required for further processing, as we’ll see below:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="p">)</span>
@@ -512,11 +739,11 @@ deepof analysis of 6 videos
 &lt;class &#39;deepof.data.Coordinates&#39;&gt;
 </pre></div></div>
 </div>
-<p>As described before, the .create() method runs most of the heavy preprocessing already, which allows us to extract features including coordinates, distances, angles, and areas. Let’s see how that works!</p>
+<p>As described before, the <code class="docutils literal notranslate"><span class="pre">.create()</span></code> method runs most of the heavy preprocessing already, which allows us to extract features including coordinates, distances, angles, and areas. Let’s see how that works!</p>
 <img alt="preprocessing" src="../_images/deepof_preprocessing.png" />
-<p>With the .get_coords() method, for example, we can obtain the processed (smooth and imputed) tracks for all videos in a dictionary. The returned objects are called table dictionaries (TableDict is the name of the class). They follow a dictionary-like structure, where each value is a data frame. They also provide a plethora of extra methods, some of which we’ll cover in these tutorials. Let’s retrieve these for one of the animals:</p>
+<p>With the <code class="docutils literal notranslate"><span class="pre">.get_coords()</span></code> method, for example, we can obtain the processed (smooth and imputed) tracks for all videos in a dictionary. The returned objects are called table dictionaries (TableDict is the name of the class). They follow a dictionary-like structure, where each value is a data frame. They also provide a plethora of extra methods, some of which we’ll cover in these tutorials. Let’s retrieve these for one of the animals:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">(</span><span class="n">polar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="s2">&quot;Center&quot;</span><span class="p">,</span> <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Spine_1&quot;</span><span class="p">)[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -524,7 +751,7 @@ deepof analysis of 6 videos
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -853,11 +1080,11 @@ deepof analysis of 6 videos
 <p>14999 rows × 44 columns</p>
 </div></div>
 </div>
-<p>Note that there are a few parameters you can pass to the .get_coords() method. If “polar” is set to True, polar coordinates will be used, instead of Cartesian. Both “center” and “align” control how translational and rotational variance are removed from the data: the former will use the specified body part as [0, 0] (or the center of the arena, if set to “arena”). The latter will rotate the mice on each time point, to align the line connecting the body parts specified in the “center” and “align”
-methods with the y-axis.</p>
+<p>Note that there are a few parameters you can pass to the <code class="docutils literal notranslate"><span class="pre">.get_coords()</span></code> method. If “polar” is set to True, polar coordinates will be used, instead of Cartesian. Both “center” and “align” control how translational and rotational variance are removed from the data: the former will use the specified body part as [0, 0] (or the center of the arena, if set to “arena”). The latter will rotate the mice on each time point, to align the line connecting the body parts specified in the “center” and
+“align” parameters with the y-axis.</p>
 <p>Furthermore, not only processed coordinates can be retrieved, but also distances, angles, and areas with the .get_distances(), .get_angles(), and .get_areas(), respectively.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_distances</span><span class="p">()[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -865,7 +1092,7 @@ methods with the y-axis.</p>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -889,25 +1116,25 @@ methods with the y-axis.</p>
       <th></th>
       <th>(W_Left_bhip, W_Spine_2)</th>
       <th>(W_Left_ear, W_Spine_1)</th>
-      <th>(W_Right_ear, W_Spine_1)</th>
-      <th>(B_Tail_base, W_Tail_base)</th>
+      <th>(B_Left_bhip, B_Spine_2)</th>
       <th>(B_Tail_base, W_Nose)</th>
-      <th>(B_Left_ear, B_Nose)</th>
-      <th>(B_Right_bhip, B_Spine_2)</th>
-      <th>(B_Center, B_Spine_1)</th>
-      <th>(B_Spine_2, B_Tail_base)</th>
-      <th>(B_Left_ear, B_Spine_1)</th>
-      <th>...</th>
-      <th>(W_Center, W_Spine_1)</th>
+      <th>(W_Nose, W_Right_ear)</th>
       <th>(B_Right_ear, B_Spine_1)</th>
-      <th>(W_Left_ear, W_Nose)</th>
-      <th>(B_Center, B_Right_fhip)</th>
-      <th>(B_Nose, W_Tail_base)</th>
+      <th>(B_Center, B_Spine_1)</th>
       <th>(W_Spine_2, W_Tail_base)</th>
       <th>(B_Nose, W_Nose)</th>
-      <th>(B_Nose, B_Right_ear)</th>
+      <th>(B_Spine_2, B_Tail_base)</th>
+      <th>...</th>
+      <th>(B_Tail_base, W_Tail_base)</th>
       <th>(W_Right_bhip, W_Spine_2)</th>
-      <th>(W_Nose, W_Right_ear)</th>
+      <th>(W_Left_ear, W_Nose)</th>
+      <th>(B_Left_ear, B_Spine_1)</th>
+      <th>(W_Center, W_Spine_1)</th>
+      <th>(B_Nose, B_Right_ear)</th>
+      <th>(W_Center, W_Spine_2)</th>
+      <th>(W_Center, W_Left_fhip)</th>
+      <th>(B_Nose, W_Tail_base)</th>
+      <th>(B_Center, B_Right_fhip)</th>
     </tr>
   </thead>
   <tbody>
@@ -915,121 +1142,121 @@ methods with the y-axis.</p>
       <th>00:00:00</th>
       <td>12.385698</td>
       <td>27.171833</td>
-      <td>24.124739</td>
-      <td>98.128243</td>
+      <td>15.294229</td>
       <td>148.682085</td>
-      <td>15.958751</td>
-      <td>11.352427</td>
-      <td>13.866569</td>
-      <td>14.630636</td>
-      <td>15.403174</td>
-      <td>...</td>
-      <td>20.063313</td>
+      <td>22.932418</td>
       <td>14.300370</td>
-      <td>18.915606</td>
-      <td>13.307170</td>
-      <td>115.579049</td>
+      <td>13.866569</td>
       <td>24.262574</td>
       <td>198.053922</td>
-      <td>18.862163</td>
+      <td>14.630636</td>
+      <td>...</td>
+      <td>98.128243</td>
       <td>10.990415</td>
-      <td>22.932418</td>
+      <td>18.915606</td>
+      <td>15.403174</td>
+      <td>20.063313</td>
+      <td>18.862163</td>
+      <td>15.650178</td>
+      <td>18.654549</td>
+      <td>115.579049</td>
+      <td>13.307170</td>
     </tr>
     <tr>
       <th>00:00:00.039935995</th>
       <td>15.770459</td>
       <td>25.867469</td>
-      <td>23.760425</td>
-      <td>103.329454</td>
+      <td>15.264173</td>
       <td>157.634272</td>
-      <td>15.336850</td>
-      <td>11.621177</td>
-      <td>13.405917</td>
-      <td>14.515957</td>
-      <td>15.763673</td>
-      <td>...</td>
-      <td>21.979316</td>
+      <td>21.945866</td>
       <td>14.756100</td>
-      <td>19.199412</td>
-      <td>13.469051</td>
-      <td>118.523850</td>
+      <td>13.405917</td>
       <td>19.983948</td>
       <td>202.762435</td>
-      <td>16.465716</td>
+      <td>14.515957</td>
+      <td>...</td>
+      <td>103.329454</td>
       <td>13.792246</td>
-      <td>21.945866</td>
+      <td>19.199412</td>
+      <td>15.763673</td>
+      <td>21.979316</td>
+      <td>16.465716</td>
+      <td>19.941976</td>
+      <td>20.383799</td>
+      <td>118.523850</td>
+      <td>13.469051</td>
     </tr>
     <tr>
       <th>00:00:00.079871991</th>
       <td>14.512332</td>
       <td>27.690706</td>
-      <td>25.432991</td>
-      <td>112.995114</td>
+      <td>14.663255</td>
       <td>166.003249</td>
-      <td>15.235294</td>
-      <td>11.461481</td>
-      <td>13.382224</td>
-      <td>14.816680</td>
-      <td>15.101808</td>
-      <td>...</td>
-      <td>20.005466</td>
+      <td>24.897477</td>
       <td>14.490980</td>
-      <td>22.317250</td>
-      <td>14.120393</td>
-      <td>123.177995</td>
+      <td>13.382224</td>
       <td>16.667571</td>
       <td>203.411343</td>
-      <td>15.122226</td>
+      <td>14.816680</td>
+      <td>...</td>
+      <td>112.995114</td>
       <td>14.562744</td>
-      <td>24.897477</td>
+      <td>22.317250</td>
+      <td>15.101808</td>
+      <td>20.005466</td>
+      <td>15.122226</td>
+      <td>17.233418</td>
+      <td>20.207855</td>
+      <td>123.177995</td>
+      <td>14.120393</td>
     </tr>
     <tr>
       <th>00:00:00.119807987</th>
       <td>15.156571</td>
       <td>29.150648</td>
-      <td>24.268611</td>
-      <td>120.138537</td>
+      <td>14.804978</td>
       <td>171.913365</td>
-      <td>16.106972</td>
-      <td>12.029250</td>
-      <td>12.382525</td>
-      <td>16.005507</td>
-      <td>16.356251</td>
-      <td>...</td>
-      <td>20.297740</td>
+      <td>24.811224</td>
       <td>15.648562</td>
-      <td>21.072843</td>
-      <td>14.674685</td>
-      <td>122.999419</td>
+      <td>12.382525</td>
       <td>16.546259</td>
       <td>202.302336</td>
-      <td>15.177336</td>
+      <td>16.005507</td>
+      <td>...</td>
+      <td>120.138537</td>
       <td>13.743853</td>
-      <td>24.811224</td>
+      <td>21.072843</td>
+      <td>16.356251</td>
+      <td>20.297740</td>
+      <td>15.177336</td>
+      <td>18.067626</td>
+      <td>19.823826</td>
+      <td>122.999419</td>
+      <td>14.674685</td>
     </tr>
     <tr>
       <th>00:00:00.159743982</th>
       <td>15.140400</td>
       <td>26.537352</td>
-      <td>25.116524</td>
-      <td>123.879733</td>
+      <td>15.041685</td>
       <td>174.999760</td>
-      <td>18.105548</td>
-      <td>12.912796</td>
-      <td>12.236212</td>
-      <td>15.589586</td>
-      <td>15.709842</td>
-      <td>...</td>
-      <td>21.108747</td>
+      <td>22.888286</td>
       <td>16.058247</td>
-      <td>21.258547</td>
-      <td>15.184137</td>
-      <td>122.297162</td>
+      <td>12.236212</td>
       <td>17.880008</td>
       <td>201.555974</td>
-      <td>16.304625</td>
+      <td>15.589586</td>
+      <td>...</td>
+      <td>123.879733</td>
       <td>13.464188</td>
-      <td>22.888286</td>
+      <td>21.258547</td>
+      <td>15.709842</td>
+      <td>21.108747</td>
+      <td>16.304625</td>
+      <td>18.335068</td>
+      <td>20.769126</td>
+      <td>122.297162</td>
+      <td>15.184137</td>
     </tr>
     <tr>
       <th>...</th>
@@ -1059,121 +1286,121 @@ methods with the y-axis.</p>
       <th>00:09:58.800320021</th>
       <td>15.959499</td>
       <td>18.947365</td>
-      <td>17.337064</td>
-      <td>232.725078</td>
+      <td>13.848864</td>
       <td>173.390137</td>
-      <td>21.064461</td>
-      <td>13.705981</td>
-      <td>14.144830</td>
-      <td>14.777048</td>
-      <td>17.036406</td>
-      <td>...</td>
-      <td>15.193842</td>
+      <td>19.360373</td>
       <td>17.047292</td>
-      <td>23.578072</td>
-      <td>12.428442</td>
-      <td>192.208726</td>
+      <td>14.144830</td>
       <td>13.580543</td>
       <td>148.947746</td>
-      <td>22.771844</td>
+      <td>14.777048</td>
+      <td>...</td>
+      <td>232.725078</td>
       <td>13.668491</td>
-      <td>19.360373</td>
+      <td>23.578072</td>
+      <td>17.036406</td>
+      <td>15.193842</td>
+      <td>22.771844</td>
+      <td>13.452932</td>
+      <td>15.272792</td>
+      <td>192.208726</td>
+      <td>12.428442</td>
     </tr>
     <tr>
       <th>00:09:58.840256017</th>
       <td>15.970098</td>
       <td>18.991163</td>
-      <td>17.331226</td>
-      <td>229.550823</td>
+      <td>13.526511</td>
       <td>170.363060</td>
-      <td>16.473568</td>
-      <td>13.381874</td>
-      <td>12.262096</td>
-      <td>14.639053</td>
-      <td>20.530436</td>
-      <td>...</td>
-      <td>15.144409</td>
+      <td>19.405286</td>
       <td>17.452928</td>
-      <td>23.603226</td>
-      <td>10.621567</td>
-      <td>187.529354</td>
+      <td>12.262096</td>
       <td>13.570579</td>
       <td>145.290080</td>
-      <td>22.886996</td>
+      <td>14.639053</td>
+      <td>...</td>
+      <td>229.550823</td>
       <td>13.799025</td>
-      <td>19.405286</td>
+      <td>23.603226</td>
+      <td>20.530436</td>
+      <td>15.144409</td>
+      <td>22.886996</td>
+      <td>13.575291</td>
+      <td>15.262735</td>
+      <td>187.529354</td>
+      <td>10.621567</td>
     </tr>
     <tr>
       <th>00:09:58.880192012</th>
       <td>16.005486</td>
       <td>19.010041</td>
-      <td>17.314768</td>
-      <td>227.365469</td>
+      <td>13.801566</td>
       <td>169.135490</td>
-      <td>18.671978</td>
-      <td>13.731724</td>
-      <td>15.814718</td>
-      <td>15.440113</td>
-      <td>19.567327</td>
-      <td>...</td>
-      <td>15.172837</td>
+      <td>19.419134</td>
       <td>18.024676</td>
-      <td>23.564206</td>
-      <td>12.458673</td>
-      <td>186.805039</td>
+      <td>15.814718</td>
       <td>13.587918</td>
       <td>147.479959</td>
-      <td>21.823175</td>
+      <td>15.440113</td>
+      <td>...</td>
+      <td>227.365469</td>
       <td>13.820064</td>
-      <td>19.419134</td>
+      <td>23.564206</td>
+      <td>19.567327</td>
+      <td>15.172837</td>
+      <td>21.823175</td>
+      <td>13.580242</td>
+      <td>15.306780</td>
+      <td>186.805039</td>
+      <td>12.458673</td>
     </tr>
     <tr>
       <th>00:09:58.920128008</th>
       <td>16.005486</td>
       <td>19.010041</td>
-      <td>17.314768</td>
-      <td>227.365469</td>
+      <td>13.801566</td>
       <td>169.135490</td>
-      <td>18.671978</td>
-      <td>13.731724</td>
-      <td>15.814718</td>
-      <td>15.440113</td>
-      <td>19.567327</td>
-      <td>...</td>
-      <td>15.172837</td>
+      <td>19.419134</td>
       <td>18.024676</td>
-      <td>23.564206</td>
-      <td>12.458673</td>
-      <td>186.805039</td>
+      <td>15.814718</td>
       <td>13.587918</td>
       <td>147.479959</td>
-      <td>21.823175</td>
+      <td>15.440113</td>
+      <td>...</td>
+      <td>227.365469</td>
       <td>13.820064</td>
-      <td>19.419134</td>
+      <td>23.564206</td>
+      <td>19.567327</td>
+      <td>15.172837</td>
+      <td>21.823175</td>
+      <td>13.580242</td>
+      <td>15.306780</td>
+      <td>186.805039</td>
+      <td>12.458673</td>
     </tr>
     <tr>
       <th>00:09:58.960064004</th>
       <td>16.005486</td>
       <td>19.010041</td>
-      <td>17.314768</td>
-      <td>227.365469</td>
+      <td>13.801566</td>
       <td>169.135490</td>
-      <td>18.671978</td>
-      <td>13.731724</td>
-      <td>15.814718</td>
-      <td>15.440113</td>
-      <td>19.567327</td>
-      <td>...</td>
-      <td>15.172837</td>
+      <td>19.419134</td>
       <td>18.024676</td>
-      <td>23.564206</td>
-      <td>12.458673</td>
-      <td>186.805039</td>
+      <td>15.814718</td>
       <td>13.587918</td>
       <td>147.479959</td>
-      <td>21.823175</td>
+      <td>15.440113</td>
+      <td>...</td>
+      <td>227.365469</td>
       <td>13.820064</td>
-      <td>19.419134</td>
+      <td>23.564206</td>
+      <td>19.567327</td>
+      <td>15.172837</td>
+      <td>21.823175</td>
+      <td>13.580242</td>
+      <td>15.306780</td>
+      <td>186.805039</td>
+      <td>12.458673</td>
     </tr>
   </tbody>
 </table>
@@ -1181,7 +1408,7 @@ methods with the y-axis.</p>
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_angles</span><span class="p">()[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -1189,7 +1416,7 @@ methods with the y-axis.</p>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1505,7 +1732,7 @@ methods with the y-axis.</p>
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_areas</span><span class="p">()[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -1513,7 +1740,7 @@ methods with the y-axis.</p>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1672,9 +1899,9 @@ methods with the y-axis.</p>
 <p>14999 rows × 8 columns</p>
 </div></div>
 </div>
-<p>Last but not least, features can be merged using the .merge() method, which can yield combinations of features if needed. For example, the code in the following cell creates an object with both coordinates and areas per time point:</p>
+<p>Last but not least, features can be merged using the <code class="docutils literal notranslate"><span class="pre">.merge()</span></code> method, which can yield combinations of features if needed. For example, the code in the following cell creates an object with both coordinates and areas per time point:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">()</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_areas</span><span class="p">())[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -1682,7 +1909,7 @@ methods with the y-axis.</p>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -2000,10 +2227,10 @@ methods with the y-axis.</p>
 </section>
 <section id="Loading-experimental-conditions">
 <h3>Loading experimental conditions<a class="headerlink" href="#Loading-experimental-conditions" title="Permalink to this heading"></a></h3>
-<p>So far, DeepOF does not know to which condition each animal belongs. This can be either set up when creating the project (as described above) or specified afterward using the .load_exp_conditions() method. We just need to pass the path to a CSV file containing all conditions per animal as extra columns. The only hard requirement is that the first column should have the experiment IDs.</p>
+<p>So far, DeepOF does not know to which condition each animal belongs. This can be either set up when creating the project (as described above) or specified afterward using the <code class="docutils literal notranslate"><span class="pre">.load_exp_conditions()</span></code> method. We just need to pass the path to a CSV file containing all conditions per animal as extra columns. The only hard requirement is that the first column should have the experiment IDs.</p>
 <p>Here is an example:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/Coordinates/tutorial_exp_conditions.csv&quot;</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
@@ -2011,7 +2238,7 @@ methods with the y-axis.</p>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -2074,7 +2301,7 @@ methods with the y-axis.</p>
 </div>
 <p>Great! Now that we understand how the CSV should be formatted, let’s then load it onto our project:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">load_exp_conditions</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project/Coordinates/tutorial_exp_conditions.csv&quot;</span><span class="p">)</span>
@@ -2083,7 +2310,7 @@ methods with the y-axis.</p>
 </div>
 <p>And we’re done!. Let’s explore what’s in there with the .get_exp_conditions property:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="p">)</span>
@@ -2105,13 +2332,738 @@ methods with the y-axis.</p>
 </pre></div></div>
 </div>
 <p>We can see that the property retrieves a dictionary with all animal experiments as keys, and data frames with conditions as values. Although in this case we only have the CSDS condition, which can take two values (“Nonstressed” and “Stressed”, with three animals each), adding more just requires us to add extra columns to the CSV file.</p>
-<p>Now that we have a basic understanding of how to create and interact with a project, let’s show some plots!</p>
+</section>
+<section id="Filtering-DeepOF-objects">
+<h3>Filtering DeepOF objects<a class="headerlink" href="#Filtering-DeepOF-objects" title="Permalink to this heading"></a></h3>
+<p>Now that experimental conditions were added, we’ll explore some filtering tools that DeepOF provides for table dictionary objects.</p>
+<p>For starters, imagine you want to subset your data to only contain stressed animals. You can do that with the <code class="docutils literal notranslate"><span class="pre">.filter_condition()</span></code> method, which takes a dictionary as input with the experimental condition to filter on as key, and the value you’d like to keep as value:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Let&#39;s use coords as an example</span>
+<span class="n">coords</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The original dataset has </span><span class="si">{}</span><span class="s2"> videos&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)))</span>
+
+<span class="c1"># Let&#39;s keep only those experiments where the subject is stressed:</span>
+<span class="n">coords</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">filter_condition</span><span class="p">({</span><span class="s2">&quot;CSDS&quot;</span><span class="p">:</span> <span class="s2">&quot;Stressed&quot;</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The filtered dataset has only </span><span class="si">{}</span><span class="s2"> videos&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The original dataset has 6 videos
+The filtered dataset has only 3 videos
+</pre></div></div>
+</div>
+<p>We can also filter specific experiments with the <code class="docutils literal notranslate"><span class="pre">.filter_videos()</span></code> method, which takes a list of experiment IDs as input:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">single_video_coords</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">([</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_56&#39;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The new filtered dataset has only </span><span class="si">{}</span><span class="s2"> video&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">single_video_coords</span><span class="p">)))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The new filtered dataset has only 1 video
+</pre></div></div>
+</div>
+<p>Last but not least, we can also keep all videos, but filter certain animals whose coordinates we’d like to keep for further analysis. As seen above, the dataset used in this tutorial contains two animals per video: a C57Bl6 (labelled “B”) and a CD1 (labelled “W”). Let’s see how we can keep only the C57B16 with the <code class="docutils literal notranslate"><span class="pre">.filter_id()</span></code> method:</p>
+<p>Let’s first point out that, before filtering, a given experiment in the coords object has 44 features (22 from each animal).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">coords</span><span class="p">[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_56&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead tr th {
+        text-align: left;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr>
+      <th></th>
+      <th colspan="2" halign="left">B_Center</th>
+      <th colspan="2" halign="left">B_Left_bhip</th>
+      <th colspan="2" halign="left">B_Left_ear</th>
+      <th colspan="2" halign="left">B_Left_fhip</th>
+      <th colspan="2" halign="left">B_Nose</th>
+      <th>...</th>
+      <th colspan="2" halign="left">W_Right_ear</th>
+      <th colspan="2" halign="left">W_Right_fhip</th>
+      <th colspan="2" halign="left">W_Spine_1</th>
+      <th colspan="2" halign="left">W_Spine_2</th>
+      <th colspan="2" halign="left">W_Tail_base</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>...</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>00:00:00</th>
+      <td>538.363647</td>
+      <td>249.284027</td>
+      <td>552.938171</td>
+      <td>238.256393</td>
+      <td>526.389221</td>
+      <td>298.484528</td>
+      <td>554.218140</td>
+      <td>263.846924</td>
+      <td>497.151367</td>
+      <td>300.893616</td>
+      <td>...</td>
+      <td>163.311036</td>
+      <td>230.528197</td>
+      <td>151.194123</td>
+      <td>260.958313</td>
+      <td>145.208389</td>
+      <td>245.764724</td>
+      <td>123.380149</td>
+      <td>292.024324</td>
+      <td>117.470673</td>
+      <td>316.318786</td>
+    </tr>
+    <tr>
+      <th>00:00:00.039938658</th>
+      <td>538.369385</td>
+      <td>249.327469</td>
+      <td>552.927368</td>
+      <td>238.261719</td>
+      <td>526.412781</td>
+      <td>298.484711</td>
+      <td>554.220703</td>
+      <td>263.867645</td>
+      <td>497.139038</td>
+      <td>300.743500</td>
+      <td>...</td>
+      <td>167.872041</td>
+      <td>221.538756</td>
+      <td>156.158676</td>
+      <td>252.000641</td>
+      <td>147.822707</td>
+      <td>238.749525</td>
+      <td>126.308410</td>
+      <td>282.404055</td>
+      <td>117.764466</td>
+      <td>305.007018</td>
+    </tr>
+    <tr>
+      <th>00:00:00.079877316</th>
+      <td>538.341919</td>
+      <td>249.331680</td>
+      <td>552.979980</td>
+      <td>238.308563</td>
+      <td>526.437988</td>
+      <td>298.471222</td>
+      <td>554.231751</td>
+      <td>263.856079</td>
+      <td>497.157898</td>
+      <td>300.888397</td>
+      <td>...</td>
+      <td>172.082931</td>
+      <td>213.227768</td>
+      <td>160.587585</td>
+      <td>244.264328</td>
+      <td>151.865173</td>
+      <td>229.841355</td>
+      <td>129.889419</td>
+      <td>272.855470</td>
+      <td>119.838295</td>
+      <td>295.199738</td>
+    </tr>
+    <tr>
+      <th>00:00:00.119815975</th>
+      <td>538.328064</td>
+      <td>249.476318</td>
+      <td>553.003174</td>
+      <td>238.238953</td>
+      <td>526.427002</td>
+      <td>298.530182</td>
+      <td>554.242981</td>
+      <td>263.896118</td>
+      <td>497.196014</td>
+      <td>300.982727</td>
+      <td>...</td>
+      <td>176.770797</td>
+      <td>203.171585</td>
+      <td>164.369293</td>
+      <td>235.348343</td>
+      <td>156.897583</td>
+      <td>219.281571</td>
+      <td>134.908768</td>
+      <td>261.188996</td>
+      <td>124.537338</td>
+      <td>280.778840</td>
+    </tr>
+    <tr>
+      <th>00:00:00.159754633</th>
+      <td>538.361267</td>
+      <td>249.156189</td>
+      <td>552.935913</td>
+      <td>238.178787</td>
+      <td>526.232361</td>
+      <td>298.454224</td>
+      <td>554.304565</td>
+      <td>263.707153</td>
+      <td>497.193512</td>
+      <td>300.888733</td>
+      <td>...</td>
+      <td>184.708252</td>
+      <td>193.616104</td>
+      <td>168.269272</td>
+      <td>226.879074</td>
+      <td>161.464935</td>
+      <td>209.005005</td>
+      <td>135.903274</td>
+      <td>252.997026</td>
+      <td>125.637749</td>
+      <td>273.162354</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>00:09:58.800306707</th>
+      <td>417.213013</td>
+      <td>120.369354</td>
+      <td>434.364075</td>
+      <td>121.799324</td>
+      <td>407.657898</td>
+      <td>149.051193</td>
+      <td>420.671143</td>
+      <td>132.926590</td>
+      <td>403.773225</td>
+      <td>168.571396</td>
+      <td>...</td>
+      <td>458.965545</td>
+      <td>138.696243</td>
+      <td>478.439513</td>
+      <td>152.962585</td>
+      <td>464.861633</td>
+      <td>161.004669</td>
+      <td>492.194305</td>
+      <td>185.569657</td>
+      <td>507.282135</td>
+      <td>198.650726</td>
+    </tr>
+    <tr>
+      <th>00:09:58.840245366</th>
+      <td>418.764465</td>
+      <td>121.211830</td>
+      <td>437.265686</td>
+      <td>124.925872</td>
+      <td>408.706879</td>
+      <td>148.632080</td>
+      <td>423.572205</td>
+      <td>135.010574</td>
+      <td>403.317353</td>
+      <td>167.953598</td>
+      <td>...</td>
+      <td>459.109069</td>
+      <td>139.845016</td>
+      <td>480.203215</td>
+      <td>153.216278</td>
+      <td>465.769653</td>
+      <td>161.612426</td>
+      <td>494.342407</td>
+      <td>186.055055</td>
+      <td>509.487884</td>
+      <td>199.299560</td>
+    </tr>
+    <tr>
+      <th>00:09:58.880184024</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>459.507567</td>
+      <td>142.085800</td>
+      <td>482.209348</td>
+      <td>155.651763</td>
+      <td>468.152923</td>
+      <td>164.586746</td>
+      <td>496.519652</td>
+      <td>187.808962</td>
+      <td>510.491302</td>
+      <td>200.315918</td>
+    </tr>
+    <tr>
+      <th>00:09:58.920122683</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>459.507567</td>
+      <td>142.085800</td>
+      <td>482.209348</td>
+      <td>155.651763</td>
+      <td>468.152923</td>
+      <td>164.586746</td>
+      <td>496.519652</td>
+      <td>187.808962</td>
+      <td>510.491302</td>
+      <td>200.315918</td>
+    </tr>
+    <tr>
+      <th>00:09:58.960061341</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>459.507567</td>
+      <td>142.085800</td>
+      <td>482.209348</td>
+      <td>155.651763</td>
+      <td>468.152923</td>
+      <td>164.586746</td>
+      <td>496.519652</td>
+      <td>187.808962</td>
+      <td>510.491302</td>
+      <td>200.315918</td>
+    </tr>
+  </tbody>
+</table>
+<p>14998 rows × 44 columns</p>
+</div></div>
+</div>
+<p>After filtering to keep only the C57Bl6 (“B”), there are only 22 features left (scroll right to see that, as expected, no features related to “W” remain):</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">coords</span><span class="o">.</span><span class="n">filter_id</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">)[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_56&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead tr th {
+        text-align: left;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr>
+      <th></th>
+      <th colspan="2" halign="left">B_Center</th>
+      <th colspan="2" halign="left">B_Left_bhip</th>
+      <th colspan="2" halign="left">B_Left_ear</th>
+      <th colspan="2" halign="left">B_Left_fhip</th>
+      <th colspan="2" halign="left">B_Nose</th>
+      <th>...</th>
+      <th colspan="2" halign="left">B_Right_ear</th>
+      <th colspan="2" halign="left">B_Right_fhip</th>
+      <th colspan="2" halign="left">B_Spine_1</th>
+      <th colspan="2" halign="left">B_Spine_2</th>
+      <th colspan="2" halign="left">B_Tail_base</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>...</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+      <th>x</th>
+      <th>y</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>00:00:00</th>
+      <td>538.363647</td>
+      <td>249.284027</td>
+      <td>552.938171</td>
+      <td>238.256393</td>
+      <td>526.389221</td>
+      <td>298.484528</td>
+      <td>554.218140</td>
+      <td>263.846924</td>
+      <td>497.151367</td>
+      <td>300.893616</td>
+      <td>...</td>
+      <td>515.534424</td>
+      <td>278.740295</td>
+      <td>524.835266</td>
+      <td>258.351959</td>
+      <td>536.314819</td>
+      <td>269.603027</td>
+      <td>536.819580</td>
+      <td>230.367477</td>
+      <td>530.644226</td>
+      <td>211.947082</td>
+    </tr>
+    <tr>
+      <th>00:00:00.039938658</th>
+      <td>538.369385</td>
+      <td>249.327469</td>
+      <td>552.927368</td>
+      <td>238.261719</td>
+      <td>526.412781</td>
+      <td>298.484711</td>
+      <td>554.220703</td>
+      <td>263.867645</td>
+      <td>497.139038</td>
+      <td>300.743500</td>
+      <td>...</td>
+      <td>515.557556</td>
+      <td>278.727722</td>
+      <td>524.861694</td>
+      <td>258.385285</td>
+      <td>536.332397</td>
+      <td>269.632355</td>
+      <td>536.820496</td>
+      <td>230.371612</td>
+      <td>530.645569</td>
+      <td>211.948883</td>
+    </tr>
+    <tr>
+      <th>00:00:00.079877316</th>
+      <td>538.341919</td>
+      <td>249.331680</td>
+      <td>552.979980</td>
+      <td>238.308563</td>
+      <td>526.437988</td>
+      <td>298.471222</td>
+      <td>554.231751</td>
+      <td>263.856079</td>
+      <td>497.157898</td>
+      <td>300.888397</td>
+      <td>...</td>
+      <td>515.525696</td>
+      <td>278.735718</td>
+      <td>524.850891</td>
+      <td>258.373383</td>
+      <td>536.320923</td>
+      <td>269.619812</td>
+      <td>536.835327</td>
+      <td>230.389618</td>
+      <td>530.657898</td>
+      <td>211.960388</td>
+    </tr>
+    <tr>
+      <th>00:00:00.119815975</th>
+      <td>538.328064</td>
+      <td>249.476318</td>
+      <td>553.003174</td>
+      <td>238.238953</td>
+      <td>526.427002</td>
+      <td>298.530182</td>
+      <td>554.242981</td>
+      <td>263.896118</td>
+      <td>497.196014</td>
+      <td>300.982727</td>
+      <td>...</td>
+      <td>515.538391</td>
+      <td>278.738708</td>
+      <td>524.852112</td>
+      <td>258.445496</td>
+      <td>536.338318</td>
+      <td>269.629272</td>
+      <td>536.825806</td>
+      <td>230.358459</td>
+      <td>530.663635</td>
+      <td>211.948959</td>
+    </tr>
+    <tr>
+      <th>00:00:00.159754633</th>
+      <td>538.361267</td>
+      <td>249.156189</td>
+      <td>552.935913</td>
+      <td>238.178787</td>
+      <td>526.232361</td>
+      <td>298.454224</td>
+      <td>554.304565</td>
+      <td>263.707153</td>
+      <td>497.193512</td>
+      <td>300.888733</td>
+      <td>...</td>
+      <td>515.538025</td>
+      <td>278.705048</td>
+      <td>524.844055</td>
+      <td>258.242065</td>
+      <td>536.360901</td>
+      <td>269.499512</td>
+      <td>536.811890</td>
+      <td>230.327743</td>
+      <td>530.650696</td>
+      <td>211.961029</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>00:09:58.800306707</th>
+      <td>417.213013</td>
+      <td>120.369354</td>
+      <td>434.364075</td>
+      <td>121.799324</td>
+      <td>407.657898</td>
+      <td>149.051193</td>
+      <td>420.671143</td>
+      <td>132.926590</td>
+      <td>403.773225</td>
+      <td>168.571396</td>
+      <td>...</td>
+      <td>389.377777</td>
+      <td>147.743684</td>
+      <td>402.071594</td>
+      <td>119.623657</td>
+      <td>406.150024</td>
+      <td>129.519211</td>
+      <td>430.530731</td>
+      <td>113.965172</td>
+      <td>448.407562</td>
+      <td>110.662156</td>
+    </tr>
+    <tr>
+      <th>00:09:58.840245366</th>
+      <td>418.764465</td>
+      <td>121.211830</td>
+      <td>437.265686</td>
+      <td>124.925872</td>
+      <td>408.706879</td>
+      <td>148.632080</td>
+      <td>423.572205</td>
+      <td>135.010574</td>
+      <td>403.317353</td>
+      <td>167.953598</td>
+      <td>...</td>
+      <td>389.137940</td>
+      <td>146.219651</td>
+      <td>402.076691</td>
+      <td>119.482201</td>
+      <td>407.196777</td>
+      <td>129.546539</td>
+      <td>432.573608</td>
+      <td>114.848869</td>
+      <td>448.386139</td>
+      <td>111.038552</td>
+    </tr>
+    <tr>
+      <th>00:09:58.880184024</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>387.196167</td>
+      <td>144.977769</td>
+      <td>399.367402</td>
+      <td>117.643234</td>
+      <td>406.196411</td>
+      <td>127.711792</td>
+      <td>431.796935</td>
+      <td>114.095085</td>
+      <td>448.092437</td>
+      <td>110.713548</td>
+    </tr>
+    <tr>
+      <th>00:09:58.920122683</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>387.196167</td>
+      <td>144.977769</td>
+      <td>399.367402</td>
+      <td>117.643234</td>
+      <td>406.196411</td>
+      <td>127.711792</td>
+      <td>431.796935</td>
+      <td>114.095085</td>
+      <td>448.092437</td>
+      <td>110.713548</td>
+    </tr>
+    <tr>
+      <th>00:09:58.960061341</th>
+      <td>417.745423</td>
+      <td>119.924720</td>
+      <td>436.591827</td>
+      <td>123.725265</td>
+      <td>407.754945</td>
+      <td>145.980683</td>
+      <td>422.490540</td>
+      <td>133.576019</td>
+      <td>404.400087</td>
+      <td>162.526779</td>
+      <td>...</td>
+      <td>387.196167</td>
+      <td>144.977769</td>
+      <td>399.367402</td>
+      <td>117.643234</td>
+      <td>406.196411</td>
+      <td>127.711792</td>
+      <td>431.796935</td>
+      <td>114.095085</td>
+      <td>448.092437</td>
+      <td>110.713548</td>
+    </tr>
+  </tbody>
+</table>
+<p>14998 rows × 22 columns</p>
+</div></div>
+</div>
+<p>Now that we have a basic understanding of how to create and interact with a project, coordinates, and table dictionaries, let’s show some plots!</p>
 </section>
 <section id="Basic-visual-exploration">
 <h3>Basic visual exploration<a class="headerlink" href="#Basic-visual-exploration" title="Permalink to this heading"></a></h3>
 <p>Let’s first see some basic heatmaps per condition. All plotting functions within DeepOF are hosted in the deepof.visuals module. Among many other things, we can plot average heatmaps per experimental condition! Let’s see if we can visualize ant interesting patterns on the available data:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sns</span><span class="o">.</span><span class="n">set_context</span><span class="p">(</span><span class="s2">&quot;notebook&quot;</span><span class="p">)</span>
@@ -2151,13 +3103,13 @@ methods with the y-axis.</p>
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_47_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_47_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_63_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_63_0.png" />
 </div>
 </div>
 <p>It seems stressed animals spend more time closer to the walls of the arena, and less time in the center! For details on how deepof.visuals.plot_heatmap() works, feel free to check the full API reference or the function docstring.</p>
 <p>Finally, let’s create an animated video showing our newly preprocessed data. DeepOF can produce reconstructions of the tracks and show them as videos. All animals and the arena are displayed by default. This is particularly useful when interpreting clusters and visualizing embeddings in the unsupervised pipeline, as we’ll see in a later turorial.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">display</span>

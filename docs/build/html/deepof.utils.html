@@ -266,8 +266,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pair_array</strong> (<em>numpy.array</em>) – np.array of shape N * 4 containing X, y positions.</p></li>
-<li><p><strong>parts.</strong> (<em>over time for a given pair</em><em> of </em><em>body</em>) – </p></li>
+<li><p><strong>pair_array</strong> (<em>numpy.array</em>) – np.array of shape N * 4 containing X, y positions over time for a given pair of body parts.</p></li>
 <li><p><strong>arena_abs</strong> (<em>int</em>) – Diameter of the real arena in cm.</p></li>
 <li><p><strong>arena_rel</strong> (<em>int</em>) – Diameter of the captured arena in pixels.</p></li>
 </ul>
@@ -288,8 +287,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dataframe</strong> (<em>pandas.DataFrame</em>) – pd.DataFrame of shape N*(2*bp) containing X,y positions</p></li>
-<li><p><strong>parts.</strong> (<em>over time for a given set</em><em> of </em><em>bp body</em>) – </p></li>
+<li><p><strong>dataframe</strong> (<em>pandas.DataFrame</em>) – pd.DataFrame of shape N*(2*bp) containing X,y positions over time for a given set of bp body parts.</p></li>
 <li><p><strong>arena_abs</strong> (<em>int</em>) – Diameter of the real arena in cm.</p></li>
 <li><p><strong>arena_rel</strong> (<em>int</em>) – Diameter of the captured arena in pixels.</p></li>
 </ul>
@@ -375,9 +373,7 @@ column of data are aligned with the y-axis.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data</strong> (<em>numpy.ndarray</em>) – 3D array containing positions of body parts over time, where</p></li>
 <li><p><strong>N</strong> (<em>shape is</em>) – </p></li>
-<li><p><strong>mode</strong> (<em>string</em>) – Specifies if <em>all</em> instances of each sliding window get</p></li>
-<li><p><strong>aligned</strong> – </p></li>
-<li><p><strong>center</strong> (<em>or only the</em>) – </p></li>
+<li><p><strong>mode</strong> (<em>string</em>) – Specifies if <em>all</em> instances of each sliding window get aligned, or only the <em>center</em></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -426,20 +422,22 @@ List of scalers per modality.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.utils.kleinberg">
-<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">kleinberg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.718281828459045</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.kleinberg" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">kleinberg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">offsets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.718281828459045</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.kleinberg" title="Permalink to this definition"></a></dt>
 <dd><p>Apply Kleinberg’s algorithm (described in ‘Bursty and Hierarchical Structure in Streams’).</p>
 <p>The algorithm models activity bursts in a time series as an
 infinite hidden Markov model.</p>
 <p>Taken from pybursts (<a class="reference external" href="https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py">https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py</a>)
 and adapted for dependency compatibility reasons.</p>
-<dl class="simple">
-<dt>Input:</dt><dd><p>offsets: a list of time offsets (numeric)
-s: the base of the exponential distribution that is used for modeling
-the event frequencies
-gamma: coefficient for the transition costs between states
-n, T: to have a fixed cost function (not dependent of the given offsets).
-Which is needed if you want to compare bursts for different inputs.
-k: maximum burst level</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>offsets</strong> (<em>list</em>) – a list of time offsets (numeric)</p></li>
+<li><p><strong>s</strong> (<em>float</em>) – the base of the exponential distribution that is used for modeling the event frequencies</p></li>
+<li><p><strong>gamma</strong> (<em>float</em>) – coefficient for the transition costs between states</p></li>
+<li><p><strong>n</strong> – to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.</p></li>
+<li><p><strong>T</strong> – to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.</p></li>
+<li><p><strong>k</strong> – maximum burst level</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -486,7 +484,7 @@ k: maximum burst level</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.utils.rolling_window">
-<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">rolling_window</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">automatic_changepoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed_breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#deepof.utils.rolling_window" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">rolling_window</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">automatic_changepoints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precomputed_breaks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#deepof.utils.rolling_window" title="Permalink to this definition"></a></dt>
 <dd><p>Return a 3D numpy.array with a sliding-window extra dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -494,11 +492,8 @@ k: maximum burst level</p>
 <li><p><strong>a</strong> (<em>np.ndarray</em>) – N (instances) * m (features) shape</p></li>
 <li><p><strong>window_size</strong> (<em>int</em>) – Size of the window to apply</p></li>
 <li><p><strong>window_step</strong> (<em>int</em>) – Step of the window to apply</p></li>
-<li><p><strong>automatic_changepoints</strong> (<em>str</em>) – Changepoint detection algorithm to apply.</p></li>
-<li><p><strong>False</strong> (<em>If</em>) – </p></li>
-<li><p><strong>window.</strong> (<em>applies a fixed sliding</em>) – </p></li>
-<li><p><strong>precomputed_breaks</strong> (<em>np.ndarray</em>) – Precomputed breaks to use, bypassing the changepoint detection algorithm.</p></li>
-<li><p><strong>default</strong> (<em>None by</em>) – </p></li>
+<li><p><strong>automatic_changepoints</strong> (<em>str</em>) – Changepoint detection algorithm to apply. If False, applies a fixed sliding window.</p></li>
+<li><p><strong>precomputed_breaks</strong> (<em>np.ndarray</em>) – Precomputed breaks to use, bypassing the changepoint detection algorithm. None by default (break points are computed).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -522,19 +517,9 @@ of the labels.</p>
 <li><p><strong>table_dict</strong> (<em>deepof.data.table_dict</em>) – table_dict with all experiments.</p></li>
 <li><p><strong>to_rupture</strong> (<em>np.ndarray</em>) – Array with dataset to rupture.</p></li>
 <li><p><strong>rupture_indices</strong> (<em>list</em>) – Indices of tables to rupture. Useful to select training and test sets.</p></li>
-<li><p><strong>automatic_changepoints</strong> (<em>str</em>) – Rupture method to apply.</p></li>
-<li><p><strong>false</strong> (<em>If</em>) – </p></li>
-<li><p><strong>obtained.</strong> (<em>a sliding window</em><em> of </em><em>window_length * window_size is</em>) – </p></li>
-<li><p><strong>&quot;l1&quot;</strong> (<em>If one of</em>) – </p></li>
-<li><p><strong>&quot;rbf&quot;</strong> (<em>&quot;l2&quot; or</em>) – </p></li>
-<li><p><strong>applied</strong> (<em>different automatic change point detection algorithms are</em>) – </p></li>
-<li><p><strong>experiment.</strong> (<em>on each independent</em>) – </p></li>
-<li><p><strong>window_size</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the length of the sliding window.</p></li>
-<li><p><strong>not</strong> (<em>If</em>) – </p></li>
-<li><p><strong>breaks.</strong> (<em>it determines the minimum step size</em><em> of </em><em>the obtained time series</em>) – </p></li>
-<li><p><strong>window_step</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the stride of the sliding window.</p></li>
-<li><p><strong>not</strong> – </p></li>
-<li><p><strong>breaks.</strong> – </p></li>
+<li><p><strong>automatic_changepoints</strong> (<em>str</em>) – Rupture method to apply. If false, a sliding window of window_length * window_size is obtained. If one of “l1”, “l2” or “rbf”, different automatic change point detection algorithms are applied on each independent experiment.</p></li>
+<li><p><strong>window_size</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the length of the sliding window. If not, it determines the minimum size of the obtained time series breaks.</p></li>
+<li><p><strong>window_step</strong> (<em>int</em>) – If automatic_changepoints is False, specifies the stride of the sliding window. If not, it determines the minimum step size of the obtained time series breaks.</p></li>
 <li><p><strong>precomputed_breaks</strong> (<em>dict</em>) – If provided, changepoint detection is prevented, and provided breaks are used instead.</p></li>
 </ul>
 </dd>
@@ -556,11 +541,8 @@ rupture_indices (list): Indices of ruptures.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>series</strong> (<em>numpy.ndarray</em>) – 1D trajectory array with N (instances)</p></li>
-<li><p><strong>alpha</strong> (<em>int</em>) – 0 &lt;= alpha &lt; w_length; indicates the difference between the degree of the polynomial and the window</p></li>
-<li><p><strong>fit</strong> (<em>length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse</em>) – </p></li>
-<li><p><strong>smoothing.</strong> (<em>hence more</em>) – </p></li>
-<li><p><strong>w_length</strong> (<em>int</em>) – Length of the sliding window to which the filter fit. Higher values yield a coarser fit,</p></li>
-<li><p><strong>smoothing.</strong> – </p></li>
+<li><p><strong>alpha</strong> (<em>int</em>) – 0 &lt;= alpha &lt; w_length; indicates the difference between the degree of the polynomial and the window length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse fit, hence more smoothing.</p></li>
+<li><p><strong>w_length</strong> (<em>int</em>) – Length of the sliding window to which the filter fit. Higher values yield a coarser fit, hence more smoothing.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -707,9 +689,6 @@ and/or 2) the deviation from a moving average model is greater than n_std.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>1D-array containing information about the arena.
-“circular-autodetect” (3-element-array) -&gt; x-y position of the center and the radius.
-“circular-manual” (3-element-array) -&gt; x-y position of the center and the radius.
-“polygon-manual” (2n-element-array) -&gt; x-y position of each of the n the vertices of the polygon.
 h (int): Height of the video in pixels.
 w (int): Width of the video in pixels.</p>
 </dd>
@@ -749,10 +728,10 @@ w (int): Width of the video in pixels.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>video_path</strong> – Path to the video file.</p></li>
-<li><p><strong>arena_type</strong> – Type of arena to be used. Must be one of the following: “circular-manual”, “polygon-manual”.</p></li>
-<li><p><strong>video_index</strong> – Index of the current video in the list of videos.</p></li>
-<li><p><strong>videos</strong> – List of videos to be processed.</p></li>
+<li><p><strong>video_path</strong> (<em>str</em>) – Path to the video file.</p></li>
+<li><p><strong>arena_type</strong> (<em>str</em>) – Type of arena to be used. Must be one of the following: “circular-manual”, “polygon-manual”.</p></li>
+<li><p><strong>video_index</strong> (<em>int</em>) – Index of the current video in the list of videos.</p></li>
+<li><p><strong>videos</strong> (<em>list</em>) – List of videos to be processed.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -772,7 +751,7 @@ int: Width of the video.</p>
 <dd><p>Fit an ellipse to the provided polygon.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>polygon</strong> – List of (x,y) coordinates of the corners of the polygon.</p>
+<dd class="field-odd"><p><strong>polygon</strong> (<em>list</em>) – List of (x,y) coordinates of the corners of the polygon.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>(x,y) coordinates of the center of the ellipse.
@@ -814,8 +793,7 @@ of the arena, and a third value indicating the radius.</p>
 <li><p><strong>window</strong> (<em>int</em>) – Number of frames to average over.</p></li>
 <li><p><strong>rounds</strong> (<em>int</em>) – Float rounding decimals.</p></li>
 <li><p><strong>deriv</strong> (<em>int</em>) – Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.</p></li>
-<li><p><strong>center</strong> (<em>str</em>) – For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames</p></li>
-<li><p><strong>part.</strong> (<em>to a specific body</em>) – </p></li>
+<li><p><strong>center</strong> (<em>str</em>) – For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames to a specific body part.</p></li>
 <li><p><strong>shift</strong> (<em>int</em>) – Window shift for rolling speed calculation.</p></li>
 <li><p><strong>typ</strong> (<em>str</em>) – Type of dataset. Intended for internal usage only.</p></li>
 </ul>
@@ -862,11 +840,7 @@ consequent derivatives.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>x</strong> (<em>numpy.ndarray</em>) – Data matrix to train the model</p></li>
 <li><p><strong>n_components</strong> (<em>int</em>) – Number of Gaussian components to use</p></li>
-<li><p><strong>cv_type</strong> (<em>str</em>) – Covariance matrix type to use.</p></li>
-<li><p><strong>&quot;spherical&quot;</strong> (<em>Must be one of</em>) – </p></li>
-<li><p><strong>&quot;tied&quot;</strong> – </p></li>
-<li><p><strong>&quot;diag&quot;</strong> – </p></li>
-<li><p><strong>&quot;full&quot;.</strong> – </p></li>
+<li><p><strong>cv_type</strong> (<em>str</em>) – Covariance matrix type to use. Must be one of “spherical”, “tied”, “diag”, “full”.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -898,11 +872,9 @@ consequent derivatives.</p>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>All recorded BIC values for all attempted parameter combinations
-(useful for plotting)
-- m_bic(list): All minimum BIC values recorded throughout the process
-(useful for plottinh)
-- best_bic_gmm (sklearn.GMM): Unfitted version of the best found model</p>
+<dd class="field-even"><p>All recorded BIC values for all attempted parameter combinations (useful for plotting).
+- m_bic(list): All minimum BIC values recorded throughout the process (useful for plottinh).
+- best_bic_gmm (sklearn.GMM): Unfitted version of the best found model.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
@@ -928,8 +900,7 @@ consequent derivatives.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Transition matrix as numpy.ndarray or networkx.DiGraph.
-autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation
-values on cluster assignment.</p>
+autocorr (numpy.array): If autocorrelation is True, returns a numpy.ndarray with all autocorrelation values on cluster assignment.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>trans_normed (numpy.ndarray / networkx.Graph)</p>
