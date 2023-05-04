@@ -9,6 +9,7 @@
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
       <link rel="stylesheet" href="../_static/thebelab.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
     <link rel="shortcut icon" href="../_static/deepof.ico"/>
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -372,15 +373,6 @@ div.rendered_html tbody tr:hover {
 </style>
 <section id="Formatting-your-data:-feature-extraction-from-motion-tracking-output">
 <h1>Formatting your data: feature extraction from motion tracking output<a class="headerlink" href="#Formatting-your-data:-feature-extraction-from-motion-tracking-output" title="Permalink to this heading"></a></h1>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
-<span class="o">%</span><span class="k">autoreload</span> 2
-</pre></div>
-</div>
-</div>
 <p><a class="reference external" href="https://colab.research.google.com/github/lucasmiranda42/deepof/blob/master/docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" /></a></p>
 <section id="What-we’ll-cover:">
 <h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
@@ -391,7 +383,7 @@ div.rendered_html tbody tr:hover {
 <li><p>Exploratory visualizations: heatmaps and processed animations.</p></li>
 </ul>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
@@ -405,8 +397,8 @@ div.rendered_html tbody tr:hover {
 </div>
 </div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, pandas to load data frames, and the data entry API within DeepOF, located in deepof.data</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
@@ -416,17 +408,9 @@ div.rendered_html tbody tr:hover {
 </pre></div>
 </div>
 </div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
-</pre></div></div>
-</div>
 <p>We’ll also need some plotting gear:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.visuals</span>
@@ -447,20 +431,20 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 </ul>
 <p>The dataset used in this tutorial is a subset of the social interaction (SI) dataset used in DeepOF’s original paper. It contains six 10-minute-long videos with two animals (a C57Bl6 and a CD1) tracked in a round arena. Three of the C57Bl6 mice have been exposed to chronic social defeat stress (CSDS).</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
-                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Desktop/&quot;</span><span class="p">),</span>
-                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Downloads/Veronika/Videos/&quot;</span><span class="p">),</span>
-                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;../../../../../Downloads/Veronika/Tables/&quot;</span><span class="p">),</span>
-                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;Veronika_debug&quot;</span><span class="p">,</span>
-                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;polygonal-manual&quot;</span><span class="p">,</span>
-                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">],</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files&quot;</span><span class="p">),</span>
+                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Videos/&quot;</span><span class="p">),</span>
+                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Tables/&quot;</span><span class="p">),</span>
+                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;tutorial_project&quot;</span><span class="p">,</span>
+                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;circular-autodetect&quot;</span><span class="p">,</span>
+                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;W&quot;</span><span class="p">],</span>
                 <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;.mp4&quot;</span><span class="p">,</span>
-                <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
                 <span class="n">exclude_bodyparts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Tail_1&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_2&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_tip&quot;</span><span class="p">],</span>
-                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
+                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
                 <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                 <span class="n">exp_conditions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span>
@@ -479,222 +463,13 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 </ul>
 <p>For more details, feel free to visit the full API reference.</p>
 <p>Let’s then create our first project, by running the <code class="docutils literal notranslate"><span class="pre">.create()</span></code> method in our newly created object:</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </pre></div>
 </div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-Setting up project directories...
-Loading trajectories...
-Smoothing trajectories...
-Interpolating outliers...
-Iterative imputation of ocluded bodyparts...
-</pre></div></div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-[IterativeImputer] Early stopping criterion not reached.
-No accelerated colorspace conversion found from yuv420p to rgb24.
- (repeated 663 more times)
-No accelerated colorspace conversion found from yuv420p to rgb24.
-No accelerated colorspace conversion found from yuv420p to rgb24.
-No accelerated colorspace conversion found from yuv420p to rgb24.
-</pre></div></div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-Detecting arena...
-Computing distances...
-Computing angles...
-Computing areas...
-Done!
-</pre></div></div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_quality</span><span class="p">()[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x2f813ee50&gt;]
-</pre></div></div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_16_1.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_16_1.png" />
-</div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_coords</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-{&#39;short_49+51_HFD&#39;:                       0_Center             0_Left_bhip              \
-                              x           y           x           y
- 00:00:00            273.822734  229.563703  276.485967  237.500175
- 00:00:00.066629650  273.822734  229.563703  276.485967  237.500175
- 00:00:00.133259300  273.822734  229.563703  276.485967  237.500175
- 00:00:00.199888950  273.822734  229.563703  276.485967  237.500175
- 00:00:00.266518600  273.822734  229.563703  276.485967  237.500175
- ...                        ...         ...         ...         ...
- 00:01:59.666851749  165.480998  342.408999  199.296997  323.783998
- 00:01:59.733481399  165.508998  342.359998  199.269997  323.730998
- 00:01:59.800111049  155.875996  345.957997  187.769992  330.562995
- 00:01:59.866740699  155.875996  345.957997  187.769992  330.562995
- 00:01:59.933370349  155.875996  345.957997  187.769992  330.562995
-
-                     0_Left_ear             0_Left_fhip              \
-                              x           y           x           y
- 00:00:00            265.780298  226.784523  267.746368  227.323413
- 00:00:00.066629650  265.780298  226.784523  267.746368  227.323413
- 00:00:00.133259300  265.780298  226.784523  267.746368  227.323413
- 00:00:00.199888950  265.780298  226.784523  267.746368  227.323413
- 00:00:00.266518600  265.780298  226.784523  267.746368  227.323413
- ...                        ...         ...         ...         ...
- 00:01:59.666851749  153.101000  394.678001  169.142995  380.319998
- 00:01:59.733481399  153.129999  394.670001  169.119994  380.305998
- 00:01:59.800111049  143.654995  398.379002  162.630990  383.877996
- 00:01:59.866740699  143.654995  398.379002  162.630990  383.877996
- 00:01:59.933370349  143.654995  398.379002  162.630990  383.877996
-
-                         0_Nose              ... 1_Right_ear              \
-                              x           y  ...           x           y
- 00:00:00            264.077743  229.099265  ...  295.765515  291.002972
- 00:00:00.066629650  264.077743  229.099265  ...  295.765515  291.002972
- 00:00:00.133259300  264.077743  229.099265  ...  295.765515  291.002972
- 00:00:00.199888950  264.077743  229.099265  ...  295.765515  291.002972
- 00:00:00.266518600  264.077743  229.099265  ...  295.765515  291.002972
- ...                        ...         ...  ...         ...         ...
- 00:01:59.666851749  133.923997  411.044001  ...  296.256776  288.882432
- 00:01:59.733481399  134.068997  411.017001  ...  296.239543  288.880258
- 00:01:59.800111049  125.752989  414.282002  ...  295.648320  288.325880
- 00:01:59.866740699  125.752989  414.282002  ...  295.648320  288.325880
- 00:01:59.933370349  125.752989  414.282002  ...  295.648320  288.325880
-
-                    1_Right_fhip               1_Spine_1              \
-                               x           y           x           y
- 00:00:00             290.248332  286.885705  296.105798  281.118480
- 00:00:00.066629650   290.248332  286.885705  296.105798  281.118480
- 00:00:00.133259300   290.248332  286.885705  296.105798  281.118480
- 00:00:00.199888950   290.248332  286.885705  296.105798  281.118480
- 00:00:00.266518600   290.248332  286.885705  296.105798  281.118480
- ...                         ...         ...         ...         ...
- 00:01:59.666851749   290.049863  284.751645  293.163093  281.174475
- 00:01:59.733481399   290.026731  284.739534  293.165345  281.169152
- 00:01:59.800111049   289.790880  284.072332  292.524366  280.364886
- 00:01:59.866740699   289.790880  284.072332  292.524366  280.364886
- 00:01:59.933370349   289.790880  284.072332  292.524366  280.364886
-
-                      1_Spine_2             1_Tail_base
-                              x           y           x           y
- 00:00:00            286.920161  271.174833  285.515194  272.208189
- 00:00:00.066629650  286.920161  271.174833  285.515194  272.208189
- 00:00:00.133259300  286.920161  271.174833  285.515194  272.208189
- 00:00:00.199888950  286.920161  271.174833  285.515194  272.208189
- 00:00:00.266518600  286.920161  271.174833  285.515194  272.208189
- ...                        ...         ...         ...         ...
- 00:01:59.666851749  286.214627  274.101377  288.574965  276.290297
- 00:01:59.733481399  286.234537  274.117807  288.578998  276.360892
- 00:01:59.800111049  286.354078  273.509554  289.432576  276.058061
- 00:01:59.866740699  286.354078  273.509554  289.432576  276.058061
- 00:01:59.933370349  286.354078  273.509554  289.432576  276.058061
-
- [1801 rows x 44 columns]}
-</pre></div></div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sa</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-  0%|                                                                                                                                                                                  | 0/1 [00:00&lt;?, ?it/s]Trying to unpickle estimator StandardScaler from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator NearestNeighbors from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator DummyClassifier from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator DecisionTreeRegressor from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator GradientBoostingClassifier from version 1.2.0 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator StandardScaler from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator DummyClassifier from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator DecisionTreeRegressor from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-No accelerated colorspace conversion found from yuv420p to rgb24.
- (repeated 437 more times)
-Trying to unpickle estimator GradientBoostingClassifier from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-Trying to unpickle estimator Pipeline from version 1.0.1 when using version 1.2.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
-https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
-100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:01&lt;00:00,  1.36s/it]
-</pre></div></div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sa</span><span class="p">[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">][</span><span class="s2">&quot;nose2nose&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">sa</span><span class="p">[</span><span class="s1">&#39;short_49+51_HFD&#39;</span><span class="p">][</span><span class="s2">&quot;nose2nose&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">]</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-00:00:39.911160466    1.0
-00:00:39.977790116    1.0
-00:00:40.044419766    1.0
-00:00:40.111049416    1.0
-00:01:11.960022209    1.0
-00:01:12.026651860    1.0
-Name: nose2nose, dtype: float64
-</pre></div></div>
 </div>
 <p>As you will see, this organizes all required file into a folder in the specified path. Moreover, some processing steps are computed on the go, such as distances, angles and areas. This makes it easier for DeepOF to load all required features later on, without the need to compute them every time.</p>
 <p>In addition, if “circular-manual” or “polygonal-manual” were selected in the ‘arena’ parameter, a GUI will pop up in the “detecting arena” step.</p>
@@ -3103,7 +2878,7 @@ The new filtered dataset has only 1 video
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_63_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_63_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_58_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_58_0.png" />
 </div>
 </div>
 <p>It seems stressed animals spend more time closer to the walls of the arena, and less time in the center! For details on how deepof.visuals.plot_heatmap() works, feel free to check the full API reference or the function docstring.</p>

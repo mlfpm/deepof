@@ -9,6 +9,7 @@
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
       <link rel="stylesheet" href="../_static/thebelab.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
     <link rel="shortcut icon" href="../_static/deepof.ico"/>
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -393,7 +394,7 @@ div.rendered_html tbody tr:hover {
 <li><p>Exporting cluster video snippets.</p></li>
 </ul>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
@@ -408,7 +409,7 @@ div.rendered_html tbody tr:hover {
 </div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, and the data entry API within DeepOF, located in deepof.data. This time we’ll add copy and numpy to the mix.</p>
 <p><strong>NOTE</strong>: If running this notebook in colab, we strongly recommend using a GPU environment. Go to ‘Runtime’ -&gt; ‘Change runtime type’, and select GPU under ‘Hardware accelerator’.</p>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
@@ -419,6 +420,14 @@ div.rendered_html tbody tr:hover {
 <span class="kn">import</span> <span class="nn">deepof.data</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+</pre></div></div>
 </div>
 <p>We’ll also need some plotting gear:</p>
 <div class="nbinput nblast docutils container">
@@ -441,7 +450,7 @@ underlying patterns and behaviors of your mice, which can ultimately help you ma
 </section>
 <section id="Load-your-previous-project">
 <h3>Load your previous project<a class="headerlink" href="#Load-your-previous-project" title="Permalink to this heading"></a></h3>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
@@ -449,6 +458,34 @@ underlying patterns and behaviors of your mice, which can ultimately help you ma
 <span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">load_project</span><span class="p">(</span><span class="s2">&quot;./tutorial_files/tutorial_project&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[4], line 2</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span style="color: rgb(95,135,135)"># Load a previously saved project</span>
+<span class="ansi-green-fg">----&gt; 2</span> my_deepof_project <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">deepof</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">load_project</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">./tutorial_files/tutorial_project</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">~/PycharmProjects/deepof/deepof/data.py:78</span>, in <span class="ansi-cyan-fg">load_project</span><span class="ansi-blue-fg">(project_path)</span>
+<span class="ansi-green-intense-fg ansi-bold">     68</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">load_project</span>(project_path: <span style="color: rgb(0,135,0)">str</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> coordinates:  <span style="color: rgb(95,135,135)"># pragma: no cover</span>
+<span class="ansi-green-intense-fg ansi-bold">     69</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Load a pre-saved pickled Coordinates object.</span>
+<span class="ansi-green-intense-fg ansi-bold">     70</span>
+<span class="ansi-green-intense-fg ansi-bold">     71</span> <span style="color: rgb(175,0,0)">    Args:</span>
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">     76</span>
+<span class="ansi-green-intense-fg ansi-bold">     77</span> <span style="color: rgb(175,0,0)">    &#34;&#34;&#34;</span>
+<span class="ansi-green-fg">---&gt; 78</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     79</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">os</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">path</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">join</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">project_path</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">Coordinates</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">deepof_coordinates.pkl</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">rb</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     80</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> handle:
+<span class="ansi-green-intense-fg ansi-bold">     81</span>         coordinates <span style="color: rgb(98,98,98)">=</span> pickle<span style="color: rgb(98,98,98)">.</span>load(handle)
+<span class="ansi-green-intense-fg ansi-bold">     83</span>     coordinates<span style="color: rgb(98,98,98)">.</span>_project_path <span style="color: rgb(98,98,98)">=</span> os<span style="color: rgb(98,98,98)">.</span>path<span style="color: rgb(98,98,98)">.</span>split(project_path)[<span style="color: rgb(98,98,98)">0</span>]
+
+<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;./tutorial_files/tutorial_project/Coordinates/deepof_coordinates.pkl&#39;
+</pre></div></div>
 </div>
 </section>
 <section id="Processing-time-series-for-unsupervised-learning">
@@ -679,9 +716,22 @@ structure is imposed in the latent space that forms in between, so that embeddin
 </pre></div>
 </div>
 </div>
-<p>As the training set in this tutorial is quite small, we’ll load embeddings from a model trained on the full dataset of 53 videos for the rest of the presented analyses. Feel free to try the remaining cells with your trained model by skipping the cell below, though!</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[67]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span>
+    <span class="s2">&quot;../../../../../Downloads/deepof_coo&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+    <span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
+
+<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span>
+</pre></div>
+</div>
+</div>
+<p>As the training set in this tutorial is quite small, we’ll load embeddings from a model trained on the full dataset of 53 videos for the rest of the presented analyses. Feel free to try the remaining cells with your trained model by skipping the cell below, though!</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load results</span>
@@ -695,6 +745,56 @@ structure is imposed in the latent space that forms in between, so that embeddin
     <span class="n">embeddings</span><span class="p">,</span> <span class="n">soft_counts</span><span class="p">,</span> <span class="n">breaks</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[6], line 2</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span style="color: rgb(95,135,135)"># Load results</span>
+<span class="ansi-green-fg">----&gt; 2</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">./tutorial_files/Trained_weights/deepof_coordinates.pkl</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">rb</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> handle:
+<span class="ansi-green-intense-fg ansi-bold">      5</span>     my_deepof_project <span style="color: rgb(98,98,98)">=</span> pickle<span style="color: rgb(98,98,98)">.</span>load(handle)
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span style="color: rgb(0,135,0)">open</span>(
+<span class="ansi-green-intense-fg ansi-bold">      7</span>     <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">./tutorial_files/Trained_weights/deepof_unsupervised_sa_VaDE_encoder_recurrent_encodings_input=graph_k=10_latdim=8_changepoints_False_kmeans_loss=0.0.pkl</span><span style="color: rgb(175,0,0)">&#34;</span>, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">rb</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> ) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> handle:
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/deepof-qxwF8hwh-py3.9/lib/python3.9/site-packages/IPython/core/interactiveshell.py:282</span>, in <span class="ansi-cyan-fg">_modified_open</span><span class="ansi-blue-fg">(file, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    275</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> file <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> {<span style="color: rgb(98,98,98)">0</span>, <span style="color: rgb(98,98,98)">1</span>, <span style="color: rgb(98,98,98)">2</span>}:
+<span class="ansi-green-intense-fg ansi-bold">    276</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(
+<span class="ansi-green-intense-fg ansi-bold">    277</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">IPython won</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">t let you open fd=</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>file<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)"> by default </span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    278</span>         <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">as it is likely to crash IPython. If you know what you are doing, </span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    279</span>         <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">you can use builtins</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)"> open.</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    280</span>     )
+<span class="ansi-green-fg">--&gt; 282</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">io_open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">file</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">args</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+
+<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;./tutorial_files/Trained_weights/deepof_coordinates.pkl&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[5], line 1</span>
+<span class="ansi-green-fg">----&gt; 1</span> <span class="ansi-yellow-bg">my_deepof_project</span><span style="color: rgb(98,98,98)">.</span>get_exp_conditions
+
+<span class="ansi-red-fg">NameError</span>: name &#39;my_deepof_project&#39; is not defined
+</pre></div></div>
 </div>
 <p>So we finally have our trained embeddings, and our data has been clustered. Let’s see what sort of tools DeepOF offers to analyze the results, then!</p>
 </section>
@@ -750,7 +850,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_47_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_47_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_49_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_49_1.png" />
 </div>
 </div>
 <p>The figure on the left now shows time points in a UMAP projection of the latent space, where colors indicate different clusters. The figure on the right aggregates all time points in a given animal as a vector of counts per behavior (indicating how much time each animal spends on each cluster). We can already see a clear separation between conditions, in a fully unsupervised way!</p>
@@ -776,7 +876,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_51_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_51_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_53_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_53_0.png" />
 </div>
 </div>
 </section>
@@ -797,7 +897,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
     <span class="n">breaks</span><span class="p">,</span>
     <span class="s2">&quot;CSDS&quot;</span><span class="p">,</span>
     <span class="n">distance_metric</span><span class="o">=</span><span class="s2">&quot;wasserstein&quot;</span><span class="p">,</span>
-    <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
@@ -816,7 +916,7 @@ Found an optimal_bin at 126 seconds
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_54_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_54_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_1.png" />
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -875,7 +975,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_58_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_58_0.png" />
 </div>
 </div>
 <p>Where we clearly see that the overlap between the distributions is greater in the figure on the right (and therefore their Wasserstein distance lower).</p>
@@ -932,7 +1032,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_60_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_60_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_62_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_62_0.png" />
 </div>
 </div>
 <p>We can see how, as expected, there are many more differences in the first time bin than in the entire time series. Moreover, we see a few clusters (1 and 5, for example) that are highly enriched in stressed animals in the first time bin, but not different at all when looking at the whole time series. We’ll visualize what these are at the end of this tutorial.</p>
@@ -949,9 +1049,9 @@ mice to the novel environment in which they were introduced (see the main paper 
 <span class="c1"># Transition matrices and heatmaps</span>
 <span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_transitions</span><span class="p">(</span>
     <span class="n">my_deepof_project</span><span class="p">,</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">soft_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">breaks</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
+    <span class="n">embeddings</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="n">soft_counts</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="n">breaks</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
    <span class="c1"># cluster=False,</span>
     <span class="n">visualization</span><span class="o">=</span><span class="s2">&quot;heatmaps&quot;</span><span class="p">,</span>
     <span class="n">bin_size</span><span class="o">=</span><span class="mi">125</span><span class="p">,</span>
@@ -969,7 +1069,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_64_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_64_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" />
 </div>
 </div>
 <p>Here we can see heatmaps depicting how common transitions between components are. Rows and columns are clustered, to put clusters with common transitions between them together. As it may be hard to retrieve patterns from heatmaps visualized this way, the function can also represent them as graphs, where more common transitions are depicted with thicker edges:</p>
@@ -981,9 +1081,9 @@ mice to the novel environment in which they were introduced (see the main paper 
 
 <span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">plot_transitions</span><span class="p">(</span>
     <span class="n">my_deepof_project</span><span class="p">,</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">soft_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
-    <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">val</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">breaks</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
+    <span class="n">embeddings</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="n">soft_counts</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="n">breaks</span><span class="o">.</span><span class="n">filter_videos</span><span class="p">(</span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_exp_conditions</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
     <span class="n">visualization</span><span class="o">=</span><span class="s2">&quot;networks&quot;</span><span class="p">,</span>
     <span class="n">silence_diagonal</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">bin_size</span><span class="o">=</span><span class="mi">125</span><span class="p">,</span>
@@ -1001,7 +1101,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_68_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_68_0.png" />
 </div>
 </div>
 <p>We can see how clusters 2, 3, 4, 7, and 8 form a tight cluster for non-stressed animals, whereas 0, 1, 5, and 9 do so for stressed animals. Interestingly, cluster 6 seems to act like a bridge in both cases. This means that transitions between clusters enriched in a certain condition are indeed more common than transitions between clusters enriched across conditions.</p>
@@ -1029,7 +1129,7 @@ analysis is <code class="docutils literal notranslate"><span class="pre">deepof.
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_69_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_69_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_71_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_71_0.png" />
 </div>
 </div>
 <p>Here we see that behavioral entropy is significantly lower in stressed animals with respect to non-stressed ones! This could be explained by the richer behavioral repertoire that non-stressed animals explore. Upon visualizing the attached videos, one can see that much of the time stressed animals are showing behaviors closer to freezing, while non-stressed animals tend to transition between different exploratory behaviors.</p>
@@ -1503,7 +1603,7 @@ iteritems is deprecated and will be removed in a future version. Use .items inst
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_84_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_84_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_86_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_86_1.png" />
 </div>
 </div>
 <p>The confusion matrix on the left shows how the proportion of allocations the model we just trained made in the validation set (all folds are aggregated). The diagonal corresponds then to correct assignments, whereas common errors are shown as off-diagonal high values. This way we can see there are some miss assignments that are more common than others: although the diagonal elements are the highest for all rows, cluster 4 is often confused with cluster 8, for example. This can be interpreted as
@@ -1549,7 +1649,7 @@ a measure of similarity behind the underlying behaviors.</p>
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_90_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_90_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_0.png" />
 </div>
 </div>
 <p>The <em>x</em> axis in the figure above depicts the average absolute SHAP values, a measure of feature importance. The <em>y</em> axis shows the names of the top 8 features the model uses to detect across all clusters. Here, we’re looking at <strong>global</strong> feature importance for the model; even though this plot is not very informative regarding individual clusters, we can indeed interpret that the most important features overall are speed, spine stretch (distance between the center of the animal and spine 1 — see
@@ -1580,7 +1680,7 @@ No data for colormapping provided via &#39;c&#39;. Parameters &#39;vmin&#39;, &#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_94_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_94_1.png" />
 </div>
 </div>
 <p>Selecting any cluster in the ‘cluster’ parameter will render a different kind of plot. What we’re looking now is called a bee swarm plot, and it’s one of the main visualizations the SHAP package has to offer. The y-axis is the same as before (but it’s now based on feature importance to detect the cluster that was specifically selected). The <em>x</em> axis, however, shows the raw SHAP values instead of the global absolute value. Positive values indicate an association with the model selecting this
@@ -3336,7 +3436,7 @@ The legend below shows the experiment from which each sample was taken.</p>
 </pre></div>
 </div>
 </div>
-<p><img alt="a71e7611a9a14b4185c272143a875020" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
+<p><img alt="75ece2411715423ba7e3cc517b995c1b" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
 </section>
 <section id="Wrapping-up">
 <h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>
