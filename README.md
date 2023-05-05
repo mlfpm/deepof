@@ -111,7 +111,7 @@ The former returns a ```deepof.data.TableDict``` object, with a pandas.DataFrame
 annotations. The latter is a bit more complicated: it returns a series of objects that depend on the model selected (we 
 offer three flavours of deep clustering models), and allow for further analysis comparing cluster expression and dynamics.
 
-That's it for this (very basic) introduction. Check out the tutorials [full documentation](https://deepof.readthedocs.io/en/latest/index.html) for details!
+That's it for this (very basic) introduction. Check out the tutorials and [full documentation](https://deepof.readthedocs.io/en/latest/index.html) for details!
 
 ---
 ### Issues

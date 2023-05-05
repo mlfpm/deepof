@@ -288,7 +288,7 @@ class Project:
         """Bool. Toggles angle computation. True by default. If turned off, enhances performance for big datasets."""
         return self._angles
 
-    def get_arena(self, tables, verbose=False) -> np.array:
+    def get_arena(self, tables: list, verbose: bool = False) -> np.array:
         """Return the arena as recognised from the videos.
 
         Args:
@@ -302,97 +302,14 @@ class Project:
         if verbose:
             print("Detecting arena...")
 
-        scales = []
-        arena_params = []
-        video_resolution = []
-
-        def get_first_length(arena_corners):
-            return math.dist(arena_corners[0], arena_corners[1])
-
-        if self.arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
-
-            for i, video_path in enumerate(self.videos):
-                arena_corners, h, w = deepof.utils.extract_polygonal_arena_coordinates(
-                    os.path.join(
-                        self.project_path, self.project_name, "Videos", video_path
-                    ),
-                    self.arena,
-                    i,
-                    self.videos,
-                )
-
-                cur_scales = [
-                    *np.mean(arena_corners, axis=0).astype(int),
-                    get_first_length(arena_corners),
-                    self.arena_dims,
-                ]
-
-                cur_arena_params = arena_corners
-
-                if self.arena == "circular-manual":
-                    cur_arena_params = deepof.utils.fit_ellipse_to_polygon(
-                        cur_arena_params
-                    )
-
-                    scales.append(
-                        list(
-                            np.array(
-                                [
-                                    cur_arena_params[0][0],
-                                    cur_arena_params[0][1],
-                                    np.mean(
-                                        [cur_arena_params[1][0], cur_arena_params[1][1]]
-                                    )
-                                    * 2,
-                                ]
-                            )
-                        )
-                        + [self.arena_dims]
-                    )
-                else:
-                    scales.append(cur_scales)
-
-                arena_params.append(cur_arena_params)
-                video_resolution.append((h, w))
-
-        elif self.arena in ["circular-autodetect"]:
-
-            for vid_index, _ in enumerate(self.videos):
-                ellipse, h, w = deepof.utils.automatically_recognize_arena(
-                    videos=self.videos,
-                    tables=tables,
-                    vid_index=vid_index,
-                    path=self.video_path,
-                    arena_type=self.arena,
-                )
-
-                # scales contains the coordinates of the center of the arena,
-                # the absolute diameter measured from the video in pixels, and
-                # the provided diameter in mm (1 -default- equals not provided)
-                scales.append(
-                    list(
-                        np.array(
-                            [
-                                ellipse[0][0],
-                                ellipse[0][1],
-                                np.mean([ellipse[1][0], ellipse[1][1]]) * 2,
-                            ]
-                        )
-                    )
-                    + [self.arena_dims]
-                )
-                arena_params.append(ellipse)
-                video_resolution.append((h, w))
-
-        elif not self.arena:
-            return None, None, None
-
-        else:  # pragma: no cover
-            raise NotImplementedError(
-                "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
-            )
-
-        return np.array(scales), arena_params, video_resolution
+        return deepof.utils.get_arenas(
+            self.arena,
+            self.arena_dims,
+            self.project_path,
+            self.project_name,
+            tables,
+            self.videos,
+        )
 
     def load_tables(self, verbose: bool = True) -> deepof.utils.Tuple:
         """Load videos and tables into dictionaries.
@@ -1298,6 +1215,51 @@ class Coordinates:
     def get_arenas(self):
         """Retrieve all available information associated with the arena."""
         return self._arena, [self._arena_dims], self._scales
+
+    def edit_arenas(
+        self, videos: list = None, arena_type: str = None, verbose: bool = True
+    ):  # pragma: no cover
+        """Tag the arena in the videos.
+
+        Args:
+            videos (list): A list of videos to reannotate. If None, all videos are loaded.
+            arena_type (str): The type of arena to use. Must be one of "polygonal-manual", "circular-manual", or "circular-autodetect". If None (default), the arena type specified when creating the project is used.
+            verbose (bool): Whether to print the progress of the annotation.
+
+        """
+        if videos is None:
+            videos = self._videos
+        if arena_type is None:
+            arena_type = self._arena
+
+        videos_renamed, vid_idcs = [], []
+        for vid_idx, vid_in in enumerate(self._videos):
+            for vid_out in videos:
+                if vid_out in vid_in:
+                    videos_renamed.append(vid_in)
+                    vid_idcs.append(vid_idx)
+
+        if verbose:
+            print(
+                "Editing {} arena{}".format(len(videos), "s" if len(videos) > 1 else "")
+            )
+
+        edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
+            arena=arena_type,
+            arena_dims=self._arena_dims,
+            project_path=self._project_path,
+            project_name=self._project_name,
+            tables=self._tables,
+            videos=videos_renamed,
+        )
+
+        if verbose:
+            print("Done!")
+
+        # update the scales and arena parameters
+        for vid_idx, vid in enumerate(videos):
+            self._scales[vid_idcs[vid_idx]] = edited_scales[vid_idx]
+            self._arena_params[vid_idcs[vid_idx]] = edited_arena_params[vid_idx]
 
     def save(self, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.

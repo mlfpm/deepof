@@ -97,7 +97,7 @@ def recluster(
     max_states: int = 25,
     save: bool = True,
 ):
-    """ Recluster the data using a HMM-based approach. If soft_counts is provided, the model will use the soft cluster assignments as priors for a semi-supervised HMM.
+    """Recluster the data using a HMM-based approach. If soft_counts is provided, the model will use the soft cluster assignments as priors for a semi-supervised HMM.
 
     Args:
         coordinates: deepOF project where the data is stored.

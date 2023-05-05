@@ -1024,6 +1024,117 @@ def filter_columns(columns: list, selected_id: str) -> list:
     return columns_to_keep
 
 
+def get_arenas(
+    arena: str,
+    arena_dims: int,
+    project_path: str,
+    project_name: str,
+    tables: dict,
+    videos: list = None,
+):
+    """Extract arena parameters from a project or coordinates object.
+
+    Args:
+        arena (str): Arena type (must be either "polygonal-manual", "circular-manual", or "circular-autodetect").
+        arena_dims (int): Arena dimensions.
+        project_path (str): Path to project.
+        project_name (str): Name of project.
+        tables (dict): List of tables to extract arena parameters from.
+        videos (list): List of videos to extract arena parameters from. Defaults to None (all videos are used).
+
+    Returns:
+        arena_params (list): List of arena parameters.
+
+    """
+    scales = []
+    arena_params = []
+    video_resolution = []
+
+    def get_first_length(arena_corners):
+        return math.dist(arena_corners[0], arena_corners[1])
+
+    if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
+
+        for i, video_path in enumerate(videos):
+            arena_corners, h, w = extract_polygonal_arena_coordinates(
+                os.path.join(project_path, project_name, "Videos", video_path),
+                arena,
+                i,
+                videos,
+            )
+
+            cur_scales = [
+                *np.mean(arena_corners, axis=0).astype(int),
+                get_first_length(arena_corners),
+                arena_dims,
+            ]
+
+            cur_arena_params = arena_corners
+
+            if arena == "circular-manual":
+                cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
+
+                scales.append(
+                    list(
+                        np.array(
+                            [
+                                cur_arena_params[0][0],
+                                cur_arena_params[0][1],
+                                np.mean(
+                                    [cur_arena_params[1][0], cur_arena_params[1][1]]
+                                )
+                                * 2,
+                            ]
+                        )
+                    )
+                    + [arena_dims]
+                )
+            else:
+                scales.append(cur_scales)
+
+            arena_params.append(cur_arena_params)
+            video_resolution.append((h, w))
+
+    elif arena in ["circular-autodetect"]:
+
+        for vid_index, _ in enumerate(videos):
+            ellipse, h, w = automatically_recognize_arena(
+                videos=videos,
+                tables=tables,
+                vid_index=vid_index,
+                path=os.path.join(project_path, project_name, "Videos"),
+                arena_type=arena,
+            )
+
+            # scales contains the coordinates of the center of the arena,
+            # the absolute diameter measured from the video in pixels, and
+            # the provided diameter in mm (1 -default- equals not provided)
+            scales.append(
+                list(
+                    np.array(
+                        [
+                            ellipse[0][0],
+                            ellipse[0][1],
+                            np.mean([ellipse[1][0], ellipse[1][1]]) * 2,
+                        ]
+                    )
+                )
+                + [arena_dims]
+            )
+            arena_params.append(ellipse)
+            video_resolution.append((h, w))
+
+    elif not arena:
+        return None, None, None
+
+    else:  # pragma: no cover
+        raise NotImplementedError(
+            "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
+        )
+
+    return np.array(scales), arena_params, video_resolution
+
+
 # noinspection PyUnboundLocalVariable
 def automatically_recognize_arena(
     videos: list,
