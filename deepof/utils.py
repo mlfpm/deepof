@@ -1165,7 +1165,7 @@ def automatically_recognize_arena(
     """
     # "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
     # "circular-manual" (3-element-array) -> x-y position of the center and the radius.
-    # "polygon-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
+    # "polygonal-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
 
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 

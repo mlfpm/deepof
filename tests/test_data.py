@@ -148,6 +148,7 @@ def test_get_distances(nodes, ego):
         video_format=".mp4",
         table_format=".h5",
     )
+    prun.create(force=True)
 
     tables, _ = prun.load_tables(verbose=True)
     prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
