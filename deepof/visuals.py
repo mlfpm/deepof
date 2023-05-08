@@ -461,7 +461,7 @@ def plot_gantt(
         behavior_ticks = np.array(
             [
                 f"Cluster {cluster}"
-                for cluster in range(gantt.shape[0])
+                for cluster in range(n_features)
                 if behaviors_to_plot is None or cluster in behaviors_to_plot
             ]
         )
@@ -471,6 +471,7 @@ def plot_gantt(
         )
 
     plt.xticks([])
+
     plt.yticks(
         np.array(range(gantt.shape[0])) + 0.5,
         # Concatenate cluster IDs and checkpoint names if they exist
@@ -527,7 +528,7 @@ def plot_enrichment(
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
-    precomputed: np.ndarray = None,
+    precomputed_bins: np.ndarray = None,
     # Visualization parameters
     exp_condition: str = None,
     exp_condition_order: list = None,
@@ -550,7 +551,7 @@ def plot_enrichment(
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
-        precomputed (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -591,7 +592,7 @@ def plot_enrichment(
         exp_conditions=exp_conditions,
         bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
         bin_index=bin_index,
-        precomputed=precomputed,
+        precomputed=precomputed_bins,
         normalize=normalize,
     )
 
@@ -647,6 +648,14 @@ def plot_enrichment(
             .tolist()
         ]
         pairs = [item for sublist in pairs for item in sublist]
+
+        # Remove elements from pairs if clusters are not present in the enrichment data frame
+        pairs = [
+            p
+            for p in pairs
+            if p[0][0] in enrichment["cluster"].values
+            and p[1][0] in enrichment["cluster"].values
+        ]
 
         annotator = Annotator(
             ax,
@@ -984,6 +993,7 @@ def _filter_embeddings(
     exp_condition,
     bin_size,
     bin_index,
+    precomputed_bins,
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
     # Get experimental conditions per video
@@ -1015,7 +1025,15 @@ def _filter_embeddings(
         ]
 
     # Restrict embeddings, soft_counts and breaks to the selected time bin
-    if bin_size is not None:
+    if precomputed_bins is not None:
+        embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
+            embeddings,
+            soft_counts,
+            breaks,
+            precomputed=(precomputed_bins == bin_index),
+        )
+
+    elif bin_size is not None:
         if embeddings is not None:
             embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
                 embeddings,
@@ -1059,7 +1077,7 @@ def _filter_embeddings(
 
 
 def plot_normative_log_likelihood(
-    coordinates: coordinates,
+    embeddings: table_dict,
     exp_condition: str,
     embedding_dataset: pd.DataFrame,
     normative_model: str,
@@ -1070,7 +1088,7 @@ def plot_normative_log_likelihood(
     """Plot a bar chart with normative log likelihoods per experimental condition, and compute statistics.
 
     Args:
-        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dictionary containing unsupervised embeddings per animal.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         embedding_dataset (pd.DataFrame): global animal embeddings, alongside their respective experimental conditions
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
@@ -1147,15 +1165,15 @@ def plot_normative_log_likelihood(
     if exp_condition is None:
         exp_conditions = {
             key: val.iloc[:, 0].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
+            for key, val in embeddings._exp_conditions.items()
         }
     else:
         exp_conditions = {
             key: val.loc[:, exp_condition].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
+            for key, val in embeddings._exp_conditions.items()
         }
 
-    embedding_dataset.index = coordinates.get_exp_conditions.keys()
+    embedding_dataset.index = embeddings._exp_conditions.keys()
     embedding_dataset.sort_values(
         "experimental condition",
         key=lambda x: x == normative_model,
@@ -1168,6 +1186,7 @@ def plot_normative_log_likelihood(
         for pair in list(combinations(set(exp_conditions.values()), 2))
         if normative_model in pair
     ]
+
     annotator = Annotator(
         pairs=pairs,
         data=embedding_dataset,
@@ -1195,6 +1214,7 @@ def plot_embeddings(
     # Time selection parameters
     bin_size: int = None,
     bin_index: int = 0,
+    precomputed_bins: np.ndarray = None,
     # Normative modelling
     normative_model: str = None,
     add_stats: str = "Mann-Whitney",
@@ -1224,6 +1244,7 @@ def plot_embeddings(
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (int): bin size for time filtering.
         bin_index (int): index of the bin of size bin_size to select along the time dimension.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
@@ -1249,6 +1270,7 @@ def plot_embeddings(
         exp_condition,
         bin_size,
         bin_index,
+        precomputed_bins,
     )
     show = True
 
@@ -1345,7 +1367,7 @@ def plot_embeddings(
 
         if normative_model:
             embedding_dataset, show, ax = plot_normative_log_likelihood(
-                coordinates,
+                embeddings,
                 exp_condition,
                 embedding_dataset,
                 normative_model,
@@ -2038,7 +2060,6 @@ def plot_shap_swarm_per_cluster(
                 "Figures",
                 "deepof_supervised_cluster_detection_SHAP{}_{}.pdf".format(
                     (f"_{save}" if isinstance(save, str) else ""),
-                    visualization,
                     calendar.timegm(time.gmtime()),
                 ),
             )
