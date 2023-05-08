@@ -376,89 +376,14 @@ if __name__ == "__main__":
             run=run,
         )
 
-        # Save data encoded with the current trained model
-        deep_encodings_per_video = {}
-        deep_assignments_per_video = {}
-        deep_breaks_per_video = {}
-
-        for key in to_preprocess.keys():
-
-            # Get preprocessed data for current video
-            if input_type == "coords":
-                curr_prep, _ = to_preprocess.filter_videos([key]).preprocess(
-                    window_size=window_size,
-                    window_step=1,
-                    automatic_changepoints=automatic_changepoints,
-                    pretrained_scaler=global_scaler,
-                    scale="standard",
-                    test_videos=0,
-                    shuffle=False,
-                )[0]
-                curr_adj = np.zeros(curr_prep.shape)
-
-            elif input_type == "graph":
-                curr_prep, _, _, _ = project_coords.get_graph_dataset(
-                    precomputed_tab_dict=to_preprocess.filter_videos([key]),
-                    animal_id=animal_to_preprocess,
-                    window_size=window_size,
-                    window_step=1,
-                    automatic_changepoints=automatic_changepoints,
-                    pretrained_scaler=global_scaler,
-                    scale="standard",
-                    test_videos=0,
-                    shuffle=False,
-                )
-                curr_adj = curr_prep[1]
-                curr_prep = curr_prep[0]
-
-            # Get breakpoints per video
-            deep_breaks_per_video[key] = (~np.all(curr_prep == 0, axis=2)).sum(axis=1)
-
-            # Get current model weights
-            curr_weights = trained_models.get_weights()
-
-            # Load weights into a newly created model, built with the current input shape
-            if embedding_model == "VQVAE":
-                curr_ae = deepof.models.VQVAE(
-                    input_shape=curr_prep.shape,
-                    edge_feature_shape=curr_adj.shape,
-                    adjacency_matrix=(
-                        None if input_type == "coords" else adjacency_matrix
-                    ),
-                    use_gnn=(input_type == "graph"),
-                    encoder_type=encoder_type,
-                    latent_dim=encoding_size,
-                    n_components=n_components,
-                )
-
-            elif embedding_model == "VaDE":
-                curr_ae = deepof.models.VaDE(
-                    input_shape=curr_prep.shape,
-                    edge_feature_shape=curr_adj.shape,
-                    adjacency_matrix=(
-                        None if input_type == "coords" else adjacency_matrix
-                    ),
-                    use_gnn=(input_type == "graph"),
-                    encoder_type=encoder_type,
-                    batch_size=batch_size,
-                    latent_dim=encoding_size,
-                    n_components=n_components,
-                    reg_cat_clusters=cat_kl_loss,
-                )
-
-            elif embedding_model == "Contrastive":
-                raise NotImplementedError
-
-            # noinspection PyUnboundLocalVariable
-            curr_ae.set_weights(curr_weights)
-
-            # Embed current video in the autoencoder and add to the dictionary
-            # noinspection PyUnboundLocalVariable
-            deep_encodings_per_video[key] = curr_ae.encoder([curr_prep, curr_adj])
-
-            # Obtain groupings for current video and add to the dictionary
-            # noinspection PyUnboundLocalVariable
-            deep_assignments_per_video[key] = curr_ae.grouper([curr_prep, curr_adj])
+        # Get embeddings, soft_counts, and breaks per video
+        embeddings, soft_counts, breaks = deepof.model_utils.embedding_per_video(
+            coordinates=my_deepof_project,
+            to_preprocess=to_preprocess,
+            model=trained_model,
+            animal_id=animal_to_preprocess,
+            global_scaler=global_scaler,
+        )
 
         with open(
             os.path.join(
