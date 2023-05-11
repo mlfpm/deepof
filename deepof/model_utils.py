@@ -19,6 +19,7 @@ from typing import Tuple, Union, Any, List, NewType
 import deepof.data
 import deepof.hypermodels
 import deepof.models
+import deepof.post_hoc
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1460,6 +1461,7 @@ def embedding_per_video(
     animal_id: str = None,
     ruptures: bool = False,
     global_scaler: Any = None,
+    **kwargs,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
 
@@ -1471,6 +1473,7 @@ def embedding_per_video(
         ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -1482,9 +1485,17 @@ def embedding_per_video(
     soft_counts = {}
     breaks = {}
 
+    graph, contrastive = False, False
+    try:
+        if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
+            graph = True
+    except AttributeError:
+        if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
+            graph, contrastive = True, True
+
     for key in tqdm.tqdm(to_preprocess.keys()):
 
-        if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
+        if graph:
             processed_exp, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
                 precomputed_tab_dict=to_preprocess.filter_videos([key]),
@@ -1507,11 +1518,18 @@ def embedding_per_video(
             )
 
         embeddings[key] = model.encoder([processed_exp[0], processed_exp[1]]).numpy()
-        soft_counts[key] = model.grouper([processed_exp[0], processed_exp[1]]).numpy()
         if ruptures:
             breaks[key] = (~np.all(processed_exp[0] == 0, axis=2)).sum(axis=1)
         else:
-            breaks[key] = np.ones(soft_counts[key].shape[0]).astype(int)
+            breaks[key] = np.ones(embeddings[key].shape[0]).astype(int)
+
+        if not contrastive:
+            soft_counts[key] = model.grouper(
+                [processed_exp[0], processed_exp[1]]
+            ).numpy()
+
+    if contrastive:
+        soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
 
     return (
         deepof.data.TableDict(
