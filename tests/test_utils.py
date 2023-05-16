@@ -78,27 +78,6 @@ def test_str2bool(v):
     ),
     threshold=st.data(),
 )
-def test_likelihood_qc(mult, dframe, threshold):
-    thresh1 = threshold.draw(st.floats(min_value=0.1, max_value=1.0, allow_nan=False))
-    thresh2 = threshold.draw(
-        st.floats(min_value=thresh1, max_value=1.0, allow_nan=False)
-    )
-
-    dframe = pd.concat([dframe] * mult, axis=0)
-    idx = pd.MultiIndex.from_product(
-        [list(dframe.columns[: len(dframe.columns) // 3]), ["X", "y", "likelihood"]],
-        names=["bodyparts", "coords"],
-    )
-    dframe.columns = idx
-
-    filt1 = deepof.utils.likelihood_qc(dframe, thresh1)
-    filt2 = deepof.utils.likelihood_qc(dframe, thresh2)
-
-    assert np.sum(filt1) <= dframe.shape[0]
-    assert np.sum(filt2) <= dframe.shape[0]
-    assert np.sum(filt1) >= np.sum(filt2)
-
-
 @settings(deadline=None)
 @given(
     tab=data_frames(

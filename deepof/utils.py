@@ -3,7 +3,7 @@
 # module deepof
 
 """Functions and general utilities for the deepof package."""
-
+import copy
 from copy import deepcopy
 from dask_image.imread import imread
 from itertools import combinations, product
@@ -12,6 +12,8 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
@@ -26,6 +28,9 @@ import pandas as pd
 import regex as re
 import ruptures as rpt
 import tensorflow as tf
+import warnings
+
+import deepof.data
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -36,7 +41,9 @@ table_dict = NewType("deepof_table_dict", Any)
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 
-def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx.Graph:
+def connect_mouse(
+    animal_ids=None, exclude_bodyparts: list = None, graph_preset: str = "deepof_14"
+) -> nx.Graph:
     """Create a nx.Graph object with the connectivity of the bodyparts in the DLC topview model for a single mouse.
 
     Used later for angle computing, among others.
@@ -44,6 +51,7 @@ def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx
     Args:
         animal_ids (str): if more than one animal is tagged, specify the animal identyfier as a string.
         exclude_bodyparts (list): Remove the specified nodes from the graph.
+        graph_preset (str): Connectivity preset to use. Currently supported: "deepof_14" and "deepof_8".
 
     Returns:
         connectivity (nx.Graph)
@@ -57,16 +65,29 @@ def connect_mouse_topview(animal_ids=None, exclude_bodyparts: list = None) -> nx
     connectivities = []
 
     for animal_id in animal_ids:
-        connectivity = {
-            "Nose": ["Left_ear", "Right_ear"],
-            "Spine_1": ["Center", "Left_ear", "Right_ear"],
-            "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
-            "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
-            "Tail_base": ["Tail_1"],
-            "Tail_1": ["Tail_2"],
-            "Tail_2": ["Tail_tip"],
+        connectivity_dict = {
+            "deepof_14": {
+                "Nose": ["Left_ear", "Right_ear"],
+                "Spine_1": ["Center", "Left_ear", "Right_ear"],
+                "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
+                "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
+                "Tail_base": ["Tail_1"],
+                "Tail_1": ["Tail_2"],
+                "Tail_2": ["Tail_tip"],
+            },
+            "deepof_8": {
+                "Nose": ["Left_ear", "Right_ear"],
+                "Center": [
+                    "Left_fhip",
+                    "Right_fhip",
+                    "Tail_base",
+                    "Left_ear",
+                    "Right_ear",
+                ],
+                "Tail_base": ["Tail_tip"],
+            },
         }
-        connectivity = nx.Graph(connectivity)
+        connectivity = nx.Graph(connectivity_dict[graph_preset])
 
         if animal_id:
             mapping = {
@@ -168,22 +189,123 @@ def str2bool(v: str) -> bool:
     raise argparse.ArgumentTypeError("Boolean compatible value expected.")
 
 
-def likelihood_qc(dframe: pd.DataFrame, threshold: float = 0.9) -> np.array:
-    """Return a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.
+def compute_animal_presence_mask(
+    quality: table_dict, threshold: float = 0.5
+) -> table_dict:
+    """Compute a mask of the animal presence in the video.
 
     Args:
-        dframe (pandas.DataFrame): DeepLabCut output, with positions over time and associated likelihood.
-        threshold (float): Minimum acceptable confidence.
+        quality (table_dict): Dictionary with the quality of the tracking for each body part and animal.
+        threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
 
     Returns:
-        filt_mask (np.array): mask on the rows of dframe
+        animal_presence_mask (table_dict): Dictionary with the animal presence mask for each bodypart and animal.
 
     """
-    Likes = np.array([dframe[i]["likelihood"] for i in list(dframe.columns.levels[0])])
-    Likes = np.nan_to_num(Likes, nan=1.0)
-    filt_mask = np.all(Likes > threshold, axis=0)
+    animal_presence_mask = {}
 
-    return filt_mask
+    for exp in quality.keys():
+        animal_presence_mask[exp] = {}
+        for animal_id in quality._animal_ids:
+            animal_presence_mask[exp][animal_id] = (
+                quality.filter_id(animal_id)[exp].median(axis=1) > threshold
+            ).astype(int)
+
+        animal_presence_mask[exp] = pd.DataFrame(animal_presence_mask[exp])
+
+    return deepof.data.TableDict(
+        animal_presence_mask, typ="animal_presence_mask", animal_ids=quality._animal_ids
+    )
+
+
+def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
+    """Perform iterative imputation on occluded body parts. Run per animal and experiment.
+
+    Args:
+        project (project): Project object.
+        tab_dict (dict): Dictionary with the coordinates of the body parts.
+        lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
+
+    Returns:
+        tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
+
+    """
+    presence_masks = compute_animal_presence_mask(lik_dict)
+    tab_dict = deepof.data.TableDict(
+        tab_dict, typ="coords", animal_ids=project.animal_ids
+    )
+    imputed_tabs = copy.deepcopy(tab_dict)
+
+    for animal_id in project.animal_ids:
+
+        for k, tab in tab_dict.filter_id(animal_id).items():
+
+            scaler = StandardScaler()
+            imputed = IterativeImputer(
+                skip_complete=True,
+                max_iter=project.enable_iterative_imputation,
+                n_nearest_features=tab.shape[1],
+                tol=1e-1,
+            ).fit_transform(
+                scaler.fit_transform(
+                    tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                )
+            )
+
+            imputed = pd.DataFrame(
+                scaler.inverse_transform(imputed),
+                index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
+                columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
+            )
+
+            imputed_tabs[k].update(imputed)
+
+            if tab.shape[1] != imputed.shape[1]:
+                warnings.warn(
+                    "Some of the body parts have zero measurements. Iterative imputation skips these,"
+                    " which could bring problems downstream. A possible solution could be to refine "
+                    "DLC tracklets."
+                )
+
+    return imputed_tabs
+
+
+def set_missing_animals(
+    coordinates: project, tab_dict: dict, lik_dict: dict, animal_ids: list = None
+):
+    """Set the coordinates of the missing animals to NaN.
+
+    Args:
+        coordinates (project): Project object.
+        tab_dict (dict): Dictionary with the coordinates of the body parts.
+        lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
+        animal_ids (list): List with the animal ids to remove. If None, all the animals with missing data are processed.
+
+    Returns:
+        tab_dict (dict): Dictionary with the coordinates of the body parts after removing missing animals.
+
+    """
+    if animal_ids is None:
+        try:
+            animal_ids = coordinates.animal_ids
+        except AttributeError:
+            animal_ids = coordinates._animal_ids
+
+    presence_masks = compute_animal_presence_mask(lik_dict)
+    tab_dict = deepof.data.TableDict(tab_dict, typ="qc", animal_ids=animal_ids)
+
+    for animal_id in animal_ids:
+        for k, tab in tab_dict.filter_id(animal_id).items():
+            try:
+                missing_times = tab[presence_masks[k][animal_id] == 0]
+            except KeyError:
+                missing_times = tab[
+                    presence_masks[k].sum(axis=1) < (len(animal_ids) - 1)
+                ]
+
+            tab_dict[k].loc[missing_times.index, missing_times.columns] = np.nan
+
+    return tab_dict
 
 
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
@@ -1010,6 +1132,12 @@ def filter_columns(columns: list, selected_id: str) -> list:
     columns_to_keep = []
     for column in columns:
         # Speed transformed columns
+        if selected_id == "supervised" and column in [
+            "nose2nose",
+            "sidebyside",
+            "sidereside",
+        ]:
+            columns_to_keep.append(column)
         if type(column) == str and column.startswith(selected_id):
             columns_to_keep.append(column)
         # Raw coordinate columns
@@ -1166,7 +1294,6 @@ def automatically_recognize_arena(
     # "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
     # "circular-manual" (3-element-array) -> x-y position of the center and the radius.
     # "polygonal-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
-
     cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
 
     if tables is not None:
@@ -1225,8 +1352,7 @@ def automatically_recognize_arena(
         # Within the frame recognition limit, only the 1% less obstructed will contribute to the arena
         # fitting
         center_quantile = np.quantile(center_distances, 0.05)
-        arena = arena[center_distances < center_quantile]
-        weights = 1 / center_distances[center_distances < center_quantile]
+        arena = arena[center_distances <= center_quantile]
 
     # Compute the median across frames and return to tuple format for downstream compatibility
     arena = np.average(arena[~np.any(np.isnan(arena), axis=1)], axis=0)

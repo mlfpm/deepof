@@ -294,8 +294,11 @@ def huddle(
 
     """
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    y_huddle = huddle_estimator.predict(StandardScaler().fit_transform(X_huddle))
-
+    X_mask = np.isnan(X_huddle).mean(axis=1) == 1
+    y_huddle = huddle_estimator.predict(
+        StandardScaler().fit_transform(np.nan_to_num(X_huddle))
+    )
+    y_huddle[X_mask] = np.nan
     return y_huddle
 
 

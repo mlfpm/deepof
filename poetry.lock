@@ -5365,13 +5365,13 @@ wrapt = ">=1.11.0"
 
 [[package]]
 name = "tensorflow-probability"
-version = "0.17.0"
+version = "0.19.0"
 description = "Probabilistic modeling and statistical inference in TensorFlow"
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "tensorflow_probability-0.17.0-py2.py3-none-any.whl", hash = "sha256:4cb04201c2fb92593c9a73514f4da3897554f927305c38f6aa6cc4caa14a7357"},
+    {file = "tensorflow_probability-0.19.0-py2.py3-none-any.whl", hash = "sha256:ee70967fbd52b09e9c5ec148a9437c4cf3f9e9d689cdca400a1bc921f21cdcac"},
 ]
 
 [package.dependencies]
@@ -5940,4 +5940,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "f9188a53547e601d44aee0f270cd49cf36d7516867d338e77138dafee95df7ed"
+content-hash = "9a7df20a77be0f66a47974828c580ab4d6c45c7768966db920e97d46f9c417b3"

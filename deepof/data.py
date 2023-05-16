@@ -21,8 +21,6 @@ from shapely.geometry import Polygon
 from shutil import rmtree
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -95,6 +93,7 @@ class Project:
         self,
         animal_ids: List = [""],
         arena: str = "polygonal-manual",
+        bodypart_graph: str = "deepof_14",
         enable_iterative_imputation: bool = 250,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
@@ -117,6 +116,7 @@ class Project:
         Args:
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
+            bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
             enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended if several animals are present, but slower.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
@@ -177,6 +177,7 @@ class Project:
         self.angles = True
         self.animal_ids = animal_ids
         self.areas = True
+        self.bodypart_graph = bodypart_graph
         self.connectivity = None
         self.distances = "all"
         self.ego = False
@@ -383,8 +384,10 @@ class Project:
 
         # Update body part connectivity graph, taking detected or specified body parts into account
         model_dict = {
-            "{}mouse_topview".format(aid): deepof.utils.connect_mouse_topview(
-                aid, exclude_bodyparts=self.exclude_bodyparts
+            "{}mouse_topview".format(aid): deepof.utils.connect_mouse(
+                aid,
+                exclude_bodyparts=self.exclude_bodyparts,
+                graph_preset=self.bodypart_graph,
             )
             for aid in self.animal_ids
         }
@@ -419,6 +422,8 @@ class Project:
 
             tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
             lik_dict[key] = lik.fillna(0.0)
+
+        lik_dict = TableDict(lik_dict, typ="quality", animal_ids=self.animal_ids)
 
         if self.smooth_alpha:
 
@@ -467,30 +472,10 @@ class Project:
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
-            for k, tab in tab_dict.items():
+            tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict)
 
-                scaler = StandardScaler()
-                imputed = IterativeImputer(
-                    skip_complete=True,
-                    max_iter=self.enable_iterative_imputation,
-                    n_nearest_features=tab.shape[1] // len(self.animal_ids) - 1,
-                    tol=1e-1,
-                ).fit_transform(scaler.fit_transform(tab))
-                imputed = pd.DataFrame(
-                    scaler.inverse_transform(imputed),
-                    index=tab.index,
-                    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
-                )
-
-                tab.update(imputed)
-                tab_dict[k] = tab
-
-                if tab.shape != imputed.shape:
-                    warnings.warn(
-                        "Some of the body parts have zero measurements. Iterative imputation skips these,"
-                        " which could bring problems downstream. A possible solution could be to refine "
-                        "DLC tracklets."
-                    )
+        # Set table_dict to NaN if animals are missing
+        tab_dict = deepof.utils.set_missing_animals(self, tab_dict, lik_dict)
 
         return tab_dict, lik_dict
 
@@ -693,6 +678,7 @@ class Project:
             areas=areas,
             arena=self.arena,
             arena_dims=self.arena_dims,
+            bodypart_graph=self.bodypart_graph,
             distances=distances,
             connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
@@ -746,6 +732,7 @@ class Coordinates:
         project_name: str,
         arena: str,
         arena_dims: np.array,
+        bodypart_graph: str,
         path: str,
         quality: dict,
         scales: np.ndarray,
@@ -770,6 +757,7 @@ class Coordinates:
             project_path (str): path to the folder containing the DLC output data.
             arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
             arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
+            bodypart_graph (nx.Graph): Graph containing the body part connectivity. See deepof.data.Project for more information.
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
             scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
@@ -793,6 +781,7 @@ class Coordinates:
         self._arena = arena
         self._arena_params = arena_params
         self._arena_dims = arena_dims
+        self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._frame_rate = frame_rate
@@ -968,6 +957,9 @@ class Coordinates:
             for key, tab in tabs.items():
                 tab.loc[:, "pheno"] = self._exp_conditions[key]
 
+        # Set table_dict to NaN if animals are missing
+        tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
         return TableDict(
             tabs,
             "coords",
@@ -1038,14 +1030,18 @@ class Coordinates:
                             set(
                                 [
                                     tuple(sorted(e))
-                                    for e in deepof.utils.connect_mouse_topview(
-                                        animal_ids=self._animal_ids
+                                    for e in deepof.utils.connect_mouse(
+                                        animal_ids=self._animal_ids,
+                                        graph_preset=self._bodypart_graph,
                                     ).edges
                                 ]
                             )
                             & set(tab.columns)
                         ),
                     ]
+
+            # Set table_dict to NaN if animals are missing
+            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
 
             return TableDict(
                 tabs,
@@ -1110,6 +1106,9 @@ class Coordinates:
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
+            # Set table_dict to NaN if animals are missing
+            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
             return TableDict(
                 tabs,
                 animal_ids=self._animal_ids,
@@ -1160,6 +1159,14 @@ class Coordinates:
 
                 tabs[key] = exp_table
 
+            if speed:
+                for key, tab in tabs.items():
+                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+                    tabs[key] = vel
+
+            # Set table_dict to NaN if animals are missing
+            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
             areas = TableDict(
                 tabs,
                 animal_ids=self._animal_ids,
@@ -1167,11 +1174,6 @@ class Coordinates:
                 typ="areas",
                 exp_conditions=self._exp_conditions,
             )
-
-            if speed:
-                for key, tab in areas.items():
-                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-                    areas[key] = vel
 
             return areas
 
@@ -1209,7 +1211,7 @@ class Coordinates:
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC."""
-        return self._quality
+        return TableDict(self._quality, typ="quality", animal_ids=self._animal_ids)
 
     @property
     def get_arenas(self):
@@ -1324,7 +1326,7 @@ class Coordinates:
             tab_dict = precomputed_tab_dict
 
         # Get corresponding feature graph
-        graph = deepof.utils.connect_mouse_topview(
+        graph = deepof.utils.connect_mouse(
             animal_ids=(self._animal_ids if animal_id is None else animal_id),
             exclude_bodyparts=(
                 list(
@@ -1344,6 +1346,7 @@ class Coordinates:
                 if (self._animal_ids is not None and self._animal_ids[0])
                 else self._excluded
             ),
+            graph_preset=self._connectivity,
         )
 
         tab_dict._connectivity = graph
@@ -1515,6 +1518,22 @@ class Coordinates:
             with parallel_backend("threading", n_jobs=n_jobs):
                 Parallel()(delayed(output_video)(key) for key in vid_idxs)
             pbar.close()
+
+        # Set table_dict to NaN if animals are missing
+        tag_dict = deepof.utils.set_missing_animals(
+            self,
+            tag_dict,
+            self.get_quality(),
+            animal_ids=self._animal_ids + ["supervised"],
+        )
+
+        # Add missing tags to all animals
+        presence_masks = deepof.utils.compute_animal_presence_mask(self.get_quality())
+        for tag in tag_dict:
+            for animal in self._animal_ids:
+                tag_dict[tag]["{}_missing".format(animal)] = (
+                    1 - presence_masks[tag][animal].values
+                )
 
         return TableDict(
             tag_dict,

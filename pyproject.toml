@@ -25,7 +25,7 @@ tensorflow-macos = {version = "2.11.0", markers="platform_machine == 'arm64' and
 tensorflow = {version = "2.11.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
-tensorflow-probability = "0.17.0"
+tensorflow-probability = "0.19.0"
 tifffile = "^2022.8.12"
 ipykernel = "^6.16.0"
 statsmodels = "^0.13.2"
