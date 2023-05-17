@@ -946,6 +946,9 @@ class Coordinates:
                     :, deepof.utils.filter_columns(val.columns, selected_id)
                 ]
 
+        # Set table_dict to NaN if animals are missing
+        tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
         if propagate_annotations:
             annotations = list(propagate_annotations.values())[0].columns
 
@@ -955,10 +958,9 @@ class Coordinates:
 
         if propagate_labels:
             for key, tab in tabs.items():
-                tab.loc[:, "pheno"] = self._exp_conditions[key]
-
-        # Set table_dict to NaN if animals are missing
-        tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+                tab.loc[:, "pheno"] = np.repeat(
+                    self._exp_conditions[key][propagate_labels].values, tab.shape[0]
+                )
 
         return TableDict(
             tabs,
@@ -1010,6 +1012,9 @@ class Coordinates:
                         :, deepof.utils.filter_columns(val.columns, selected_id)
                     ]
 
+            # Set table_dict to NaN if animals are missing
+            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
             if propagate_labels:
                 for key, tab in tabs.items():
                     tab.loc[:, "pheno"] = self._exp_conditions[key]
@@ -1039,9 +1044,6 @@ class Coordinates:
                             & set(tab.columns)
                         ),
                     ]
-
-            # Set table_dict to NaN if animals are missing
-            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
 
             return TableDict(
                 tabs,
@@ -1095,6 +1097,9 @@ class Coordinates:
                         :, deepof.utils.filter_columns(val.columns, selected_id)
                     ]
 
+            # Set table_dict to NaN if animals are missing
+            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+
             if propagate_labels:
                 for key, tab in tabs.items():
                     tab["pheno"] = self._exp_conditions[key]
@@ -1105,9 +1110,6 @@ class Coordinates:
                 for key, tab in tabs.items():
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
-
-            # Set table_dict to NaN if animals are missing
-            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
 
             return TableDict(
                 tabs,
@@ -1280,8 +1282,9 @@ class Coordinates:
             filename (str): Name of the pickled file to store. If no name is provided, a default is used.
             timestamp (bool): Whether to append a time stamp at the end of the output file name.
         """
-        pkl_out = "{}{}.pkl".format(
-            (filename if filename is not None else "deepOF_Coordinates"),
+        pkl_out = "{}{}{}.pkl".format(
+            os.path.join(self._project_path, self._project_name, "Coordinates"),
+            (filename if filename is not None else "deepof_coordinates"),
             (f"_{int(time())}" if timestamp else ""),
         )
 
@@ -1346,7 +1349,7 @@ class Coordinates:
                 if (self._animal_ids is not None and self._animal_ids[0])
                 else self._excluded
             ),
-            graph_preset=self._connectivity,
+            graph_preset=self._bodypart_graph,
         )
 
         tab_dict._connectivity = graph

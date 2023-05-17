@@ -449,8 +449,8 @@ def test_shap_pipeline(mode, sampler):
     breaks = {}
     soft_counts = {}
     for i in ["test", "test2"]:
-        counts = np.random.normal(size=(100 - 25 + 1, 10))
-        breaks[i] = np.array([1] * (100 - 25 + 1))
+        counts = np.random.normal(size=(100 - 5 + 1, 10))
+        breaks[i] = np.array([1] * (100 - 5 + 1))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
     # get supervised annotations from project
@@ -462,9 +462,9 @@ def test_shap_pipeline(mode, sampler):
         soft_counts,
         breaks,
         supervised_annotations,
-        window_size=25,
+        window_size=5,
         animal_id=(
-            sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
+            sampler.draw(st.sampled_from(["B", "W"])) if mode != "multi" else None
         ),
         kin_derivative=sampler.draw(st.integers(min_value=1, max_value=2)),
         include_distances=sampler.draw(st.booleans()),

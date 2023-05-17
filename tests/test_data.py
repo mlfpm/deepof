@@ -294,7 +294,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
         animal_ids=animal_ids,
         table_format=".h5",
         exclude_bodyparts=exclude,
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        exp_conditions={
+            "test": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
+            "test2": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
+        },
     )
 
     if mode == "single":
@@ -316,7 +319,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = sampler.draw(st.booleans())
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
-    propagate = sampler.draw(st.booleans())
+    propagate = sampler.draw(st.sampled_from(["CSDS", False]))
     propagate_annots = False
 
     selected_id = None
@@ -361,7 +364,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
     assert isinstance(merged, deepof.data.TableDict)
     assert isinstance(prun.get_videos(), list)
     assert prun.get_exp_conditions is not None
-    assert isinstance(prun.get_quality(), defaultdict)
+    assert isinstance(prun.get_quality(), deepof.data.TableDict)
     assert isinstance(prun.get_arenas, tuple)
 
     # deepof.table testing

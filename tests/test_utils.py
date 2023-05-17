@@ -60,26 +60,6 @@ def test_str2bool(v):
 
 @settings(deadline=None)
 @given(
-    mult=st.integers(min_value=1, max_value=10),
-    dframe=data_frames(
-        index=range_indexes(min_size=1),
-        columns=columns(["X", "y", "likelihood"], dtype=float),
-        rows=st.tuples(
-            st.floats(
-                min_value=0, max_value=1000, allow_nan=False, allow_infinity=False
-            ),
-            st.floats(
-                min_value=0, max_value=1000, allow_nan=False, allow_infinity=False
-            ),
-            st.floats(
-                min_value=0.01, max_value=1.0, allow_nan=False, allow_infinity=False
-            ),
-        ),
-    ),
-    threshold=st.data(),
-)
-@settings(deadline=None)
-@given(
     tab=data_frames(
         index=range_indexes(min_size=1),
         columns=columns(["X", "y"], dtype=float),

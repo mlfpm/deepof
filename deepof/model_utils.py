@@ -1493,6 +1493,7 @@ def embedding_per_video(
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
             graph, contrastive = True, True
 
+    window_size = model.layers[0].input_shape[0][1]
     for key in tqdm.tqdm(to_preprocess.keys()):
 
         if graph:
@@ -1501,7 +1502,7 @@ def embedding_per_video(
                 precomputed_tab_dict=to_preprocess.filter_videos([key]),
                 preprocess=True,
                 scale=scale,
-                window_size=model.layers[0].input_shape[0][1],
+                window_size=window_size,
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,
@@ -1511,7 +1512,7 @@ def embedding_per_video(
 
             processed_exp, _ = to_preprocess.filter_videos([key]).preprocess(
                 scale=scale,
-                window_size=model.layers[0].input_shape[0][1],
+                window_size=window_size,
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,

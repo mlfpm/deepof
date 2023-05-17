@@ -340,4 +340,4 @@ def test_rule_based_tagging(multi_animal, video_output):
     )
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (20 if multi_animal else 5)
+    assert list(hardcoded_tags.values())[0].shape[1] == (22 if multi_animal else 6)

@@ -2058,7 +2058,8 @@ def plot_shap_swarm_per_cluster(
                 coordinates._project_path,
                 coordinates._project_name,
                 "Figures",
-                "deepof_supervised_cluster_detection_SHAP{}_{}.pdf".format(
+                "deepof_supervised_cluster_detection_SHAP_cluster={}{}_{}.pdf".format(
+                    cluster,
                     (f"_{save}" if isinstance(save, str) else ""),
                     calendar.timegm(time.gmtime()),
                 ),

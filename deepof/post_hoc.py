@@ -767,7 +767,7 @@ def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
 
 
 def align_deepof_kinematics_with_unsupervised_labels(
-    deepof_project: project,
+    deepof_project: coordinates,
     kin_derivative: int = 1,
     include_feature_derivatives: bool = False,
     include_distances: bool = True,
@@ -782,7 +782,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
     obtained from the unsupervised pipeline.
 
     Args:
-        deepof_project (Project): A deepof.Project object.
+        deepof_project (coordinates): A deepof.Project object.
         kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
         include_feature_derivatives (bool): Whether to compute speed on distances, angles, and areas, if they are included.
         include_distances (bool): Whether to include distances in the alignment.
@@ -898,7 +898,7 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
 
 
 def annotate_time_chunks(
-    deepof_project: project,
+    deepof_project: coordinates,
     soft_counts: table_dict,
     breaks: table_dict,
     supervised_annotations: table_dict = None,
@@ -918,7 +918,7 @@ def annotate_time_chunks(
     Uses a set of summary statistics coming from kinematics, distances, angles, and supervised labels when provided.
 
     Args:
-        deepof_project (table_dict): Project object.
+        deepof_project (coordinates): Project object.
         soft_counts (table_dict): matrix with soft cluster assignments produced by the unsupervised pipeline.
         breaks (table_dict): the breaks for each condition.
         supervised_annotations (table_dict): set of supervised annotations produced by the supervised pipeline withing deepof.
@@ -974,6 +974,10 @@ def annotate_time_chunks(
         precomputed_breaks=breaks,
     )[0][0]
 
+    # Remove chunks with missing values
+    possible_idcs = ~np.isnan(comprehensive_features).any(axis=-1).any(axis=-1)
+    comprehensive_features = comprehensive_features[possible_idcs]
+
     def sample_from_breaks(breaks, idcs):
 
         # Sample from breaks, keeping each animal's identity
@@ -995,9 +999,9 @@ def annotate_time_chunks(
     qual_filter = (
         np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
         > min_confidence
-    )
+    )[possible_idcs]
     comprehensive_features = comprehensive_features[qual_filter]
-    hard_counts = hard_counts[qual_filter].reset_index(drop=True)
+    hard_counts = hard_counts[possible_idcs][qual_filter].reset_index(drop=True)
     breaks = sample_from_breaks(breaks, np.where(qual_filter)[0])
 
     # Sample X and y matrices to increase computational efficiency
