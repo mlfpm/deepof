@@ -695,15 +695,7 @@ class Project:
         )
 
         # Save created coordinates to the project directory
-        coords.save(
-            filename=os.path.join(
-                self.project_path,
-                self.project_name,
-                "Coordinates",
-                "deepof_coordinates",
-            ),
-            timestamp=False,
-        )
+        coords.save(timestamp=False)
 
         if verbose:
             print("Done!")
@@ -1265,15 +1257,7 @@ class Coordinates:
             self._scales[vid_idcs[vid_idx]] = edited_scales[vid_idx]
             self._arena_params[vid_idcs[vid_idx]] = edited_arena_params[vid_idx]
 
-        self.save(
-            filename=os.path.join(
-                self._project_path,
-                self._project_name,
-                "Coordinates",
-                "deepof_coordinates",
-            ),
-            timestamp=False,
-        )
+        self.save(timestamp=False)
 
     def save(self, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.
