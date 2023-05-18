@@ -1,7 +1,25 @@
 stages:
-  - build
+  - tutorials
   - test
   - deploy
+
+tutorials:
+  stage: tutorials
+
+  image:
+    name: lucasmiranda42/deepof:latest
+    entrypoint: [ "" ]
+
+  before_script:
+    - pip install papermill, gdown
+    - git clone -q https://github.com/mlfpm/deepof.git
+    - pip install -q -e deepof --progress-bar off
+    - gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing
+
+  script:
+    - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
 
 test:
   stage: test
