@@ -12,7 +12,6 @@ tutorials:
 
   before_script:
     - pip install papermill gdown
-    - git clone -q https://github.com/mlfpm/deepof.git
     - pip install -q -e deepof --progress-bar off
     - gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing
 
