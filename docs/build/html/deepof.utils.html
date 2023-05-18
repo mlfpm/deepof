@@ -52,11 +52,13 @@
               <!-- Local TOC -->
               <div class="local-toc"><ul>
 <li><a class="reference internal" href="#">deepof.utils module</a><ul>
-<li><a class="reference internal" href="#deepof.utils.connect_mouse_topview"><code class="docutils literal notranslate"><span class="pre">connect_mouse_topview()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.utils.connect_mouse"><code class="docutils literal notranslate"><span class="pre">connect_mouse()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.edges_to_weithed_adj"><code class="docutils literal notranslate"><span class="pre">edges_to_weithed_adj()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.enumerate_all_bridges"><code class="docutils literal notranslate"><span class="pre">enumerate_all_bridges()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.str2bool"><code class="docutils literal notranslate"><span class="pre">str2bool()</span></code></a></li>
-<li><a class="reference internal" href="#deepof.utils.likelihood_qc"><code class="docutils literal notranslate"><span class="pre">likelihood_qc()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.utils.compute_animal_presence_mask"><code class="docutils literal notranslate"><span class="pre">compute_animal_presence_mask()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.utils.iterative_imputation"><code class="docutils literal notranslate"><span class="pre">iterative_imputation()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.utils.set_missing_animals"><code class="docutils literal notranslate"><span class="pre">set_missing_animals()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.bp2polar"><code class="docutils literal notranslate"><span class="pre">bp2polar()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.tab2polar"><code class="docutils literal notranslate"><span class="pre">tab2polar()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.compute_dist"><code class="docutils literal notranslate"><span class="pre">compute_dist()</span></code></a></li>
@@ -78,6 +80,7 @@
 <li><a class="reference internal" href="#deepof.utils.full_outlier_mask"><code class="docutils literal notranslate"><span class="pre">full_outlier_mask()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.interpolate_outliers"><code class="docutils literal notranslate"><span class="pre">interpolate_outliers()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.filter_columns"><code class="docutils literal notranslate"><span class="pre">filter_columns()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.utils.get_arenas"><code class="docutils literal notranslate"><span class="pre">get_arenas()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.automatically_recognize_arena"><code class="docutils literal notranslate"><span class="pre">automatically_recognize_arena()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.retrieve_corners_from_image"><code class="docutils literal notranslate"><span class="pre">retrieve_corners_from_image()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.utils.extract_polygonal_arena_coordinates"><code class="docutils literal notranslate"><span class="pre">extract_polygonal_arena_coordinates()</span></code></a></li>
@@ -144,8 +147,8 @@
 <span id="deepof-utils-module"></span><h1>deepof.utils module<a class="headerlink" href="#module-deepof.utils" title="Permalink to this heading"></a></h1>
 <p>Functions and general utilities for the deepof package.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="deepof.utils.connect_mouse_topview">
-<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">connect_mouse_topview</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">animal_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Graph</span></span></span><a class="headerlink" href="#deepof.utils.connect_mouse_topview" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="deepof.utils.connect_mouse">
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">connect_mouse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">animal_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_bodyparts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">graph_preset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'deepof_14'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Graph</span></span></span><a class="headerlink" href="#deepof.utils.connect_mouse" title="Permalink to this definition"></a></dt>
 <dd><p>Create a nx.Graph object with the connectivity of the bodyparts in the DLC topview model for a single mouse.</p>
 <p>Used later for angle computing, among others.</p>
 <dl class="field-list simple">
@@ -153,6 +156,7 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>animal_ids</strong> (<em>str</em>) – if more than one animal is tagged, specify the animal identyfier as a string.</p></li>
 <li><p><strong>exclude_bodyparts</strong> (<em>list</em>) – Remove the specified nodes from the graph.</p></li>
+<li><p><strong>graph_preset</strong> (<em>str</em>) – Connectivity preset to use. Currently supported: “deepof_14” and “deepof_8”.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -207,21 +211,64 @@
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="deepof.utils.likelihood_qc">
-<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">likelihood_qc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#deepof.utils.likelihood_qc" title="Permalink to this definition"></a></dt>
-<dd><p>Return a DataFrame filtered dataframe, keeping only the rows entirely above the threshold.</p>
+<dt class="sig sig-object py" id="deepof.utils.compute_animal_presence_mask">
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">compute_animal_presence_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">quality</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">deepof_table_dict</span></span></span><a class="headerlink" href="#deepof.utils.compute_animal_presence_mask" title="Permalink to this definition"></a></dt>
+<dd><p>Compute a mask of the animal presence in the video.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dframe</strong> (<em>pandas.DataFrame</em>) – DeepLabCut output, with positions over time and associated likelihood.</p></li>
-<li><p><strong>threshold</strong> (<em>float</em>) – Minimum acceptable confidence.</p></li>
+<li><p><strong>quality</strong> (<em>table_dict</em>) – Dictionary with the quality of the tracking for each body part and animal.</p></li>
+<li><p><strong>threshold</strong> (<em>float</em>) – Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>mask on the rows of dframe</p>
+<dd class="field-even"><p>Dictionary with the animal presence mask for each bodypart and animal.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>filt_mask (np.array)</p>
+<dd class="field-odd"><p>animal_presence_mask (table_dict)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.utils.iterative_imputation">
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">iterative_imputation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tab_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lik_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.iterative_imputation" title="Permalink to this definition"></a></dt>
+<dd><p>Perform iterative imputation on occluded body parts. Run per animal and experiment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>project</strong> (<em>project</em>) – Project object.</p></li>
+<li><p><strong>tab_dict</strong> (<em>dict</em>) – Dictionary with the coordinates of the body parts.</p></li>
+<li><p><strong>lik_dict</strong> (<em>dict</em>) – Dictionary with the likelihood of the tracking for each body part and animal.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary with the coordinates of the body parts after imputation.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tab_dict (dict)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.utils.set_missing_animals">
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">set_missing_animals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tab_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lik_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.set_missing_animals" title="Permalink to this definition"></a></dt>
+<dd><p>Set the coordinates of the missing animals to NaN.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coordinates</strong> (<em>project</em>) – Project object.</p></li>
+<li><p><strong>tab_dict</strong> (<em>dict</em>) – Dictionary with the coordinates of the body parts.</p></li>
+<li><p><strong>lik_dict</strong> (<em>dict</em>) – Dictionary with the likelihood of the tracking for each body part and animal.</p></li>
+<li><p><strong>animal_ids</strong> (<em>list</em>) – List with the animal ids to remove. If None, all the animals with missing data are processed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary with the coordinates of the body parts after removing missing animals.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tab_dict (dict)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -667,6 +714,30 @@ and/or 2) the deviation from a moving average model is greater than n_std.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>filtered_columns (list)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.utils.get_arenas">
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">get_arenas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arena</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arena_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">videos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.get_arenas" title="Permalink to this definition"></a></dt>
+<dd><p>Extract arena parameters from a project or coordinates object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>arena</strong> (<em>str</em>) – Arena type (must be either “polygonal-manual”, “circular-manual”, or “circular-autodetect”).</p></li>
+<li><p><strong>arena_dims</strong> (<em>int</em>) – Arena dimensions.</p></li>
+<li><p><strong>project_path</strong> (<em>str</em>) – Path to project.</p></li>
+<li><p><strong>project_name</strong> (<em>str</em>) – Name of project.</p></li>
+<li><p><strong>tables</strong> (<em>dict</em>) – List of tables to extract arena parameters from.</p></li>
+<li><p><strong>videos</strong> (<em>list</em>) – List of videos to extract arena parameters from. Defaults to None (all videos are used).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of arena parameters.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>arena_params (list)</p>
 </dd>
 </dl>
 </dd></dl>

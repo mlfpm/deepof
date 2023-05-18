@@ -618,7 +618,7 @@ structure is imposed in the latent space that forms in between, so that embeddin
 <a class="reference external" href="https://medium.com/machine-intelligence-and-deep-learning-lab/variational-deep-embedding-403fb476ed7f">here</a> and <a class="reference external" href="https://ml.berkeley.edu/blog/posts/vq-vae/">here</a>, respectively.</p>
 <p>For now, let’s just say that VaDE models are a lot more stable (at least in our experiments) when working with graph input, so we’ve assigned them as default. You can still try the VQVAE models with your data if you’d like, though!</p>
 <img alt="unsupervised_models" src="../_images/deepof_unsupervised_models.png" />
-<p>The third class of models (not included for now in this tutorial) use a different architecture altogether, which is based in <a class="reference external" href="https://lilianweng.github.io/posts/2021-05-31-contrastive/">contrastive learning</a>. This produces embeddings without the need for a decoder, but clustering must be conducted post-hoc, which has some disadvantages.</p>
+<p>The third class of models use a different architecture altogether, which is based in <a class="reference external" href="https://lilianweng.github.io/posts/2021-05-31-contrastive/">contrastive learning</a>. This produces embeddings without the need for a decoder, but clustering must be conducted post-hoc, which DeepOF takes care of using a Hidden Markov Model.</p>
 <p>With all of this in mind, let’s see how this works in practice. To train a model, you need to call the <code class="docutils literal notranslate"><span class="pre">.deep_unsupervised_embedding()</span></code> method on your coordinates. Some parameters we should take into account when doing so are:</p>
 <ul class="simple">
 <li><p>preprocessed_object, which corresponds to the dataset tuples generated above (either preprocessed_coords or graph_preprocessed_coords, for matrix and graph input respectively).</p></li>
@@ -1598,10 +1598,7 @@ specific cluster, whereas negative values indicate an association with the model
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_project_path</span> <span class="o">=</span> <span class="s2">&quot;../../../NatComm_supplemental_data/&quot;</span>
-<span class="n">my_deepof_project</span><span class="o">.</span><span class="n">_project_name</span> <span class="o">=</span> <span class="s2">&quot;deepof_SI_project&quot;</span>
-
-<span class="n">video</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">animate_skeleton</span><span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">video</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">visuals</span><span class="o">.</span><span class="n">animate_skeleton</span><span class="p">(</span>
     <span class="n">my_deepof_project</span><span class="p">,</span>
     <span class="n">embedding</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
     <span class="n">cluster_assignments</span><span class="o">=</span><span class="n">soft_counts</span><span class="p">,</span>
@@ -3337,7 +3334,7 @@ The legend below shows the experiment from which each sample was taken.</p>
 </pre></div>
 </div>
 </div>
-<p><img alt="aaf7e89b82564de690fc6664157d0b29" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
+<p><img alt="dafb0f0c6fff486c940c5f47e20f3a11" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
 </section>
 <section id="Wrapping-up">
 <h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>

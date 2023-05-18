@@ -2759,7 +2759,6 @@ def annotate_video(
     videos = coordinates._videos
     path = os.path.join(coordinates._project_path, coordinates._project_name, "Videos")
 
-    params = deepof.annotation_utils.get_hparameters(params)
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 

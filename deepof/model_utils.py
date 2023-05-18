@@ -90,7 +90,6 @@ def select_contrastive_loss(
             similarity,
             temperature,
             elimination_topk=elimination_topk,
-            attraction=attraction,
         )
     elif loss_fn == "hard_dcl":
         loss, pos, neg = hard_loss(
@@ -204,7 +203,11 @@ def dcl_loss(
 
 
 def fc_loss(
-    history, future, similarity, temperature=0.1, elimination_topk=0.1, attraction=False
+    history,
+    future,
+    similarity,
+    temperature=0.1,
+    elimination_topk=0.1,
 ):  # pragma: no cover
     """Compute the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2004.11362)."""
     N = history.shape[0]

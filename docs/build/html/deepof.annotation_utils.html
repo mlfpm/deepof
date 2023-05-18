@@ -66,6 +66,7 @@
 <li><a class="reference internal" href="#deepof.annotation_utils.get_hparameters"><code class="docutils literal notranslate"><span class="pre">get_hparameters()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.annotation_utils.frame_corners"><code class="docutils literal notranslate"><span class="pre">frame_corners()</span></code></a></li>
 <li><a class="reference internal" href="#deepof.annotation_utils.supervised_tagging"><code class="docutils literal notranslate"><span class="pre">supervised_tagging()</span></code></a></li>
+<li><a class="reference internal" href="#deepof.annotation_utils.tagged_video_output"><code class="docutils literal notranslate"><span class="pre">tagged_video_output()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -404,6 +405,25 @@ tol (float) Maximum distance for which True is returned</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>tag_df (pandas.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="deepof.annotation_utils.tagged_video_output">
+<span class="sig-prename descclassname"><span class="pre">deepof.annotation_utils.</span></span><span class="sig-name descname"><span class="pre">tagged_video_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">deepof_table_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.annotation_utils.tagged_video_output" title="Permalink to this definition"></a></dt>
+<dd><p>Output annotated videos.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coordinates</strong> – Coordinates object.</p></li>
+<li><p><strong>tag_dict</strong> – Dictionary with supervised annotations to render on the video.</p></li>
+<li><p><strong>video_output</strong> – List with the names of the videos to render, or ‘all’ (default) to render all videos.</p></li>
+<li><p><strong>frame_limit</strong> – Number of frames to render per output video. If None, all frames are rendered.</p></li>
+<li><p><strong>debug</strong> – If True, debugging information, such as arena fits and processed tracklets, are displayed.</p></li>
+<li><p><strong>n_jobs</strong> – Number of jobs to run in parallel.</p></li>
+<li><p><strong>params</strong> (<em>dict</em>) – dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

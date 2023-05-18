@@ -15,7 +15,6 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 
 from collections import defaultdict
-from joblib import delayed, Parallel, parallel_backend
 from pkg_resources import resource_filename
 from shapely.geometry import Polygon
 from shutil import rmtree
@@ -31,7 +30,7 @@ from sklearn.preprocessing import (
 from time import time
 from tqdm import tqdm
 from typing import Any, NewType, Union
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import copy
 import datetime
 import math
@@ -91,7 +90,7 @@ class Project:
 
     def __init__(
         self,
-        animal_ids: List = [""],
+        animal_ids: List = None,
         arena: str = "polygonal-manual",
         bodypart_graph: str = "deepof_14",
         enable_iterative_imputation: bool = 250,
@@ -103,7 +102,7 @@ class Project:
         likelihood_tol: float = 0.75,
         model: str = "mouse_topview",
         project_name: str = "deepof_project",
-        project_path: str = deepof.utils.os.path.join("."),
+        project_path: str = os.path.join("."),
         video_path: str = None,
         table_path: str = None,
         smooth_alpha: float = 1,
@@ -153,14 +152,14 @@ class Project:
         self.videos = sorted(
             [
                 vid
-                for vid in deepof.utils.os.listdir(self.video_path)
+                for vid in os.listdir(self.video_path)
                 if vid.endswith(video_format) and not vid.startswith(".")
             ]
         )
         self.tables = sorted(
             [
                 tab
-                for tab in deepof.utils.os.listdir(self.table_path)
+                for tab in os.listdir(self.table_path)
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
@@ -175,7 +174,7 @@ class Project:
 
         # Set the rest of the init parameters
         self.angles = True
-        self.animal_ids = animal_ids
+        self.animal_ids = animal_ids if animal_ids is not None else [""]
         self.areas = True
         self.bodypart_graph = bodypart_graph
         self.connectivity = None
@@ -312,7 +311,7 @@ class Project:
             self.videos,
         )
 
-    def load_tables(self, verbose: bool = True) -> deepof.utils.Tuple:
+    def load_tables(self, verbose: bool = True) -> Tuple:
         """Load videos and tables into dictionaries.
 
         Args:
@@ -338,7 +337,7 @@ class Project:
             tab_dict = {}
             for tab in self.tables:
                 loaded_tab = pd.read_hdf(
-                    deepof.utils.os.path.join(self.table_path, tab), dtype=float
+                    os.path.join(self.table_path, tab), dtype=float
                 )
 
                 # Adapt index to be compatible with downstream processing
@@ -352,7 +351,7 @@ class Project:
 
             tab_dict = {
                 deepof.utils.re.findall("(.*?)DLC", tab)[0]: pd.read_csv(
-                    deepof.utils.os.path.join(self.table_path, tab),
+                    os.path.join(self.table_path, tab),
                     index_col=0,
                     low_memory=False,
                 )
@@ -595,15 +594,17 @@ class Project:
 
             exp_table = pd.DataFrame()
 
-            for id in self.animal_ids:
+            for aid in self.animal_ids:
 
-                if id == "":
-                    id = None
+                if aid == "":
+                    aid = None
 
                 # get the current table for the current animal
-                current_table = tab.loc[:, deepof.utils.filter_columns(tab.columns, id)]
+                current_table = tab.loc[
+                    :, deepof.utils.filter_columns(tab.columns, aid)
+                ]
                 current_table = current_table.apply(
-                    lambda x: deepof.utils.compute_areas(x, animal_id=id), axis=1
+                    lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
                 )
                 current_table = pd.DataFrame(
                     current_table.to_list(),
@@ -611,7 +612,8 @@ class Project:
                     columns=["head_area", "torso_area", "back_area", "full_area"],
                 ).add_prefix(
                     "{}{}".format(
-                        (id if id is not None else ""), ("_" if id is not None else "")
+                        (aid if aid is not None else ""),
+                        ("_" if aid is not None else ""),
                     )
                 )
 
@@ -1140,14 +1142,14 @@ class Coordinates:
 
                 exp_table = pd.DataFrame()
 
-                for id in selected_ids:
+                for aid in selected_ids:
 
-                    if id == "":
-                        id = None
+                    if aid == "":
+                        aid = None
 
                     # get the current table for the current animal
                     current_table = tab.loc[
-                        :, deepof.utils.filter_columns(tab.columns, id)
+                        :, deepof.utils.filter_columns(tab.columns, aid)
                     ]
                     exp_table = pd.concat([exp_table, current_table], axis=1)
 
@@ -1266,9 +1268,13 @@ class Coordinates:
             filename (str): Name of the pickled file to store. If no name is provided, a default is used.
             timestamp (bool): Whether to append a time stamp at the end of the output file name.
         """
-        pkl_out = "{}{}{}.pkl".format(
-            os.path.join(self._project_path, self._project_name, "Coordinates"),
-            (filename if filename is not None else "deepof_coordinates"),
+        pkl_out = "{}{}.pkl".format(
+            os.path.join(
+                self._project_path,
+                self._project_name,
+                "Coordinates",
+                (filename if filename is not None else "deepof_coordinates"),
+            ),
             (f"_{int(time())}" if timestamp else ""),
         )
 
@@ -1437,6 +1443,7 @@ class Coordinates:
 
         """
         tag_dict = {}
+        params = deepof.annotation_utils.get_hparameters(params)
         raw_coords = self.get_coords(center=None)
         coords = self.get_coords(center="Center", align="Spine_1")
         dists = self.get_distances()
@@ -1480,31 +1487,15 @@ class Coordinates:
 
         if video_output:  # pragma: no cover
 
-            def output_video(idx):
-                """Output a single annotated video. Enclosed in a function to enable parallelization."""
-                deepof.visuals.annotate_video(
-                    self,
-                    tag_dict=tag_dict[idx],
-                    vid_index=list(self._tables.keys()).index(idx),
-                    debug=debug,
-                    frame_limit=frame_limit,
-                    params=params,
-                )
-                pbar.update(1)
-
-            if isinstance(video_output, list):
-                vid_idxs = video_output
-            elif video_output == "all":
-                vid_idxs = list(self._tables.keys())
-            else:
-                raise AttributeError(
-                    "Video output must be either 'all' or a list with the names of the videos to render"
-                )
-
-            pbar = tqdm(total=len(vid_idxs))
-            with parallel_backend("threading", n_jobs=n_jobs):
-                Parallel()(delayed(output_video)(key) for key in vid_idxs)
-            pbar.close()
+            deepof.annotation_utils.tagged_video_output(
+                self,
+                tag_dict,
+                video_output=video_output,
+                frame_limit=frame_limit,
+                debug=debug,
+                n_jobs=n_jobs,
+                params=params,
+            )
 
         # Set table_dict to NaN if animals are missing
         tag_dict = deepof.utils.set_missing_animals(
@@ -1793,7 +1784,7 @@ class TableDict(dict):
         projection_type: str,
         n_components: int = 2,
         kernel: str = None,
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+    ) -> Tuple[Any, Any]:
         """Return a training set generated from the 2D original data (time x features) and a specified projection to an n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for performance or visualization reasons. For internal usage only.
@@ -1826,7 +1817,7 @@ class TableDict(dict):
 
     def random_projection(
         self, n_components: int = 2, kernel: str = "linear"
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+    ) -> Tuple[Any, Any]:
         """Return a training set generated from the 2D original data (time x features) and a random projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for
@@ -1841,9 +1832,7 @@ class TableDict(dict):
         """
         return self._projection("random", n_components=n_components, kernel=kernel)
 
-    def pca(
-        self, n_components: int = 2, kernel: str = "linear"
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:
+    def pca(self, n_components: int = 2, kernel: str = "linear") -> Tuple[Any, Any]:
         """Return a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for
@@ -1861,7 +1850,7 @@ class TableDict(dict):
     def umap(
         self,
         n_components: int = 2,
-    ) -> deepof.utils.Tuple[deepof.utils.Any, deepof.utils.Any]:  # pragma: no cover
+    ) -> Tuple[Any, Any]:  # pragma: no cover
         """Return a training set generated from the 2D original data (time x features) and a PCA projection to a n_components space.
 
         The sample parameter allows the user to randomly pick a subset of the data for

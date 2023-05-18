@@ -7,9 +7,11 @@
 import os
 import pickle
 import warnings
-from typing import Any, List, NewType
+from joblib import delayed, Parallel, parallel_backend
+from typing import Any, List, NewType, Union
 from shapely.geometry import Point, Polygon
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
 import cv2
 import numpy as np
@@ -547,7 +549,6 @@ def supervised_tagging(
     arena_params = coord_object._arena_params[vid_index]
     arena_type = coord_object._arena
 
-    params = get_hparameters(params)
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
@@ -719,6 +720,54 @@ def supervised_tagging(
     tag_df = pd.DataFrame(tag_dict).fillna(0).astype(float)
 
     return tag_df
+
+
+def tagged_video_output(
+    coordinates: coordinates,
+    tag_dict: table_dict,
+    video_output: Union[str, List[str]] = "all",
+    frame_limit: int = None,
+    debug: bool = False,
+    n_jobs: int = 1,
+    params: dict = None,
+):  # pragma: no cover
+    """Output annotated videos.
+
+    Args:
+        coordinates: Coordinates object.
+        tag_dict: Dictionary with supervised annotations to render on the video.
+        video_output: List with the names of the videos to render, or 'all' (default) to render all videos.
+        frame_limit: Number of frames to render per output video. If None, all frames are rendered.
+        debug: If True, debugging information, such as arena fits and processed tracklets, are displayed.
+        n_jobs: Number of jobs to run in parallel.
+        params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
+    """
+
+    def output_video(idx):
+        """Output a single annotated video. Enclosed in a function to enable parallelization."""
+        deepof.visuals.annotate_video(
+            coordinates,
+            tag_dict=tag_dict[idx],
+            vid_index=list(coordinates._tables.keys()).index(idx),
+            debug=debug,
+            frame_limit=frame_limit,
+            params=params,
+        )
+        pbar.update(1)
+
+    if isinstance(video_output, list):
+        vid_idxs = video_output
+    elif video_output == "all":
+        vid_idxs = list(coordinates._tables.keys())
+    else:
+        raise AttributeError(
+            "Video output must be either 'all' or a list with the names of the videos to render"
+        )
+
+    pbar = tqdm(total=len(vid_idxs))
+    with parallel_backend("threading", n_jobs=n_jobs):
+        Parallel()(delayed(output_video)(key) for key in vid_idxs)
+    pbar.close()
 
 
 if __name__ == "__main__":
