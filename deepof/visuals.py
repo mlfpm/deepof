@@ -378,7 +378,7 @@ def plot_gantt(
         behavior_ids = [
             col
             for col in supervised_annotations[experiment_id].columns
-            if "speed" not in col and "missing" not in col
+            if "speed" not in col
         ]
         n_features = len(behavior_ids)
         row_shape = n_features if behaviors_to_plot is None else len(behaviors_to_plot)
