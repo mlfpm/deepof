@@ -1,26 +1,7 @@
 stages:
-  - tutorials
   - test
+  - tutorials
   - deploy
-
-tutorials:
-  stage: tutorials
-
-  image:
-    name: lucasmiranda42/deepof:latest
-    entrypoint: [ "" ]
-
-  before_script:
-    - pip install papermill
-    - pip install -U --no-cache-dir gdown --pre
-    - pip install -q -e . --progress-bar off
-    - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
-    - gdown -q --folder "https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing"
-
-  script:
-    # - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
-    - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
-    - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
 
 test:
   stage: test
@@ -45,6 +26,25 @@ test:
       coverage_report:
         coverage_format: cobertura
         path: deepof_cov.xml
+
+tutorials:
+  stage: tutorials
+
+  image:
+    name: lucasmiranda42/deepof:latest
+    entrypoint: [ "" ]
+
+  before_script:
+    - pip install papermill
+    - pip install -U --no-cache-dir gdown --pre
+    - pip install -q -e . --progress-bar off
+    - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
+    - gdown -q --folder "https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing"
+
+  script:
+    - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
 
 deploy:
 
