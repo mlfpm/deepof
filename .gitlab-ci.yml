@@ -12,7 +12,7 @@ tutorials:
 
   before_script:
     - pip install papermill gdown
-    - pip install -q -e deepof --progress-bar off
+    - pip install -q -e . --progress-bar off
     - gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing
 
   script:
