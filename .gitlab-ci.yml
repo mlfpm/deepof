@@ -13,6 +13,7 @@ tutorials:
   before_script:
     - pip install papermill gdown
     - pip install -q -e . --progress-bar off
+    - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
     - gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing
 
   script:
