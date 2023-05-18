@@ -1518,9 +1518,9 @@ class Coordinates:
         presence_masks = deepof.utils.compute_animal_presence_mask(self.get_quality())
         for tag in tag_dict:
             for animal in self._animal_ids:
-                tag_dict[tag]["{}_missing".format(animal)] = (
-                    1 - presence_masks[tag][animal].values
-                )
+                tag_dict[tag][
+                    "{}missing".format(("{}_".format(animal) if animal else ""))
+                ] = (1 - presence_masks[tag][animal].values)
 
         return TableDict(
             tag_dict,
