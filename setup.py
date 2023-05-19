@@ -15,7 +15,9 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/",
-    packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+    packages=setuptools.find_packages(
+        exclude=["*.tests", "*.tests.*", "tests.*", "tests"]
+    ),
     classifiers=[
         "Programming Language :: Python :: 3",
         "Development Status :: 4 - Beta",

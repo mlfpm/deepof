@@ -1145,6 +1145,7 @@ def explain_clusters(
     hard_counts: np.ndarray,
     full_cluster_clf: Pipeline,
     samples: int = 10000,
+    n_jobs: int = -1,
 ):  # pragma: no cover
     """Compute SHAP feature importance for models mapping chunk_stats to cluster assignments.
 
@@ -1153,6 +1154,7 @@ def explain_clusters(
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         full_cluster_clf (imblearn.pipeline.Pipeline): trained supervised model on the full dataset, mapping chunk stats to cluster assignments.
         samples (int): number of samples to draw from the original chunk_stats dataset.
+        n_jobs (int): number of parallel jobs to run. If -1 (default), all CPUs are used.
 
     Returns:
         shap_values (list): shap_values per cluster.
@@ -1177,6 +1179,8 @@ def explain_clusters(
     )
     if samples is not None and samples < chunk_stats.shape[0]:
         processed_stats = processed_stats.sample(samples)
-    shap_values = explainer.shap_values(processed_stats, nsamples=samples, n_jobs=-1)
+    shap_values = explainer.shap_values(
+        processed_stats, nsamples=samples, n_jobs=n_jobs
+    )
 
     return shap_values, explainer, processed_stats
