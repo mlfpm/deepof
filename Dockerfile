@@ -5,6 +5,7 @@ WORKDIR /
 
 COPY pyproject.toml* .
 COPY poetry.lock* .
+COPY . .
 
 # Combine apt-get commands and clean up after installations
 RUN apt-get clean \
@@ -20,7 +21,6 @@ RUN apt-get clean \
  && poetry config virtualenvs.create false \
  && poetry install --no-interaction \
  && rm -r /root/.cache/
-
 
 ENV PATH="./root/.local/pipx/venvs/poetry/bin:$PATH"
 

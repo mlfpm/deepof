@@ -2,7 +2,7 @@
 [![Coverage](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg)](https://coverage.readthedocs.io/en/coverage-5.3/)
 [![Documentation Status](https://readthedocs.org/projects/deepof/badge/?version=latest)](https://deepof.readthedocs.io/en/latest)
 [![CodeFactor](https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge)](https://www.codefactor.io/repository/github/lucasmiranda42/deepof)
-[![Version](https://img.shields.io/badge/release-v0.2-informational)](https://pypi.org/project/deepof/)
+[![Version](https://img.shields.io/badge/release-v0.3-informational)](https://pypi.org/project/deepof/)
 [![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 
@@ -23,9 +23,16 @@ compare user-defined experimental groups.
 ### How do I start?
 ##### Installation:
 
-The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof):
+The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
 ```bash
+conda create -n deepof python=3.9
+```
+
+Then, activate the environment and install DeepOF:
+
+```bash
+conda activate deepof
 pip install deepof
 ```
 

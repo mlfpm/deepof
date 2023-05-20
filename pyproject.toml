@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.2"
+version = "0.3"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
@@ -62,6 +62,9 @@ jupyter = "^1.0.0"
 pydocstyle = "^6.1.1"
 jupyter-sphinx = "^0.4.0"
 deptry = "^0.8.0"
+pipreqs = "^0.4.13"
+build = "^0.10.0"
+twine = "^4.0.2"
 
 [build-system]
 requires = ["poetry==1.4.1"]
