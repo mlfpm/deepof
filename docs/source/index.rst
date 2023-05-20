@@ -37,11 +37,20 @@ compare user-defined experimental groups.
 Installation
 ------------
 
-The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof/>`_:
+The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
-.. code:: bash
+.. code:: python
 
+   conda create -n deepof python=3.9
+
+
+Then, activate the environment and install DeepOF:
+
+.. code:: python
+
+   conda activate deepof
    pip install deepof
+
 
 Alternatively, you can download our pre-built `Docker image <https://hub.docker.com/repository/docker/lucasmiranda42/deepof>`_,
 which contains all compatible dependencies:
