@@ -382,16 +382,28 @@ div.rendered_html tbody tr:hover {
 <li><p>Visualize global embeddings using the retrieved traits.</p></li>
 </ul>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell and the one below to set up the environment</span>
+<span class="c1"># # Note: becasuse of how colab handles the installation of local packages, this cell will kill your runtime.</span>
+<span class="c1"># # This is not an error! Just continue with the cells below.</span>
+<span class="c1"># import os</span>
 <span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
 <span class="c1"># !pip install -q -e deepof --progress-bar off</span>
-<span class="c1"># !gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing</span>
-<span class="c1"># import os, warnings</span>
-<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># !gdown -q --folder &quot;https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing&quot;</span>
 <span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
 </pre></div>
 </div>
 </div>
@@ -772,7 +784,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_23_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_23_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_24_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_24_0.png" />
 </div>
 </div>
 <p>Thats good for a quick visualization, but let’s indeed compare how these patterns compare across experimental conditions!</p>
@@ -823,7 +835,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_27_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_28_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_28_0.png" />
 </div>
 </div>
 <p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_enrichment()</span></code>.</p>
@@ -877,7 +889,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_30_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_30_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_31_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_31_0.png" />
 </div>
 </div>
 <p>Even though at first glance the figure may look similar, there are some important differences! For starters, the y-axis now shows lower values, since we’re only looking at two minutes of data instead of ten. Moreover, the effect sizes in some tagged patterns (such as huddling or speed) are much larger. Some patterns (such as nose2body) even show high significance where they were barely different across conditions before!</p>
@@ -919,7 +931,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_34_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_34_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_35_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_35_0.png" />
 </div>
 </div>
 <p>We can see how, indeed, the PCA on the average set of annotators seems to distinguish across conditions better when looking at the first two minutes only. We’ll continue to explore this idea in the next (and last) tutorial.</p>

@@ -386,13 +386,25 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell and the one below to set up the environment</span>
+<span class="c1"># # Note: becasuse of how colab handles the installation of local packages, this cell will kill your runtime.</span>
+<span class="c1"># # This is not an error! Just continue with the cells below.</span>
+<span class="c1"># import os</span>
 <span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
 <span class="c1"># !pip install -q -e deepof --progress-bar off</span>
-<span class="c1"># !gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing</span>
-<span class="c1"># import os, warnings</span>
-<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># !gdown -q --folder &quot;https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing&quot;</span>
 <span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
 </pre></div>
 </div>
 </div>
@@ -2914,7 +2926,7 @@ The new filtered dataset has only 1 video
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_61_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_61_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_62_0.png" src="../_images/tutorial_notebooks_deepof_preprocessing_tutorial_62_0.png" />
 </div>
 </div>
 <p>It seems stressed animals spend more time closer to the walls of the arena, and less time in the center! For details on how deepof.visuals.plot_heatmap() works, feel free to check the full API reference or the function docstring.</p>

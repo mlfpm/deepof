@@ -35,3 +35,4 @@ tensorflow_probability>=0.19.0
 tqdm>=4.64.0
 tqdm>=4.65.0
 umap_learn>=0.5.3
+jupyter_sphinx>=0.4.0

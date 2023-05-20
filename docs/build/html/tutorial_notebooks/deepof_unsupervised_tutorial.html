@@ -394,16 +394,28 @@ div.rendered_html tbody tr:hover {
 <li><p>Exporting cluster video snippets.</p></li>
 </ul>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell to set up the environment</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell and the one below to set up the environment</span>
+<span class="c1"># # Note: becasuse of how colab handles the installation of local packages, this cell will kill your runtime.</span>
+<span class="c1"># # This is not an error! Just continue with the cells below.</span>
+<span class="c1"># import os</span>
 <span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
 <span class="c1"># !pip install -q -e deepof --progress-bar off</span>
-<span class="c1"># !gdown -q --folder https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing</span>
-<span class="c1"># import os, warnings</span>
-<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># !gdown -q --folder &quot;https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing&quot;</span>
 <span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
 </pre></div>
 </div>
 </div>
@@ -604,7 +616,7 @@ Edge features in the validation set have shape (14975, 25, 11)
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_31_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_31_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_32_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_32_0.png" />
 </div>
 </div>
 <p>Finally, the two last objects correspond to the TableDict object with the features (useful later on, as we’ll see shortly) and the already explained global scaler.</p>
@@ -751,7 +763,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_47_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_47_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_48_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_48_1.png" />
 </div>
 </div>
 <p>The figure on the left now shows time points in a UMAP projection of the latent space, where colors indicate different clusters. The figure on the right aggregates all time points in a given animal as a vector of counts per behavior (indicating how much time each animal spends on each cluster). We can already see a clear separation between conditions, in a fully unsupervised way!</p>
@@ -777,7 +789,7 @@ OMP: Info #271: omp_set_nested routine deprecated, please use omp_set_max_active
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_51_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_51_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_52_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_52_0.png" />
 </div>
 </div>
 </section>
@@ -817,7 +829,7 @@ Found an optimal_bin at 126 seconds
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_54_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_54_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_55_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_55_1.png" />
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -876,7 +888,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_56_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_57_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_57_0.png" />
 </div>
 </div>
 <p>Where we clearly see that the overlap between the distributions is greater in the figure on the right (and therefore their Wasserstein distance lower).</p>
@@ -933,7 +945,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_60_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_60_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_61_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_61_0.png" />
 </div>
 </div>
 <p>We can see how, as expected, there are many more differences in the first time bin than in the entire time series. Moreover, we see a few clusters (1 and 5, for example) that are highly enriched in stressed animals in the first time bin, but not different at all when looking at the whole time series. We’ll visualize what these are at the end of this tutorial.</p>
@@ -970,7 +982,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_64_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_64_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_65_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_65_0.png" />
 </div>
 </div>
 <p>Here we can see heatmaps depicting how common transitions between components are. Rows and columns are clustered, to put clusters with common transitions between them together. As it may be hard to retrieve patterns from heatmaps visualized this way, the function can also represent them as graphs, where more common transitions are depicted with thicker edges:</p>
@@ -1002,7 +1014,7 @@ mice to the novel environment in which they were introduced (see the main paper 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_66_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_67_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_67_0.png" />
 </div>
 </div>
 <p>We can see how clusters 2, 3, 4, 7, and 8 form a tight cluster for non-stressed animals, whereas 0, 1, 5, and 9 do so for stressed animals. Interestingly, cluster 6 seems to act like a bridge in both cases. This means that transitions between clusters enriched in a certain condition are indeed more common than transitions between clusters enriched across conditions.</p>
@@ -1030,7 +1042,7 @@ analysis is <code class="docutils literal notranslate"><span class="pre">deepof.
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_69_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_69_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_70_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_70_0.png" />
 </div>
 </div>
 <p>Here we see that behavioral entropy is significantly lower in stressed animals with respect to non-stressed ones! This could be explained by the richer behavioral repertoire that non-stressed animals explore. Upon visualizing the attached videos, one can see that much of the time stressed animals are showing behaviors closer to freezing, while non-stressed animals tend to transition between different exploratory behaviors.</p>
@@ -1504,7 +1516,7 @@ iteritems is deprecated and will be removed in a future version. Use .items inst
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_84_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_84_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_85_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_85_1.png" />
 </div>
 </div>
 <p>The confusion matrix on the left shows how the proportion of allocations the model we just trained made in the validation set (all folds are aggregated). The diagonal corresponds then to correct assignments, whereas common errors are shown as off-diagonal high values. This way we can see there are some miss assignments that are more common than others: although the diagonal elements are the highest for all rows, cluster 4 is often confused with cluster 8, for example. This can be interpreted as
@@ -1550,7 +1562,7 @@ a measure of similarity behind the underlying behaviors.</p>
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_90_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_90_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_91_0.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_91_0.png" />
 </div>
 </div>
 <p>The <em>x</em> axis in the figure above depicts the average absolute SHAP values, a measure of feature importance. The <em>y</em> axis shows the names of the top 8 features the model uses to detect across all clusters. Here, we’re looking at <strong>global</strong> feature importance for the model; even though this plot is not very informative regarding individual clusters, we can indeed interpret that the most important features overall are speed, spine stretch (distance between the center of the animal and spine 1 — see
@@ -1581,7 +1593,7 @@ No data for colormapping provided via &#39;c&#39;. Parameters &#39;vmin&#39;, &#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_92_1.png" />
+<img alt="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_93_1.png" src="../_images/tutorial_notebooks_deepof_unsupervised_tutorial_93_1.png" />
 </div>
 </div>
 <p>Selecting any cluster in the ‘cluster’ parameter will render a different kind of plot. What we’re looking now is called a bee swarm plot, and it’s one of the main visualizations the SHAP package has to offer. The y-axis is the same as before (but it’s now based on feature importance to detect the cluster that was specifically selected). The <em>x</em> axis, however, shows the raw SHAP values instead of the global absolute value. Positive values indicate an association with the model selecting this
@@ -3334,7 +3346,7 @@ The legend below shows the experiment from which each sample was taken.</p>
 </pre></div>
 </div>
 </div>
-<p><img alt="dafb0f0c6fff486c940c5f47e20f3a11" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
+<p><img alt="7d308287c59249c191242118938854e2" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
 </section>
 <section id="Wrapping-up">
 <h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>
