@@ -29,10 +29,14 @@ A suite for postprocessing time-series extracted from videos of freely moving ro
 
 Getting started
 ===============
-You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing,
-basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
-unsupervised way! Both of these can be used within the package, for example, to automatically
-compare user-defined experimental groups.
+You can use this package to process and annotate motion tracking data produced with DeepLabCut, either using pre-defined motifs (such as time-in-zone, climbing,
+basic social interactions) or embedding your data into a sequence-aware latent space to extract meaningful motifs in an
+unsupervised way. DeepOF also includes a set of tools to interpret the retrieved motifs, and to analyze their differential expression anddynamics across experimental conditions.
+
+.. image:: _static/deepof_pipelines.png
+   :width: 400
+   :align: center
+   :alt: DeepOF label scheme
 
 Installation
 ------------
