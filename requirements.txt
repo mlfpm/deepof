@@ -1,6 +1,6 @@
 catboost>=1.1.1
 dask_image>=2022.9.0
-hypothesis>=6.70.1
+imageio-ffmpeg>=0.4.8
 imbalanced_learn>=0.10.1
 imblearn>=0.0
 joblib>=1.2.0
@@ -11,11 +11,11 @@ matplotlib>=3.7.1
 networkx>=2.8.8
 numpy>=1.23.5
 opencv_python>=4.7.0.72
-pandas>=1.5.3
+pandas~=1.5
 PIMS>=0.6.1
 pomegranate>=1.0.0
 POT>=0.8.2
-pytest>=7.2.2
+tables>=3.7.0
 regex>=2022.3.15
 regex>=2022.10.31
 ruptures>=1.1.7
@@ -28,6 +28,7 @@ shap>=0.41.0
 Shapely>=1.8.5.post1
 spektral>=1.2.0
 statannotations>=0.5.0
+statsmodels>=0.13
 tensorboard>=2.11.2
 tensorflow>=2.11.0;platform_machine != 'arm64' or platform_system != 'Darwin'
 tensorflow-macos>=2.11.0;platform_machine == 'arm64' and platform_system == 'Darwin'
