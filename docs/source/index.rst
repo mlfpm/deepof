@@ -41,7 +41,7 @@ unsupervised way. DeepOF also includes a set of tools to interpret the retrieved
 Installation
 ------------
 
-The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
+The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof>`_. Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
 .. code:: python
 

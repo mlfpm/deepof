@@ -46,16 +46,15 @@ docker pull lucasmiranda42/deepof:latest
 docker run -it lucasmiranda42/deepof
 ```
 
-**NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
-please use either poetry or Docker. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
-
-
 Or use [poetry](https://python-poetry.org/):
 
 ```bash
 # after installing poetry and clonning the DeepOF repository, just run
 poetry install # from the main directory
 ```
+
+**NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
+please use either poetry or Docker. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
 
 ##### Before we delve in:
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found [here](https://www.mousemotorlab.org/deeplabcut).
