@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.3-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.4.5-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/
@@ -31,7 +31,7 @@ Getting started
 ===============
 You can use this package to process and annotate motion tracking data produced with DeepLabCut, either using pre-defined motifs (such as time-in-zone, climbing,
 basic social interactions) or embedding your data into a sequence-aware latent space to extract meaningful motifs in an
-unsupervised way. DeepOF also includes a set of tools to interpret the retrieved motifs, and to analyze their differential expression anddynamics across experimental conditions.
+unsupervised way. DeepOF also includes a set of tools to interpret the retrieved motifs, and to analyze their differential expression anddynamics across experimental conditions. The package is compatible with both single and multi-animal DLC 2.X projects.
 
 .. image:: _static/deepof_pipelines.png
    :width: 400
@@ -73,11 +73,14 @@ Or use `poetry <https://python-poetry.org/>`_:
    # after installing poetry and cloning the DeepOF repository, just run
    poetry install # from the main directory
 
+**NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
+please use either poetry or Docker. You should also install hdf5 using `homebrew <https://brew.sh/>`_, as described in `this <https://github.com/mlfpm/deepof/issues/15>`_ issue.
+
 What you need
 -------------
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow a set of labels
-equivalent to the ones shown in the figure below. A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models>`_.
+equivalent to the ones shown in the figure below. Pre-trained models following this scheme, and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
    :width: 400

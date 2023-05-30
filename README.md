@@ -18,7 +18,7 @@
 You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing, 
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically 
-compare user-defined experimental groups.
+compare user-defined experimental groups. The package is compatible with both single and multi-animal DLC 2.X projects.
 
 ### How do I start?
 ##### Installation:
@@ -46,6 +46,10 @@ docker pull lucasmiranda42/deepof:latest
 docker run -it lucasmiranda42/deepof
 ```
 
+**NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
+please use either poetry or Docker. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
+
+
 Or use [poetry](https://python-poetry.org/):
 
 ```bash
@@ -56,7 +60,7 @@ poetry install # from the main directory
 ##### Before we delve in:
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found [here](https://www.mousemotorlab.org/deeplabcut).
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow our recommended
-set of labels (which can be found in the full documentation page). A pre-trained model capable of recognizing **C57Bl6** and **CD1** mice can be downloaded from [our repository](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/tree/master/models).
+set of labels (which can be found in the full documentation page). Pre-trained models following this scheme, and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from [our repository](https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9).
 
 ##### Basic usage:
 
