@@ -1088,7 +1088,7 @@ def plot_normative_log_likelihood(
     """Plot a bar chart with normative log likelihoods per experimental condition, and compute statistics.
 
     Args:
-        embeddings (table_dict): table dictionary containing unsupervised embeddings per animal.
+        embeddings (table_dict): table dictionary containing supervised annotations or unsupervised embeddings per animal.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         embedding_dataset (pd.DataFrame): global animal embeddings, alongside their respective experimental conditions
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
@@ -1367,7 +1367,7 @@ def plot_embeddings(
 
         if normative_model:
             embedding_dataset, show, ax = plot_normative_log_likelihood(
-                embeddings,
+                (embeddings if embeddings is not None else supervised_annotations),
                 exp_condition,
                 embedding_dataset,
                 normative_model,
