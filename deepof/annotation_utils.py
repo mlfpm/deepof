@@ -284,17 +284,59 @@ def sniff_object(
 def huddle(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
+    animal_id: str = "",
 ) -> np.array:
     """Return true when the mouse is huddling a pretrained model.
 
     Args:
-        X_huddle (pandas.DataFrame): mouse features over time
-        huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
+        X_huddle (pandas.DataFrame): mouse features over time.
+        huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence.
+        animal_id (str): indicates the animal to sniff. Must be one of animal_ids.
 
     Returns:
         y_huddle (np.array): 1 if the animal is huddling, 0 otherwise
 
     """
+    # Keep only body parts that are relevant for huddling
+    required_features = [
+        "('{}Right_bhip', '{}Spine_2')_raw".format(animal_id, animal_id),
+        "('{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id),
+        "('{}Left_bhip', '{}Spine_2')_raw".format(animal_id, animal_id),
+        "('{}Center', '{}Spine_2')_raw".format(animal_id, animal_id),
+        "('{}Left_ear', '{}Nose')_raw".format(animal_id, animal_id),
+        "('{}Nose', '{}Right_ear')_raw".format(animal_id, animal_id),
+        "('{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id),
+        "('{}Center', '{}Left_fhip')_raw".format(animal_id, animal_id),
+        "('{}Center', '{}Spine_1')_raw".format(animal_id, animal_id),
+        "('{}Right_ear', '{}Spine_1')_raw".format(animal_id, animal_id),
+        "('{}Left_ear', '{}Spine_1')_raw".format(animal_id, animal_id),
+        "{}head_area_raw".format(animal_id),
+        "{}torso_area_raw".format(animal_id),
+        "{}back_area_raw".format(animal_id),
+        "{}full_area_raw".format(animal_id),
+        "{}Center_speed".format(animal_id),
+        "{}Left_bhip_speed".format(animal_id),
+        "{}Left_ear_speed".format(animal_id),
+        "{}Left_fhip_speed".format(animal_id),
+        "{}Nose_speed".format(animal_id),
+        "{}Right_bhip_speed".format(animal_id),
+        "{}Right_ear_speed".format(animal_id),
+        "{}Right_fhip_speed".format(animal_id),
+        "{}Spine_1_speed".format(animal_id),
+        "{}Spine_2_speed".format(animal_id),
+        "{}Tail_base_speed".format(animal_id),
+    ]
+    try:
+        X_huddle = X_huddle[required_features]
+    except KeyError:
+        # Return an array of NaNs if the required features are not present, and raise a warning
+        warnings.warn(
+            "Huddle annotation failed. The following features are missing: {}".format(
+                set(required_features) - set(X_huddle.columns)
+            )
+        )
+        return np.full(X_huddle.shape[0], np.nan)
+
     # Concatenate all relevant data frames and predict using the pre-trained estimator
     X_mask = np.isnan(X_huddle).mean(axis=1) == 1
     y_huddle = huddle_estimator.predict(
@@ -704,6 +746,7 @@ def supervised_tagging(
             huddle(
                 (full_features[_id][vid_name] if _id else full_features[vid_name]),
                 huddle_estimator=huddle_estimator,
+                animal_id=_id + undercond,
             )
         )
         tag_dict[_id + undercond + "lookaround"] = look_around(
