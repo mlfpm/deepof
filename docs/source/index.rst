@@ -83,7 +83,7 @@ Once your videos are processed and tagged, you can use DeepOF to extract and ann
 equivalent to either labelling scheme shown in the figure below. Custom schemes are also supported, but a bit more involved (see the last tutorial below for details). Pre-trained models following the default scheme (```deepof_14```), and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
-   :width: 400
+   :width: 800
    :align: center
    :alt: DeepOF label scheme
 
