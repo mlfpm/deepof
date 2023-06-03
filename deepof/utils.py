@@ -65,29 +65,32 @@ def connect_mouse(
     connectivities = []
 
     for animal_id in animal_ids:
-        connectivity_dict = {
-            "deepof_14": {
-                "Nose": ["Left_ear", "Right_ear"],
-                "Spine_1": ["Center", "Left_ear", "Right_ear"],
-                "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
-                "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
-                "Tail_base": ["Tail_1"],
-                "Tail_1": ["Tail_2"],
-                "Tail_2": ["Tail_tip"],
-            },
-            "deepof_8": {
-                "Nose": ["Left_ear", "Right_ear"],
-                "Center": [
-                    "Left_fhip",
-                    "Right_fhip",
-                    "Tail_base",
-                    "Left_ear",
-                    "Right_ear",
-                ],
-                "Tail_base": ["Tail_tip"],
-            },
-        }
-        connectivity = nx.Graph(connectivity_dict[graph_preset])
+        try:
+            connectivity_dict = {
+                "deepof_14": {
+                    "Nose": ["Left_ear", "Right_ear"],
+                    "Spine_1": ["Center", "Left_ear", "Right_ear"],
+                    "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
+                    "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
+                    "Tail_base": ["Tail_1"],
+                    "Tail_1": ["Tail_2"],
+                    "Tail_2": ["Tail_tip"],
+                },
+                "deepof_8": {
+                    "Nose": ["Left_ear", "Right_ear"],
+                    "Center": [
+                        "Left_fhip",
+                        "Right_fhip",
+                        "Tail_base",
+                        "Left_ear",
+                        "Right_ear",
+                    ],
+                    "Tail_base": ["Tail_tip"],
+                },
+            }
+            connectivity = nx.Graph(connectivity_dict[graph_preset])
+        except TypeError:
+            connectivity = nx.Graph(graph_preset)
 
         if animal_id:
             mapping = {

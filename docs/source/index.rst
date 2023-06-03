@@ -80,7 +80,7 @@ What you need
 -------------
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow a set of labels
-equivalent to the ones shown in the figure below. Pre-trained models following this scheme, and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
+equivalent to either labelling scheme shown in the figure below. Custom schemes are also supported, but a bit more involved (see the last tutorial below for details). Pre-trained models following the default scheme (```deepof_14```), and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
    :width: 400
@@ -100,6 +100,7 @@ The main module with which you'll interact is called ```deepof.data```. Let's im
       table_path="/path/to/tables", # Path to DLC output
       project_name="my_deepof_project", # Name of the current project
       exp_conditions={exp_ID: exp_condition} # Dictionary containing one or more experimental conditions per provided video
+      bodypart_graph="deepof_14" # Labelling scheme to use. See the last tutorial for details
     )
 
 This command will create a ```deepof.data.Project``` object storing all the necessary information to start. There are
@@ -156,6 +157,7 @@ Tutorials
 * `Formatting your data: feature extraction from DLC output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
 * `DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial.ipynb>`_
 * `DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial.ipynb>`_
+* `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
 
 Full API reference
 ==================
