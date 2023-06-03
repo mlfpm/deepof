@@ -79,8 +79,8 @@ please use either poetry or Docker. You should also install hdf5 using `homebrew
 What you need
 -------------
 DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
-Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow a set of labels
-equivalent to either labelling scheme shown in the figure below. Custom schemes are also supported, but a bit more involved (see the last tutorial below for details). Pre-trained models following the default scheme (```deepof_14```), and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
+Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Support out of the box is provided for videos from a top-down perspective, that follow a set of labels
+equivalent to either labelling scheme shown in the figure below. Custom schemes are also supported, but require a bit more work (see the last tutorial below for details). Pre-trained models following the default scheme (```deepof_14```), and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
    :width: 800
