@@ -1,5 +1,5 @@
 
-|Pipeline| |Coverage| |Docs| |CodeFactor| |Version| |MLFPM| |Black|
+|Pipeline| |Coverage| |Docs| |CodeFactor| |Version| |MLFPM| |Black| |JOSS|
 
 .. |Pipeline| image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/pipeline.svg
    :target: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/pipelines
