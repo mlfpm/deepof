@@ -243,31 +243,37 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
 
         for k, tab in tab_dict.filter_id(animal_id).items():
 
-            scaler = StandardScaler()
-            imputed = IterativeImputer(
-                skip_complete=True,
-                max_iter=project.enable_iterative_imputation,
-                n_nearest_features=tab.shape[1],
-                tol=1e-1,
-            ).fit_transform(
-                scaler.fit_transform(
-                    tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+            try:
+                scaler = StandardScaler()
+                imputed = IterativeImputer(
+                    skip_complete=True,
+                    max_iter=project.enable_iterative_imputation,
+                    n_nearest_features=tab.shape[1],
+                    tol=1e-1,
+                ).fit_transform(
+                    scaler.fit_transform(
+                        tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                    )
                 )
-            )
 
-            imputed = pd.DataFrame(
-                scaler.inverse_transform(imputed),
-                index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
-                columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
-            )
+                imputed = pd.DataFrame(
+                    scaler.inverse_transform(imputed),
+                    index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
+                    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
+                )
 
-            imputed_tabs[k].update(imputed)
+                imputed_tabs[k].update(imputed)
 
-            if tab.shape[1] != imputed.shape[1]:
+                if tab.shape[1] != imputed.shape[1]:
+                    warnings.warn(
+                        "Some of the body parts have zero measurements. Iterative imputation skips these,"
+                        " which could bring problems downstream. A possible solution could be to refine "
+                        "DLC tracklets."
+                    )
+
+            except ValueError:
                 warnings.warn(
-                    "Some of the body parts have zero measurements. Iterative imputation skips these,"
-                    " which could bring problems downstream. A possible solution could be to refine "
-                    "DLC tracklets."
+                    f"Animal {animal_id} in experiment {k} has not enough data. Skipping imputation."
                 )
 
     return imputed_tabs
