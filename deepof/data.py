@@ -564,8 +564,9 @@ class Project:
                 angle_dict[key] = dats
         except KeyError:
             raise KeyError(
-                "Are there multiple animals in your single-animal DLC video? Make sure to set the animal_ids parameter"
-                " in deepof.data.Project"
+                "Are you using a custom labelling scheme? Out tutorials may help! "
+                "In case you're not, are there multiple animals in your single-animal DLC video? Make sure to set the "
+                "animal_ids parameter in deepof.data.Project"
             )
 
         # Restore original index
@@ -590,36 +591,43 @@ class Project:
 
         areas_dict = {}
 
-        for key, tab in tab_dict.items():
+        try:
+            for key, tab in tab_dict.items():
 
-            exp_table = pd.DataFrame()
+                exp_table = pd.DataFrame()
 
-            for aid in self.animal_ids:
+                for aid in self.animal_ids:
 
-                if aid == "":
-                    aid = None
+                    if aid == "":
+                        aid = None
 
-                # get the current table for the current animal
-                current_table = tab.loc[
-                    :, deepof.utils.filter_columns(tab.columns, aid)
-                ]
-                current_table = current_table.apply(
-                    lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
-                )
-                current_table = pd.DataFrame(
-                    current_table.to_list(),
-                    index=current_table.index,
-                    columns=["head_area", "torso_area", "back_area", "full_area"],
-                ).add_prefix(
-                    "{}{}".format(
-                        (aid if aid is not None else ""),
-                        ("_" if aid is not None else ""),
+                    # get the current table for the current animal
+                    current_table = tab.loc[
+                        :, deepof.utils.filter_columns(tab.columns, aid)
+                    ]
+                    current_table = current_table.apply(
+                        lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
                     )
-                )
+                    current_table = pd.DataFrame(
+                        current_table.to_list(),
+                        index=current_table.index,
+                        columns=["head_area", "torso_area", "back_area", "full_area"],
+                    ).add_prefix(
+                        "{}{}".format(
+                            (aid if aid is not None else ""),
+                            ("_" if aid is not None else ""),
+                        )
+                    )
 
-                exp_table = pd.concat([exp_table, current_table], axis=1)
+                    exp_table = pd.concat([exp_table, current_table], axis=1)
 
-            areas_dict[key] = exp_table
+                areas_dict[key] = exp_table
+
+        except KeyError:
+            warnings.warn(
+                "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but no areas will be computed."
+            )
+            return None
 
         return areas_dict
 
