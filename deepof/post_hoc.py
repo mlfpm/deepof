@@ -34,6 +34,7 @@ import scipy
 import shap
 import tqdm
 import umap
+import warnings
 
 import deepof.data
 
@@ -800,9 +801,14 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
     for der in range(kin_derivative + 1):
 
-        cur_kinematics = deepof_project.get_coords(
-            center="Center", align="Spine_1", speed=der
-        )
+        try:
+            cur_kinematics = deepof_project.get_coords(
+                center="Center", align="Spine_1", speed=der
+            )
+        except AssertionError:
+            cur_kinematics = deepof_project.get_coords(
+                center="Center", align="Nose", speed=der
+            )
 
         # If specified, filter on specific animals
         if animal_id is not None:
@@ -843,14 +849,22 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
         if include_areas:
             if der == 0 or include_feature_derivatives:
-                cur_areas = deepof_project.get_areas(speed=der, selected_id=animal_id)
-
-                cur_kinematics = {
-                    key: pd.concat([kin, area], axis=1)
-                    for (key, kin), area in zip(
-                        cur_kinematics.items(), cur_areas.values()
+                try:
+                    cur_areas = deepof_project.get_areas(
+                        speed=der, selected_id=animal_id
                     )
-                }
+
+                    cur_kinematics = {
+                        key: pd.concat([kin, area], axis=1)
+                        for (key, kin), area in zip(
+                            cur_kinematics.items(), cur_areas.values()
+                        )
+                    }
+
+                except ValueError:
+                    warnings.warn(
+                        "No areas found for animal ID {}. Skipping.".format(animal_id)
+                    )
 
         # Add corresponding suffixes to most common moments
         if der == 0:

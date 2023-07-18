@@ -331,11 +331,10 @@ class Project:
             print("Loading trajectories...")
 
         tab_dict = {}
+        for tab in self.tables:
 
-        if self.table_format == ".h5":
+            if self.table_format == ".h5":
 
-            tab_dict = {}
-            for tab in self.tables:
                 loaded_tab = pd.read_hdf(
                     os.path.join(self.table_path, tab), dtype=float
                 )
@@ -345,18 +344,21 @@ class Project:
                 loaded_tab.columns = loaded_tab.loc["scorer", :]
                 loaded_tab = loaded_tab.iloc[1:]
 
-                tab_dict[deepof.utils.re.findall("(.*?)DLC", tab)[0]] = loaded_tab
+            elif self.table_format == ".csv":
 
-        elif self.table_format == ".csv":
-
-            tab_dict = {
-                deepof.utils.re.findall("(.*?)DLC", tab)[0]: pd.read_csv(
+                loaded_tab = pd.read_csv(
                     os.path.join(self.table_path, tab),
                     index_col=0,
                     low_memory=False,
                 )
-                for tab in self.tables
-            }
+
+            # Remove the DLC suffix from the table name
+            try:
+                tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
+            except IndexError:
+                tab_name = tab
+
+            tab_dict[tab_name] = loaded_tab
 
         # Check in the files come from a multi-animal DLC project
         if "individuals" in list(tab_dict.values())[0].index:
@@ -1453,7 +1455,12 @@ class Coordinates:
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
         raw_coords = self.get_coords(center=None)
-        coords = self.get_coords(center="Center", align="Spine_1")
+
+        try:
+            coords = self.get_coords(center="Center", align="Spine_1")
+        except AssertionError:
+            coords = self.get_coords(center="Center", align="Nose")
+
         dists = self.get_distances()
         speeds = self.get_coords(speed=1)
         if len(self._animal_ids) <= 1:
@@ -1482,7 +1489,7 @@ class Coordinates:
                 dists=dists,
                 full_features=features_dict,
                 speeds=speeds,
-                video=[vid for vid in self._videos if key + "DLC" in vid][0],
+                video=[vid for vid in self._videos if key][0],
                 trained_model_path=self._trained_model_path,
                 params=params,
             )

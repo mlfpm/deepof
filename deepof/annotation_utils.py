@@ -12,6 +12,7 @@ from typing import Any, List, NewType, Union
 from shapely.geometry import Point, Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
+from itertools import combinations
 
 import cv2
 import numpy as np
@@ -331,9 +332,8 @@ def huddle(
     except KeyError:
         # Return an array of NaNs if the required features are not present, and raise a warning
         warnings.warn(
-            "Huddle annotation failed. The following features are missing: {}".format(
-                set(required_features) - set(X_huddle.columns)
-            )
+            "Skipping huddle annotation as not all required body parts are present. At the moment, huddle annotation "
+            "requires the deepof_14 labelling scheme. Read the full documentation for further details."
         )
         return np.full(X_huddle.shape[0], np.nan)
 
@@ -344,25 +344,6 @@ def huddle(
     )
     y_huddle[X_mask] = np.nan
     return y_huddle
-
-
-def dig(
-    pos_dframe: pd.DataFrame,
-    speed_dframe: pd.DataFrame,
-    dig_estimator: sklearn.pipeline.Pipeline,
-):
-    """Return true when the mouse is digging using a pretrained model.
-
-    Args:
-        pos_dframe (pandas.DataFrame): position of body parts over time
-        speed_dframe (pandas.DataFrame): speed of body parts over time
-        dig_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence
-
-    Returns:
-        dig (np.array): True if the animal is digging, False otherwise
-    """
-    # Concatenate all relevant data frames and predict using the pre-trained estimator
-    pass
 
 
 def look_around(
@@ -378,7 +359,7 @@ def look_around(
         speed_dframe (pandas.DataFrame): speed of body parts over time
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
         tol_speed (float): Maximum tolerated speed for the center of the mouse
-        tol_likelihood (float): Maximum tolerated likelihood for the nose (if the animal is digging, the nose is momentarily occluded).
+        tol_likelihood (float): Maximum tolerated likelihood for the nose.
 
     Returns:
         lookaround (np.array): True if the animal is standing still and looking around, False otherwise
@@ -574,15 +555,6 @@ def supervised_tagging(
         "rb",
     ) as est:
         huddle_estimator = pickle.load(est)
-    with open(
-        os.path.join(
-            trained_model_path,
-            "deepof_supervised",
-            "deepof_supervised_dig_estimator.pkl",
-        ),
-        "rb",
-    ) as est:
-        dig_estimator = pickle.load(est)
 
     # Extract useful information from coordinates object
     tracks = list(coord_object._tables.keys())
@@ -624,6 +596,7 @@ def supervised_tagging(
         "Left_bhip",
         "Right_bhip",
     ]
+    main_body = [body_part for body_part in main_body if body_part in coords.columns]
 
     def onebyone_contact(bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
@@ -682,42 +655,71 @@ def supervised_tagging(
             "Right_bhip",
             "Tail_base",
         ]
+        bparts = [bpart for bpart in bparts if bpart in ovr_speeds.columns]
         array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
         return np.insert(avg_speed, 0, np.nan, axis=0)
 
-    if len(animal_ids) == 2:
-        # Define behaviours that can be computed on the fly from the distance matrix
-        tag_dict["nose2nose"] = onebyone_contact(bparts=["_Nose"])
+    # Get all animal ID combinations
+    animal_pairs = list(combinations(animal_ids, 2))
 
-        tag_dict["sidebyside"] = twobytwo_contact(rev=False)
+    if len(animal_ids) >= 2:
 
-        tag_dict["sidereside"] = twobytwo_contact(rev=True)
-
-        tag_dict[animal_ids[0] + "_nose2tail"] = onebyone_contact(
-            bparts=["_Nose", "_Tail_base"]
-        )
-        tag_dict[animal_ids[1] + "_nose2tail"] = onebyone_contact(
-            bparts=["_Tail_base", "_Nose"]
-        )
-        tag_dict[animal_ids[0] + "_nose2body"] = onebyone_contact(
-            bparts=["_Nose", main_body]
-        )
-        tag_dict[animal_ids[1] + "_nose2body"] = onebyone_contact(
-            bparts=[main_body, "_Nose"]
-        )
-
-        for _id in animal_ids:
-            tag_dict[_id + "_following"] = deepof.utils.smooth_boolean_array(
-                following_path(
-                    dists,
-                    raw_coords,
-                    follower=_id,
-                    followed=[i for i in animal_ids if i != _id][0],
-                    frames=params["follow_frames"],
-                    tol=params["follow_tol"],
-                )
+        for animal_pair in animal_pairs:
+            # Define behaviours that can be computed on the fly from the distance matrix
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2nose"] = onebyone_contact(
+                bparts=["_Nose"]
             )
+
+            tag_dict[
+                f"{animal_pair[0]}_{animal_pair[1]}_sidebyside"
+            ] = twobytwo_contact(rev=False)
+
+            tag_dict[
+                f"{animal_pair[0]}_{animal_pair[1]}_sidereside"
+            ] = twobytwo_contact(rev=True)
+
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2tail"] = onebyone_contact(
+                bparts=["_Nose", "_Tail_base"]
+            )
+            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2tail"] = onebyone_contact(
+                bparts=["_Tail_base", "_Nose"]
+            )
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2body"] = onebyone_contact(
+                bparts=["_Nose", main_body]
+            )
+            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2body"] = onebyone_contact(
+                bparts=[main_body, "_Nose"]
+            )
+
+            try:
+                tag_dict[
+                    f"{animal_pair[0]}_{animal_pair[1]}_following"
+                ] = deepof.utils.smooth_boolean_array(
+                    following_path(
+                        dists,
+                        raw_coords,
+                        follower=animal_pair[0],
+                        followed=animal_pair[1],
+                        frames=params["follow_frames"],
+                        tol=params["follow_tol"],
+                    )
+                )
+
+                tag_dict[
+                    f"{animal_pair[1]}_{animal_pair[0]}_following"
+                ] = deepof.utils.smooth_boolean_array(
+                    following_path(
+                        dists,
+                        raw_coords,
+                        follower=animal_pair[1],
+                        followed=animal_pair[0],
+                        frames=params["follow_frames"],
+                        tol=params["follow_tol"],
+                    )
+                )
+            except KeyError:
+                pass
 
     for _id in animal_ids:
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
