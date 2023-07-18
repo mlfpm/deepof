@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.4.6"
+version = "0.5.0"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"

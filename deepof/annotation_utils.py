@@ -598,19 +598,19 @@ def supervised_tagging(
     ]
     main_body = [body_part for body_part in main_body if body_part in coords.columns]
 
-    def onebyone_contact(bparts: List):
+    def onebyone_contact(interactors: List, bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
 
         try:
-            left = animal_ids[0] + bparts[0]
+            left = interactors[0] + bparts[0]
         except TypeError:
-            left = [animal_ids[0] + "_" + suffix for suffix in bparts[0]]
+            left = [interactors[0] + "_" + suffix for suffix in bparts[0]]
 
         try:
-            right = animal_ids[1] + bparts[-1]
+            right = interactors[1] + bparts[-1]
         except TypeError:
-            right = [animal_ids[1] + "_" + suffix for suffix in bparts[-1]]
+            right = [interactors[1] + "_" + suffix for suffix in bparts[-1]]
 
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
@@ -623,16 +623,16 @@ def supervised_tagging(
             )
         )
 
-    def twobytwo_contact(rev):
+    def twobytwo_contact(interactors: List, rev: bool):
         """Return a smooth boolean array with side by side contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
                 raw_coords,
-                animal_ids[0] + "_Nose",
-                animal_ids[0] + "_Tail_base",
-                animal_ids[1] + "_Nose",
-                animal_ids[1] + "_Tail_base",
+                interactors[0] + "_Nose",
+                interactors[0] + "_Tail_base",
+                interactors[1] + "_Nose",
+                interactors[1] + "_Tail_base",
                 params["side_contact_tol"],
                 rev=rev,
                 arena_abs=arena_abs,
@@ -668,28 +668,28 @@ def supervised_tagging(
         for animal_pair in animal_pairs:
             # Define behaviours that can be computed on the fly from the distance matrix
             tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2nose"] = onebyone_contact(
-                bparts=["_Nose"]
+                interactors=animal_pair, bparts=["_Nose"]
             )
 
             tag_dict[
                 f"{animal_pair[0]}_{animal_pair[1]}_sidebyside"
-            ] = twobytwo_contact(rev=False)
+            ] = twobytwo_contact(interactors=animal_pair, rev=False)
 
             tag_dict[
                 f"{animal_pair[0]}_{animal_pair[1]}_sidereside"
-            ] = twobytwo_contact(rev=True)
+            ] = twobytwo_contact(interactors=animal_pair, rev=True)
 
             tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2tail"] = onebyone_contact(
-                bparts=["_Nose", "_Tail_base"]
+                interactors=animal_pair, bparts=["_Nose", "_Tail_base"]
             )
             tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2tail"] = onebyone_contact(
-                bparts=["_Tail_base", "_Nose"]
+                interactors=animal_pair, bparts=["_Tail_base", "_Nose"]
             )
             tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2body"] = onebyone_contact(
-                bparts=["_Nose", main_body]
+                interactors=animal_pair, bparts=["_Nose", main_body]
             )
             tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2body"] = onebyone_contact(
-                bparts=[main_body, "_Nose"]
+                interactors=animal_pair, bparts=[main_body, "_Nose"]
             )
 
             try:

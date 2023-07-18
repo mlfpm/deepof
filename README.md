@@ -2,7 +2,7 @@
 [![Coverage](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg)](https://coverage.readthedocs.io/en/coverage-5.3/)
 [![Documentation Status](https://readthedocs.org/projects/deepof/badge/?version=latest)](https://deepof.readthedocs.io/en/latest)
 [![CodeFactor](https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge)](https://www.codefactor.io/repository/github/lucasmiranda42/deepof)
-[![Version](https://img.shields.io/badge/release-v0.4.6-informational)](https://pypi.org/project/deepof/)
+[![Version](https://img.shields.io/badge/release-v0.5.0-informational)](https://pypi.org/project/deepof/)
 [![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.05394/status.svg)](https://doi.org/10.21105/joss.05394)
@@ -123,6 +123,27 @@ annotations. The latter is a bit more complicated: it returns a series of object
 offer three flavours of deep clustering models), and allow for further analysis comparing cluster expression and dynamics.
 
 That's it for this (very basic) introduction. Check out the tutorials and [full documentation](https://deepof.readthedocs.io/en/latest/index.html) for details!
+
+---
+### Cite us!
+
+If you use DeepOF for your research, please consider citing the following:
+
+```bibtex
+@article{DeepOF:JOSS,
+    title = {{DeepOF: a Python package for supervised and unsupervised pattern recognition in mice motion tracking data}},
+    year = {2023},
+    journal = {Journal of Open Source Software},
+    author = {Miranda, Lucas and Bordes, Joeri and P{\"{u}}tz, Benno and Schmidt, Mathias V. and M{\"{u}}ller-Myhsok, Bertram},
+    number = {86},
+    month = {6},
+    pages = {5394},
+    volume = {8},
+    url = {https://joss.theoj.org/papers/10.21105/joss.05394},
+    doi = {10.21105/JOSS.05394},
+    issn = {2475-9066}
+}
+```
 
 ---
 ### Issues

@@ -193,18 +193,10 @@ def test_single_animal_traits(animal_id):
         "rb",
     ) as handle:
         huddle_clf = pickle.load(handle)
-    with open(
-        "./deepof/trained_models/deepof_supervised/deepof_supervised_dig_estimator.pkl",
-        "rb",
-    ) as handle:
-        dig_clf = pickle.load(handle)
 
     huddling = deepof.annotation_utils.huddle(
         features, huddle_estimator=huddle_clf
     ).astype(int)
-    digging = deepof.annotation_utils.dig(
-        pos_dframe, speed_dframe, dig_estimator=dig_clf
-    )
 
     assert huddling.dtype == int
     assert np.array(huddling).shape[0] == pos_dframe.shape[0]
