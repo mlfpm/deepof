@@ -15,6 +15,7 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 
 from collections import defaultdict
+from difflib import get_close_matches
 from pkg_resources import resource_filename
 from shapely.geometry import Polygon
 from shutil import rmtree
@@ -1491,7 +1492,12 @@ class Coordinates:
                 dists=dists,
                 full_features=features_dict,
                 speeds=speeds,
-                video=[vid for vid in self._videos if key in vid][0],
+                video=get_close_matches(
+                    key,
+                    [vid for vid in self._videos if vid.startswith(key)],
+                    cutoff=0.1,
+                    n=1,
+                )[0],
                 trained_model_path=self._trained_model_path,
                 params=params,
             )
