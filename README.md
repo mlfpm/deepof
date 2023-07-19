@@ -2,7 +2,7 @@
 [![Coverage](https://gitlab.mpcdf.mpg.de/lucasmir/deepof/badges/master/coverage.svg)](https://coverage.readthedocs.io/en/coverage-5.3/)
 [![Documentation Status](https://readthedocs.org/projects/deepof/badge/?version=latest)](https://deepof.readthedocs.io/en/latest)
 [![CodeFactor](https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge)](https://www.codefactor.io/repository/github/lucasmiranda42/deepof)
-[![Version](https://img.shields.io/badge/release-v0.5.0-informational)](https://pypi.org/project/deepof/)
+[![Version](https://img.shields.io/badge/release-v0.5.1-informational)](https://pypi.org/project/deepof/)
 [![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.05394/status.svg)](https://doi.org/10.21105/joss.05394)
@@ -144,6 +144,23 @@ If you use DeepOF for your research, please consider citing the following:
     issn = {2475-9066}
 }
 ```
+
+```bibtex
+@article{DeepOF:NCOMMS,
+  doi = {10.1038/s41467-023-40040-3},
+  url = {https://doi.org/10.1038/s41467-023-40040-3},
+  year = {2023},
+  month = jul,
+  publisher = {Springer Science and Business Media {LLC}},
+  volume = {14},
+  number = {1},
+  author = {Joeri Bordes and Lucas Miranda and Maya Reinhardt and Sowmya Narayan and Jakob Hartmann and Emily L. Newman and Lea Maria Brix and Lotte van Doeselaar and Clara Engelhardt and Larissa Dillmann and Shiladitya Mitra and Kerry J. Ressler and Benno P\"{u}tz and Felix Agakov and Bertram M\"{u}ller-Myhsok and Mathias V. Schmidt},
+  title = {Automatically annotated motion tracking identifies a distinct social behavioral profile following chronic social defeat stress},
+  journal = {Nature Communications}
+}
+```
+
+All data and code used to generate the results in the NCOMMS paper are available [here](https://datashare.mpcdf.mpg.de/s/3ETwBe1CKk09c9x) (password: *DeepOF2023*).
 
 ---
 ### Issues

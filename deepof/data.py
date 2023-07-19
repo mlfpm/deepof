@@ -1493,6 +1493,10 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 params=params,
             )
+
+            print(supervised_tags.shape)
+            print(tag_index.shape)
+
             supervised_tags.index = tag_index
             tag_dict[key] = supervised_tags
 
