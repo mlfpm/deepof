@@ -596,7 +596,11 @@ def supervised_tagging(
         "Left_bhip",
         "Right_bhip",
     ]
-    main_body = [body_part for body_part in main_body if body_part in coords.columns]
+    main_body = [
+        body_part
+        for body_part in main_body
+        if any(body_part in col[0] for col in coords.columns)
+    ]
 
     def onebyone_contact(interactors: List, bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
@@ -655,7 +659,12 @@ def supervised_tagging(
             "Right_bhip",
             "Tail_base",
         ]
-        bparts = [bpart for bpart in bparts if bpart in ovr_speeds.columns]
+        bparts = [
+            bpart
+            for bpart in bparts
+            if bpart
+            if any(bpart in col for col in ovr_speeds.columns)
+        ]
         array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
         return np.insert(avg_speed, 0, np.nan, axis=0)
