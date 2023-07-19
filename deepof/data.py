@@ -1479,9 +1479,11 @@ class Coordinates:
 
         # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
+
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
+
             supervised_tags = deepof.annotation_utils.supervised_tagging(
                 self,
                 raw_coords=raw_coords,
@@ -1489,13 +1491,10 @@ class Coordinates:
                 dists=dists,
                 full_features=features_dict,
                 speeds=speeds,
-                video=[vid for vid in self._videos if key][0],
+                video=[vid for vid in self._videos if key in vid][0],
                 trained_model_path=self._trained_model_path,
                 params=params,
             )
-
-            print(supervised_tags.shape)
-            print(tag_index.shape)
 
             supervised_tags.index = tag_index
             tag_dict[key] = supervised_tags
