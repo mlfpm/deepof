@@ -208,6 +208,7 @@ def sniff_object(
     tol: float,
     tol_speed: float,
     nose: str,
+    center_name: str = "Center",
     centered_data: bool = False,
     s_object: str = "arena",
     animal_id: str = "",
@@ -220,6 +221,7 @@ def sniff_object(
         arena (np.array): contains arena location and shape details.
         pos_dict (table_dict): position over time for all videos in a project.
         tol (float): minimum tolerance to report a hit.
+        center_name (str): Body part to center coordinates on. "Center" by default.
         nose (str): indicates the name of the body part representing the nose of the selected animal.
         centered_data (bool): indicates whether the input data is centered.
         s_object (str): indicates the object to sniff. Must be one of ['arena', 'object'].
@@ -276,7 +278,7 @@ def sniff_object(
     else:
         raise NotImplementedError
 
-    speed = speed_dframe[animal_id + "Center"] < tol_speed
+    speed = speed_dframe[animal_id + center_name] < tol_speed
     sniffing = nosing & speed
 
     return sniffing
@@ -351,6 +353,7 @@ def look_around(
     likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
+    center_name: str = "Center",
     animal_id: str = "",
 ):
     """Return true when the mouse is looking around using simple rules.
@@ -360,6 +363,8 @@ def look_around(
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        center_name (str): Body part to center coordinates on. "Center" by default.
+        animal_id (str): ID of the current animal.
 
     Returns:
         lookaround (np.array): True if the animal is standing still and looking around, False otherwise
@@ -368,8 +373,10 @@ def look_around(
     if animal_id != "":
         animal_id += "_"
 
-    speed = speed_dframe[animal_id + "Center"] < tol_speed
-    nose_speed = speed_dframe[animal_id + "Center"] < speed_dframe[animal_id + "Nose"]
+    speed = speed_dframe[animal_id + center_name] < tol_speed
+    nose_speed = (
+        speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
+    )
     nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
 
     lookaround = speed & nose_likelihood & nose_speed
@@ -524,6 +531,7 @@ def supervised_tagging(
     full_features: dict,
     video: str,
     trained_model_path: str = None,
+    center: str = "Center",
     params: dict = {},
 ) -> pd.DataFrame:
     """Output a dataframe with the registered motives per frame.
@@ -539,6 +547,7 @@ def supervised_tagging(
         full_features (dict): dictionary with
         video (str): string name of the experiment to tag
         trained_model_path (str): path indicating where all pretrained models are located
+        center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
 
     Returns:
@@ -546,6 +555,7 @@ def supervised_tagging(
 
     """
     # Load pre-trained models for ML annotated traits
+
     with open(
         os.path.join(
             trained_model_path,
@@ -742,17 +752,19 @@ def supervised_tagging(
         )
         tag_dict[_id + undercond + "sniffing"] = deepof.utils.smooth_boolean_array(
             sniff_object(
-                speeds,
-                arena_type,
-                arena_params,
-                raw_coords,
-                params["climb_tol"],
-                params["huddle_speed"],
-                _id + undercond + "Nose",
+                speed_dframe=speeds,
+                arena_type=arena_type,
+                arena=arena_params,
+                pos_dict=raw_coords,
+                tol=params["climb_tol"],
+                tol_speed=params["huddle_speed"],
+                nose=_id + undercond + "Nose",
+                center_name=center,
                 s_object="arena",
                 animal_id=_id,
             )
         )
+
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
                 (full_features[_id][vid_name] if _id else full_features[vid_name]),
@@ -765,6 +777,7 @@ def supervised_tagging(
             likelihoods,
             params["huddle_speed"],
             params["nose_likelihood"],
+            center_name=center,
             animal_id=_id,
         )
         # NOTE: It's important that speeds remain the last columns.

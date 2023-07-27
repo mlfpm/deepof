@@ -4,6 +4,7 @@
 
 """Functions and general utilities for the deepof package."""
 import copy
+import h5py
 from copy import deepcopy
 from dask_image.imread import imread
 from itertools import combinations, product
@@ -436,37 +437,40 @@ def compute_areas(coords, animal_id=None):
         areas: list including head, torso, back, and full areas for the provided coordinates.
 
     """
-    head = ["Nose", "Left_ear", "Left_fhip", "Spine_1"]
+    area_bps = {
+        "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
+        "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
+        "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
+        "full_area": [
+            "Nose",
+            "Left_ear",
+            "Left_fhip",
+            "Left_bhip",
+            "Tail_base",
+            "Right_bhip",
+            "Right_fhip",
+            "Right_ear",
+        ],
+    }
 
-    torso = ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"]
+    areas = {}
 
-    back = ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"]
+    for name, bps in area_bps.items():
 
-    full = [
-        "Nose",
-        "Left_ear",
-        "Left_fhip",
-        "Left_bhip",
-        "Tail_base",
-        "Right_bhip",
-        "Right_fhip",
-        "Right_ear",
-    ]
+        try:
+            if animal_id is not None:
+                bps = ["_".join([animal_id, bp]) for bp in bps]
 
-    areas = []
+            x = coords.xs(key="x", level=1)[bps]
+            y = coords.xs(key="y", level=1)[bps]
 
-    for bps in [head, torso, back, full]:
+            if np.isnan(x).any() or np.isnan(y).any():
+                areas[name] = np.nan
+            else:
+                areas[name] = Polygon(zip(x, y)).area
 
-        if animal_id is not None:
-            bps = ["_".join([animal_id, bp]) for bp in bps]
-
-        x = coords.xs(key="x", level=1)[bps]
-        y = coords.xs(key="y", level=1)[bps]
-
-        if np.isnan(x).any() or np.isnan(y).any():
-            areas.append(np.nan)
-        else:
-            areas.append(Polygon(zip(x, y)).area)
+        except KeyError:
+            continue
 
     return areas
 
@@ -503,8 +507,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     column of data are aligned with the y-axis.
 
     Args:
-        data (numpy.ndarray): 3D array containing positions of body parts over time, where
-        shape is N (sliding window instances) * m (sliding window size) * l (features)
+        data (numpy.ndarray): 3D array containing positions of body parts over time, where shape is N (sliding window instances) * m (sliding window size) * l (features)
         mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
 
     Returns:
@@ -536,6 +539,98 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
     return aligned_trajs
+
+
+def load_table(
+    tab: str,
+    table_path: str,
+    table_format: str,
+    rename_bodyparts: list = None,
+    animal_ids: list = None,
+):
+    """Loads a table into a structured pandas data frame.
+
+    Supports inputs from both DeepLabCut and (S)LEAP.
+
+    Args:
+        tab (str): Name of the file containing the tracks.
+        table_path (string): Full path to the file containing the tracks.
+        table_format (str): type of the files to load, coming from either DeepLabCut (CSV and H5) and (S)LEAP (NPY).
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+
+    Returns:
+        loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
+
+    """
+
+    if table_format == ".h5":
+
+        loaded_tab = pd.read_hdf(os.path.join(table_path, tab), dtype=float)
+
+        # Adapt index to be compatible with downstream processing
+        loaded_tab = loaded_tab.T.reset_index(drop=False).T
+        loaded_tab.columns = loaded_tab.loc["scorer", :]
+        loaded_tab = loaded_tab.iloc[1:]
+
+    elif table_format == ".csv":
+
+        loaded_tab = pd.read_csv(
+            os.path.join(table_path, tab),
+            index_col=0,
+            low_memory=False,
+        )
+
+    elif table_format in ".npy":
+
+        # Load numpy array from disk
+        loaded_tab = np.load(os.path.join(table_path, tab), "r")
+
+        # Check that body part names are provided
+        assert len(rename_bodyparts) == loaded_tab.shape[2]
+
+        # Impute likelihood as a third dimension in the last axis,
+        # with 1.0 if xy values are present and 0.0 otherwise
+        likelihoods = np.expand_dims(
+            np.all(np.isfinite(loaded_tab), axis=-1), axis=-1
+        ).astype(float)
+        loaded_tab = np.concatenate([loaded_tab, likelihoods], axis=-1)
+
+        # Collapse nodes and animals to the desired shape
+        loaded_tab = pd.DataFrame(loaded_tab.reshape(loaded_tab.shape[0], -1))
+
+        # Create the header as a multi index, using animals, body parts and coordinates
+        multi_index = pd.MultiIndex.from_product(
+            [["sleap_scorer"], animal_ids, rename_bodyparts, ["x", "y", "likelihood"]],
+            names=["scorer", "individuals", "bodyparts", "coords"],
+        )
+        multi_index = pd.DataFrame(
+            pd.DataFrame(multi_index).explode(0).values.reshape([-1, 4]).T,
+            index=["scorer", "individuals", "bodyparts", "coords"],
+        )
+
+        loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
+        loaded_tab.columns = multi_index.loc["scorer"]
+
+    # if rename_bodyparts is not None:
+    #    loaded_tab = rename_track_bps(loaded_tab, rename_bodyparts)
+
+    return loaded_tab
+
+
+def rename_track_bps(loaded_tab: pd.DataFrame, rename_bodyparts: list):
+    """Renames all body parts in the provided dataframe.
+
+    Args:
+        loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+
+    Returns:
+        renamed_tab (pd.DataFrame): Data frame with renamed body parts
+
+    """
+    renamed_tab = None
+
+    return renamed_tab
 
 
 def scale_table(
