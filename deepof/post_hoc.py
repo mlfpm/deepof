@@ -770,6 +770,8 @@ def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
 def align_deepof_kinematics_with_unsupervised_labels(
     deepof_project: coordinates,
     kin_derivative: int = 1,
+    center: str = "Center",
+    align: str = "Spine_1",
     include_feature_derivatives: bool = False,
     include_distances: bool = True,
     include_angles: bool = True,
@@ -785,6 +787,8 @@ def align_deepof_kinematics_with_unsupervised_labels(
     Args:
         deepof_project (coordinates): A deepof.Project object.
         kin_derivative (int): The order of the derivative to use for the kinematics. 1 = speed, 2 = acceleration, etc.
+        center (str): Body part to center coordinates on. "Center" by default.
+        align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
         include_feature_derivatives (bool): Whether to compute speed on distances, angles, and areas, if they are included.
         include_distances (bool): Whether to include distances in the alignment.
         include_angles (bool): Whether to include angles in the alignment.
@@ -803,12 +807,18 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
         try:
             cur_kinematics = deepof_project.get_coords(
-                center="Center", align="Spine_1", speed=der
+                center=center, align=align, speed=der
             )
         except AssertionError:
-            cur_kinematics = deepof_project.get_coords(
-                center="Center", align="Nose", speed=der
-            )
+
+            try:
+                cur_kinematics = deepof_project.get_coords(
+                    center="Center", align="Spine_1"
+                )
+            except AssertionError:
+                cur_kinematics = deepof_project.get_coords(
+                    center="Center", align="Nose"
+                )
 
         # If specified, filter on specific animals
         if animal_id is not None:
