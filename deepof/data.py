@@ -92,7 +92,7 @@ class Project:
     def __init__(
         self,
         animal_ids: List = None,
-        arena: str = "polygonal-manual",
+        arena: str = "polygonal-autodetect",
         bodypart_graph: str = "deepof_14",
         enable_iterative_imputation: bool = 250,
         exclude_bodyparts: List = tuple([""]),
@@ -107,6 +107,7 @@ class Project:
         video_path: str = None,
         table_path: str = None,
         rename_bodyparts: list = None,
+        sam_checkpoint_path: str = None,
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
@@ -116,7 +117,7 @@ class Project:
 
         Args:
             animal_ids (list): list of animal ids.
-            arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
+            arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
             enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended if several animals are present, but slower.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
@@ -131,6 +132,7 @@ class Project:
             video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
             table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
             rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+            sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, or "npy" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
@@ -191,6 +193,7 @@ class Project:
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
+        self.segmentation_path = sam_checkpoint_path
         self.rename_bodyparts = rename_bodyparts
 
     def __str__(self):  # pragma: no cover
@@ -201,7 +204,7 @@ class Project:
         """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self.videos))
 
-    def set_up_project_directory(self):
+    def set_up_project_directory(self, debug=False):
         """Create a project directory where to save all produced results."""
         # Create a project directory, as well as subfolders for videos and tables
         project_path = os.path.join(self.project_path, self.project_name)
@@ -241,6 +244,12 @@ class Project:
                 os.path.join(self.project_path, self.project_name, "Coordinates")
             )
             os.makedirs(os.path.join(self.project_path, self.project_name, "Figures"))
+            if debug and "auto" in self.arena:
+                os.makedirs(
+                    os.path.join(
+                        self.project_path, self.project_name, "Arena_detection"
+                    )
+                )
 
             # Copy videos and tables to the new directories
             for vid in os.listdir(self.video_path):
@@ -289,12 +298,15 @@ class Project:
         """Bool. Toggles angle computation. True by default. If turned off, enhances performance for big datasets."""
         return self._angles
 
-    def get_arena(self, tables: list, verbose: bool = False) -> np.array:
+    def get_arena(
+        self, tables: list, verbose: bool = False, debug: str = False
+    ) -> np.array:
         """Return the arena as recognised from the videos.
 
         Args:
             tables (list): list of coordinate tables
             verbose (bool): if True, logs to console
+            debug (str): if True, saves intermediate results to disk
 
         Returns:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
@@ -304,12 +316,14 @@ class Project:
             print("Detecting arena...")
 
         return deepof.utils.get_arenas(
+            self,
             self.arena,
             self.arena_dims,
             self.project_path,
             self.project_name,
-            tables,
+            self.segmentation_path,
             self.videos,
+            debug,
         )
 
     def load_tables(self, verbose: bool = True) -> Tuple:
@@ -623,11 +637,14 @@ class Project:
 
         return areas_dict
 
-    def create(self, verbose: bool = True, force: bool = False) -> coordinates:
+    def create(
+        self, verbose: bool = True, force: bool = False, debug: bool = True
+    ) -> coordinates:
         """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
+            debug (bool): If True, saves arena detection images to disk. Defaults to False.
 
         Returns:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
@@ -639,7 +656,7 @@ class Project:
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
             rmtree(os.path.join(self.project_path, self.project_name))
 
-        self.set_up_project_directory()
+        self.set_up_project_directory(debug=debug)
         self.frame_rate = int(
             np.round(
                 pims.ImageIOReader(
@@ -660,7 +677,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables, verbose
+            tables, verbose, debug
         )
 
         if self.distances:
@@ -1245,11 +1262,11 @@ class Coordinates:
             )
 
         edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
+            coordinates=self,
             arena=arena_type,
             arena_dims=self._arena_dims,
             project_path=self._project_path,
             project_name=self._project_name,
-            tables=self._tables,
             videos=videos_renamed,
         )
 
