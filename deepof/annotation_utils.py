@@ -14,7 +14,6 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from itertools import combinations
 
-import cv2
 import numpy as np
 import pandas as pd
 import regex as re

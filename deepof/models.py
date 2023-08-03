@@ -10,14 +10,13 @@
 # module deepof
 
 from sklearn.mixture import GaussianMixture
-from spektral.layers import CensNetConv, GATConv
-from spektral.utils.convolution import gcn_filter, incidence_matrix, line_graph
+from spektral.layers import CensNetConv
 from tensorflow.keras import Input, Model
 from tensorflow.keras.initializers import he_uniform
 from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
 from tensorflow.keras.layers import LayerNormalization, Bidirectional
 from tensorflow.keras.optimizers import Nadam
-from typing import Any, List, NewType
+from typing import Any, NewType
 import numpy as np
 import tcn
 import tensorflow as tf

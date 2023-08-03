@@ -17,11 +17,9 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 from collections import defaultdict
 from difflib import get_close_matches
 from pkg_resources import resource_filename
-from shapely.geometry import Polygon
 from shutil import rmtree
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
-from sklearn.manifold import TSNE
 from sklearn.preprocessing import (
     MinMaxScaler,
     StandardScaler,
@@ -30,12 +28,9 @@ from sklearn.preprocessing import (
 )
 from time import time
 from tqdm import tqdm
-from typing import Any, NewType, Union
+from typing import NewType, Union
 from typing import Dict, List, Tuple, Any
 import copy
-import datetime
-import math
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import os
@@ -44,7 +39,6 @@ import pickle
 import pims
 import re
 import shutil
-import tensorflow as tf
 import umap
 import warnings
 

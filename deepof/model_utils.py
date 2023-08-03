@@ -5,7 +5,6 @@
 """Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels."""
 
 from datetime import date, datetime
-from functools import partial
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from tensorboard.plugins.hparams import api as hp
 from tensorflow.keras.initializers import he_uniform
@@ -20,7 +19,6 @@ import deepof.data
 import deepof.hypermodels
 import deepof.models
 import deepof.post_hoc
-import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os

@@ -14,8 +14,6 @@ import calendar
 import time
 import os
 import pickle
-import networkx as nx
-import numpy as np
 import deepof.data
 import deepof.model_utils
 import deepof.utils

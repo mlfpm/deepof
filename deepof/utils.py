@@ -4,7 +4,6 @@
 
 """Functions and general utilities for the deepof package."""
 import copy
-import h5py
 from copy import deepcopy
 from dask_image.imread import imread
 from difflib import get_close_matches

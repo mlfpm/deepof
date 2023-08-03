@@ -1,20 +1,17 @@
 """General plotting functions for the deepof package."""
-import collections
-
 # @author lucasmiranda42
 # encoding: utf-8
 # module deepof
 
 from collections import defaultdict
 from collections.abc import Sequence
-from itertools import cycle, product, combinations
+from itertools import product, combinations
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.patches import Ellipse
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.signal import savgol_filter
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.metrics import balanced_accuracy_score, confusion_matrix
+from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 from typing import Any, List, NewType, Union
 import calendar
@@ -31,7 +28,6 @@ import seaborn as sns
 import shap
 import tensorflow as tf
 import time
-import umap
 import warnings
 
 import deepof.post_hoc

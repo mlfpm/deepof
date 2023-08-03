@@ -23,14 +23,12 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from tensorflow_probability import distributions as tfd
-from typing import Any, List, NewType, Union
+from typing import Any, NewType, Union
 import numpy as np
 import os
 import ot
 import pandas as pd
 import pickle
-import scipy
 import shap
 import tqdm
 import umap
