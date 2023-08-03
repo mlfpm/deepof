@@ -317,6 +317,7 @@ class Project:
 
         return deepof.utils.get_arenas(
             self,
+            tables,
             self.arena,
             self.arena_dims,
             self.project_path,
@@ -1263,6 +1264,7 @@ class Coordinates:
 
         edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
             coordinates=self,
+            tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
             project_path=self._project_path,

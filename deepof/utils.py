@@ -7,9 +7,11 @@ import copy
 import h5py
 from copy import deepcopy
 from dask_image.imread import imread
+from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
 from scipy.signal import savgol_filter
+from scipy.spatial.distance import cdist
 from segment_anything import sam_model_registry, SamPredictor
 from shapely.geometry import Polygon
 from sklearn import mixture
@@ -1301,6 +1303,7 @@ def load_segmentation_model(path):
 
 def get_arenas(
     coordinates: coordinates,
+    tables: table_dict,
     arena: str,
     arena_dims: int,
     project_path: str,
@@ -1313,6 +1316,7 @@ def get_arenas(
 
     Args:
         coordinates (coordinates): Coordinates object.
+        tables (table_dict): TableDict object containing tracklets per animal.
         arena (str): Arena type (must be either "polygonal-manual", "circular-manual", "polygonal-autodetect", or "circular-autodetect").
         arena_dims (int): Arena dimensions.
         project_path (str): Path to project.
@@ -1382,6 +1386,7 @@ def get_arenas(
         for vid_index, _ in enumerate(videos):
             arena_parameters, h, w = automatically_recognize_arena(
                 coordinates=coordinates,
+                tables=tables,
                 videos=videos,
                 vid_index=vid_index,
                 path=os.path.join(project_path, project_name, "Videos"),
@@ -1435,6 +1440,7 @@ def get_arenas(
 # noinspection PyUnboundLocalVariable
 def automatically_recognize_arena(
     coordinates: coordinates,
+    tables: table_dict,
     videos: list,
     vid_index: int,
     path: str = ".",
@@ -1448,6 +1454,7 @@ def automatically_recognize_arena(
 
     Args:
         coordinates (coordinates): Coordinates object.
+        tables (table_dict): Dictionary of tables per experiment.
         videos (list): Relative paths of the videos to analise.
         vid_index (int): Element of videos list to use.
         path (str): Full path of the directory where the videos are.
@@ -1467,13 +1474,37 @@ def automatically_recognize_arena(
 
     # Get frame as array
     current_video = imread(os.path.join(path, videos[vid_index]))
-    current_frame = np.random.choice(current_video.shape[0])
-    frame = current_video[current_frame].compute()
+    h, w = current_video[0].shape[:2]
 
-    h, w = frame.shape[:2]
+    # Select frames in which the animals are neither in the center nor close to the edges
+    current_tab = tables[
+        get_close_matches(
+            videos[vid_index].split(".")[0],
+            [
+                vid
+                for vid in tables.keys()
+                if vid.startswith(videos[vid_index].split(".")[0])
+            ],
+            cutoff=0.1,
+            n=1,
+        )[0]
+    ]
+    distances_to_center = cdist(
+        current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
+    ).reshape(current_tab.shape[0], -1)
+
+    # Avoid the center, as it's the main prompt
+    possible_frames = distances_to_center.min(axis=1) > (
+        0.1 * distances_to_center.max()
+    )
+
+    # Select the point in the frame that is furthest from the edges
+    current_frame = np.argmin(distances_to_center[possible_frames].min(axis=1))
+    frame = current_video[current_frame].compute()
 
     # Get mask using the segmentation model
     segmentation_model.set_image(frame)
+
     frame_mask, score, logits = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
         point_labels=np.array([1]),
