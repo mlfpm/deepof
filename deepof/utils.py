@@ -9,7 +9,7 @@ from dask_image.imread import imread
 from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
-from math import atan2, sqrt
+from math import atan2, dist
 from scipy.signal import savgol_filter
 from scipy.spatial.distance import cdist
 from segment_anything import sam_model_registry, SamPredictor
@@ -1409,12 +1409,14 @@ def get_arenas(
 
             if "polygonal" in arena:
 
+                closest_side_points = closest_side(
+                    simplify_polygon(arena_parameters), arena_reference[:2]
+                )
+
                 scales.append(
                     [
                         *np.mean(arena_parameters, axis=0).astype(int),
-                        closest_side(
-                            simplify_polygon(arena_parameters), arena_reference[:2]
-                        ),
+                        dist(*closest_side_points),
                         arena_dims,
                     ]
                 )
@@ -1485,14 +1487,10 @@ def closest_side(polygon: list, reference_side: list):
 
     """
 
-    def distance(p1, p2):
-        return sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-
-    # Function to calculate the angle between two points
     def angle(p1, p2):
         return atan2(p2[1] - p1[1], p2[0] - p1[0])
 
-    ref_length = distance(*reference_side)
+    ref_length = dist(*reference_side)
     ref_angle = angle(*reference_side)
 
     min_difference = float("inf")
@@ -1500,7 +1498,7 @@ def closest_side(polygon: list, reference_side: list):
 
     for i in range(len(polygon)):
         side_points = (polygon[i], polygon[(i + 1) % len(polygon)])
-        side_length = distance(*side_points)
+        side_length = dist(*side_points)
         side_angle = angle(*side_points)
         total_difference = abs(side_length - ref_length) + abs(side_angle - ref_angle)
 
@@ -1508,7 +1506,7 @@ def closest_side(polygon: list, reference_side: list):
             min_difference = total_difference
             closest_side_points = list(side_points)
 
-    return distance(*closest_side_points)
+    return closest_side_points
 
 
 # noinspection PyUnboundLocalVariable
@@ -1519,8 +1517,8 @@ def automatically_recognize_arena(
     vid_index: int,
     path: str = ".",
     arena_type: str = "circular-autodetect",
-    segmentation_model: torch.nn.Module = None,
     arena_reference: list = None,
+    segmentation_model: torch.nn.Module = None,
     debug: bool = False,
 ) -> Tuple[np.array, int, int]:
     """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
@@ -1535,65 +1533,90 @@ def automatically_recognize_arena(
         path (str): Full path of the directory where the videos are.
         potentially more accurate in poor lighting conditions.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
+        arena_reference (list): List of coordinates defining the reference arena annotated by the user.
         segmentation_model (torch.nn.Module): Model used for automatic arena detection.
-        arena_reference (list): If arena is polygonal, this represents the manually defined prompt for the SAM model.
         debug (bool): If True, save a video frame with the arena detected.
 
     Returns:
-        arena (np.ndarray): 1D-array containing information about the arena.
+        arena (np.ndarray): 1D-array containing information about the arena. If the arena is circular, returns a 3-element-array) -> center, radius, and angle. If arena is polygonal, returns a list with x-y position of each of the n the vertices of the polygon.
         h (int): Height of the video in pixels.
         w (int): Width of the video in pixels.
 
     """
-    # "circular-x" (3-element-array) -> x-y position of the center and the radius.
-    # "polygonal-x" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
-
-    # Get frame as array
+    # Read video as a 3D array
     current_video = imread(os.path.join(path, videos[vid_index]))
     h, w = current_video[0].shape[:2]
 
-    # Select frames in which the animals are neither in the center nor close to the edges
+    # Select the corresponding tracklets
     current_tab = tables[
         get_close_matches(
             videos[vid_index].split(".")[0],
             [
                 vid
                 for vid in tables.keys()
-                if vid.startswith(videos[vid_index].split(".")[0])
+                if (
+                    vid.startswith(videos[vid_index].split(".")[0])
+                    or videos[vid_index].startswith(vid)
+                )
             ],
-            cutoff=0.1,
+            cutoff=0.01,
             n=1,
         )[0]
     ]
+
+    # Get distances of all body parts and timepoints to both center and periphery
     distances_to_center = cdist(
         current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
     ).reshape(current_tab.shape[0], -1)
 
-    # Avoid the center, as it's the main prompt
-    possible_frames = (
-        np.nanmin(distances_to_center, axis=1) > (0.4 * np.nanmax(distances_to_center))
-    ) & (
-        np.nanmax(distances_to_center, axis=1) < (0.6 * np.nanmax(distances_to_center))
+    possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
+        distances_to_center, 5.0
     )
-    current_video = current_video[possible_frames]
+    possible_distances_to_center = distances_to_center[possible_frames]
+    current_video = current_video[: possible_frames.shape[0]][possible_frames]
 
-    # Select the point in the frame that is furthest from the edges
-    current_frame = np.random.choice(current_video.shape[0])
+    if arena_reference is not None:
+        # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
+        # hinder segmentation
+        min_distance_to_arena = cdist(
+            current_tab.values.reshape(-1, 2), arena_reference
+        ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
+
+        min_distance_to_arena = min_distance_to_arena[possible_frames]
+        current_frame = np.argmax(
+            np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
+        )
+
+    else:
+        # If not, use the maximum distance to the center as a proxy
+        current_frame = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
+
     frame = current_video[current_frame].compute()
 
     # Get mask using the segmentation model
     segmentation_model.set_image(frame)
 
-    frame_mask, score, logits = segmentation_model.predict(
+    frame_masks, score, logits = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
         point_labels=np.array([1]),
         multimask_output=True,
     )
-    # Select the largest mask
-    frame_mask = frame_mask[np.argmax(score)]
 
-    # Detect arena and extract positions
-    arena = arena_parameter_extraction(frame_mask, arena_type)
+    # Get arenas for all retrieved masks, and select that whose area is the closest to the reference
+    if arena_reference is not None:
+        arenas = [
+            arena_parameter_extraction(frame_mask, arena_type)
+            for frame_mask in frame_masks
+        ]
+        arena = arenas[
+            np.argmin(
+                np.abs(
+                    [Polygon(arena_reference).area - Polygon(a).area for a in arenas]
+                )
+            )
+        ]
+    else:
+        arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
 
     if debug:
 
@@ -1621,6 +1644,20 @@ def automatically_recognize_arena(
                 color=(40, 86, 236),
                 thickness=3,
             )
+
+            # Plot scale references
+            closest_side_points = closest_side(
+                simplify_polygon(arena), arena_reference[:2]
+            )
+
+            for point in closest_side_points:
+                cv2.circle(
+                    frame_with_arena,
+                    list(map(int, point)),
+                    radius=10,
+                    color=(40, 86, 236),
+                    thickness=2,
+                )
 
         cv2.imwrite(
             os.path.join(
