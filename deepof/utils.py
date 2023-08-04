@@ -1381,14 +1381,15 @@ def get_arenas(
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
 
         # Open GUI for manual labelling of two scaling points in the first video
+        arena_reference = None
         if arena == "polygonal-autodetect":
 
-            scale_reference = extract_polygonal_arena_coordinates(
+            arena_reference = extract_polygonal_arena_coordinates(
                 os.path.join(project_path, project_name, "Videos", videos[0]),
                 arena,
                 0,
                 [videos[0]],
-            )[0][:2]
+            )[0]
 
         # Load SAM
         segmentation_model = load_segmentation_model(segmentation_model_path)
@@ -1402,6 +1403,7 @@ def get_arenas(
                 path=os.path.join(project_path, project_name, "Videos"),
                 arena_type=arena,
                 segmentation_model=segmentation_model,
+                arena_reference=arena_reference,
                 debug=debug,
             )
 
@@ -1411,7 +1413,7 @@ def get_arenas(
                     [
                         *np.mean(arena_parameters, axis=0).astype(int),
                         closest_side(
-                            simplify_polygon(arena_parameters), scale_reference
+                            simplify_polygon(arena_parameters), arena_reference[:2]
                         ),
                         arena_dims,
                     ]
@@ -1518,6 +1520,7 @@ def automatically_recognize_arena(
     path: str = ".",
     arena_type: str = "circular-autodetect",
     segmentation_model: torch.nn.Module = None,
+    arena_reference: list = None,
     debug: bool = False,
 ) -> Tuple[np.array, int, int]:
     """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
@@ -1533,6 +1536,7 @@ def automatically_recognize_arena(
         potentially more accurate in poor lighting conditions.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
         segmentation_model (torch.nn.Module): Model used for automatic arena detection.
+        arena_reference (list): If arena is polygonal, this represents the manually defined prompt for the SAM model.
         debug (bool): If True, save a video frame with the arena detected.
 
     Returns:
@@ -1566,12 +1570,15 @@ def automatically_recognize_arena(
     ).reshape(current_tab.shape[0], -1)
 
     # Avoid the center, as it's the main prompt
-    possible_frames = distances_to_center.min(axis=1) > (
-        0.1 * distances_to_center.max()
+    possible_frames = (
+        np.nanmin(distances_to_center, axis=1) > (0.4 * np.nanmax(distances_to_center))
+    ) & (
+        np.nanmax(distances_to_center, axis=1) < (0.6 * np.nanmax(distances_to_center))
     )
+    current_video = current_video[possible_frames]
 
     # Select the point in the frame that is furthest from the edges
-    current_frame = np.argmin(distances_to_center[possible_frames].min(axis=1))
+    current_frame = np.random.choice(current_video.shape[0])
     frame = current_video[current_frame].compute()
 
     # Get mask using the segmentation model
@@ -1679,7 +1686,7 @@ def retrieve_corners_from_image(
                 cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
                 # Display lines between the corners
                 if len(corners) > 1 and c > 0:
-                    if arena_type == "polygonal-manual" or len(corners) < 5:
+                    if "polygonal" in arena_type or len(corners) < 5:
                         cv2.line(
                             frame_copy,
                             (corners[c - 1][0], corners[c - 1][1]),
@@ -1690,7 +1697,7 @@ def retrieve_corners_from_image(
 
         # Close the polygon
         if len(corners) > 2:
-            if arena_type == "polygonal-manual" or len(corners) < 5:
+            if "polygonal" in arena_type or len(corners) < 5:
                 cv2.line(
                     frame_copy,
                     (corners[0][0], corners[0][1]),
@@ -1698,7 +1705,7 @@ def retrieve_corners_from_image(
                     (40, 86, 236),
                     2,
                 )
-        if len(corners) >= 5 and arena_type == "circular-manual":
+        if len(corners) >= 5 and "circular" in arena_type:
             cv2.ellipse(
                 frame_copy,
                 *fit_ellipse_to_polygon(corners),
@@ -1740,7 +1747,7 @@ def extract_polygonal_arena_coordinates(
 
     Args:
         video_path (str): Path to the video file.
-        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
         video_index (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
 
