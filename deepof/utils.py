@@ -9,6 +9,7 @@ from dask_image.imread import imread
 from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
+from math import atan2, sqrt
 from scipy.signal import savgol_filter
 from scipy.spatial.distance import cdist
 from segment_anything import sam_model_registry, SamPredictor
@@ -1379,6 +1380,16 @@ def get_arenas(
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
 
+        # Open GUI for manual labelling of two scaling points in the first video
+        if arena == "polygonal-autodetect":
+
+            scale_reference = extract_polygonal_arena_coordinates(
+                os.path.join(project_path, project_name, "Videos", videos[0]),
+                arena,
+                0,
+                [videos[0]],
+            )[0][:2]
+
         # Load SAM
         segmentation_model = load_segmentation_model(segmentation_model_path)
 
@@ -1395,10 +1406,13 @@ def get_arenas(
             )
 
             if "polygonal" in arena:
+
                 scales.append(
                     [
                         *np.mean(arena_parameters, axis=0).astype(int),
-                        get_first_length(arena_parameters),
+                        closest_side(
+                            simplify_polygon(arena_parameters), scale_reference
+                        ),
                         arena_dims,
                     ]
                 )
@@ -1434,6 +1448,65 @@ def get_arenas(
         )
 
     return np.array(scales), arena_params, video_resolution
+
+
+def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
+    """Simplify a polygon using the Ramer-Douglas-Peucker algorithm.
+
+    Args:
+        polygon (list): List of polygon coordinates.
+        relative_tolerance (float): Relative tolerance for simplification. Defaults to 0.05.
+
+    Returns:
+        simplified_poly (list): List of simplified polygon coordinates.
+
+    """
+    poly = Polygon(polygon)
+    perimeter = poly.length
+    tolerance = perimeter * relative_tolerance
+
+    simplified_poly = poly.simplify(tolerance, preserve_topology=False)
+    return list(simplified_poly.exterior.coords)[
+        :-1
+    ]  # Exclude last point (same as first)
+
+
+def closest_side(polygon: list, reference_side: list):
+    """Find the closest side in other polygons to a reference side in the first polygon.
+
+    Args:
+        polygon (list): List of polygons.
+        reference_side (list): List of coordinates of the reference side.
+
+    Returns:
+        closest_side_points (list): List of coordinates of the closest side.
+
+    """
+
+    def distance(p1, p2):
+        return sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+    # Function to calculate the angle between two points
+    def angle(p1, p2):
+        return atan2(p2[1] - p1[1], p2[0] - p1[0])
+
+    ref_length = distance(*reference_side)
+    ref_angle = angle(*reference_side)
+
+    min_difference = float("inf")
+    closest_side_points = None
+
+    for i in range(len(polygon)):
+        side_points = (polygon[i], polygon[(i + 1) % len(polygon)])
+        side_length = distance(*side_points)
+        side_angle = angle(*side_points)
+        total_difference = abs(side_length - ref_length) + abs(side_angle - ref_angle)
+
+        if total_difference < min_difference:
+            min_difference = total_difference
+            closest_side_points = list(side_points)
+
+    return distance(*closest_side_points)
 
 
 # noinspection PyUnboundLocalVariable
@@ -1533,6 +1606,7 @@ def automatically_recognize_arena(
             )
 
         elif "polygonal" in arena_type:
+
             cv2.polylines(
                 img=frame_with_arena,
                 pts=[arena],

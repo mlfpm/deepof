@@ -8,7 +8,7 @@ test:
   retry: 1
 
   image:
-    name: lucasmiranda42/deepof:latest
+    name: lucasmiranda42/deepof:dev
     entrypoint: [""]
 
   before_script:
@@ -31,7 +31,7 @@ tutorials:
   stage: tutorials
 
   image:
-    name: lucasmiranda42/deepof:latest
+    name: lucasmiranda42/deepof:dev
     entrypoint: [ "" ]
 
   before_script:
