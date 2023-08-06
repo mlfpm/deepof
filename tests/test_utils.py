@@ -349,16 +349,36 @@ def test_recognize_arena_and_subfunctions(indexes):
 
     path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
-
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
-    recoglimit = indexes.draw(st.integers(min_value=1, max_value=10))
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    )
+    tables = prun.create(force=True).get_coords()
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
 
     arena = deepof.utils.automatically_recognize_arena(
+        coordinates=prun,
         videos=videos,
-        tables=None,
+        tables=tables,
         vid_index=vid_index,
         path=path,
-        recoglimit=recoglimit,
+        segmentation_model=deepof.utils.load_segmentation_model(None),
         arena_type="circular-autodetect",
     )
     assert len(arena) == 3
