@@ -589,8 +589,14 @@ def load_table(
         # Load numpy array from disk
         loaded_tab = np.load(os.path.join(table_path, tab), "r")
 
+        # Create the header as a multi index, using animals, body parts and coordinates
+        if not animal_ids[0]:  # If no animal ids are provided, assume a single animal
+            animal_ids = [str(i + 1) for i in range(loaded_tab.shape[1])]
+
         # Check that body part names are provided
-        assert len(rename_bodyparts) == loaded_tab.shape[2]
+        assert (
+            len(rename_bodyparts) == loaded_tab.shape[2]
+        ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
 
         # Impute likelihood as a third dimension in the last axis,
         # with 1.0 if xy values are present and 0.0 otherwise
@@ -602,7 +608,6 @@ def load_table(
         # Collapse nodes and animals to the desired shape
         loaded_tab = pd.DataFrame(loaded_tab.reshape(loaded_tab.shape[0], -1))
 
-        # Create the header as a multi index, using animals, body parts and coordinates
         multi_index = pd.MultiIndex.from_product(
             [["sleap_scorer"], animal_ids, rename_bodyparts, ["x", "y", "likelihood"]],
             names=["scorer", "individuals", "bodyparts", "coords"],
@@ -615,24 +620,39 @@ def load_table(
         loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
         loaded_tab.columns = multi_index.loc["scorer"]
 
-    # if rename_bodyparts is not None:
-    #    loaded_tab = rename_track_bps(loaded_tab, rename_bodyparts)
+    if rename_bodyparts is not None:
+        loaded_tab = rename_track_bps(loaded_tab, rename_bodyparts, animal_ids)
 
     return loaded_tab
 
 
-def rename_track_bps(loaded_tab: pd.DataFrame, rename_bodyparts: list):
+def rename_track_bps(
+    loaded_tab: pd.DataFrame, rename_bodyparts: list, animal_ids: list
+):
     """Renames all body parts in the provided dataframe.
 
     Args:
         loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
         rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+        animal_ids (list): list of IDs to use for the animals present in the provided tracking files.
 
     Returns:
         renamed_tab (pd.DataFrame): Data frame with renamed body parts
 
     """
-    renamed_tab = None
+    renamed_tab = copy.deepcopy(loaded_tab)
+    if not animal_ids[0]:
+        current_bparts = loaded_tab.loc["bodyparts", :].unique()
+    else:
+        current_bparts = list(
+            map(
+                lambda x: "_".join(x.split("_")[1:]),
+                loaded_tab.loc["bodyparts", :].unique(),
+            )
+        )
+
+    for old, new in zip(current_bparts, rename_bodyparts):
+        renamed_tab.replace(old, new, inplace=True, regex=True)
 
     return renamed_tab
 
@@ -1311,6 +1331,7 @@ def get_arenas(
     segmentation_model_path: str,
     videos: list = None,
     debug: bool = False,
+    test: bool = False,
 ):
     """Extract arena parameters from a project or coordinates object.
 
@@ -1324,6 +1345,7 @@ def get_arenas(
         segmentation_model_path (str): Path to segmentation model used for automatic arena detection.
         videos (list): List of videos to extract arena parameters from. Defaults to None (all videos are used).
         debug (bool): If True, a frame per video with the detected arena is saved. Defaults to False.
+        test (bool): If True, the function is run in test mode. Defaults to False.
 
     Returns:
         arena_params (list): List of arena parameters.
@@ -1382,14 +1404,17 @@ def get_arenas(
 
         # Open GUI for manual labelling of two scaling points in the first video
         arena_reference = None
-        if arena == "polygonal-autodetect":
+        if arena == "polygonal-autodetect":  # pragma: no cover
 
-            arena_reference = extract_polygonal_arena_coordinates(
-                os.path.join(project_path, project_name, "Videos", videos[0]),
-                arena,
-                0,
-                [videos[0]],
-            )[0]
+            if test:
+                arena_reference = np.zeros((4, 2))
+            else:
+                arena_reference = extract_polygonal_arena_coordinates(
+                    os.path.join(project_path, project_name, "Videos", videos[0]),
+                    arena,
+                    0,
+                    [videos[0]],
+                )[0]
 
         # Load SAM
         segmentation_model = load_segmentation_model(segmentation_model_path)

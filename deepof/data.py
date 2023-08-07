@@ -87,7 +87,7 @@ class Project:
         self,
         animal_ids: List = None,
         arena: str = "polygonal-autodetect",
-        bodypart_graph: str = "deepof_14",
+        bodypart_graph: Union[str, dict] = "deepof_14",
         enable_iterative_imputation: bool = 250,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
@@ -293,7 +293,11 @@ class Project:
         return self._angles
 
     def get_arena(
-        self, tables: list, verbose: bool = False, debug: str = False
+        self,
+        tables: list,
+        verbose: bool = False,
+        debug: str = False,
+        test: bool = False,
     ) -> np.array:
         """Return the arena as recognised from the videos.
 
@@ -301,6 +305,7 @@ class Project:
             tables (list): list of coordinate tables
             verbose (bool): if True, logs to console
             debug (str): if True, saves intermediate results to disk
+            test (bool): if True, runs the function in test mode
 
         Returns:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
@@ -319,6 +324,7 @@ class Project:
             self.segmentation_path,
             self.videos,
             debug,
+            test,
         )
 
     def load_tables(self, verbose: bool = True) -> Tuple:
@@ -633,13 +639,19 @@ class Project:
         return areas_dict
 
     def create(
-        self, verbose: bool = True, force: bool = False, debug: bool = True
+        self,
+        verbose: bool = True,
+        force: bool = False,
+        debug: bool = True,
+        test: bool = False,
     ) -> coordinates:
         """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
+            force (bool): If True, overwrites existing project. Defaults to False.
             debug (bool): If True, saves arena detection images to disk. Defaults to False.
+            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
 
         Returns:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
@@ -672,7 +684,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables, verbose, debug
+            tables, verbose, debug, test
         )
 
         if self.distances:
@@ -1263,6 +1275,7 @@ class Coordinates:
             arena_dims=self._arena_dims,
             project_path=self._project_path,
             project_name=self._project_name,
+            segmentation_model_path=None,
             videos=videos_renamed,
         )
 

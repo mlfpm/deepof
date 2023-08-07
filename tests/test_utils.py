@@ -344,8 +344,11 @@ def test_interpolate_outliers(mode):
 @settings(deadline=None, max_examples=10)
 @given(
     indexes=st.data(),
+    detection_mode=st.one_of(
+        st.just("circular-autodetect"), st.just("polygonal-autodetect")
+    ),
 )
-def test_recognize_arena_and_subfunctions(indexes):
+def test_recognize_arena_and_subfunctions(indexes, detection_mode):
 
     path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
@@ -359,13 +362,13 @@ def test_recognize_arena_and_subfunctions(indexes):
         table_path=os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
-        arena="circular-autodetect",
+        arena=detection_mode,
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
     )
-    tables = prun.create(force=True).get_coords()
+    tables = prun.create(force=True, test=True).get_coords()
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"

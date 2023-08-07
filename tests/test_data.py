@@ -9,12 +9,11 @@ Testing module for deepof.preprocess
 """
 
 import os
-from collections import defaultdict
 from shutil import rmtree
 
 import numpy as np
 import pandas as pd
-import pytest
+import random
 import string
 from hypothesis import given
 from hypothesis import settings
@@ -26,9 +25,17 @@ import deepof.utils
 
 @settings(max_examples=2, deadline=None)
 @given(
-    table_type=st.one_of(st.just(".h5"), st.just(".csv")),
+    table_type=st.one_of(st.just(".npy"), st.just(".npy"), st.just(".npy")),
+    arena_detection=st.one_of(
+        st.just("circular-autodetect"), st.just("polygonal-autodetect")
+    ),
 )
-def test_project_init(table_type):
+def test_project_init(table_type, arena_detection):
+
+    custom_bodyparts = [
+        "".join(random.choice(string.ascii_lowercase) for _ in range(10))
+        for _ in range(14)
+    ]
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -39,7 +46,9 @@ def test_project_init(table_type):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         project_name=f"test_{table_type[1:]}",
-        arena="circular-autodetect",
+        rename_bodyparts=custom_bodyparts,
+        bodypart_graph={custom_bodyparts[0]: custom_bodyparts[1:]},
+        arena=arena_detection,
         video_scale=380,
         video_format=".mp4",
         table_format=table_type,
@@ -48,7 +57,7 @@ def test_project_init(table_type):
     assert isinstance(prun, deepof.data.Project)
     assert isinstance(prun.load_tables(verbose=True), tuple)
 
-    prun = prun.create()
+    prun = prun.create(test=True, force=True)
     assert isinstance(prun, deepof.data.Coordinates)
     rmtree(
         os.path.join(
