@@ -1424,7 +1424,7 @@ class Coordinates:
                 dataset += [to_preprocess[2], to_preprocess[2], to_preprocess[3]]
 
         else:  # pragma: no cover
-            to_preprocess = np.concatenate(list(to_preprocess.values()))
+            to_preprocess = np.concatenate(list(tab_dict.values()))
 
             # Split node features (positions, speeds) from edge features (distances)
             dataset = (
@@ -1439,12 +1439,15 @@ class Coordinates:
                 ),
             )
 
-        return (
-            tuple(dataset),
-            nx.adjacency_matrix(graph).todense(),
-            tab_dict,
-            global_scaler,
-        )
+        try:
+            return (
+                tuple(dataset),
+                nx.adjacency_matrix(graph).todense(),
+                tab_dict,
+                global_scaler,
+            )
+        except UnboundLocalError:
+            return tuple(dataset), nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
@@ -1513,6 +1516,7 @@ class Coordinates:
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
+            self._trained_model_path = resource_filename(__name__, "trained_models")
 
             supervised_tags = deepof.annotation_utils.supervised_tagging(
                 self,
