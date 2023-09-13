@@ -128,7 +128,7 @@ class Project:
             rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
             sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
-            table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, or "npy" for (S)LEAP.
+            table_format (str): format of the table. Defaults to 'autodetect', but can be set to ".csv" or "h5" for DLC output, and "npy", "slp" or "h5-sleap" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
             video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
 
@@ -144,7 +144,7 @@ class Project:
         self.table_format = table_format
         if self.table_format == "autodetect":
             ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
-            self.table_format = "." + ex.split(".")[-1]
+            self.table_format = ex.split(".")[-1]
         self.videos = sorted(
             [
                 vid
@@ -338,9 +338,9 @@ class Project:
             and another dictionary with DLC data quality.
 
         """
-        if self.table_format not in [".h5", ".csv", ".npy"]:
+        if self.table_format not in ["h5", "csv", "npy", "slp", "h5-sleap"]:
             raise NotImplementedError(
-                "Tracking files must be in either h5 or csv format"
+                "Tracking files must be in h5 (DLC or SLEAP), csv, npy, or slp format"
             )  # pragma: no cover
 
         if verbose:

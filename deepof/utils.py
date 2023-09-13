@@ -23,6 +23,7 @@ from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
 import cv2
+import h5py
 import math
 import multiprocessing
 import networkx as nx
@@ -32,6 +33,7 @@ import pandas as pd
 import regex as re
 import requests
 import ruptures as rpt
+import sleap_io as sio
 import torch
 import warnings
 
@@ -567,7 +569,7 @@ def load_table(
 
     """
 
-    if table_format == ".h5":
+    if table_format == "h5":
 
         loaded_tab = pd.read_hdf(os.path.join(table_path, tab), dtype=float)
 
@@ -576,7 +578,7 @@ def load_table(
         loaded_tab.columns = loaded_tab.loc["scorer", :]
         loaded_tab = loaded_tab.iloc[1:]
 
-    elif table_format == ".csv":
+    elif table_format == "csv":
 
         loaded_tab = pd.read_csv(
             os.path.join(table_path, tab),
@@ -584,10 +586,25 @@ def load_table(
             low_memory=False,
         )
 
-    elif table_format in ".npy":
+    elif table_format in ["npy", "slp", "h5-sleap"]:
 
-        # Load numpy array from disk
-        loaded_tab = np.load(os.path.join(table_path, tab), "r")
+        if table_format == "h5-sleap":
+            # Load sleap .h5 file from disk
+            with h5py.File(os.path.join(table_path, tab), "r") as f:
+                loaded_tab = np.stack(f["tracks"][:].T)
+                slp_bodyparts = [n.decode() for n in f["node_names"][:]]
+                slp_animal_ids = [n.decode() for n in f["track_names"][:]]
+
+        elif table_format == "slp":
+            # Use sleap-io to convert .slp files into numpy arrays
+            loaded_tab = sio.load_slp(os.path.join(table_path, tab))
+            slp_bodyparts = [i.name for i in loaded_tab.skeletons[0].nodes]
+            slp_animal_ids = [i.name for i in loaded_tab.tracks]
+            loaded_tab = loaded_tab.numpy()
+
+        else:
+            # Load numpy array from disk
+            loaded_tab = np.load(os.path.join(table_path, tab), "r")
 
         # Create the header as a multi index, using animals, body parts and coordinates
         if not animal_ids[0]:  # If no animal ids are provided, assume a single animal
@@ -619,6 +636,9 @@ def load_table(
 
         loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
         loaded_tab.columns = multi_index.loc["scorer"]
+
+    if table_format in ["h5-sleap", "slp"]:
+        loaded_tab = rename_track_bps(loaded_tab, slp_bodyparts, slp_animal_ids)
 
     if rename_bodyparts is not None:
         loaded_tab = rename_track_bps(loaded_tab, rename_bodyparts, animal_ids)
