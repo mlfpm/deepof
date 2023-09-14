@@ -25,7 +25,7 @@ import deepof.utils
 
 @settings(max_examples=2, deadline=None)
 @given(
-    table_type=st.one_of(st.just(".npy"), st.just(".npy"), st.just(".npy")),
+    table_type=st.one_of(st.just("h5"), st.just("csv"), st.just("npy")),
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
     ),

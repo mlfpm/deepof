@@ -141,7 +141,7 @@ class Project:
         self.trained_path = resource_filename(__name__, "trained_models")
 
         # Detect files to load from disk
-        self.table_format = table_format
+        self.table_format = table_format.replace(".", "")
         if self.table_format == "autodetect":
             ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
             self.table_format = ex.split(".")[-1]
