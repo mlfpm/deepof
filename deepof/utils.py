@@ -586,12 +586,12 @@ def load_table(
             low_memory=False,
         )
 
-    elif table_format in ["npy", "slp", "h5-sleap"]:
+    elif table_format in ["npy", "slp", "analysis.h5"]:
 
-        if table_format == "h5-sleap":
+        if table_format == "analysis.h5":
             # Load sleap .h5 file from disk
             with h5py.File(os.path.join(table_path, tab), "r") as f:
-                loaded_tab = np.stack(f["tracks"][:].T)
+                loaded_tab = np.stack(np.transpose(f["tracks"][:], [3, 0, 2, 1]))
                 slp_bodyparts = [n.decode() for n in f["node_names"][:]]
                 slp_animal_ids = [n.decode() for n in f["track_names"][:]]
 
@@ -606,14 +606,19 @@ def load_table(
             # Load numpy array from disk
             loaded_tab = np.load(os.path.join(table_path, tab), "r")
 
-        # Create the header as a multi index, using animals, body parts and coordinates
-        if not animal_ids[0]:  # If no animal ids are provided, assume a single animal
-            animal_ids = [str(i + 1) for i in range(loaded_tab.shape[1])]
+            # Check that body part names are provided
+            slp_bodyparts = rename_bodyparts
+            if not animal_ids[0]:
+                slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
+            else:
+                slp_animal_ids = animal_ids
+            assert (
+                len(rename_bodyparts) == loaded_tab.shape[2]
+            ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
 
-        # Check that body part names are provided
-        assert (
-            len(rename_bodyparts) == loaded_tab.shape[2]
-        ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
+        # Create the header as a multi index, using animals, body parts and coordinates
+        if not animal_ids[0]:
+            animal_ids = slp_animal_ids
 
         # Impute likelihood as a third dimension in the last axis,
         # with 1.0 if xy values are present and 0.0 otherwise
@@ -626,7 +631,7 @@ def load_table(
         loaded_tab = pd.DataFrame(loaded_tab.reshape(loaded_tab.shape[0], -1))
 
         multi_index = pd.MultiIndex.from_product(
-            [["sleap_scorer"], animal_ids, rename_bodyparts, ["x", "y", "likelihood"]],
+            [["sleap_scorer"], slp_animal_ids, slp_bodyparts, ["x", "y", "likelihood"]],
             names=["scorer", "individuals", "bodyparts", "coords"],
         )
         multi_index = pd.DataFrame(
@@ -637,11 +642,12 @@ def load_table(
         loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
         loaded_tab.columns = multi_index.loc["scorer"]
 
-    if table_format in ["h5-sleap", "slp"]:
-        loaded_tab = rename_track_bps(loaded_tab, slp_bodyparts, slp_animal_ids)
-
     if rename_bodyparts is not None:
-        loaded_tab = rename_track_bps(loaded_tab, rename_bodyparts, animal_ids)
+        loaded_tab = rename_track_bps(
+            loaded_tab,
+            rename_bodyparts,
+            (animal_ids if table_format in ["h5", "csv"] else [""]),
+        )
 
     return loaded_tab
 
@@ -653,7 +659,7 @@ def rename_track_bps(
 
     Args:
         loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
-        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP files.
         animal_ids (list): list of IDs to use for the animals present in the provided tracking files.
 
     Returns:
@@ -661,6 +667,7 @@ def rename_track_bps(
 
     """
     renamed_tab = copy.deepcopy(loaded_tab)
+
     if not animal_ids[0]:
         current_bparts = loaded_tab.loc["bodyparts", :].unique()
     else:
