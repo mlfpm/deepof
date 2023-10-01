@@ -23,19 +23,32 @@ import deepof.data
 import deepof.utils
 
 
-@settings(max_examples=2, deadline=None)
+@settings(max_examples=20, deadline=None)
 @given(
-    table_type=st.one_of(st.just("h5"), st.just("csv"), st.just("npy")),
+    table_type=st.one_of(
+        st.just("analysis.h5"),
+        st.just("h5"),
+        st.just("csv"),
+        st.just("npy"),
+        st.just("slp"),
+    ),
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
     ),
+    custom_bodyparts=st.booleans(),
 )
-def test_project_init(table_type, arena_detection):
+def test_project_init(table_type, arena_detection, custom_bodyparts):
 
-    custom_bodyparts = [
-        "".join(random.choice(string.ascii_lowercase) for _ in range(10))
-        for _ in range(14)
-    ]
+    if custom_bodyparts or table_type == "npy":
+        custom_bodyparts = [
+            "".join(random.choice(string.ascii_lowercase) for _ in range(10))
+            for _ in range(14)
+        ]
+
+    # Add path to SLEAP tables if necessary
+    tables_path = "Tables"
+    if table_type in ["slp", "analysis.h5", "npy"]:
+        tables_path = os.path.join(tables_path, "SLEAP")
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -43,11 +56,15 @@ def test_project_init(table_type, arena_detection):
             ".", "tests", "test_examples", "test_single_topview", "Videos"
         ),
         table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
+            ".", "tests", "test_examples", "test_single_topview", tables_path
         ),
         project_name=f"test_{table_type[1:]}",
-        rename_bodyparts=custom_bodyparts,
-        bodypart_graph={custom_bodyparts[0]: custom_bodyparts[1:]},
+        rename_bodyparts=(None if not custom_bodyparts else custom_bodyparts),
+        bodypart_graph=(
+            "deepof_14"
+            if not custom_bodyparts
+            else {custom_bodyparts[0]: custom_bodyparts[1:]}
+        ),
         arena=arena_detection,
         video_scale=380,
         video_format=".mp4",
