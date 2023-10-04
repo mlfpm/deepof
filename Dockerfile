@@ -16,7 +16,7 @@ RUN apt-get clean \
  && apt-get install -y --no-install-recommends gcc libgl1-mesa-dev libdatrie-dev ffmpeg git \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir pipx \
- && pipx install poetry==1.4.0 \
+ && pipx install poetry==1.4.1 \
  && pipx ensurepath \
  && export PATH="$PATH:$HOME/.local/bin" \
  && poetry config virtualenvs.create false \
