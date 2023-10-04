@@ -13,7 +13,6 @@ test:
 
   before_script:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
-    - docker image prune
 
   script:
     - coverage run --source deepof -m pytest
@@ -39,7 +38,6 @@ tutorials:
     - apt update
     - apt install -y curl unzip
     - pip install papermill
-    - docker image prune
     - pip install -q -e . --progress-bar off
     - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
     - curl --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/knF7t78isQuIAr0/download
