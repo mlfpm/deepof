@@ -50,6 +50,7 @@ torchvision = "^0.15.1"
 torch = ">=2.0.0, !=2.0.1"
 segment-anything = "^1.0"
 sleap-io = "^0.0.9"
+matplotlib = "3.7.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
