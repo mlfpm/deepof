@@ -88,7 +88,7 @@ class Project:
         animal_ids: List = None,
         arena: str = "polygonal-autodetect",
         bodypart_graph: Union[str, dict] = "deepof_14",
-        enable_iterative_imputation: bool = 250,
+        enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,

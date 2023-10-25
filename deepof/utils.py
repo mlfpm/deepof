@@ -16,9 +16,8 @@ from segment_anything import sam_model_registry, SamPredictor
 from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from sktime.transformations.series.impute import Imputer
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
@@ -252,12 +251,7 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
 
             try:
                 scaler = StandardScaler()
-                imputed = IterativeImputer(
-                    skip_complete=True,
-                    max_iter=project.enable_iterative_imputation,
-                    n_nearest_features=tab.shape[1],
-                    tol=1e-1,
-                ).fit_transform(
+                imputed = Imputer(method="drift",).fit_transform(
                     scaler.fit_transform(
                         tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
                     )
@@ -1387,24 +1381,37 @@ def get_arenas(
 
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
+        propagate_last = False
         for i, video_path in enumerate(videos):
-            arena_corners, h, w = extract_polygonal_arena_coordinates(
-                os.path.join(project_path, project_name, "Videos", video_path),
-                arena,
-                i,
-                videos,
-            )
 
-            cur_scales = [
-                *np.mean(arena_corners, axis=0).astype(int),
-                get_first_length(arena_corners),
-                arena_dims,
-            ]
+            if not propagate_last:
+                arena_corners, h, w = extract_polygonal_arena_coordinates(
+                    os.path.join(project_path, project_name, "Videos", video_path),
+                    arena,
+                    i,
+                    videos,
+                )
 
-            cur_arena_params = arena_corners
+                if arena_corners is None:
+                    propagate_last = True
+
+                else:
+                    cur_scales = [
+                        *np.mean(arena_corners, axis=0).astype(int),
+                        get_first_length(arena_corners),
+                        arena_dims,
+                    ]
+
+            if propagate_last:
+                cur_arena_params = arena_params[-1]
+                cur_scales = scales[-1]
+            else:
+                cur_arena_params = arena_corners
 
             if arena == "circular-manual":
-                cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
+
+                if not propagate_last:
+                    cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
 
                 scales.append(
                     list(
@@ -1750,6 +1757,9 @@ def retrieve_corners_from_image(
         if event == cv2.EVENT_LBUTTONDOWN:
             corners.append((x, y))
 
+    # Resize frame to a standard size
+    frame = frame.copy()
+
     # Create a window and display the image
     cv2.startWindowThread()
 
@@ -1757,14 +1767,14 @@ def retrieve_corners_from_image(
         frame_copy = frame.copy()
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
             ),
             frame_copy,
         )
         cv2.setMouseCallback(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
             ),
             click_on_corners,
         )
@@ -1805,8 +1815,8 @@ def retrieve_corners_from_image(
             )
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
             ),
             frame_copy,
         )
@@ -1818,9 +1828,12 @@ def retrieve_corners_from_image(
         # Exit is user presses 'q'
         if len(corners) > 2:
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                for i in range(1, 5):
-                    cv2.waitKey(1)
                 break
+
+        # Exit and copy all coordinates if user presses 'c'
+        if cur_vid > 0 and cv2.waitKey(1) & 0xFF == ord("p"):
+            corners = None
+            break
 
     cv2.destroyAllWindows()
     cv2.waitKey(1)
