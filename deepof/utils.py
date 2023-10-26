@@ -24,6 +24,7 @@ import argparse
 import cv2
 import h5py
 import math
+import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
 import numpy as np
@@ -1768,13 +1769,18 @@ def retrieve_corners_from_image(
 
         cv2.imshow(
             "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             frame_copy,
         )
+
         cv2.setMouseCallback(
             "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             click_on_corners,
         )
@@ -1816,7 +1822,9 @@ def retrieve_corners_from_image(
 
         cv2.imshow(
             "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""), cur_vid, len(videos)
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             frame_copy,
         )
@@ -1863,12 +1871,23 @@ def extract_polygonal_arena_coordinates(
     current_frame = np.random.choice(current_video.shape[0])
 
     # Get and return the corners of the arena
-    arena_corners = retrieve_corners_from_image(
-        current_video[current_frame].compute(),
-        arena_type,
-        video_index,
-        videos,
-    )
+    try:
+        import google.colab
+
+        arena_corners = retrieve_corners_from_colab(
+            current_video[current_frame].compute(),
+            arena_type,
+            video_index,
+            videos,
+        )
+
+    except ImportError:
+        arena_corners = retrieve_corners_from_image(
+            current_video[current_frame].compute(),
+            arena_type,
+            video_index,
+            videos,
+        )
     return arena_corners, current_video.shape[2], current_video.shape[1]
 
 
