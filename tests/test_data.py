@@ -87,6 +87,56 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
     )
 
 
+def test_project_extend():
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
+        project_name=f"test_extend",
+        rename_bodyparts=None,
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format="h5",
+    )
+
+    ext_prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Tables"
+        ),
+        project_name=f"test_extended",
+        rename_bodyparts=None,
+        animal_ids=["B", "W"],
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format="h5",
+    )
+
+    prun_path = os.path.join(
+        ".",
+        "tests",
+        "test_examples",
+        "test_single_topview",
+        "test_extend",
+    )
+
+    prun.create(test=True, force=True)
+    ext_prun.extend(prun_path)
+
+    rmtree(prun_path)
+    rmtree(prun_path + "ed")
+
+
 def test_project_properties():
 
     prun = deepof.data.Project(

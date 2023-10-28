@@ -646,6 +646,7 @@ class Project:
         force: bool = False,
         debug: bool = True,
         test: bool = False,
+        _to_extend: coordinates = None,
     ) -> coordinates:
         """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
@@ -654,6 +655,7 @@ class Project:
             force (bool): If True, overwrites existing project. Defaults to False.
             debug (bool): If True, saves arena detection images to disk. Defaults to False.
             test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+            _to_extend (coordinates): Coordinates object to extend with the current dataset. For internal usage only.
 
         Returns:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
@@ -665,7 +667,9 @@ class Project:
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
             rmtree(os.path.join(self.project_path, self.project_name))
 
-        self.set_up_project_directory(debug=debug)
+        elif not os.path.exists(os.path.join(self.project_path, self.project_name)):
+            self.set_up_project_directory(debug=debug)
+
         self.frame_rate = int(
             np.round(
                 pims.ImageIOReader(
@@ -698,6 +702,32 @@ class Project:
         if self.areas:
             areas = self.get_areas(tables, verbose)
 
+        if _to_extend is not None:
+
+            # Merge and expand coordinate objects
+            angles = TableDict({**_to_extend._angles, **angles}, typ="angles")
+            # areas = TableDict({**_to_extend._areas, **areas}, typ="areas")
+            distances = TableDict(
+                {**_to_extend._distances, **distances}, typ="distances"
+            )
+            tables = TableDict({**_to_extend._tables, **tables}, typ="tables")
+            quality = TableDict({**_to_extend._quality, **quality}, typ="quality")
+
+            # Merge metadata
+            self.tables = _to_extend._table_paths + self.tables
+            self.videos = _to_extend._videos + self.videos
+            self.arena_params = _to_extend._arena_params + self.arena_params
+            self.scales = np.vstack([_to_extend._scales, self.scales])
+
+            # Optional
+            try:
+                self.exp_conditions = {
+                    **_to_extend._exp_conditions,
+                    **self.exp_conditions,
+                }
+            except TypeError:
+                pass
+
         coords = Coordinates(
             project_path=self.project_path,
             project_name=self.project_name,
@@ -717,6 +747,7 @@ class Project:
             scales=self.scales,
             arena_params=self.arena_params,
             tables=tables,
+            table_paths=self.tables,
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
@@ -742,6 +773,80 @@ class Project:
     def angles(self, value):
         self._angles = value
 
+    def extend(
+        self,
+        project_to_extend: coordinates,
+        verbose: bool = True,
+        debug: bool = True,
+        test: bool = False,
+    ) -> coordinates:
+        """Generate a deepof.Coordinates dataset using all the options specified during initialization.
+
+        Args:
+            project_to_extend (coordinates): Coordinates object to extend with the current dataset.
+            verbose (bool): If True, prints progress. Defaults to True.
+            debug (bool): If True, saves arena detection images to disk. Defaults to False.
+            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+
+        Returns:
+            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
+
+        """
+        if verbose:
+            print("Loading previous project...")
+
+        previous_project = load_project(project_to_extend)
+
+        # Keep only those videos and tables that were not in the original dataset
+        self.videos = [
+            vid for vid in self.videos if vid not in previous_project._videos
+        ]
+        self.tables = [
+            tab for tab in self.tables if tab not in previous_project._table_paths
+        ]
+
+        if verbose:
+            print(f"Processing data from {len(self.videos)} experiments...")
+
+        if len(self.videos) > 0:
+
+            # Use the same directory as the original project
+            extended_coords = self.create(
+                verbose,
+                force=False,
+                debug=debug,
+                test=test,
+                _to_extend=previous_project,
+            )
+
+            # Copy old files to the new directory
+            for vid, tab in zip(
+                previous_project._videos, previous_project._table_paths
+            ):
+                if vid not in self.tables:
+
+                    shutil.copy(
+                        os.path.join(
+                            previous_project._project_path,
+                            "Videos",
+                            vid,
+                        ),
+                        os.path.join(self.project_path, self.project_name, "Videos"),
+                    )
+                    shutil.copy(
+                        os.path.join(
+                            previous_project._project_path,
+                            "Tables",
+                            tab,
+                        ),
+                        os.path.join(self.project_path, self.project_name, "Tables"),
+                    )
+
+            return extended_coords
+
+        else:
+            print("No new experiments to process. Exiting...")
+
 
 class Coordinates:
     """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables."""
@@ -759,6 +864,7 @@ class Coordinates:
         frame_rate: int,
         arena_params: List,
         tables: dict,
+        table_paths: List,
         trained_model_path: str,
         videos: List,
         video_resolution: List,
@@ -784,6 +890,7 @@ class Coordinates:
             frame_rate (int): frame rate of the processed videos.
             arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
+            table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
             videos (List): List containing the videos used for the experiment. See deepof.data.Project for more information.
             video_resolution (List): List containing the automatically detected resolution of the videos used for the experiment.
@@ -809,6 +916,7 @@ class Coordinates:
         self._quality = quality
         self._scales = scales
         self._tables = tables
+        self._table_paths = table_paths
         self._trained_model_path = trained_model_path
         self._videos = videos
         self._video_resolution = video_resolution
