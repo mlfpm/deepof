@@ -2041,6 +2041,22 @@ docs = ["myst-parser", "sphinx-autodoc-typehints", "sphinxcontrib-github-alt", "
 test = ["ipykernel", "pre-commit", "pytest", "pytest-cov", "pytest-timeout"]
 
 [[package]]
+name = "jupyter-http-over-ws"
+version = "0.0.8"
+description = "Jupyter support for HTTP-over-ws"
+optional = false
+python-versions = "*"
+files = [
+    {file = "jupyter_http_over_ws-0.0.8-py2.py3-none-any.whl", hash = "sha256:3052a94929d9fb41e4fe33fc22c569e81e018b9454a923bd818599bf62ffd85a"},
+    {file = "jupyter_http_over_ws-0.0.8.tar.gz", hash = "sha256:b0aa1e7902d3808a698d4853f6dfe12fd02a0d9cb3851db3bf59703106d44a80"},
+]
+
+[package.dependencies]
+notebook = ">=5.0"
+six = ">=1.6.0"
+tornado = ">=4.5"
+
+[[package]]
 name = "jupyter-server"
 version = "1.24.0"
 description = "The backend—i.e. core services, APIs, and REST endpoints—to Jupyter web applications."
@@ -4859,6 +4875,25 @@ docs = ["jupyter", "librosa", "matplotlib", "mkdocs", "mkdocs-macros-plugin", "m
 test = ["pytest", "pytest-cov"]
 
 [[package]]
+name = "scikit-base"
+version = "0.6.0"
+description = "Base classes for sklearn-like parametric objects"
+optional = false
+python-versions = "<3.13,>=3.8"
+files = [
+    {file = "scikit-base-0.6.0.tar.gz", hash = "sha256:73bb78e6200247cba03419156e8c9ed16ed891db068173426932012429328d85"},
+    {file = "scikit_base-0.6.0-py3-none-any.whl", hash = "sha256:84af6353e8757057ffe61ae475017e77bb2fbf48b16cef882733dd4f106d0e2a"},
+]
+
+[package.extras]
+all-extras = ["numpy", "pandas"]
+binder = ["jupyter"]
+dev = ["pre-commit", "pytest", "pytest-cov", "scikit-learn (>=0.24.0)"]
+docs = ["Sphinx (!=7.2.0,<8.0.0)", "jupyter", "myst-parser", "nbsphinx (>=0.8.6)", "numpydoc", "pydata-sphinx-theme", "sphinx-design (<0.6.0)", "sphinx-gallery (<0.15.0)", "sphinx-issues (<4.0.0)", "sphinx-panels", "tabulate"]
+linters = ["black", "doc8", "flake8", "flake8-bugbear", "flake8-builtins", "flake8-comprehensions", "flake8-print", "flake8-quotes", "isort", "mypy", "nbqa", "pandas-vet", "pep8-naming", "pydocstyle"]
+test = ["coverage", "numpy", "pandas", "pytest", "pytest-cov", "safety", "scikit-learn (>=0.24.0)", "scipy"]
+
+[[package]]
 name = "scikit-learn"
 version = "1.2.0"
 description = "A set of python modules for machine learning and data mining"
@@ -5289,6 +5324,46 @@ files = [
     {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
     {file = "six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926"},
 ]
+
+[[package]]
+name = "sktime"
+version = "0.24.0"
+description = "A unified framework for machine learning with time series"
+optional = false
+python-versions = "<3.13,>=3.8"
+files = [
+    {file = "sktime-0.24.0-py3-none-any.whl", hash = "sha256:a6a8deb12983e529f20a77b083d98e5821c490ca370d993ed3438ba4a17dbd16"},
+    {file = "sktime-0.24.0.tar.gz", hash = "sha256:878c67845dc643e5827b5fbbf8018a46941eb536e9dfb2171f41e40e5782a42e"},
+]
+
+[package.dependencies]
+numpy = ">=1.21.0,<1.27"
+packaging = "*"
+pandas = ">=1.1.0,<2.2.0"
+scikit-base = "<0.7.0"
+scikit-learn = ">=0.24.0,<1.4.0"
+scipy = ">=1.2.0,<2.0.0"
+
+[package.extras]
+alignment = ["dtw-python (>=1.3,<1.4)", "numba (>=0.53,<0.59)"]
+all-extras = ["arch (>=5.6.0,<6.3.0)", "cloudpickle", "dash (!=2.9.0)", "dask", "dtw-python", "esig (==0.9.7)", "filterpy (>=1.4.5)", "gluonts (>=0.9.0)", "h5py", "hmmlearn (>=0.2.7)", "holidays", "keras-self-attention", "kotsu (>=0.3.1)", "matplotlib (>=3.3.2)", "mne", "numba (>=0.53,<0.59)", "pmdarima (>=1.8.0,!=1.8.1,<3.0.0)", "prophet (>=1.1)", "pycatch22", "pykalman-bardo (>=0.9.7,<0.10)", "pyod (>=0.8.0)", "scikit-optimize", "scikit-posthocs (>=0.6.5)", "seaborn (>=0.11.0)", "seasonal", "skpro (>=2.0.0,<2.2.0)", "statsforecast (>=0.5.2,<1.7.0)", "statsmodels (>=0.12.1)", "stumpy (>=1.5.1)", "tbats (>=1.1.0)", "tensorflow", "tsfresh (>=0.17.0)", "tslearn (>=0.5.2,<0.6.0)", "xarray"]
+all-extras-pandas2 = ["arch (>=5.6.0,<6.3.0)", "cloudpickle", "dash (!=2.9.0)", "dask (<2023.7.1)", "dtw-python", "esig (==0.9.7)", "filterpy (>=1.4.5)", "gluonts (>=0.9.0)", "h5py", "hmmlearn (>=0.2.7)", "holidays", "keras-self-attention", "kotsu (>=0.3.1)", "matplotlib (>=3.3.2)", "mne", "numba (>=0.53,<0.59)", "pmdarima (>=1.8.0,!=1.8.1,<3.0.0)", "prophet (>=1.1)", "pycatch22", "pykalman-bardo (>=0.9.7,<0.10)", "pyod (>=0.8.0)", "scikit-posthocs (>=0.6.5)", "seaborn (>=0.11.0)", "seasonal", "skpro (>=2.0.0,<2.2.0)", "statsforecast (>=0.5.2,<1.7.0)", "statsmodels (>=0.12.1)", "stumpy (>=1.5.1)", "tbats (>=1.1.0)", "tensorflow", "tsfresh (>=0.17.0)", "tslearn (>=0.5.2,<0.6.0)", "xarray"]
+annotation = ["hmmlearn (>=0.2.7,<0.4)", "numba (>=0.53,<0.59)", "pyod (>=0.8.0,<1.2)"]
+binder = ["jupyter", "pandas (<2.0.0)"]
+classification = ["esig (>=0.9.7,<0.10)", "mrsqm (>=0.0.3,<0.1)", "numba (>=0.53,<0.59)", "tensorflow (>=2,<=2.14)", "tsfresh (>=0.17,<0.21)"]
+clustering = ["numba (>=0.53,<0.59)", "tslearn (>=0.5.2,<0.6.3)"]
+cython-extras = ["mrseql", "mrsqm", "numba (<0.59)"]
+dev = ["backoff", "httpx", "pre-commit", "pytest", "pytest-cov", "pytest-randomly", "pytest-timeout", "pytest-xdist", "wheel"]
+dl = ["tensorflow"]
+docs = ["Sphinx (!=7.2.0,<8.0.0)", "jupyter", "myst-parser", "nbsphinx (>=0.8.6)", "numpydoc", "pydata-sphinx-theme", "sphinx-copybutton", "sphinx-design (<0.6.0)", "sphinx-gallery (<0.15.0)", "sphinx-issues (<4.0.0)", "sphinx-version-warning", "tabulate"]
+forecasting = ["arch (>=5.6.0,<6.3.0)", "pmdarima (>=1.8,!=1.8.1,<2.1)", "prophet (>=1.1,<1.2)", "skpro (>=2.0.0,<2.2.0)", "statsforecast (>=0.5.2,<1.7.0)", "statsmodels (>=0.12.1,<0.15)", "tbats (>=1.1,<1.2)"]
+mlflow = ["mlflow"]
+mlflow-tests = ["boto3", "botocore", "mlflow", "moto"]
+networks = ["keras-self-attention (>=0.51,<0.52)", "tensorflow (>=2,<=2.14)"]
+pandas1 = ["pandas (<2.0.0)"]
+param-est = ["seasonal (>=0.3.1,<0.4)", "statsmodels (>=0.12.1,<0.15)"]
+regression = ["numba (>=0.53,<0.59)", "tensorflow (>=2,<=2.14)"]
+transformations = ["esig (>=0.9.7,<0.10)", "filterpy (>=1.4.5,<1.5)", "holidays (>=0.29,<0.35)", "mne (>=1.5,<1.6)", "numba (>=0.53,<0.59)", "pycatch22 (>=0.4,<0.5)", "pykalman-bardo (>=0.9.7,<0.10)", "statsmodels (>=0.12.1,<0.15)", "stumpy (>=1.5.1,<1.13)", "tsfresh (>=0.17,<0.21)"]
 
 [[package]]
 name = "sleap-io"
@@ -6629,4 +6704,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "5ef65c4866062228926538bf324af3913200ea776c001473f8ab180939a8c0e2"
+content-hash = "893804be83235c8c9727f4eac2d84bdb553deec6c1100e8cdea11964e6abf9db"
