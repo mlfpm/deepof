@@ -99,11 +99,6 @@ def test_model_embedding_fitting(
         video_scale=380,
         video_format=".mp4",
     ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.array([20, 1]).astype(float)
@@ -127,6 +122,12 @@ def test_model_embedding_fitting(
         log_hparams=True,
         n_components=10,
         kmeans_loss=0.1,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
     )
 
 

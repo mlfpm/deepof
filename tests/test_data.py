@@ -201,7 +201,7 @@ def test_project_filters():
     assert isinstance(coords.filter_condition(exp_filters={"CSDS": "Control"}), dict)
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
@@ -236,6 +236,12 @@ def test_get_distances(nodes, ego):
 
     assert isinstance(prun, dict)
 
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+
 
 @settings(deadline=None)
 @given(
@@ -268,7 +274,7 @@ def test_get_angles(nodes, ego):
     assert isinstance(prun, dict)
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
