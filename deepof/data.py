@@ -667,7 +667,7 @@ class Project:
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
             rmtree(os.path.join(self.project_path, self.project_name))
 
-        elif not os.path.exists(os.path.join(self.project_path, self.project_name)):
+        if not os.path.exists(os.path.join(self.project_path, self.project_name)):
             self.set_up_project_directory(debug=debug)
 
         self.frame_rate = int(

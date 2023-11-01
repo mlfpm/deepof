@@ -52,6 +52,7 @@ segment-anything = "^1.0"
 sleap-io = "^0.0.9"
 matplotlib = "3.7.2"
 sktime = "^0.24.0"
+moviepy = "^1.0.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
