@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>deepof.model_utils &mdash; deepof 0.5.1 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/thebelab.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+    <link rel="shortcut icon" href="../_static/deepof.ico"/>
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/thebelab-helper.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/deepof_sidebar.ico" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">deepof.model_utils</a></li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">deepof</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">deepof.model_utils</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_generated/deepof.model_utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="module-deepof.model_utils">
+<span id="deepof-model-utils"></span><h1>deepof.model_utils<a class="headerlink" href="#module-deepof.model_utils" title="Permalink to this heading"></a></h1>
+<p>Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels.</p>
+<p class="rubric">Functions</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer</span></code>(soft_counts, k)</p></td>
+<td><p>Compute the KL divergence between the cluster assignment distribution and a uniform prior across clusters.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_kmeans_loss</span></code>(latent_means[, weight, ...])</p></td>
+<td><p>Add a penalty to the singular values of the Gram matrix of the latent means.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_shannon_entropy</span></code>(tensor)</p></td>
+<td><p>Compute Shannon entropy for a given tensor.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_look_ahead_mask</span></code>(size)</p></td>
+<td><p>Create a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_masks</span></code>(inp)</p></td>
+<td><p>Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_padding_mask</span></code>(seq)</p></td>
+<td><p>Create a padding mask, with zeros where data is missing, and ones where data is available.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dcl_loss</span></code>(history, future, similarity[, ...])</p></td>
+<td><p>Compute the DCL loss function, as described in the paper &quot;Debiased Contrastive Learning&quot; (<a class="reference external" href="https://github.com/chingyaoc/DCL/">https://github.com/chingyaoc/DCL/</a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_model_fitting</span></code>(preprocessed_object, ...)</p></td>
+<td><p>Trains the specified embedding model on the preprocessed data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_per_video</span></code>(coordinates, ...[, ...])</p></td>
+<td><p>Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fc_loss</span></code>(history, future, similarity[, ...])</p></td>
+<td><p>Compute the FC loss function, as described in the paper &quot;Fully-Contrastive Learning of Visual Representations&quot; (<a class="reference external" href="https://arxiv.org/abs/2004.11362">https://arxiv.org/abs/2004.11362</a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_learning_rate</span></code>(model, data[, epochs, ...])</p></td>
+<td><p>Train the provided model for an epoch with an exponentially increasing learning rate.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_angles</span></code>(pos, i, d_model)</p></td>
+<td><p>Auxiliary function for positional encoding computation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_callbacks</span></code>(embedding_model, encoder_type)</p></td>
+<td><p>Generate callbacks used for model training.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_hard_counts</span></code>(soft_counts)</p></td>
+<td><p>Compute hard counts per cluster in a differentiable way.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_k_nearest_neighbors</span></code>(tensor, k, index)</p></td>
+<td><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_recurrent_block</span></code>(x, latent_dim, ...)</p></td>
+<td><p>Build a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">hard_loss</span></code>(history, future, similarity, ...)</p></td>
+<td><p>Compute the Hard loss function, as described in the paper &quot;Contrastive Learning with Hard Negative Samples&quot; (<a class="reference external" href="https://arxiv.org/abs/2011.03343">https://arxiv.org/abs/2011.03343</a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_hyperparameters</span></code>()</p></td>
+<td><p>Log hyperparameters in tensorboard.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nce_loss</span></code>(history, future, similarity[, ...])</p></td>
+<td><p>Compute the NCE loss function, as described in the paper &quot;A Simple Framework for Contrastive Learning of Visual Representations&quot; (<a class="reference external" href="https://arxiv.org/abs/2002.05709">https://arxiv.org/abs/2002.05709</a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_lr_vs_loss</span></code>(rates, losses)</p></td>
+<td><p>Plot learning rate versus the loss function of the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">positional_encoding</span></code>(position, d_model)</p></td>
+<td><p>Compute positional encodings, as in <a class="reference external" href="https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf">https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">select_contrastive_loss</span></code>(history, future, ...)</p></td>
+<td><p>Select and applies the contrastive loss function to be used in the Contrastive embedding models.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tune_search</span></code>(preprocessed_object, ...[, ...])</p></td>
+<td><p>Define the search space using keras-tuner and hyperband or bayesian optimization.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Classes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClusterControl</span></code>(*args, **kwargs)</p></td>
+<td><p>Identity layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">CustomStopper</span></code>(start_epoch, *args, **kwargs)</p></td>
+<td><p>Custom early stopping callback.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code>(factor)</p></td>
+<td><p>Simple class that allows to grow learning rate exponentially during training.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code>(*args, **kwargs)</p></td>
+<td><p>Map the reconstruction output of a given decoder to a multivariate normal distribution.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoder</span></code>(*args, **kwargs)</p></td>
+<td><p>Transformer decoder.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code>(*args, **kwargs)</p></td>
+<td><p>Transformer decoder layer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoder</span></code>(*args, **kwargs)</p></td>
+<td><p>Transformer encoder.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code>(*args, **kwargs)</p></td>
+<td><p>Transformer encoder layer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Lucas Miranda.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

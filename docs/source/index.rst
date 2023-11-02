@@ -160,20 +160,27 @@ reference for details!
 Tutorials
 =========
 
-* `Formatting your data: feature extraction from DLC output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
+Formatting your data
+--------------------
+* `Formatting your data: feature extraction from motion tracking output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
+
+Supervised and unsupervised pipelines
+-------------------------------------
 * `DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial.ipynb>`_
 * `DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial.ipynb>`_
+
+Advanced usage
+--------------
 * `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
 
-Full API reference
-==================
+API Reference
+=============
 
-* `deepof.data (main data-wrangling module) <deepof.data.html>`_
-* `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
-* `deepof.models (deep unsupervised models) <deepof.models.html>`_
-* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
-* `deepof.annotation_utils (rule-based and supervised annotation auxiliary functions) <deepof.annotation_utils.html>`_
-* `deepof.model_utils (deep machine learning models' auxiliary functions) <deepof.model_utils.html>`_
-* `deepof.visuals (visualization functions) <deepof.visuals.html>`_
-* `deepof.post_hoc (post-hoc analysis functions) <deepof.post_hoc.html>`_
-
+* `deepof.data (main data-wrangling module) <_generated/deepof.data.html>`_
+* `deepof.utils (data-wrangling auxiliary functions) <_generated/deepof.utils.html>`_
+* `deepof.models (deep unsupervised models) <_generated/deepof.models.html>`_
+* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <_generated/deepof.hypermodels.html>`_
+* `deepof.annotation_utils (rule-based and supervised annotation auxiliary functions) <_generated/deepof.annotation_utils.html>`_
+* `deepof.model_utils (deep machine learning models' auxiliary functions) <_generated/deepof.model_utils.html>`_
+* `deepof.visuals (visualization functions) <_generated/deepof.visuals.html>`_
+* `deepof.post_hoc (post-hoc analysis functions) <_generated/deepof.post_hoc.html>`_

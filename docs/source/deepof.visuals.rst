@@ -1,7 +1,8 @@
 deepof.visuals module
 =====================
 
-.. automodule:: deepof.visuals
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.visuals

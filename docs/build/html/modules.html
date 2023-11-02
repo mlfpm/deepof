@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof &mdash; deepof 0.2 documentation</title>
+  <title>deepof &mdash; deepof 0.5.1 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/jupyter-sphinx.css" type="text/css" />
@@ -38,8 +38,9 @@
 
           
           
-          <a href="index.html" class="icon icon-home">
-            deepof
+          <a href="index.html">
+            
+              <img src="_static/deepof_sidebar.ico" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -109,10 +110,10 @@
 <li class="toctree-l1"><a class="reference internal" href="deepof.html">deepof package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="deepof.html#submodules">Submodules</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="deepof.data.html">deepof.data module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.load_project"><code class="docutils literal notranslate"><span class="pre">load_project()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Project"><code class="docutils literal notranslate"><span class="pre">Project</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.Coordinates"><code class="docutils literal notranslate"><span class="pre">Coordinates</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.data.html#deepof.data.TableDict"><code class="docutils literal notranslate"><span class="pre">TableDict</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="_generated/deepof.data.Project.html">deepof.data.Project</a></li>
+<li class="toctree-l4"><a class="reference internal" href="_generated/deepof.data.Coordinates.html">deepof.data.Coordinates</a></li>
+<li class="toctree-l4"><a class="reference internal" href="_generated/deepof.data.TableDict.html">deepof.data.TableDict</a></li>
+<li class="toctree-l4"><a class="reference internal" href="_generated/deepof.data.load_project.html">deepof.data.load_project</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="deepof.deepof_train_embeddings.html">deepof.deepof_train_embeddings module</a></li>
@@ -168,7 +169,6 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.climb_wall"><code class="docutils literal notranslate"><span class="pre">climb_wall()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.sniff_object"><code class="docutils literal notranslate"><span class="pre">sniff_object()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.huddle"><code class="docutils literal notranslate"><span class="pre">huddle()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.dig"><code class="docutils literal notranslate"><span class="pre">dig()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.look_around"><code class="docutils literal notranslate"><span class="pre">look_around()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.following_path"><code class="docutils literal notranslate"><span class="pre">following_path()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.annotation_utils.html#deepof.annotation_utils.max_behaviour"><code class="docutils literal notranslate"><span class="pre">max_behaviour()</span></code></a></li>
@@ -228,6 +228,8 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.compute_areas"><code class="docutils literal notranslate"><span class="pre">compute_areas()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rotate"><code class="docutils literal notranslate"><span class="pre">rotate()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.align_trajectories"><code class="docutils literal notranslate"><span class="pre">align_trajectories()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.load_table"><code class="docutils literal notranslate"><span class="pre">load_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rename_track_bps"><code class="docutils literal notranslate"><span class="pre">rename_track_bps()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.scale_table"><code class="docutils literal notranslate"><span class="pre">scale_table()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.scale_animal"><code class="docutils literal notranslate"><span class="pre">scale_animal()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.kleinberg"><code class="docutils literal notranslate"><span class="pre">kleinberg()</span></code></a></li>
@@ -241,12 +243,15 @@
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.full_outlier_mask"><code class="docutils literal notranslate"><span class="pre">full_outlier_mask()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.interpolate_outliers"><code class="docutils literal notranslate"><span class="pre">interpolate_outliers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.filter_columns"><code class="docutils literal notranslate"><span class="pre">filter_columns()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.load_segmentation_model"><code class="docutils literal notranslate"><span class="pre">load_segmentation_model()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.get_arenas"><code class="docutils literal notranslate"><span class="pre">get_arenas()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.simplify_polygon"><code class="docutils literal notranslate"><span class="pre">simplify_polygon()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.closest_side"><code class="docutils literal notranslate"><span class="pre">closest_side()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.automatically_recognize_arena"><code class="docutils literal notranslate"><span class="pre">automatically_recognize_arena()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.retrieve_corners_from_image"><code class="docutils literal notranslate"><span class="pre">retrieve_corners_from_image()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.extract_polygonal_arena_coordinates"><code class="docutils literal notranslate"><span class="pre">extract_polygonal_arena_coordinates()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.fit_ellipse_to_polygon"><code class="docutils literal notranslate"><span class="pre">fit_ellipse_to_polygon()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.circular_arena_recognition"><code class="docutils literal notranslate"><span class="pre">circular_arena_recognition()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.arena_parameter_extraction"><code class="docutils literal notranslate"><span class="pre">arena_parameter_extraction()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.rolling_speed"><code class="docutils literal notranslate"><span class="pre">rolling_speed()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.filter_short_bouts"><code class="docutils literal notranslate"><span class="pre">filter_short_bouts()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="deepof.utils.html#deepof.utils.gmm_compute"><code class="docutils literal notranslate"><span class="pre">gmm_compute()</span></code></a></li>

@@ -36,6 +36,7 @@ release = "0.5.1"
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
+    'sphinx.ext.autosummary',
     "sphinx.ext.coverage",
     "sphinx.ext.napoleon",
     'jupyter_sphinx',
@@ -56,6 +57,10 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = "sphinx_rtd_theme"
+html_theme_options = {
+    'logo_only': True,
+    'display_version': False,
+}
 def setup(app):
     app.add_css_file('custom.css')
 
@@ -66,6 +71,7 @@ html_static_path = ["_static"]
 
 # Change the icon displayed in the sidebar and the web browser tab for the docs
 html_favicon = "deepof.ico"
+html_logo = "deepof_sidebar.ico"
 
 # Autodoc default configuration
 autodoc_default_options = {"member-order": "bysource", "special-members": "__init__"}

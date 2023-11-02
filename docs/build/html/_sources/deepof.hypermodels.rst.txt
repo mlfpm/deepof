@@ -1,7 +1,8 @@
 deepof.hypermodels module
 =========================
 
-.. automodule:: deepof.hypermodels
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.hypermodels

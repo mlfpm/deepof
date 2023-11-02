@@ -1,7 +1,8 @@
-deepof.post\_hoc module
-=======================
+deepof.post_hoc module
+=========================
 
-.. automodule:: deepof.post_hoc
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.post_hoc

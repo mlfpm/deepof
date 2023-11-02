@@ -1,7 +1,8 @@
-deepof.utils module
-===================
+deepof.data module
+==================
 
-.. automodule:: deepof.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.utils

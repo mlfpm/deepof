@@ -1,7 +1,8 @@
 deepof.models module
 ====================
 
-.. automodule:: deepof.models
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.models
