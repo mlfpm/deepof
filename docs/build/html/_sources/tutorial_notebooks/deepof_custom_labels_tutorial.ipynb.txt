@@ -65,8 +65,8 @@
    "outputs": [],
    "source": [
     "# os.chdir(\"deepof\")\n",
-    "import os, warnings\n",
-    "warnings.filterwarnings('ignore')"
+    "# import os, warnings\n",
+    "# warnings.filterwarnings('ignore')"
    ]
   },
   {

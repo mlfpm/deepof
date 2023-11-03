@@ -110,6 +110,48 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.html#module-deepof.annotation_utils" title="deepof.annotation_utils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils</span></code></a></p></td>
 <td><p>Functions and general utilities for supervised pose estimation.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.climb_wall.html#deepof.annotation_utils.climb_wall" title="deepof.annotation_utils.climb_wall"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.climb_wall</span></code></a>(...[, ...])</p></td>
+<td><p>Return True if the specified mouse is climbing the wall.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.close_double_contact.html#deepof.annotation_utils.close_double_contact" title="deepof.annotation_utils.close_double_contact"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.close_double_contact</span></code></a>(...)</p></td>
+<td><p>Return a boolean array that's True if the specified body parts are closer than tol.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.close_single_contact.html#deepof.annotation_utils.close_single_contact" title="deepof.annotation_utils.close_single_contact"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.close_single_contact</span></code></a>(...)</p></td>
+<td><p>Return a boolean array that's True if the specified body parts are closer than tol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.following_path.html#deepof.annotation_utils.following_path" title="deepof.annotation_utils.following_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.following_path</span></code></a>(...)</p></td>
+<td><p>Return True if 'follower' is closer than tol to the path that followed has walked over the last specified number of frames.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.frame_corners.html#deepof.annotation_utils.frame_corners" title="deepof.annotation_utils.frame_corners"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.frame_corners</span></code></a>(w, h)</p></td>
+<td><p>Return a dictionary with the corner positions of the video frame.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.get_hparameters.html#deepof.annotation_utils.get_hparameters" title="deepof.annotation_utils.get_hparameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.get_hparameters</span></code></a>([...])</p></td>
+<td><p>Return the most frequent behaviour in a window of window_size frames.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.huddle.html#deepof.annotation_utils.huddle" title="deepof.annotation_utils.huddle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.huddle</span></code></a>(X_huddle, ...)</p></td>
+<td><p>Return true when the mouse is huddling a pretrained model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.look_around.html#deepof.annotation_utils.look_around" title="deepof.annotation_utils.look_around"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.look_around</span></code></a>(...[, ...])</p></td>
+<td><p>Return true when the mouse is looking around using simple rules.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.max_behaviour.html#deepof.annotation_utils.max_behaviour" title="deepof.annotation_utils.max_behaviour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.max_behaviour</span></code></a>(...[, ...])</p></td>
+<td><p>Return the most frequent behaviour in a window of window_size frames.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.outside_ellipse.html#deepof.annotation_utils.outside_ellipse" title="deepof.annotation_utils.outside_ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.outside_ellipse</span></code></a>(x, ...)</p></td>
+<td><p>Auxiliar function to climb_wall and sniff_object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.rotate.html#deepof.annotation_utils.rotate" title="deepof.annotation_utils.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.rotate</span></code></a>(origin, ...)</p></td>
+<td><p>Auxiliar function to climb_wall and sniff_object.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.sniff_object.html#deepof.annotation_utils.sniff_object" title="deepof.annotation_utils.sniff_object"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.sniff_object</span></code></a>(...[, ...])</p></td>
+<td><p>Return True if the specified mouse is sniffing an object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.supervised_tagging.html#deepof.annotation_utils.supervised_tagging" title="deepof.annotation_utils.supervised_tagging"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.supervised_tagging</span></code></a>(...)</p></td>
+<td><p>Output a dataframe with the registered motives per frame.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.annotation_utils.tagged_video_output.html#deepof.annotation_utils.tagged_video_output" title="deepof.annotation_utils.tagged_video_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.annotation_utils.tagged_video_output</span></code></a>(...)</p></td>
+<td><p>Output annotated videos.</p></td>
+</tr>
 </tbody>
 </table>
 </section>

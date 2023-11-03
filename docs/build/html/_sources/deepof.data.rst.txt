@@ -6,3 +6,7 @@ deepof.data module
    :recursive:
 
    deepof.data
+   deepof.data.load_project
+   deepof.data.Coordinates
+   deepof.data.Project
+   deepof.data.TableDict

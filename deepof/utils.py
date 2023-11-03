@@ -137,7 +137,7 @@ def connect_mouse(
     return final_graph
 
 
-def edges_to_weithed_adj(adj: np.ndarray, edges: np.ndarray):
+def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray):
     """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
@@ -1500,8 +1500,9 @@ def get_arenas(
                     )
                     + [arena_dims]
                 )
-                arena_params.append(arena_parameters)
-                video_resolution.append((h, w))
+
+            arena_params.append(arena_parameters)
+            video_resolution.append((h, w))
 
     elif not arena:
         return None, None, None

@@ -109,73 +109,73 @@
 <p class="rubric">Functions</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer</span></code>(soft_counts, k)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.cluster_frequencies_regularizer.html#deepof.model_utils.cluster_frequencies_regularizer" title="deepof.model_utils.cluster_frequencies_regularizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cluster_frequencies_regularizer</span></code></a>(soft_counts, k)</p></td>
 <td><p>Compute the KL divergence between the cluster assignment distribution and a uniform prior across clusters.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_kmeans_loss</span></code>(latent_means[, weight, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.compute_kmeans_loss.html#deepof.model_utils.compute_kmeans_loss" title="deepof.model_utils.compute_kmeans_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_kmeans_loss</span></code></a>(latent_means[, weight, ...])</p></td>
 <td><p>Add a penalty to the singular values of the Gram matrix of the latent means.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_shannon_entropy</span></code>(tensor)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.compute_shannon_entropy.html#deepof.model_utils.compute_shannon_entropy" title="deepof.model_utils.compute_shannon_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_shannon_entropy</span></code></a>(tensor)</p></td>
 <td><p>Compute Shannon entropy for a given tensor.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_look_ahead_mask</span></code>(size)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.create_look_ahead_mask.html#deepof.model_utils.create_look_ahead_mask" title="deepof.model_utils.create_look_ahead_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_look_ahead_mask</span></code></a>(size)</p></td>
 <td><p>Create a triangular matrix containing an increasing amount of ones from left to right on each subsequent row.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_masks</span></code>(inp)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.create_masks.html#deepof.model_utils.create_masks" title="deepof.model_utils.create_masks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_masks</span></code></a>(inp)</p></td>
 <td><p>Given an input sequence, it creates all necessary masks to pass it through the transformer architecture.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_padding_mask</span></code>(seq)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.create_padding_mask.html#deepof.model_utils.create_padding_mask" title="deepof.model_utils.create_padding_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_padding_mask</span></code></a>(seq)</p></td>
 <td><p>Create a padding mask, with zeros where data is missing, and ones where data is available.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dcl_loss</span></code>(history, future, similarity[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.dcl_loss.html#deepof.model_utils.dcl_loss" title="deepof.model_utils.dcl_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dcl_loss</span></code></a>(history, future, similarity[, ...])</p></td>
 <td><p>Compute the DCL loss function, as described in the paper &quot;Debiased Contrastive Learning&quot; (<a class="reference external" href="https://github.com/chingyaoc/DCL/">https://github.com/chingyaoc/DCL/</a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_model_fitting</span></code>(preprocessed_object, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.embedding_model_fitting.html#deepof.model_utils.embedding_model_fitting" title="deepof.model_utils.embedding_model_fitting"><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_model_fitting</span></code></a>(preprocessed_object, ...)</p></td>
 <td><p>Trains the specified embedding model on the preprocessed data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_per_video</span></code>(coordinates, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.embedding_per_video.html#deepof.model_utils.embedding_per_video" title="deepof.model_utils.embedding_per_video"><code class="xref py py-obj docutils literal notranslate"><span class="pre">embedding_per_video</span></code></a>(coordinates, ...[, ...])</p></td>
 <td><p>Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fc_loss</span></code>(history, future, similarity[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.fc_loss.html#deepof.model_utils.fc_loss" title="deepof.model_utils.fc_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fc_loss</span></code></a>(history, future, similarity[, ...])</p></td>
 <td><p>Compute the FC loss function, as described in the paper &quot;Fully-Contrastive Learning of Visual Representations&quot; (<a class="reference external" href="https://arxiv.org/abs/2004.11362">https://arxiv.org/abs/2004.11362</a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_learning_rate</span></code>(model, data[, epochs, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.find_learning_rate.html#deepof.model_utils.find_learning_rate" title="deepof.model_utils.find_learning_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_learning_rate</span></code></a>(model, data[, epochs, ...])</p></td>
 <td><p>Train the provided model for an epoch with an exponentially increasing learning rate.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_angles</span></code>(pos, i, d_model)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.get_angles.html#deepof.model_utils.get_angles" title="deepof.model_utils.get_angles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_angles</span></code></a>(pos, i, d_model)</p></td>
 <td><p>Auxiliary function for positional encoding computation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_callbacks</span></code>(embedding_model, encoder_type)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.get_callbacks.html#deepof.model_utils.get_callbacks" title="deepof.model_utils.get_callbacks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_callbacks</span></code></a>(embedding_model, encoder_type)</p></td>
 <td><p>Generate callbacks used for model training.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_hard_counts</span></code>(soft_counts)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.get_hard_counts.html#deepof.model_utils.get_hard_counts" title="deepof.model_utils.get_hard_counts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_hard_counts</span></code></a>(soft_counts)</p></td>
 <td><p>Compute hard counts per cluster in a differentiable way.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_k_nearest_neighbors</span></code>(tensor, k, index)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.get_k_nearest_neighbors.html#deepof.model_utils.get_k_nearest_neighbors" title="deepof.model_utils.get_k_nearest_neighbors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_k_nearest_neighbors</span></code></a>(tensor, k, index)</p></td>
 <td><p>Retrieve indices of the k nearest neighbors in tensor to the vector with the specified index.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_recurrent_block</span></code>(x, latent_dim, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.get_recurrent_block.html#deepof.model_utils.get_recurrent_block" title="deepof.model_utils.get_recurrent_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_recurrent_block</span></code></a>(x, latent_dim, ...)</p></td>
 <td><p>Build a recurrent embedding block, using a 1D convolution followed by two bidirectional GRU layers.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">hard_loss</span></code>(history, future, similarity, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.hard_loss.html#deepof.model_utils.hard_loss" title="deepof.model_utils.hard_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hard_loss</span></code></a>(history, future, similarity, ...)</p></td>
 <td><p>Compute the Hard loss function, as described in the paper &quot;Contrastive Learning with Hard Negative Samples&quot; (<a class="reference external" href="https://arxiv.org/abs/2011.03343">https://arxiv.org/abs/2011.03343</a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_hyperparameters</span></code>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.log_hyperparameters.html#deepof.model_utils.log_hyperparameters" title="deepof.model_utils.log_hyperparameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_hyperparameters</span></code></a>()</p></td>
 <td><p>Log hyperparameters in tensorboard.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nce_loss</span></code>(history, future, similarity[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.nce_loss.html#deepof.model_utils.nce_loss" title="deepof.model_utils.nce_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nce_loss</span></code></a>(history, future, similarity[, ...])</p></td>
 <td><p>Compute the NCE loss function, as described in the paper &quot;A Simple Framework for Contrastive Learning of Visual Representations&quot; (<a class="reference external" href="https://arxiv.org/abs/2002.05709">https://arxiv.org/abs/2002.05709</a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_lr_vs_loss</span></code>(rates, losses)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.plot_lr_vs_loss.html#deepof.model_utils.plot_lr_vs_loss" title="deepof.model_utils.plot_lr_vs_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_lr_vs_loss</span></code></a>(rates, losses)</p></td>
 <td><p>Plot learning rate versus the loss function of the model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">positional_encoding</span></code>(position, d_model)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.positional_encoding.html#deepof.model_utils.positional_encoding" title="deepof.model_utils.positional_encoding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">positional_encoding</span></code></a>(position, d_model)</p></td>
 <td><p>Compute positional encodings, as in <a class="reference external" href="https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf">https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf</a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">select_contrastive_loss</span></code>(history, future, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.select_contrastive_loss.html#deepof.model_utils.select_contrastive_loss" title="deepof.model_utils.select_contrastive_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">select_contrastive_loss</span></code></a>(history, future, ...)</p></td>
 <td><p>Select and applies the contrastive loss function to be used in the Contrastive embedding models.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tune_search</span></code>(preprocessed_object, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.tune_search.html#deepof.model_utils.tune_search" title="deepof.model_utils.tune_search"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tune_search</span></code></a>(preprocessed_object, ...[, ...])</p></td>
 <td><p>Define the search space using keras-tuner and hyperband or bayesian optimization.</p></td>
 </tr>
 </tbody>
@@ -183,28 +183,28 @@
 <p class="rubric">Classes</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClusterControl</span></code>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.ClusterControl.html#deepof.model_utils.ClusterControl" title="deepof.model_utils.ClusterControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClusterControl</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Identity layer.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">CustomStopper</span></code>(start_epoch, *args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.CustomStopper.html#deepof.model_utils.CustomStopper" title="deepof.model_utils.CustomStopper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CustomStopper</span></code></a>(start_epoch, *args, **kwargs)</p></td>
 <td><p>Custom early stopping callback.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code>(factor)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.ExponentialLearningRate.html#deepof.model_utils.ExponentialLearningRate" title="deepof.model_utils.ExponentialLearningRate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExponentialLearningRate</span></code></a>(factor)</p></td>
 <td><p>Simple class that allows to grow learning rate exponentially during training.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.ProbabilisticDecoder.html#deepof.model_utils.ProbabilisticDecoder" title="deepof.model_utils.ProbabilisticDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticDecoder</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Map the reconstruction output of a given decoder to a multivariate normal distribution.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoder</span></code>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.TransformerDecoder.html#deepof.model_utils.TransformerDecoder" title="deepof.model_utils.TransformerDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoder</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Transformer decoder.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.TransformerDecoderLayer.html#deepof.model_utils.TransformerDecoderLayer" title="deepof.model_utils.TransformerDecoderLayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerDecoderLayer</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Transformer decoder layer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoder</span></code>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="deepof.model_utils.TransformerEncoder.html#deepof.model_utils.TransformerEncoder" title="deepof.model_utils.TransformerEncoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoder</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Transformer encoder.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="deepof.model_utils.TransformerEncoderLayer.html#deepof.model_utils.TransformerEncoderLayer" title="deepof.model_utils.TransformerEncoderLayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerEncoderLayer</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Transformer encoder layer.</p></td>
 </tr>
 </tbody>

@@ -124,7 +124,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>project_name</strong> (<em>str</em>) – name of the current project.</p></li>
-<li><p><strong>project_path</strong> (<em>str</em>) – path to the folder containing the DLC output data.</p></li>
+<li><p><strong>project_path</strong> (<em>str</em>) – path to the folder containing the motion tracking output data.</p></li>
 <li><p><strong>arena</strong> (<em>str</em>) – Type of arena used for the experiment. See deepof.data.Project for more information.</p></li>
 <li><p><strong>arena_dims</strong> (<em>np.array</em>) – Dimensions of the arena. See deepof.data.Project for more information.</p></li>
 <li><p><strong>bodypart_graph</strong> (<em>nx.Graph</em>) – Graph containing the body part connectivity. See deepof.data.Project for more information.</p></li>
@@ -177,7 +177,7 @@
 <td><p>Generate a dataset with all specified features.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_quality</span></code>()</p></td>
-<td><p>Retrieve a dictionary with the tagging quality per video, as reported by DLC.</p></td>
+<td><p>Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_videos</span></code>([play])</p></td>
 <td><p>Retuens the videos associated with the dataset as a list.</p></td>
@@ -212,7 +212,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>project_name</strong> (<em>str</em>) – name of the current project.</p></li>
-<li><p><strong>project_path</strong> (<em>str</em>) – path to the folder containing the DLC output data.</p></li>
+<li><p><strong>project_path</strong> (<em>str</em>) – path to the folder containing the motion tracking output data.</p></li>
 <li><p><strong>arena</strong> (<em>str</em>) – Type of arena used for the experiment. See deepof.data.Project for more information.</p></li>
 <li><p><strong>arena_dims</strong> (<em>np.array</em>) – Dimensions of the arena. See deepof.data.Project for more information.</p></li>
 <li><p><strong>bodypart_graph</strong> (<em>nx.Graph</em>) – Graph containing the body part connectivity. See deepof.data.Project for more information.</p></li>

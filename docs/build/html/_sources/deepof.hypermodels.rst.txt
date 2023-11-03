@@ -6,3 +6,6 @@ deepof.hypermodels module
    :recursive:
 
    deepof.hypermodels
+   deepof.Contrastive
+   deepof.VQVAE
+   deepof.VaDE

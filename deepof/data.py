@@ -1,4 +1,4 @@
-"""Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
+"""Data structures for preprocessing and wrangling of motion tracking output data. This is the main module handled by the user.
 
 There are three main data structures to pay attention to:
 - :class:`~deepof.data.Project`, which serves as a configuration hub for the whole pipeline
@@ -77,7 +77,7 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
 
 
 class Project:
-    """Class for loading and preprocessing DLC data of individual and multiple animals.
+    """Class for loading and preprocessing motion tracking data of individual and multiple animals.
 
     All main computations are handled from here.
 
@@ -122,7 +122,7 @@ class Project:
             likelihood_tol (float): likelihood threshold for outlier detection.
             model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
             project_name (str): name of the current project.
-            project_path (str): path to the folder containing the DLC output data.
+            project_path (str): path to the folder containing the motion tracking output data.
             video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
             table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
             rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
@@ -337,7 +337,7 @@ class Project:
 
         Returns:
             Tuple: A tuple containing the following a dictionary with all loaded tables per experiment,
-            and another dictionary with DLC data quality.
+            and another dictionary with motion tracking data quality.
 
         """
         if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
@@ -880,7 +880,7 @@ class Coordinates:
 
         Args:
             project_name (str): name of the current project.
-            project_path (str): path to the folder containing the DLC output data.
+            project_path (str): path to the folder containing the motion tracking output data.
             arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
             arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
             bodypart_graph (nx.Graph): Graph containing the body part connectivity. See deepof.data.Project for more information.
@@ -1342,7 +1342,7 @@ class Coordinates:
         self._exp_conditions = exp_conditions
 
     def get_quality(self):
-        """Retrieve a dictionary with the tagging quality per video, as reported by DLC."""
+        """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
         return TableDict(self._quality, typ="quality", animal_ids=self._animal_ids)
 
     @property
@@ -1541,7 +1541,7 @@ class Coordinates:
                 to_preprocess[:, ~feature_names.isin(edge_feature_names)][
                     :, node_sorting_indices
                 ].reshape([to_preprocess.shape[0], len(graph.nodes()), -1], order="F"),
-                deepof.utils.edges_to_weithed_adj(
+                deepof.utils.edges_to_weighted_adj(
                     nx.adj_matrix(graph).todense(),
                     to_preprocess[:, feature_names.isin(edge_feature_names)][
                         :, edge_sorting_indices

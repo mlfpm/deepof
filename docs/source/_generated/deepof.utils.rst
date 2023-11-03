@@ -25,7 +25,7 @@
       compute_areas
       compute_dist
       connect_mouse
-      edges_to_weithed_adj
+      edges_to_weighted_adj
       enumerate_all_bridges
       extract_polygonal_arena_coordinates
       filter_columns

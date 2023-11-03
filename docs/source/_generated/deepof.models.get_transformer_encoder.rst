@@ -3,14 +3,4 @@
 
 .. currentmodule:: deepof.models
 
-.. autoclass:: get_transformer_encoder
-
-   
-   .. automethod:: __init__
-
-   
-   
-
-   
-   
-   
+.. autofunction:: get_transformer_encoder

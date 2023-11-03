@@ -323,7 +323,7 @@ def plot_heatmaps(
 
     if display_arena:
         for hmap in heatmaps:
-            plot_arena(coordinates, center, "white", hmap, i)
+            plot_arena(coordinates, center, "#ec5628", hmap, i)
 
     if show:
         plt.show()

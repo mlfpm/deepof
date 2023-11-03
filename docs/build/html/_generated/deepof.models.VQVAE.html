@@ -141,7 +141,7 @@
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="../deepof.models.html#deepof.models.VQVAE.__init__" title="deepof.models.VQVAE.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(input_shape, edge_feature_shape[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#id0" title="deepof.models.VQVAE.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(input_shape, edge_feature_shape[, ...])</p></td>
 <td><p>Initialize a VQ-VAE model.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_loss</span></code>(losses, **kwargs)</p></td>
@@ -162,7 +162,7 @@
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">build</span></code>(input_shape)</p></td>
 <td><p>Builds the model based on input shapes received.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../deepof.models.html#deepof.models.VQVAE.call" title="deepof.models.VQVAE.call"><code class="xref py py-obj docutils literal notranslate"><span class="pre">call</span></code></a>(inputs, **kwargs)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">call</span></code>(inputs, **kwargs)</p></td>
 <td><p>Call the VQVAE model.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compile</span></code>([optimizer, loss, metrics, ...])</p></td>
@@ -285,7 +285,7 @@
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">test_on_batch</span></code>(x[, y, sample_weight, ...])</p></td>
 <td><p>Test the model on a single batch of samples.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../deepof.models.html#deepof.models.VQVAE.test_step" title="deepof.models.VQVAE.test_step"><code class="xref py py-obj docutils literal notranslate"><span class="pre">test_step</span></code></a>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">test_step</span></code>(data)</p></td>
 <td><p>Performs a test step.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_json</span></code>(**kwargs)</p></td>
@@ -297,7 +297,7 @@
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">train_on_batch</span></code>(x[, y, sample_weight, ...])</p></td>
 <td><p>Runs a single gradient update on a single batch of data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../deepof.models.html#deepof.models.VQVAE.train_step" title="deepof.models.VQVAE.train_step"><code class="xref py py-obj docutils literal notranslate"><span class="pre">train_step</span></code></a>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">train_step</span></code>(data)</p></td>
 <td><p>Perform a training step.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">with_name_scope</span></code>(method)</p></td>
@@ -350,7 +350,7 @@
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">losses</span></code></p></td>
 <td><p>List of losses added using the <cite>add_loss()</cite> API.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../deepof.models.html#deepof.models.VQVAE.metrics" title="deepof.models.VQVAE.metrics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">metrics</span></code></a></p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">metrics</span></code></p></td>
 <td><p>Initialize VQVAE tracked metrics.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">metrics_names</span></code></p></td>

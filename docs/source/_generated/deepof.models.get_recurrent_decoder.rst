@@ -3,14 +3,4 @@
 
 .. currentmodule:: deepof.models
 
-.. autoclass:: get_recurrent_decoder
-
-   
-   .. automethod:: __init__
-
-   
-   
-
-   
-   
-   
+.. autofunction:: get_recurrent_decoder

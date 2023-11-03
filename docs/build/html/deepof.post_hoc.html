@@ -110,6 +110,60 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.html#module-deepof.post_hoc" title="deepof.post_hoc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc</span></code></a></p></td>
 <td><p>Data structures and functions for analyzing supervised and unsupervised model results.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.recluster.html#deepof.post_hoc.recluster" title="deepof.post_hoc.recluster"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.recluster</span></code></a>(coordinates, ...)</p></td>
+<td><p>Recluster the data using a HMM-based approach.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.get_time_on_cluster.html#deepof.post_hoc.get_time_on_cluster" title="deepof.post_hoc.get_time_on_cluster"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.get_time_on_cluster</span></code></a>(...[, ...])</p></td>
+<td><p>Compute how much each animal spends on each cluster.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.get_aggregated_embedding.html#deepof.post_hoc.get_aggregated_embedding" title="deepof.post_hoc.get_aggregated_embedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.get_aggregated_embedding</span></code></a>(...)</p></td>
+<td><p>Aggregate the embeddings of a set of videos, using the specified aggregation method.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.select_time_bin.html#deepof.post_hoc.select_time_bin" title="deepof.post_hoc.select_time_bin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.select_time_bin</span></code></a>([embedding, ...])</p></td>
+<td><p>Select a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.condition_distance_binning.html#deepof.post_hoc.condition_distance_binning" title="deepof.post_hoc.condition_distance_binning"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.condition_distance_binning</span></code></a>(...)</p></td>
+<td><p>Compute the distance between the embeddings of two conditions, using the specified aggregation method.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.separation_between_conditions.html#deepof.post_hoc.separation_between_conditions" title="deepof.post_hoc.separation_between_conditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.separation_between_conditions</span></code></a>(...)</p></td>
+<td><p>Compute the distance between the embeddings of two conditions, using the specified aggregation method.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.fit_normative_global_model.html#deepof.post_hoc.fit_normative_global_model" title="deepof.post_hoc.fit_normative_global_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.fit_normative_global_model</span></code></a>(...)</p></td>
+<td><p>Fit a global model to the normal embeddings.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.enrichment_across_conditions.html#deepof.post_hoc.enrichment_across_conditions" title="deepof.post_hoc.enrichment_across_conditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.enrichment_across_conditions</span></code></a>([...])</p></td>
+<td><p>Compute the population of each cluster across conditions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.get_transitions.html#deepof.post_hoc.get_transitions" title="deepof.post_hoc.get_transitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.get_transitions</span></code></a>(...)</p></td>
+<td><p>Compute the transitions between states in a state sequence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.compute_transition_matrix_per_condition.html#deepof.post_hoc.compute_transition_matrix_per_condition" title="deepof.post_hoc.compute_transition_matrix_per_condition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.compute_transition_matrix_per_condition</span></code></a>(...)</p></td>
+<td><p>Compute the transition matrices specific to each condition.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.compute_steady_state.html#deepof.post_hoc.compute_steady_state" title="deepof.post_hoc.compute_steady_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.compute_steady_state</span></code></a>(...[, ...])</p></td>
+<td><p>Compute the steady state of each transition matrix provided in a dictionary.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.compute_UMAP.html#deepof.post_hoc.compute_UMAP" title="deepof.post_hoc.compute_UMAP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.compute_UMAP</span></code></a>(embeddings, ...)</p></td>
+<td><p>Compute UMAP embeddings for visualization purposes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels.html#deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels" title="deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels</span></code></a>(...)</p></td>
+<td><p>Align kinematics with unsupervised labels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.chunk_summary_statistics.html#deepof.post_hoc.chunk_summary_statistics" title="deepof.post_hoc.chunk_summary_statistics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.chunk_summary_statistics</span></code></a>(...)</p></td>
+<td><p>Extract summary statistics from a chunked dataset using seglearn.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.annotate_time_chunks.html#deepof.post_hoc.annotate_time_chunks" title="deepof.post_hoc.annotate_time_chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.annotate_time_chunks</span></code></a>(...[, ...])</p></td>
+<td><p>Annotate time chunks produced after change-point detection using the unsupervised pipeline.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.chunk_cv_splitter.html#deepof.post_hoc.chunk_cv_splitter" title="deepof.post_hoc.chunk_cv_splitter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.chunk_cv_splitter</span></code></a>(...[, n_folds])</p></td>
+<td><p>Split a dataset into training and testing sets, grouped by video.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.train_supervised_cluster_detectors.html#deepof.post_hoc.train_supervised_cluster_detectors" title="deepof.post_hoc.train_supervised_cluster_detectors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.train_supervised_cluster_detectors</span></code></a>(...)</p></td>
+<td><p>Train supervised models to detect clusters from kinematic features.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/deepof.post_hoc.explain_clusters.html#deepof.post_hoc.explain_clusters" title="deepof.post_hoc.explain_clusters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deepof.post_hoc.explain_clusters</span></code></a>(...[, ...])</p></td>
+<td><p>Compute SHAP feature importance for models mapping chunk_stats to cluster assignments.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
