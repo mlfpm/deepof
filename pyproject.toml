@@ -33,7 +33,7 @@ umap-learn = "^0.5.3"
 ipywidgets = "^8.0.2"
 openpyxl = "^3.0.10"
 kaleido = "0.2.1"
-av = "^10.0.0"
+av = "9.2.0"
 imblearn = "^0.0"
 lxml = "^4.9.1"
 spektral = {git = "https://github.com/lucasmiranda42/spektral"}
@@ -46,7 +46,13 @@ catboost = "^1.1.1"
 tornado = "6.1"
 jupyter-client = "7.3.2"
 pomegranate = {git = "https://git@github.com/jmschrei/pomegranate.git"}
-torch = "2.0.0"
+torchvision = "^0.15.1"
+torch = ">=2.0.0, !=2.0.1"
+segment-anything = "^1.0"
+sleap-io = "^0.0.9"
+matplotlib = "3.7.2"
+sktime = "^0.24.0"
+moviepy = "^1.0.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -66,6 +72,7 @@ deptry = "^0.8.0"
 pipreqs = "^0.4.13"
 build = "^0.10.0"
 twine = "^4.0.2"
+jupyter-http-over-ws = "^0.0.8"
 
 [build-system]
 requires = ["poetry==1.4.1"]

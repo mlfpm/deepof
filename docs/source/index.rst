@@ -22,7 +22,7 @@
 Welcome to DeepOF!
 ==================
 
-A suite for postprocessing time-series extracted from videos of freely moving rodents using `DeepLabCut <http://www.mousemotorlab.org/deeplabcut>`_
+A suite for postprocessing time-series extracted from videos of freely moving rodents using `DeepLabCut <http://www.mousemotorlab.org/deeplabcut>`_ and `SLEAP <https://sleap.ai/>`_.
 
 .. image:: https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png
   :width: 400
@@ -31,9 +31,11 @@ A suite for postprocessing time-series extracted from videos of freely moving ro
 
 Getting started
 ===============
-You can use this package to process and annotate motion tracking data produced with DeepLabCut, either using pre-defined motifs (such as time-in-zone, climbing,
-basic social interactions) or embedding your data into a sequence-aware latent space to extract meaningful motifs in an
-unsupervised way. DeepOF also includes a set of tools to interpret the retrieved motifs, and to analyze their differential expression anddynamics across experimental conditions. The package is compatible with both single and multi-animal DLC 2.X projects.
+
+You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing,
+basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
+unsupervised way! Both of these can be used within the package, for example, to automatically
+compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
 
 .. image:: _static/deepof_pipelines.png
    :width: 400
@@ -80,9 +82,10 @@ please use either poetry or Docker. You should also install hdf5 using `homebrew
 
 What you need
 -------------
-DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found `here <https://www.mousemotorlab.org/deeplabcut>`_.
-Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. Support out of the box is provided for videos from a top-down perspective, that follow a set of labels
-equivalent to either labelling scheme shown in the figure below (note that the names of the labels should match!). Custom schemes are also supported, but require a bit more work (see the last tutorial below for details). Pre-trained models following the default scheme (```deepof_14```), and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_ (note that they may require fine tuning to your specific background conditions, but they should be a good starting point!).
+
+DeepOF relies heavily on DeepLabCut and SLEAP output. Thorough tutorials on how to get started with pose estimation using DLC can be found `here <https://www.mousemotorlab.org/deeplabcut>`_, and for SLEAP `here <https://sleap.ai/tutorials/tutorial.html>`_.
+Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow our recommended
+set of labels (which can be found in the full documentation page). Pre-trained models following this scheme, and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from `our repository <https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9>`_.
 
 .. image:: _static/deepof_DLC_tagging.png
    :width: 800
@@ -91,6 +94,7 @@ equivalent to either labelling scheme shown in the figure below (note that the n
 
 Basic usage
 -----------
+
 The main module with which you'll interact is called ```deepof.data```. Let's import it and create a project:
 
 .. code:: python
@@ -156,20 +160,27 @@ reference for details!
 Tutorials
 =========
 
-* `Formatting your data: feature extraction from DLC output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
+Formatting your data
+--------------------
+* `Formatting your data: feature extraction from motion tracking output <tutorial_notebooks/deepof_preprocessing_tutorial.ipynb>`_
+
+Supervised and unsupervised pipelines
+-------------------------------------
 * `DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial.ipynb>`_
 * `DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial.ipynb>`_
+
+Advanced usage
+--------------
 * `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
 
-Full API reference
-==================
+API Reference
+=============
 
-* `deepof.data (main data-wrangling module) <deepof.data.html>`_
-* `deepof.utils (data-wrangling auxiliary functions) <deepof.utils.html>`_
-* `deepof.models (deep unsupervised models) <deepof.models.html>`_
-* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <deepof.hypermodels.html>`_
-* `deepof.annotation_utils (rule-based and supervised annotation auxiliary functions) <deepof.annotation_utils.html>`_
-* `deepof.model_utils (deep machine learning models' auxiliary functions) <deepof.model_utils.html>`_
-* `deepof.visuals (visualization functions) <deepof.visuals.html>`_
-* `deepof.post_hoc (post-hoc analysis functions) <deepof.post_hoc.html>`_
-
+* `deepof.data (main data-wrangling module) <_generated/deepof.data.html>`_
+* `deepof.utils (data-wrangling auxiliary functions) <_generated/deepof.utils.html>`_
+* `deepof.models (deep unsupervised models) <_generated/deepof.models.html>`_
+* `deepof.hypermodels (deep unsupervised hypermodels for hyperparameter tuning) <_generated/deepof.hypermodels.html>`_
+* `deepof.annotation_utils (rule-based and supervised annotation auxiliary functions) <_generated/deepof.annotation_utils.html>`_
+* `deepof.model_utils (deep machine learning models' auxiliary functions) <_generated/deepof.model_utils.html>`_
+* `deepof.visuals (visualization functions) <_generated/deepof.visuals.html>`_
+* `deepof.post_hoc (post-hoc analysis functions) <_generated/deepof.post_hoc.html>`_

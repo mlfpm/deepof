@@ -1,4 +1,4 @@
-"""Data structures for preprocessing and wrangling of DLC output data. This is the main module handled by the user.
+"""Data structures for preprocessing and wrangling of motion tracking output data. This is the main module handled by the user.
 
 There are three main data structures to pay attention to:
 - :class:`~deepof.data.Project`, which serves as a configuration hub for the whole pipeline
@@ -17,11 +17,9 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 from collections import defaultdict
 from difflib import get_close_matches
 from pkg_resources import resource_filename
-from shapely.geometry import Polygon
 from shutil import rmtree
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
-from sklearn.manifold import TSNE
 from sklearn.preprocessing import (
     MinMaxScaler,
     StandardScaler,
@@ -30,12 +28,9 @@ from sklearn.preprocessing import (
 )
 from time import time
 from tqdm import tqdm
-from typing import Any, NewType, Union
+from typing import NewType, Union
 from typing import Dict, List, Tuple, Any
 import copy
-import datetime
-import math
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import os
@@ -44,7 +39,6 @@ import pickle
 import pims
 import re
 import shutil
-import tensorflow as tf
 import umap
 import warnings
 
@@ -83,7 +77,7 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
 
 
 class Project:
-    """Class for loading and preprocessing DLC data of individual and multiple animals.
+    """Class for loading and preprocessing motion tracking data of individual and multiple animals.
 
     All main computations are handled from here.
 
@@ -92,9 +86,9 @@ class Project:
     def __init__(
         self,
         animal_ids: List = None,
-        arena: str = "polygonal-manual",
-        bodypart_graph: str = "deepof_14",
-        enable_iterative_imputation: bool = 250,
+        arena: str = "polygonal-autodetect",
+        bodypart_graph: Union[str, dict] = "deepof_14",
+        enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         interpolate_outliers: bool = True,
@@ -106,6 +100,8 @@ class Project:
         project_path: str = os.path.join("."),
         video_path: str = None,
         table_path: str = None,
+        rename_bodyparts: list = None,
+        sam_checkpoint_path: str = None,
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
@@ -115,9 +111,9 @@ class Project:
 
         Args:
             animal_ids (list): list of animal ids.
-            arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", or "polygon-manual".
+            arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
-            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts. Recommended if several animals are present, but slower.
+            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             interpolate_outliers (bool): whether to interpolate missing data.
@@ -126,11 +122,13 @@ class Project:
             likelihood_tol (float): likelihood threshold for outlier detection.
             model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
             project_name (str): name of the current project.
-            project_path (str): path to the folder containing the DLC output data.
+            project_path (str): path to the folder containing the motion tracking output data.
             video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
             table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
+            rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+            sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
-            table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5".
+            table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
             video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
 
@@ -144,12 +142,11 @@ class Project:
 
         # Detect files to load from disk
         self.table_format = table_format
+        if self.table_format != "analysis.h5":
+            self.table_format = table_format.replace(".", "")
         if self.table_format == "autodetect":
             ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
-            if ".h5" in ex:
-                self.table_format = ".h5"
-            elif ".csv" in ex:  # pragma: no cover
-                self.table_format = ".csv"
+            self.table_format = ex.split(".")[-1]
         self.videos = sorted(
             [
                 vid
@@ -192,6 +189,8 @@ class Project:
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
+        self.segmentation_path = sam_checkpoint_path
+        self.rename_bodyparts = rename_bodyparts
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -201,7 +200,7 @@ class Project:
         """Print the object to stdout."""
         return "deepof analysis of {} videos".format(len(self.videos))
 
-    def set_up_project_directory(self):
+    def set_up_project_directory(self, debug=False):
         """Create a project directory where to save all produced results."""
         # Create a project directory, as well as subfolders for videos and tables
         project_path = os.path.join(self.project_path, self.project_name)
@@ -241,6 +240,12 @@ class Project:
                 os.path.join(self.project_path, self.project_name, "Coordinates")
             )
             os.makedirs(os.path.join(self.project_path, self.project_name, "Figures"))
+            if debug and "auto" in self.arena:
+                os.makedirs(
+                    os.path.join(
+                        self.project_path, self.project_name, "Arena_detection"
+                    )
+                )
 
             # Copy videos and tables to the new directories
             for vid in os.listdir(self.video_path):
@@ -289,12 +294,20 @@ class Project:
         """Bool. Toggles angle computation. True by default. If turned off, enhances performance for big datasets."""
         return self._angles
 
-    def get_arena(self, tables: list, verbose: bool = False) -> np.array:
+    def get_arena(
+        self,
+        tables: list,
+        verbose: bool = False,
+        debug: str = False,
+        test: bool = False,
+    ) -> np.array:
         """Return the arena as recognised from the videos.
 
         Args:
             tables (list): list of coordinate tables
             verbose (bool): if True, logs to console
+            debug (str): if True, saves intermediate results to disk
+            test (bool): if True, runs the function in test mode
 
         Returns:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
@@ -304,12 +317,16 @@ class Project:
             print("Detecting arena...")
 
         return deepof.utils.get_arenas(
+            self,
+            tables,
             self.arena,
             self.arena_dims,
             self.project_path,
             self.project_name,
-            tables,
+            self.segmentation_path,
             self.videos,
+            debug,
+            test,
         )
 
     def load_tables(self, verbose: bool = True) -> Tuple:
@@ -320,12 +337,12 @@ class Project:
 
         Returns:
             Tuple: A tuple containing the following a dictionary with all loaded tables per experiment,
-            and another dictionary with DLC data quality.
+            and another dictionary with motion tracking data quality.
 
         """
-        if self.table_format not in [".h5", ".csv"]:
+        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
             raise NotImplementedError(
-                "Tracking files must be in either h5 or csv format"
+                "Tracking files must be in h5 (DLC or SLEAP), csv, npy, or slp format"
             )  # pragma: no cover
 
         if verbose:
@@ -334,35 +351,25 @@ class Project:
         tab_dict = {}
         for tab in self.tables:
 
-            if self.table_format == ".h5":
-
-                loaded_tab = pd.read_hdf(
-                    os.path.join(self.table_path, tab), dtype=float
-                )
-
-                # Adapt index to be compatible with downstream processing
-                loaded_tab = loaded_tab.T.reset_index(drop=False).T
-                loaded_tab.columns = loaded_tab.loc["scorer", :]
-                loaded_tab = loaded_tab.iloc[1:]
-
-            elif self.table_format == ".csv":
-
-                loaded_tab = pd.read_csv(
-                    os.path.join(self.table_path, tab),
-                    index_col=0,
-                    low_memory=False,
-                )
+            loaded_tab = deepof.utils.load_table(
+                tab,
+                self.table_path,
+                self.table_format,
+                self.rename_bodyparts,
+                self.animal_ids,
+            )
 
             # Remove the DLC suffix from the table name
             try:
                 tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
             except IndexError:
-                tab_name = tab
+                tab_name = tab.split(".")[0]
 
             tab_dict[tab_name] = loaded_tab
 
         # Check in the files come from a multi-animal DLC project
         if "individuals" in list(tab_dict.values())[0].index:
+
             self.animal_ids = list(
                 list(tab_dict.values())[0].loc["individuals", :].unique()
             )
@@ -376,6 +383,7 @@ class Project:
 
         # Convert the first rows of each dataframe to a multi-index
         for key, tab in tab_dict.items():
+
             tab_copy = tab.copy()
 
             tab_copy.columns = pd.MultiIndex.from_arrays(
@@ -418,6 +426,7 @@ class Project:
         lik_dict = defaultdict()
 
         for key, tab in tab_dict.items():
+
             x = tab.xs("x", level="coords", axis=1, drop_level=False)
             y = tab.xs("y", level="coords", axis=1, drop_level=False)
             lik = tab.xs("likelihood", level="coords", axis=1, drop_level=True)
@@ -594,51 +603,59 @@ class Project:
 
         areas_dict = {}
 
-        try:
-            for key, tab in tab_dict.items():
+        for key, tab in tab_dict.items():
 
-                exp_table = pd.DataFrame()
+            exp_table = pd.DataFrame()
 
-                for aid in self.animal_ids:
+            for aid in self.animal_ids:
 
-                    if aid == "":
-                        aid = None
+                if aid == "":
+                    aid = None
 
-                    # get the current table for the current animal
-                    current_table = tab.loc[
-                        :, deepof.utils.filter_columns(tab.columns, aid)
-                    ]
-                    current_table = current_table.apply(
-                        lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
+                # get the current table for the current animal
+                current_table = tab.loc[
+                    :, deepof.utils.filter_columns(tab.columns, aid)
+                ]
+                current_table = current_table.apply(
+                    lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
+                )
+                current_table = pd.DataFrame(
+                    current_table.to_list(),
+                    index=current_table.index,
+                    columns=current_table.iloc[0].keys(),
+                ).add_prefix(
+                    "{}{}".format(
+                        (aid if aid is not None else ""),
+                        ("_" if aid is not None else ""),
                     )
-                    current_table = pd.DataFrame(
-                        current_table.to_list(),
-                        index=current_table.index,
-                        columns=["head_area", "torso_area", "back_area", "full_area"],
-                    ).add_prefix(
-                        "{}{}".format(
-                            (aid if aid is not None else ""),
-                            ("_" if aid is not None else ""),
-                        )
+                )
+                if current_table.shape[1] != 4:
+                    warnings.warn(
+                        "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
                     )
 
-                    exp_table = pd.concat([exp_table, current_table], axis=1)
+                exp_table = pd.concat([exp_table, current_table], axis=1)
 
-                areas_dict[key] = exp_table
-
-        except KeyError:
-            warnings.warn(
-                "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but no areas will be computed."
-            )
-            return None
+            areas_dict[key] = exp_table
 
         return areas_dict
 
-    def create(self, verbose: bool = True, force: bool = False) -> coordinates:
+    def create(
+        self,
+        verbose: bool = True,
+        force: bool = False,
+        debug: bool = True,
+        test: bool = False,
+        _to_extend: coordinates = None,
+    ) -> coordinates:
         """Generate a deepof.Coordinates dataset using all the options specified during initialization.
 
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
+            force (bool): If True, overwrites existing project. Defaults to False.
+            debug (bool): If True, saves arena detection images to disk. Defaults to False.
+            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+            _to_extend (coordinates): Coordinates object to extend with the current dataset. For internal usage only.
 
         Returns:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
@@ -650,7 +667,9 @@ class Project:
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
             rmtree(os.path.join(self.project_path, self.project_name))
 
-        self.set_up_project_directory()
+        if not os.path.exists(os.path.join(self.project_path, self.project_name)):
+            self.set_up_project_directory(debug=debug)
+
         self.frame_rate = int(
             np.round(
                 pims.ImageIOReader(
@@ -671,7 +690,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables, verbose
+            tables, verbose, debug, test
         )
 
         if self.distances:
@@ -682,6 +701,32 @@ class Project:
 
         if self.areas:
             areas = self.get_areas(tables, verbose)
+
+        if _to_extend is not None:
+
+            # Merge and expand coordinate objects
+            angles = TableDict({**_to_extend._angles, **angles}, typ="angles")
+            # areas = TableDict({**_to_extend._areas, **areas}, typ="areas")
+            distances = TableDict(
+                {**_to_extend._distances, **distances}, typ="distances"
+            )
+            tables = TableDict({**_to_extend._tables, **tables}, typ="tables")
+            quality = TableDict({**_to_extend._quality, **quality}, typ="quality")
+
+            # Merge metadata
+            self.tables = _to_extend._table_paths + self.tables
+            self.videos = _to_extend._videos + self.videos
+            self.arena_params = _to_extend._arena_params + self.arena_params
+            self.scales = np.vstack([_to_extend._scales, self.scales])
+
+            # Optional
+            try:
+                self.exp_conditions = {
+                    **_to_extend._exp_conditions,
+                    **self.exp_conditions,
+                }
+            except TypeError:
+                pass
 
         coords = Coordinates(
             project_path=self.project_path,
@@ -702,6 +747,7 @@ class Project:
             scales=self.scales,
             arena_params=self.arena_params,
             tables=tables,
+            table_paths=self.tables,
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
@@ -727,6 +773,80 @@ class Project:
     def angles(self, value):
         self._angles = value
 
+    def extend(
+        self,
+        project_to_extend: coordinates,
+        verbose: bool = True,
+        debug: bool = True,
+        test: bool = False,
+    ) -> coordinates:
+        """Generate a deepof.Coordinates dataset using all the options specified during initialization.
+
+        Args:
+            project_to_extend (coordinates): Coordinates object to extend with the current dataset.
+            verbose (bool): If True, prints progress. Defaults to True.
+            debug (bool): If True, saves arena detection images to disk. Defaults to False.
+            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+
+        Returns:
+            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
+
+        """
+        if verbose:
+            print("Loading previous project...")
+
+        previous_project = load_project(project_to_extend)
+
+        # Keep only those videos and tables that were not in the original dataset
+        self.videos = [
+            vid for vid in self.videos if vid not in previous_project._videos
+        ]
+        self.tables = [
+            tab for tab in self.tables if tab not in previous_project._table_paths
+        ]
+
+        if verbose:
+            print(f"Processing data from {len(self.videos)} experiments...")
+
+        if len(self.videos) > 0:
+
+            # Use the same directory as the original project
+            extended_coords = self.create(
+                verbose,
+                force=False,
+                debug=debug,
+                test=test,
+                _to_extend=previous_project,
+            )
+
+            # Copy old files to the new directory
+            for vid, tab in zip(
+                previous_project._videos, previous_project._table_paths
+            ):
+                if vid not in self.tables:
+
+                    shutil.copy(
+                        os.path.join(
+                            previous_project._project_path,
+                            "Videos",
+                            vid,
+                        ),
+                        os.path.join(self.project_path, self.project_name, "Videos"),
+                    )
+                    shutil.copy(
+                        os.path.join(
+                            previous_project._project_path,
+                            "Tables",
+                            tab,
+                        ),
+                        os.path.join(self.project_path, self.project_name, "Tables"),
+                    )
+
+            return extended_coords
+
+        else:
+            print("No new experiments to process. Exiting...")
+
 
 class Coordinates:
     """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables."""
@@ -744,6 +864,7 @@ class Coordinates:
         frame_rate: int,
         arena_params: List,
         tables: dict,
+        table_paths: List,
         trained_model_path: str,
         videos: List,
         video_resolution: List,
@@ -759,7 +880,7 @@ class Coordinates:
 
         Args:
             project_name (str): name of the current project.
-            project_path (str): path to the folder containing the DLC output data.
+            project_path (str): path to the folder containing the motion tracking output data.
             arena (str): Type of arena used for the experiment. See deepof.data.Project for more information.
             arena_dims (np.array): Dimensions of the arena. See deepof.data.Project for more information.
             bodypart_graph (nx.Graph): Graph containing the body part connectivity. See deepof.data.Project for more information.
@@ -769,6 +890,7 @@ class Coordinates:
             frame_rate (int): frame rate of the processed videos.
             arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
+            table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
             videos (List): List containing the videos used for the experiment. See deepof.data.Project for more information.
             video_resolution (List): List containing the automatically detected resolution of the videos used for the experiment.
@@ -794,6 +916,7 @@ class Coordinates:
         self._quality = quality
         self._scales = scales
         self._tables = tables
+        self._table_paths = table_paths
         self._trained_model_path = trained_model_path
         self._videos = videos
         self._video_resolution = video_resolution
@@ -804,11 +927,13 @@ class Coordinates:
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
-        return "deepof analysis of {} videos".format(len(self._videos))
+        lens = len(self._videos)
+        return "deepof analysis of {} video{}".format(lens, ("s" if lens > 1 else ""))
 
     def __repr__(self):  # pragma: no cover
         """Print the object to stdout."""
-        return "deepof analysis of {} videos".format(len(self._videos))
+        lens = len(self._videos)
+        return "deepof analysis of {} video{}".format(lens, ("s" if lens > 1 else ""))
 
     def get_coords(
         self,
@@ -1217,7 +1342,7 @@ class Coordinates:
         self._exp_conditions = exp_conditions
 
     def get_quality(self):
-        """Retrieve a dictionary with the tagging quality per video, as reported by DLC."""
+        """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
         return TableDict(self._quality, typ="quality", animal_ids=self._animal_ids)
 
     @property
@@ -1254,11 +1379,13 @@ class Coordinates:
             )
 
         edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
+            coordinates=self,
+            tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
             project_path=self._project_path,
             project_name=self._project_name,
-            tables=self._tables,
+            segmentation_model_path=None,
             videos=videos_renamed,
         )
 
@@ -1407,14 +1534,14 @@ class Coordinates:
                 dataset += [to_preprocess[2], to_preprocess[2], to_preprocess[3]]
 
         else:  # pragma: no cover
-            to_preprocess = np.concatenate(list(to_preprocess.values()))
+            to_preprocess = np.concatenate(list(tab_dict.values()))
 
             # Split node features (positions, speeds) from edge features (distances)
             dataset = (
                 to_preprocess[:, ~feature_names.isin(edge_feature_names)][
                     :, node_sorting_indices
                 ].reshape([to_preprocess.shape[0], len(graph.nodes()), -1], order="F"),
-                deepof.utils.edges_to_weithed_adj(
+                deepof.utils.edges_to_weighted_adj(
                     nx.adj_matrix(graph).todense(),
                     to_preprocess[:, feature_names.isin(edge_feature_names)][
                         :, edge_sorting_indices
@@ -1422,17 +1549,22 @@ class Coordinates:
                 ),
             )
 
-        return (
-            tuple(dataset),
-            nx.adjacency_matrix(graph).todense(),
-            tab_dict,
-            global_scaler,
-        )
+        try:
+            return (
+                tuple(dataset),
+                nx.adjacency_matrix(graph).todense(),
+                tab_dict,
+                global_scaler,
+            )
+        except UnboundLocalError:
+            return tuple(dataset), nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
     def supervised_annotation(
         self,
         params: Dict = {},
+        center: str = "Center",
+        align: str = "Spine_1",
         video_output: bool = False,
         frame_limit: int = np.inf,
         debug: bool = False,
@@ -1443,6 +1575,8 @@ class Coordinates:
 
         Args:
             params (Dict): A dictionary with the parameters to use for the pipeline. If unsure, leave empty.
+            center (str): Body part to center coordinates on. "Center" by default.
+            align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
             video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to "all", it will output all videos. False by default.
             frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per video to output.
             debug (bool): Only applies if video_output is not False. If True, all videos will include debug information, such as the detected arena and the preprocessed tracking tags.
@@ -1458,22 +1592,30 @@ class Coordinates:
         raw_coords = self.get_coords(center=None)
 
         try:
-            coords = self.get_coords(center="Center", align="Spine_1")
+            coords = self.get_coords(center=center, align=align)
         except AssertionError:
-            coords = self.get_coords(center="Center", align="Nose")
+
+            try:
+                coords = self.get_coords(center="Center", align="Spine_1")
+            except AssertionError:
+                coords = self.get_coords(center="Center", align="Nose")
 
         dists = self.get_distances()
         speeds = self.get_coords(speed=1)
         if len(self._animal_ids) <= 1:
             features_dict = (
                 deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self, include_angles=False
+                    self, center=center, align=align, include_angles=False
                 )
             )
         else:  # pragma: no cover
             features_dict = {
                 _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self, animal_id=_id, include_angles=False
+                    self,
+                    center=center,
+                    align=align,
+                    animal_id=_id,
+                    include_angles=False,
                 )
                 for _id in self._animal_ids
             }
@@ -1484,6 +1626,7 @@ class Coordinates:
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
+            self._trained_model_path = resource_filename(__name__, "trained_models")
 
             supervised_tags = deepof.annotation_utils.supervised_tagging(
                 self,
@@ -1499,6 +1642,7 @@ class Coordinates:
                     n=1,
                 )[0],
                 trained_model_path=self._trained_model_path,
+                center=center,
                 params=params,
             )
 

@@ -13,13 +13,13 @@
   <img width="350" height="350" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png">
 </div>
 
-### A suite for postprocessing time-series extracted from videos of freely moving rodents using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut)
+### A suite for postprocessing time-series extracted from videos of freely moving rodents using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut) and [SLEAP](https://sleap.ai/).
 #
 
 You can use this package to either extract pre-defined motifs from the time series (such as time-in-zone, climbing, 
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically 
-compare user-defined experimental groups. The package is compatible with both single and multi-animal DLC 2.X projects.
+compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
 
 ### How do I start?
 ##### Installation:
@@ -58,7 +58,7 @@ poetry install # from the main directory
 please use either poetry or Docker. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
 
 ##### Before we delve in:
-DeepOF relies heavily on DeepLabCut's output. Thorough tutorials on how to get started with DLC for pose estimation can be found [here](https://www.mousemotorlab.org/deeplabcut).
+DeepOF relies heavily on DeepLabCut and SLEAP output. Thorough tutorials on how to get started with pose estimation using DLC can be found [here](https://www.mousemotorlab.org/deeplabcut), and for SLEAP [here](https://sleap.ai/tutorials/tutorial.html).
 Once your videos are processed and tagged, you can use DeepOF to extract and annotate your motion-tracking time-series. While many features in DeepOF can work regardless of the set of labels used, we currently recommend using videos from a top-down perspective, and follow our recommended
 set of labels (which can be found in the full documentation page). Pre-trained models following this scheme, and capable of recognizing either **C57Bl6** mice alone, or **C57Bl6** and **CD1** mice can be downloaded from [our repository](https://datashare.mpcdf.mpg.de/s/DKg0jd7YYqnyQv9).
 
@@ -70,8 +70,8 @@ The main module with which you'll interact is called ```deepof.data```. Let's im
 import deepof.data
 my_deepof_project = deepof.data.Project(
   project_path=".", # Path where to create project files
-  video_path="/path/to/videos", # Path to DLC tracked videos
-  table_path="/path/to/tables", # Path to DLC output
+  video_path="/path/to/videos", # Path to DLC or SLEAP tracked videos
+  table_path="/path/to/tables", # Path to DLC or SLEAP output
   project_name="my_deepof_project", # Name of the current project
   exp_conditions={exp_ID: exp_condition} # Dictionary containing one or more experimental conditions per provided video
 )

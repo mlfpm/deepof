@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Supervised annotation in DeepOF - search for pre-established patterns &mdash; deepof 0.2 documentation</title>
+  <title>Supervised annotation in DeepOF - search for pre-established patterns &mdash; deepof 0.5.1 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
@@ -40,8 +40,9 @@
 
           
           
-          <a href="../index.html" class="icon icon-home">
-            deepof
+          <a href="../index.html">
+            
+              <img src="../_static/deepof_sidebar.ico" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -392,7 +393,8 @@ div.rendered_html tbody tr:hover {
 <span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
 <span class="c1"># !pip install -q -e deepof --progress-bar off</span>
 <span class="c1"># os.chdir(&quot;deepof&quot;)</span>
-<span class="c1"># !gdown -q --folder &quot;https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing&quot;</span>
+<span class="c1"># !curl --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/knF7t78isQuIAr0/download</span>
+<span class="c1"># !unzip tutorial_files.zip</span>
 <span class="c1"># os.kill(os.getpid(), 9)</span>
 </pre></div>
 </div>
@@ -401,15 +403,15 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># import os, warnings</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># import os, warnings</span>
 <span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
-<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
 </pre></div>
 </div>
 </div>
 <p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, and the data entry API within DeepOF, located in deepof.data</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
@@ -420,7 +422,7 @@ div.rendered_html tbody tr:hover {
 </div>
 <p>We’ll also need some plotting gear:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">deepof.visuals</span>
@@ -433,7 +435,7 @@ div.rendered_html tbody tr:hover {
 <h3>Loading a previously initiated project<a class="headerlink" href="#Loading-a-previously-initiated-project" title="Permalink to this heading"></a></h3>
 <p>As last time, we’ll load the already created tutorial dataset for further processing:</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load a previously saved project</span>
@@ -446,19 +448,27 @@ div.rendered_html tbody tr:hover {
 <section id="Running-the-supervised-annotation-pipeline">
 <h3>Running the supervised annotation pipeline<a class="headerlink" href="#Running-the-supervised-annotation-pipeline" title="Permalink to this heading"></a></h3>
 <p>The supervised pipeline within DeepOF aims at providing simple but generalizable annotators for a variety of single and dyadic traits (as depicted in the figure below). Each of these traits is tagged independently, which means that more than one label can be applied per time point!</p>
-<img alt="supervised" src="../_images/deepof_supervised.png" />
+<p><img alt="supervised" src="../_images/deepof_supervised.png" /></p>
 <p>Running the pipeline is as simple as executing the <code class="docutils literal notranslate"><span class="pre">.supervised_annotation()</span></code> method in your Coordinates object. A progress bar will indicate how many videos have been processed already. Let’s run it and see what happens:</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">supervised_annotation</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6/6 [00:16&lt;00:00,  2.74s/it]
+</pre></div></div>
+</div>
 <p>It worked! Upon inspection, we see that supervised annotations contains a dictionary-like object with experiment IDs as keys, and data frames with annotations as values:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">supervised_annotation</span><span class="p">[</span><span class="s1">&#39;20191204_Day2_SI_JB08_Test_54&#39;</span><span class="p">]</span>
@@ -466,7 +476,7 @@ div.rendered_html tbody tr:hover {
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -488,17 +498,17 @@ div.rendered_html tbody tr:hover {
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>nose2nose</th>
-      <th>sidebyside</th>
-      <th>sidereside</th>
-      <th>B_nose2tail</th>
-      <th>W_nose2tail</th>
-      <th>B_nose2body</th>
-      <th>W_nose2body</th>
-      <th>B_following</th>
-      <th>W_following</th>
+      <th>B_W_nose2nose</th>
+      <th>B_W_sidebyside</th>
+      <th>B_W_sidereside</th>
+      <th>B_W_nose2tail</th>
+      <th>W_B_nose2tail</th>
+      <th>B_W_nose2body</th>
+      <th>W_B_nose2body</th>
+      <th>B_W_following</th>
+      <th>W_B_following</th>
       <th>B_climbing</th>
-      <th>B_sniffing</th>
+      <th>...</th>
       <th>B_huddle</th>
       <th>B_lookaround</th>
       <th>B_speed</th>
@@ -507,6 +517,8 @@ div.rendered_html tbody tr:hover {
       <th>W_huddle</th>
       <th>W_lookaround</th>
       <th>W_speed</th>
+      <th>B_missing</th>
+      <th>W_missing</th>
     </tr>
   </thead>
   <tbody>
@@ -522,7 +534,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
@@ -531,6 +543,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:00:00.039935995</th>
@@ -544,7 +558,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
@@ -553,6 +567,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:00:00.079871991</th>
@@ -566,7 +582,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
@@ -575,6 +591,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>0.0</td>
       <td>0.000</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:00:00.119807987</th>
@@ -588,15 +606,17 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000</td>
+      <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>0.000</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.000</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:00:00.159743982</th>
@@ -610,7 +630,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>1.0</td>
       <td>2.236</td>
@@ -619,9 +639,13 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>10.636</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>...</th>
+      <td>...</td>
+      <td>...</td>
       <td>...</td>
       <td>...</td>
       <td>...</td>
@@ -654,7 +678,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>6.593</td>
@@ -663,6 +687,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>1.0</td>
       <td>0.086</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:09:58.840256017</th>
@@ -676,7 +702,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>4.934</td>
@@ -685,6 +711,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>1.0</td>
       <td>0.083</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:09:58.880192012</th>
@@ -698,7 +726,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>5.557</td>
@@ -707,6 +735,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>1.0</td>
       <td>0.064</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:09:58.920128008</th>
@@ -720,7 +750,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>6.130</td>
@@ -729,6 +759,8 @@ div.rendered_html tbody tr:hover {
       <td>1.0</td>
       <td>1.0</td>
       <td>0.046</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
     <tr>
       <th>00:09:58.960064004</th>
@@ -742,7 +774,7 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
-      <td>0.0</td>
+      <td>...</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>4.628</td>
@@ -751,21 +783,24 @@ div.rendered_html tbody tr:hover {
       <td>0.0</td>
       <td>1.0</td>
       <td>0.031</td>
+      <td>0</td>
+      <td>0</td>
     </tr>
   </tbody>
 </table>
-<p>14999 rows × 19 columns</p>
+<p>14999 rows × 21 columns</p>
 </div></div>
 </div>
-<p>All annotations are tracked for both animals in the data (the column names have a prefix indicating to which animal they belong -B or W for black and white, respectively-). Labels with no prefixes (such as ‘nose2nose’) correspond to dyadic interactions.</p>
+<p>All annotations are tracked for both animals in the data (the column names have a prefix indicating to which animal they belong -B or W for black and white, respectively-). Labels with both prefixes (such as ‘B_W_nose2nose’) correspond to dyadic interactions. If you have more than two animals in your data, all pairwise combinations will appear as results.</p>
 <p>Moreover, most cells in the data frame depicted above show 0 or 1 values, indicating the presence or absence of the given trait. The only exception is speed, which is expressed in millimeters per frame.</p>
+<p><strong>NOTE</strong>: You’ll also find a column per animal (depicted with <code class="docutils literal notranslate"><span class="pre">ID_missing</span></code>) indicating whether it’s visible or not. This is useful to track when certain animals are completely occluded (for example, when they are in their nests).</p>
 <p>Now that we know what we’re looking at, let’s explore a few simple analyses we can run within DeepOF:</p>
 </section>
 <section id="Generating-Gantt-charts-with-all-traits">
 <h3>Generating Gantt charts with all traits<a class="headerlink" href="#Generating-Gantt-charts-with-all-traits" title="Permalink to this heading"></a></h3>
 <p>The last thing we’ll do for now is to visualize all tagged patterns for a single video, using Gantt charts. To this end, let’s use deepof.visuals.plot_gantt()</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
@@ -787,6 +822,7 @@ div.rendered_html tbody tr:hover {
 <img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_24_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_24_0.png" />
 </div>
 </div>
+<p>We see in these examples neither of the animals are ever occluded.</p>
 <p>Thats good for a quick visualization, but let’s indeed compare how these patterns compare across experimental conditions!</p>
 </section>
 <section id="Exploring-trait-enrichment-across-conditions.">
@@ -835,7 +871,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_28_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_28_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_29_0.png" />
 </div>
 </div>
 <p>We see DeepOF reports significant differences for many of these traits! If you’d like to print a detailed statistical summary, you can set the ‘verbose’ parameter to True in <code class="docutils literal notranslate"><span class="pre">deepof.visuals.plot_enrichment()</span></code>.</p>
@@ -889,7 +925,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_31_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_31_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_32_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_32_0.png" />
 </div>
 </div>
 <p>Even though at first glance the figure may look similar, there are some important differences! For starters, the y-axis now shows lower values, since we’re only looking at two minutes of data instead of ten. Moreover, the effect sizes in some tagged patterns (such as huddling or speed) are much larger. Some patterns (such as nose2body) even show high significance where they were barely different across conditions before!</p>
@@ -931,7 +967,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_35_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_35_0.png" />
+<img alt="../_images/tutorial_notebooks_deepof_supervised_tutorial_36_0.png" src="../_images/tutorial_notebooks_deepof_supervised_tutorial_36_0.png" />
 </div>
 </div>
 <p>We can see how, indeed, the PCA on the average set of annotators seems to distinguish across conditions better when looking at the first two minutes only. We’ll continue to explore this idea in the next (and last) tutorial.</p>

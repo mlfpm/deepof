@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Using custom labelling schemes &mdash; deepof 0.5.1 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/thebelab.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+    <link rel="shortcut icon" href="../_static/deepof.ico"/>
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/thebelab-helper.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+        <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/deepof_sidebar.ico" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">Using custom labelling schemes</a><ul>
+<li><a class="reference internal" href="#What-we’ll-cover:">What we’ll cover:</a><ul>
+<li><a class="reference internal" href="#Recap:-labelling-schemes-supported-by-DeepOF">Recap: labelling schemes supported by DeepOF</a></li>
+<li><a class="reference internal" href="#Creating-a-new-labelling-scheme">Creating a new labelling scheme</a></li>
+<li><a class="reference internal" href="#Getting-a-custom-graph-dataset-for-the-unsupervised-pipeline">Getting a custom graph dataset for the unsupervised pipeline</a></li>
+<li><a class="reference internal" href="#Wrapping-up">Wrapping up</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">deepof</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Using custom labelling schemes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+<style>
+/* CSS for nbsphinx extension */
+
+/* remove conflicting styling from Sphinx themes */
+div.nbinput.container div.prompt *,
+div.nboutput.container div.prompt *,
+div.nbinput.container div.input_area pre,
+div.nboutput.container div.output_area pre,
+div.nbinput.container div.input_area .highlight,
+div.nboutput.container div.output_area .highlight {
+    border: none;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+}
+
+div.nbinput.container > div[class*=highlight],
+div.nboutput.container > div[class*=highlight] {
+    margin: 0;
+}
+
+div.nbinput.container div.prompt *,
+div.nboutput.container div.prompt * {
+    background: none;
+}
+
+div.nboutput.container div.output_area .highlight,
+div.nboutput.container div.output_area pre {
+    background: unset;
+}
+
+div.nboutput.container div.output_area div.highlight {
+    color: unset;  /* override Pygments text color */
+}
+
+/* avoid gaps between output lines */
+div.nboutput.container div[class*=highlight] pre {
+    line-height: normal;
+}
+
+/* input/output containers */
+div.nbinput.container,
+div.nboutput.container {
+    display: -webkit-flex;
+    display: flex;
+    align-items: flex-start;
+    margin: 0;
+    width: 100%;
+}
+@media (max-width: 540px) {
+    div.nbinput.container,
+    div.nboutput.container {
+        flex-direction: column;
+    }
+}
+
+/* input container */
+div.nbinput.container {
+    padding-top: 5px;
+}
+
+/* last container */
+div.nblast.container {
+    padding-bottom: 5px;
+}
+
+/* input prompt */
+div.nbinput.container div.prompt pre {
+    color: #307FC1;
+}
+
+/* output prompt */
+div.nboutput.container div.prompt pre {
+    color: #BF5B3D;
+}
+
+/* all prompts */
+div.nbinput.container div.prompt,
+div.nboutput.container div.prompt {
+    width: 4.5ex;
+    padding-top: 5px;
+    position: relative;
+    user-select: none;
+}
+
+div.nbinput.container div.prompt > div,
+div.nboutput.container div.prompt > div {
+    position: absolute;
+    right: 0;
+    margin-right: 0.3ex;
+}
+
+@media (max-width: 540px) {
+    div.nbinput.container div.prompt,
+    div.nboutput.container div.prompt {
+        width: unset;
+        text-align: left;
+        padding: 0.4em;
+    }
+    div.nboutput.container div.prompt.empty {
+        padding: 0;
+    }
+
+    div.nbinput.container div.prompt > div,
+    div.nboutput.container div.prompt > div {
+        position: unset;
+    }
+}
+
+/* disable scrollbars and line breaks on prompts */
+div.nbinput.container div.prompt pre,
+div.nboutput.container div.prompt pre {
+    overflow: hidden;
+    white-space: pre;
+}
+
+/* input/output area */
+div.nbinput.container div.input_area,
+div.nboutput.container div.output_area {
+    -webkit-flex: 1;
+    flex: 1;
+    overflow: auto;
+}
+@media (max-width: 540px) {
+    div.nbinput.container div.input_area,
+    div.nboutput.container div.output_area {
+        width: 100%;
+    }
+}
+
+/* input area */
+div.nbinput.container div.input_area {
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+    /*background: #f5f5f5;*/
+}
+
+/* override MathJax center alignment in output cells */
+div.nboutput.container div[class*=MathJax] {
+    text-align: left !important;
+}
+
+/* override sphinx.ext.imgmath center alignment in output cells */
+div.nboutput.container div.math p {
+    text-align: left;
+}
+
+/* standard error */
+div.nboutput.container div.output_area.stderr {
+    background: #fdd;
+}
+
+/* ANSI colors */
+.ansi-black-fg { color: #3E424D; }
+.ansi-black-bg { background-color: #3E424D; }
+.ansi-black-intense-fg { color: #282C36; }
+.ansi-black-intense-bg { background-color: #282C36; }
+.ansi-red-fg { color: #E75C58; }
+.ansi-red-bg { background-color: #E75C58; }
+.ansi-red-intense-fg { color: #B22B31; }
+.ansi-red-intense-bg { background-color: #B22B31; }
+.ansi-green-fg { color: #00A250; }
+.ansi-green-bg { background-color: #00A250; }
+.ansi-green-intense-fg { color: #007427; }
+.ansi-green-intense-bg { background-color: #007427; }
+.ansi-yellow-fg { color: #DDB62B; }
+.ansi-yellow-bg { background-color: #DDB62B; }
+.ansi-yellow-intense-fg { color: #B27D12; }
+.ansi-yellow-intense-bg { background-color: #B27D12; }
+.ansi-blue-fg { color: #208FFB; }
+.ansi-blue-bg { background-color: #208FFB; }
+.ansi-blue-intense-fg { color: #0065CA; }
+.ansi-blue-intense-bg { background-color: #0065CA; }
+.ansi-magenta-fg { color: #D160C4; }
+.ansi-magenta-bg { background-color: #D160C4; }
+.ansi-magenta-intense-fg { color: #A03196; }
+.ansi-magenta-intense-bg { background-color: #A03196; }
+.ansi-cyan-fg { color: #60C6C8; }
+.ansi-cyan-bg { background-color: #60C6C8; }
+.ansi-cyan-intense-fg { color: #258F8F; }
+.ansi-cyan-intense-bg { background-color: #258F8F; }
+.ansi-white-fg { color: #C5C1B4; }
+.ansi-white-bg { background-color: #C5C1B4; }
+.ansi-white-intense-fg { color: #A1A6B2; }
+.ansi-white-intense-bg { background-color: #A1A6B2; }
+
+.ansi-default-inverse-fg { color: #FFFFFF; }
+.ansi-default-inverse-bg { background-color: #000000; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-underline { text-decoration: underline; }
+
+
+div.nbinput.container div.input_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight].math,
+div.nboutput.container div.output_area.rendered_html,
+div.nboutput.container div.output_area > div.output_javascript,
+div.nboutput.container div.output_area:not(.rendered_html) > img{
+    padding: 5px;
+    margin: 0;
+}
+
+/* fix copybtn overflow problem in chromium (needed for 'sphinx_copybutton') */
+div.nbinput.container div.input_area > div[class^='highlight'],
+div.nboutput.container div.output_area > div[class^='highlight']{
+    overflow-y: hidden;
+}
+
+/* hide copybtn icon on prompts (needed for 'sphinx_copybutton') */
+.prompt .copybtn {
+    display: none;
+}
+
+/* Some additional styling taken form the Jupyter notebook CSS */
+.jp-RenderedHTMLCommon table,
+div.rendered_html table {
+  border: none;
+  border-collapse: collapse;
+  border-spacing: 0;
+  color: black;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.jp-RenderedHTMLCommon thead,
+div.rendered_html thead {
+  border-bottom: 1px solid black;
+  vertical-align: bottom;
+}
+.jp-RenderedHTMLCommon tr,
+.jp-RenderedHTMLCommon th,
+.jp-RenderedHTMLCommon td,
+div.rendered_html tr,
+div.rendered_html th,
+div.rendered_html td {
+  text-align: right;
+  vertical-align: middle;
+  padding: 0.5em 0.5em;
+  line-height: normal;
+  white-space: normal;
+  max-width: none;
+  border: none;
+}
+.jp-RenderedHTMLCommon th,
+div.rendered_html th {
+  font-weight: bold;
+}
+.jp-RenderedHTMLCommon tbody tr:nth-child(odd),
+div.rendered_html tbody tr:nth-child(odd) {
+  background: #f5f5f5;
+}
+.jp-RenderedHTMLCommon tbody tr:hover,
+div.rendered_html tbody tr:hover {
+  background: rgba(66, 165, 245, 0.2);
+}
+
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="Using-custom-labelling-schemes">
+<h1>Using custom labelling schemes<a class="headerlink" href="#Using-custom-labelling-schemes" title="Permalink to this heading"></a></h1>
+<p><a class="reference external" href="https://colab.research.google.com/github/lucasmiranda42/deepof/blob/master/docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" /></a></p>
+<section id="What-we’ll-cover:">
+<h2>What we’ll cover:<a class="headerlink" href="#What-we’ll-cover:" title="Permalink to this heading"></a></h2>
+<ul class="simple">
+<li><p>Labelling schemes supported by DeepOF.</p></li>
+<li><p>How to create a new labelling scheme and integrate it with the unsupervised pipeline.</p></li>
+</ul>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
+<span class="o">%</span><span class="k">autoreload</span> 2
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # If using Google colab, uncomment and run this cell and the one below to set up the environment</span>
+<span class="c1"># # Note: becasuse of how colab handles the installation of local packages, this cell will kill your runtime.</span>
+<span class="c1"># # This is not an error! Just continue with the cells below.</span>
+<span class="c1"># import os</span>
+<span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
+<span class="c1"># !pip install -q -e deepof --progress-bar off</span>
+<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># !curl --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/knF7t78isQuIAr0/download</span>
+<span class="c1"># !unzip tutorial_files.zip</span>
+<span class="c1"># os.kill(os.getpid(), 9)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># import os, warnings</span>
+<span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
+</pre></div>
+</div>
+</div>
+<p>Let’s start by importing some packages. We’ll use python’s os library to handle paths, pickle to load saved objects, pandas to load data frames, and the data entry API within DeepOF, located in deepof.data</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">deepof.data</span>
+</pre></div>
+</div>
+</div>
+<p>We’ll also need some plotting gear:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">display</span>
+<span class="kn">from</span> <span class="nn">networkx</span> <span class="kn">import</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">draw</span>
+<span class="kn">import</span> <span class="nn">deepof.visuals</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
+</pre></div>
+</div>
+</div>
+<section id="Recap:-labelling-schemes-supported-by-DeepOF">
+<h3>Recap: labelling schemes supported by DeepOF<a class="headerlink" href="#Recap:-labelling-schemes-supported-by-DeepOF" title="Permalink to this heading"></a></h3>
+<p>DeepOF supports two labelling schemes out of the box: the <code class="docutils literal notranslate"><span class="pre">deepof_14</span></code> scheme, selected by default, and <code class="docutils literal notranslate"><span class="pre">deepof_8</span></code>, a reduced set of tracking labels that is common among, for example, <a class="reference external" href="https://goldenneurolab.com/simba">SimBA</a> users.</p>
+<p><strong>NOTE</strong>: This is not necessary if you use the matrix representations introduced in the previous tutorial. If you’d like to try out the graph representations we explored, however, but you have a different labelling scheme, this is the place to be.</p>
+<p><img alt="c5e25f6b8dae4817a057c8ce0f2ac9f1" class="no-scaled-link" src="../_images/deepof_DLC_tagging1.png" style="width: 800px;" /></p>
+<p>While, as mentioned above, <code class="docutils literal notranslate"><span class="pre">deepof_14</span></code> is selected by default, the provided alternative can be selected when defining a new <code class="docutils literal notranslate"><span class="pre">deepof.Project</span></code> instance:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files&quot;</span><span class="p">),</span>
+                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Videos/&quot;</span><span class="p">),</span>
+                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Tables/&quot;</span><span class="p">),</span>
+                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;deepof_tutorial_project&quot;</span><span class="p">,</span>
+                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;circular-autodetect&quot;</span><span class="p">,</span>
+                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;W&quot;</span><span class="p">],</span>
+                <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;.mp4&quot;</span><span class="p">,</span>
+                <span class="n">bodypart_graph</span><span class="o">=</span><span class="s2">&quot;deepof_8&quot;</span><span class="p">,</span> <span class="c1"># Can also be set to &#39;deepof_14&#39; (default), or take a custom graph</span>
+                <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
+                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">exp_conditions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Setting up project directories...
+Loading trajectories...
+Smoothing trajectories...
+Interpolating outliers...
+Iterative imputation of ocluded bodyparts...
+Detecting arena...
+Computing distances...
+Computing angles...
+Computing areas...
+Done!
+</pre></div></div>
+</div>
+<p>We can take a look at the constructed graph in this case (you can see how the default looks like in the previous tutorial, or change the labelling scheme to <code class="docutils literal notranslate"><span class="pre">deepof_14</span></code> in the cell above if you’re following in colab):</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">graph_preprocessed_coords</span><span class="p">,</span> <span class="n">adj_matrix</span><span class="p">,</span> <span class="n">to_preprocess</span><span class="p">,</span> <span class="n">global_scaler</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_graph_dataset</span><span class="p">(</span>
+    <span class="n">animal_id</span><span class="o">=</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="c1"># Comment out for multi-animal embeddings</span>
+    <span class="n">center</span><span class="o">=</span><span class="s2">&quot;Center&quot;</span><span class="p">,</span>
+    <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Spine_1&quot;</span><span class="p">,</span>
+    <span class="n">window_size</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">window_step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">test_videos</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">preprocess</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;standard&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">draw</span><span class="p">(</span><span class="n">Graph</span><span class="p">(</span><span class="n">adj_matrix</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_custom_labels_tutorial_18_0.png" src="../_images/tutorial_notebooks_deepof_custom_labels_tutorial_18_0.png" />
+</div>
+</div>
+<p>We indeed see a graph with 8 labels! The diamond shape corresponds to nose, ears and center. The outer branches to both sides and the tail.</p>
+<p>This will adapt the whole downstream pipeline to work with the 8-label scheme. A more flexible alternative, if neither scheme fits your data, is to create a custom graph. Next, let’s see how this can be achieved!</p>
+</section>
+<section id="Creating-a-new-labelling-scheme">
+<h3>Creating a new labelling scheme<a class="headerlink" href="#Creating-a-new-labelling-scheme" title="Permalink to this heading"></a></h3>
+<p>Now, on for a slightly more involved task. What happens if we want another labelling scheme, not supported by DeepOF? We need to build the graph by hand using an adjacency list, and pass it to the <code class="docutils literal notranslate"><span class="pre">deepof.Project</span></code> constructor. Let’s see! We’ll adapt the <code class="docutils literal notranslate"><span class="pre">deepof_8</span></code> labelling scheme to include the full tail, which should look like this:</p>
+<p><img alt="14f15e486a4e4876af51b5054f43bc7a" class="no-scaled-link" src="../_images/deepof_custom_tagging.png" style="width: 400px;" /></p>
+<p>To start, we should create a Python dictionary specifying all connections we want. To be clear, keys in the dictionary will be connected to every element in the lists passed as values. There is no unique way of implementing this, so feel free to be creative! But an example that works is the following:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">deepof_custom</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;Nose&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Left_ear&quot;</span><span class="p">,</span> <span class="s2">&quot;Right_ear&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;Center&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Left_ear&quot;</span><span class="p">,</span> <span class="s2">&quot;Right_ear&quot;</span><span class="p">,</span> <span class="s2">&quot;Left_fhip&quot;</span><span class="p">,</span> <span class="s2">&quot;Right_fhip&quot;</span><span class="p">,</span> <span class="s2">&quot;Tail_base&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;Tail_base&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Tail_1&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;Tail_1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Tail_2&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;Tail_2&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Tail_tip&quot;</span><span class="p">],</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<p>Here, <code class="docutils literal notranslate"><span class="pre">Nose</span></code> is connected to <code class="docutils literal notranslate"><span class="pre">Left_ear</span></code> and <code class="docutils literal notranslate"><span class="pre">Right_ear</span></code>, and so on. Next, we’ll pass this structure to the <code class="docutils literal notranslate"><span class="pre">bodypart_graph</span></code> parameter in the <code class="docutils literal notranslate"><span class="pre">deepof.Project</span></code> constructor.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">deepof</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files&quot;</span><span class="p">),</span>
+                <span class="n">video_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Videos/&quot;</span><span class="p">),</span>
+                <span class="n">table_path</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">&quot;tutorial_files/Tables/&quot;</span><span class="p">),</span>
+                <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;deepof_tutorial_project&quot;</span><span class="p">,</span>
+                <span class="n">arena</span><span class="o">=</span><span class="s2">&quot;circular-autodetect&quot;</span><span class="p">,</span>
+                <span class="n">animal_ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;W&quot;</span><span class="p">],</span>
+                <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;.mp4&quot;</span><span class="p">,</span>
+                <span class="n">bodypart_graph</span><span class="o">=</span><span class="n">deepof_custom</span><span class="p">,</span> <span class="c1"># Can also be set to &#39;deepof_14&#39; (default), or &#39;deepof_8&#39;</span>
+                <span class="n">video_scale</span><span class="o">=</span><span class="mi">380</span><span class="p">,</span>
+                <span class="n">enable_iterative_imputation</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">smooth_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">exp_conditions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_deepof_project</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Setting up project directories...
+Loading trajectories...
+Smoothing trajectories...
+Interpolating outliers...
+Detecting arena...
+Computing distances...
+Computing angles...
+Computing areas...
+Done!
+</pre></div></div>
+</div>
+</section>
+<section id="Getting-a-custom-graph-dataset-for-the-unsupervised-pipeline">
+<h3>Getting a custom graph dataset for the unsupervised pipeline<a class="headerlink" href="#Getting-a-custom-graph-dataset-for-the-unsupervised-pipeline" title="Permalink to this heading"></a></h3>
+<p>Now everything works the same way as before! Let’s then obtain a new graph dataset using this custom labelling scheme, and make sure the obtained graph matches our expectations:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">graph_preprocessed_coords</span><span class="p">,</span> <span class="n">adj_matrix</span><span class="p">,</span> <span class="n">to_preprocess</span><span class="p">,</span> <span class="n">global_scaler</span> <span class="o">=</span> <span class="n">my_deepof_project</span><span class="o">.</span><span class="n">get_graph_dataset</span><span class="p">(</span>
+    <span class="n">animal_id</span><span class="o">=</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="c1"># Comment out for multi-animal embeddings</span>
+    <span class="n">center</span><span class="o">=</span><span class="s2">&quot;Center&quot;</span><span class="p">,</span>
+    <span class="n">align</span><span class="o">=</span><span class="s2">&quot;Spine_1&quot;</span><span class="p">,</span>
+    <span class="n">window_size</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">window_step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">test_videos</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">preprocess</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;standard&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">draw</span><span class="p">(</span><span class="n">Graph</span><span class="p">(</span><span class="n">adj_matrix</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorial_notebooks_deepof_custom_labels_tutorial_32_0.png" src="../_images/tutorial_notebooks_deepof_custom_labels_tutorial_32_0.png" />
+</div>
+</div>
+<p>And that’s it! Now you should be able to adapt the unsupervised pipeline within DeepOF to any labelling scheme of choice. Note that this should still work with bottom-up or side view videos.</p>
+</section>
+<section id="Wrapping-up">
+<h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>
+<p>Thank you for making it until the end. This was a slightly more involved tutorial for those users that do not rely on top-down labels like those provided out of the box. Stay tuned for more content, and make sure to raise an <a class="reference external" href="https://github.com/mlfpm/deepof/issues">issue</a> in our GitHub repository if you have any questions!</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Lucas Miranda.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

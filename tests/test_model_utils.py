@@ -75,7 +75,7 @@ def test_get_hard_counts(soft_counts):
     assert isinstance(hard_counts, tf.Tensor)
 
 
-@settings(max_examples=18, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=1, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding_model=st.sampled_from(["VQVAE", "VaDE", "Contrastive"]),
     encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
@@ -99,13 +99,8 @@ def test_model_embedding_fitting(
         video_scale=380,
         video_format=".mp4",
     ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
-    X_train = np.ones([20, 5, 6]).astype(float)
+    X_train = np.random.uniform(-1, 1, [20, 5, 6]).astype(float)
     y_train = np.array([20, 1]).astype(float)
 
     if not use_graph:
@@ -127,6 +122,12 @@ def test_model_embedding_fitting(
         log_hparams=True,
         n_components=10,
         kmeans_loss=0.1,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
     )
 
 

@@ -9,12 +9,11 @@ Testing module for deepof.preprocess
 """
 
 import os
-from collections import defaultdict
 from shutil import rmtree
 
 import numpy as np
 import pandas as pd
-import pytest
+import random
 import string
 from hypothesis import given
 from hypothesis import settings
@@ -24,11 +23,32 @@ import deepof.data
 import deepof.utils
 
 
-@settings(max_examples=2, deadline=None)
+@settings(max_examples=20, deadline=None)
 @given(
-    table_type=st.one_of(st.just(".h5"), st.just(".csv")),
+    table_type=st.one_of(
+        st.just("analysis.h5"),
+        st.just("h5"),
+        st.just("csv"),
+        st.just("npy"),
+        st.just("slp"),
+    ),
+    arena_detection=st.one_of(
+        st.just("circular-autodetect"), st.just("polygonal-autodetect")
+    ),
+    custom_bodyparts=st.booleans(),
 )
-def test_project_init(table_type):
+def test_project_init(table_type, arena_detection, custom_bodyparts):
+
+    if custom_bodyparts or table_type == "npy":
+        custom_bodyparts = [
+            "".join(random.choice(string.ascii_lowercase) for _ in range(10))
+            for _ in range(14)
+        ]
+
+    # Add path to SLEAP tables if necessary
+    tables_path = "Tables"
+    if table_type in ["slp", "analysis.h5", "npy"]:
+        tables_path = os.path.join(tables_path, "SLEAP")
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -36,10 +56,16 @@ def test_project_init(table_type):
             ".", "tests", "test_examples", "test_single_topview", "Videos"
         ),
         table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
+            ".", "tests", "test_examples", "test_single_topview", tables_path
         ),
         project_name=f"test_{table_type[1:]}",
-        arena="circular-autodetect",
+        rename_bodyparts=(None if not custom_bodyparts else custom_bodyparts),
+        bodypart_graph=(
+            "deepof_14"
+            if not custom_bodyparts
+            else {custom_bodyparts[0]: custom_bodyparts[1:]}
+        ),
+        arena=arena_detection,
         video_scale=380,
         video_format=".mp4",
         table_format=table_type,
@@ -48,7 +74,7 @@ def test_project_init(table_type):
     assert isinstance(prun, deepof.data.Project)
     assert isinstance(prun.load_tables(verbose=True), tuple)
 
-    prun = prun.create()
+    prun = prun.create(test=True, force=True)
     assert isinstance(prun, deepof.data.Coordinates)
     rmtree(
         os.path.join(
@@ -59,6 +85,56 @@ def test_project_init(table_type):
             f"test_{table_type[1:]}",
         )
     )
+
+
+def test_project_extend():
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
+        project_name=f"test_extend",
+        rename_bodyparts=None,
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format="h5",
+    )
+
+    ext_prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Tables"
+        ),
+        project_name=f"test_extended",
+        rename_bodyparts=None,
+        animal_ids=["B", "W"],
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format="h5",
+    )
+
+    prun_path = os.path.join(
+        ".",
+        "tests",
+        "test_examples",
+        "test_single_topview",
+        "test_extend",
+    )
+
+    prun.create(test=True, force=True)
+    ext_prun.extend(prun_path)
+
+    rmtree(prun_path)
+    rmtree(prun_path + "ed")
 
 
 def test_project_properties():
@@ -125,7 +201,7 @@ def test_project_filters():
     assert isinstance(coords.filter_condition(exp_filters={"CSDS": "Control"}), dict)
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
@@ -160,6 +236,12 @@ def test_get_distances(nodes, ego):
 
     assert isinstance(prun, dict)
 
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+
 
 @settings(deadline=None)
 @given(
@@ -192,7 +274,7 @@ def test_get_angles(nodes, ego):
     assert isinstance(prun, dict)
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),

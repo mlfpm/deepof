@@ -6,28 +6,35 @@
 import copy
 from copy import deepcopy
 from dask_image.imread import imread
+from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
+from math import atan2, dist
 from scipy.signal import savgol_filter
+from scipy.spatial.distance import cdist
+from segment_anything import sam_model_registry, SamPredictor
 from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from sktime.transformations.series.impute import Imputer
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
 import cv2
+import h5py
 import math
+import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
 import numpy as np
 import os
 import pandas as pd
 import regex as re
+import requests
 import ruptures as rpt
-import tensorflow as tf
+import sleap_io as sio
+import torch
 import warnings
 
 import deepof.data
@@ -130,7 +137,7 @@ def connect_mouse(
     return final_graph
 
 
-def edges_to_weithed_adj(adj: np.ndarray, edges: np.ndarray):
+def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray):
     """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
@@ -245,12 +252,7 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
 
             try:
                 scaler = StandardScaler()
-                imputed = IterativeImputer(
-                    skip_complete=True,
-                    max_iter=project.enable_iterative_imputation,
-                    n_nearest_features=tab.shape[1],
-                    tol=1e-1,
-                ).fit_transform(
+                imputed = Imputer(method="drift",).fit_transform(
                     scaler.fit_transform(
                         tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
                     )
@@ -436,37 +438,40 @@ def compute_areas(coords, animal_id=None):
         areas: list including head, torso, back, and full areas for the provided coordinates.
 
     """
-    head = ["Nose", "Left_ear", "Left_fhip", "Spine_1"]
+    area_bps = {
+        "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
+        "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
+        "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
+        "full_area": [
+            "Nose",
+            "Left_ear",
+            "Left_fhip",
+            "Left_bhip",
+            "Tail_base",
+            "Right_bhip",
+            "Right_fhip",
+            "Right_ear",
+        ],
+    }
 
-    torso = ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"]
+    areas = {}
 
-    back = ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"]
+    for name, bps in area_bps.items():
 
-    full = [
-        "Nose",
-        "Left_ear",
-        "Left_fhip",
-        "Left_bhip",
-        "Tail_base",
-        "Right_bhip",
-        "Right_fhip",
-        "Right_ear",
-    ]
+        try:
+            if animal_id is not None:
+                bps = ["_".join([animal_id, bp]) for bp in bps]
 
-    areas = []
+            x = coords.xs(key="x", level=1)[bps]
+            y = coords.xs(key="y", level=1)[bps]
 
-    for bps in [head, torso, back, full]:
+            if np.isnan(x).any() or np.isnan(y).any():
+                areas[name] = np.nan
+            else:
+                areas[name] = Polygon(zip(x, y)).area
 
-        if animal_id is not None:
-            bps = ["_".join([animal_id, bp]) for bp in bps]
-
-        x = coords.xs(key="x", level=1)[bps]
-        y = coords.xs(key="y", level=1)[bps]
-
-        if np.isnan(x).any() or np.isnan(y).any():
-            areas.append(np.nan)
-        else:
-            areas.append(Polygon(zip(x, y)).area)
+        except KeyError:
+            continue
 
     return areas
 
@@ -503,8 +508,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
     column of data are aligned with the y-axis.
 
     Args:
-        data (numpy.ndarray): 3D array containing positions of body parts over time, where
-        shape is N (sliding window instances) * m (sliding window size) * l (features)
+        data (numpy.ndarray): 3D array containing positions of body parts over time, where shape is N (sliding window instances) * m (sliding window size) * l (features)
         mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
 
     Returns:
@@ -536,6 +540,143 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
     return aligned_trajs
+
+
+def load_table(
+    tab: str,
+    table_path: str,
+    table_format: str,
+    rename_bodyparts: list = None,
+    animal_ids: list = None,
+):
+    """Loads a table into a structured pandas data frame.
+
+    Supports inputs from both DeepLabCut and (S)LEAP.
+
+    Args:
+        tab (str): Name of the file containing the tracks.
+        table_path (string): Full path to the file containing the tracks.
+        table_format (str): type of the files to load, coming from either DeepLabCut (CSV and H5) and (S)LEAP (NPY).
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+
+    Returns:
+        loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
+
+    """
+
+    if table_format == "h5":
+
+        loaded_tab = pd.read_hdf(os.path.join(table_path, tab), dtype=float)
+
+        # Adapt index to be compatible with downstream processing
+        loaded_tab = loaded_tab.T.reset_index(drop=False).T
+        loaded_tab.columns = loaded_tab.loc["scorer", :]
+        loaded_tab = loaded_tab.iloc[1:]
+
+    elif table_format == "csv":
+
+        loaded_tab = pd.read_csv(
+            os.path.join(table_path, tab),
+            index_col=0,
+            low_memory=False,
+        )
+
+    elif table_format in ["npy", "slp", "analysis.h5"]:
+
+        if table_format == "analysis.h5":
+            # Load sleap .h5 file from disk
+            with h5py.File(os.path.join(table_path, tab), "r") as f:
+                loaded_tab = np.stack(np.transpose(f["tracks"][:], [3, 0, 2, 1]))
+                slp_bodyparts = [n.decode() for n in f["node_names"][:]]
+                slp_animal_ids = [n.decode() for n in f["track_names"][:]]
+
+        elif table_format == "slp":
+            # Use sleap-io to convert .slp files into numpy arrays
+            loaded_tab = sio.load_slp(os.path.join(table_path, tab))
+            slp_bodyparts = [i.name for i in loaded_tab.skeletons[0].nodes]
+            slp_animal_ids = [i.name for i in loaded_tab.tracks]
+            loaded_tab = loaded_tab.numpy()
+
+        else:
+            # Load numpy array from disk
+            loaded_tab = np.load(os.path.join(table_path, tab), "r")
+
+            # Check that body part names are provided
+            slp_bodyparts = rename_bodyparts
+            if not animal_ids[0]:
+                slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
+            else:
+                slp_animal_ids = animal_ids
+            assert (
+                len(rename_bodyparts) == loaded_tab.shape[2]
+            ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
+
+        # Create the header as a multi index, using animals, body parts and coordinates
+        if not animal_ids[0]:
+            animal_ids = slp_animal_ids
+
+        # Impute likelihood as a third dimension in the last axis,
+        # with 1.0 if xy values are present and 0.0 otherwise
+        likelihoods = np.expand_dims(
+            np.all(np.isfinite(loaded_tab), axis=-1), axis=-1
+        ).astype(float)
+        loaded_tab = np.concatenate([loaded_tab, likelihoods], axis=-1)
+
+        # Collapse nodes and animals to the desired shape
+        loaded_tab = pd.DataFrame(loaded_tab.reshape(loaded_tab.shape[0], -1))
+
+        multi_index = pd.MultiIndex.from_product(
+            [["sleap_scorer"], slp_animal_ids, slp_bodyparts, ["x", "y", "likelihood"]],
+            names=["scorer", "individuals", "bodyparts", "coords"],
+        )
+        multi_index = pd.DataFrame(
+            pd.DataFrame(multi_index).explode(0).values.reshape([-1, 4]).T,
+            index=["scorer", "individuals", "bodyparts", "coords"],
+        )
+
+        loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
+        loaded_tab.columns = multi_index.loc["scorer"]
+
+    if rename_bodyparts is not None:
+        loaded_tab = rename_track_bps(
+            loaded_tab,
+            rename_bodyparts,
+            (animal_ids if table_format in ["h5", "csv"] else [""]),
+        )
+
+    return loaded_tab
+
+
+def rename_track_bps(
+    loaded_tab: pd.DataFrame, rename_bodyparts: list, animal_ids: list
+):
+    """Renames all body parts in the provided dataframe.
+
+    Args:
+        loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP files.
+        animal_ids (list): list of IDs to use for the animals present in the provided tracking files.
+
+    Returns:
+        renamed_tab (pd.DataFrame): Data frame with renamed body parts
+
+    """
+    renamed_tab = copy.deepcopy(loaded_tab)
+
+    if not animal_ids[0]:
+        current_bparts = loaded_tab.loc["bodyparts", :].unique()
+    else:
+        current_bparts = list(
+            map(
+                lambda x: "_".join(x.split("_")[1:]),
+                loaded_tab.loc["bodyparts", :].unique(),
+            )
+        )
+
+    for old, new in zip(current_bparts, rename_bodyparts):
+        renamed_tab.replace(old, new, inplace=True, regex=True)
+
+    return renamed_tab
 
 
 def scale_table(
@@ -1161,23 +1302,72 @@ def filter_columns(columns: list, selected_id: str) -> list:
     return columns_to_keep
 
 
+def load_segmentation_model(path):
+    model_url = "https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download"
+
+    if path is None:
+        installation_path = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(
+            installation_path,
+            "trained_models",
+            "arena_segmentation",
+            "sam_vit_h_4b8939.pth",
+        )
+
+    if not os.path.exists(path):
+        # Creating directory if it does not exist
+        directory = os.path.dirname(path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        print("Arena segmentation model not found. Downloading...")
+
+        response = requests.get(model_url, stream=True)
+        response.raise_for_status()
+
+        with open(path, "wb") as file:
+            total_length = int(response.headers.get("content-length"))
+            for chunk in tqdm(
+                response.iter_content(chunk_size=1024),
+                total=total_length // 1024,
+                unit="KB",
+            ):
+                if chunk:
+                    file.write(chunk)
+
+    # Load the model using PyTorch
+    sam = sam_model_registry["vit_h"](checkpoint=path)
+    sam.to(device="cpu")
+    predictor = SamPredictor(sam)
+
+    return predictor
+
+
 def get_arenas(
+    coordinates: coordinates,
+    tables: table_dict,
     arena: str,
     arena_dims: int,
     project_path: str,
     project_name: str,
-    tables: dict,
+    segmentation_model_path: str,
     videos: list = None,
+    debug: bool = False,
+    test: bool = False,
 ):
     """Extract arena parameters from a project or coordinates object.
 
     Args:
-        arena (str): Arena type (must be either "polygonal-manual", "circular-manual", or "circular-autodetect").
+        coordinates (coordinates): Coordinates object.
+        tables (table_dict): TableDict object containing tracklets per animal.
+        arena (str): Arena type (must be either "polygonal-manual", "circular-manual", "polygonal-autodetect", or "circular-autodetect").
         arena_dims (int): Arena dimensions.
         project_path (str): Path to project.
         project_name (str): Name of project.
-        tables (dict): List of tables to extract arena parameters from.
+        segmentation_model_path (str): Path to segmentation model used for automatic arena detection.
         videos (list): List of videos to extract arena parameters from. Defaults to None (all videos are used).
+        debug (bool): If True, a frame per video with the detected arena is saved. Defaults to False.
+        test (bool): If True, the function is run in test mode. Defaults to False.
 
     Returns:
         arena_params (list): List of arena parameters.
@@ -1192,24 +1382,37 @@ def get_arenas(
 
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
+        propagate_last = False
         for i, video_path in enumerate(videos):
-            arena_corners, h, w = extract_polygonal_arena_coordinates(
-                os.path.join(project_path, project_name, "Videos", video_path),
-                arena,
-                i,
-                videos,
-            )
 
-            cur_scales = [
-                *np.mean(arena_corners, axis=0).astype(int),
-                get_first_length(arena_corners),
-                arena_dims,
-            ]
+            if not propagate_last:
+                arena_corners, h, w = extract_polygonal_arena_coordinates(
+                    os.path.join(project_path, project_name, "Videos", video_path),
+                    arena,
+                    i,
+                    videos,
+                )
 
-            cur_arena_params = arena_corners
+                if arena_corners is None:
+                    propagate_last = True
+
+                else:
+                    cur_scales = [
+                        *np.mean(arena_corners, axis=0).astype(int),
+                        get_first_length(arena_corners),
+                        arena_dims,
+                    ]
+
+            if propagate_last:
+                cur_arena_params = arena_params[-1]
+                cur_scales = scales[-1]
+            else:
+                cur_arena_params = arena_corners
 
             if arena == "circular-manual":
-                cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
+
+                if not propagate_last:
+                    cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
 
                 scales.append(
                     list(
@@ -1232,33 +1435,73 @@ def get_arenas(
             arena_params.append(cur_arena_params)
             video_resolution.append((h, w))
 
-    elif arena in ["circular-autodetect"]:
+    elif arena in ["polygonal-autodetect", "circular-autodetect"]:
+
+        # Open GUI for manual labelling of two scaling points in the first video
+        arena_reference = None
+        if arena == "polygonal-autodetect":  # pragma: no cover
+
+            if test:
+                arena_reference = np.zeros((4, 2))
+            else:
+                arena_reference = extract_polygonal_arena_coordinates(
+                    os.path.join(project_path, project_name, "Videos", videos[0]),
+                    arena,
+                    0,
+                    [videos[0]],
+                )[0]
+
+        # Load SAM
+        segmentation_model = load_segmentation_model(segmentation_model_path)
 
         for vid_index, _ in enumerate(videos):
-            ellipse, h, w = automatically_recognize_arena(
-                videos=videos,
+            arena_parameters, h, w = automatically_recognize_arena(
+                coordinates=coordinates,
                 tables=tables,
+                videos=videos,
                 vid_index=vid_index,
                 path=os.path.join(project_path, project_name, "Videos"),
                 arena_type=arena,
+                segmentation_model=segmentation_model,
+                arena_reference=arena_reference,
+                debug=debug,
             )
 
-            # scales contains the coordinates of the center of the arena,
-            # the absolute diameter measured from the video in pixels, and
-            # the provided diameter in mm (1 -default- equals not provided)
-            scales.append(
-                list(
-                    np.array(
-                        [
-                            ellipse[0][0],
-                            ellipse[0][1],
-                            np.mean([ellipse[1][0], ellipse[1][1]]) * 2,
-                        ]
-                    )
+            if "polygonal" in arena:
+
+                closest_side_points = closest_side(
+                    simplify_polygon(arena_parameters), arena_reference[:2]
                 )
-                + [arena_dims]
-            )
-            arena_params.append(ellipse)
+
+                scales.append(
+                    [
+                        *np.mean(arena_parameters, axis=0).astype(int),
+                        dist(*closest_side_points),
+                        arena_dims,
+                    ]
+                )
+
+            elif "circular" in arena:
+                # scales contains the coordinates of the center of the arena,
+                # the absolute diameter measured from the video in pixels, and
+                # the provided diameter in mm (1 -default- equals not provided)
+                scales.append(
+                    list(
+                        np.array(
+                            [
+                                arena_parameters[0][0],
+                                arena_parameters[0][1],
+                                np.mean(
+                                    [arena_parameters[1][0], arena_parameters[1][1]]
+                                )
+                                * 2,
+                            ]
+                        )
+                    )
+                    + [arena_dims]
+                )
+
+            arena_params.append(arena_parameters)
             video_resolution.append((h, w))
 
     elif not arena:
@@ -1266,106 +1509,226 @@ def get_arenas(
 
     else:  # pragma: no cover
         raise NotImplementedError(
-            "arenas must be set to one of: 'polygonal-manual', 'circular-autodetect'"
+            "arenas must be set to one of: 'polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect'"
         )
 
     return np.array(scales), arena_params, video_resolution
 
 
+def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
+    """Simplify a polygon using the Ramer-Douglas-Peucker algorithm.
+
+    Args:
+        polygon (list): List of polygon coordinates.
+        relative_tolerance (float): Relative tolerance for simplification. Defaults to 0.05.
+
+    Returns:
+        simplified_poly (list): List of simplified polygon coordinates.
+
+    """
+    poly = Polygon(polygon)
+    perimeter = poly.length
+    tolerance = perimeter * relative_tolerance
+
+    simplified_poly = poly.simplify(tolerance, preserve_topology=False)
+    return list(simplified_poly.exterior.coords)[
+        :-1
+    ]  # Exclude last point (same as first)
+
+
+def closest_side(polygon: list, reference_side: list):
+    """Find the closest side in other polygons to a reference side in the first polygon.
+
+    Args:
+        polygon (list): List of polygons.
+        reference_side (list): List of coordinates of the reference side.
+
+    Returns:
+        closest_side_points (list): List of coordinates of the closest side.
+
+    """
+
+    def angle(p1, p2):
+        return atan2(p2[1] - p1[1], p2[0] - p1[0])
+
+    ref_length = dist(*reference_side)
+    ref_angle = angle(*reference_side)
+
+    min_difference = float("inf")
+    closest_side_points = None
+
+    for i in range(len(polygon)):
+        side_points = (polygon[i], polygon[(i + 1) % len(polygon)])
+        side_length = dist(*side_points)
+        side_angle = angle(*side_points)
+        total_difference = abs(side_length - ref_length) + abs(side_angle - ref_angle)
+
+        if total_difference < min_difference:
+            min_difference = total_difference
+            closest_side_points = list(side_points)
+
+    return closest_side_points
+
+
 # noinspection PyUnboundLocalVariable
 def automatically_recognize_arena(
+    coordinates: coordinates,
+    tables: table_dict,
     videos: list,
     vid_index: int,
     path: str = ".",
-    tables: dict = None,
-    recoglimit: int = 500,
     arena_type: str = "circular-autodetect",
+    arena_reference: list = None,
+    segmentation_model: torch.nn.Module = None,
+    debug: bool = False,
 ) -> Tuple[np.array, int, int]:
     """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
 
     WARNING: estimates won't be reliable if the camera moves along the video.
 
     Args:
+        coordinates (coordinates): Coordinates object.
+        tables (table_dict): Dictionary of tables per experiment.
         videos (list): Relative paths of the videos to analise.
         vid_index (int): Element of videos list to use.
         path (str): Full path of the directory where the videos are.
-        tables (dict): Dictionary with DLC time series in DataFrames as values.
-        recoglimit (int): Number of frames to use for position estimates.
         potentially more accurate in poor lighting conditions.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
+        arena_reference (list): List of coordinates defining the reference arena annotated by the user.
+        segmentation_model (torch.nn.Module): Model used for automatic arena detection.
+        debug (bool): If True, save a video frame with the arena detected.
 
     Returns:
-        arena (np.ndarray): 1D-array containing information about the arena.
+        arena (np.ndarray): 1D-array containing information about the arena. If the arena is circular, returns a 3-element-array) -> center, radius, and angle. If arena is polygonal, returns a list with x-y position of each of the n the vertices of the polygon.
         h (int): Height of the video in pixels.
         w (int): Width of the video in pixels.
 
     """
-    # "circular-autodetect" (3-element-array) -> x-y position of the center and the radius.
-    # "circular-manual" (3-element-array) -> x-y position of the center and the radius.
-    # "polygonal-manual" (2n-element-array) -> x-y position of each of the n the vertices of the polygon.
-    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    # Read video as a 3D array
+    current_video = imread(os.path.join(path, videos[vid_index]))
+    h, w = current_video[0].shape[:2]
 
-    if tables is not None:
-        # Select relevant table to check animal positions; if animals are close to the arena, do not take those frames
-        # into account
-        centers = tables[list(tables.keys())[vid_index]].iloc[:recoglimit, :]
+    # Select the corresponding tracklets
+    current_tab = tables[
+        get_close_matches(
+            videos[vid_index].split(".")[0],
+            [
+                vid
+                for vid in tables.keys()
+                if (
+                    vid.startswith(videos[vid_index].split(".")[0])
+                    or videos[vid_index].startswith(vid)
+                )
+            ],
+            cutoff=0.01,
+            n=1,
+        )[0]
+    ]
 
-        # Fix the edge case where there are less frames than the minimum specified for recognition
-        recoglimit = np.min([recoglimit, centers.shape[0]])
+    # Get distances of all body parts and timepoints to both center and periphery
+    distances_to_center = cdist(
+        current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
+    ).reshape(current_tab.shape[0], -1)
 
-        # Select animal centers
-        centers = centers.loc[
-            :, [bpart for bpart in centers.columns if "Tail" not in bpart[0]]
-        ]
-        centers_shape = centers.shape
+    possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
+        distances_to_center, 5.0
+    )
+    possible_distances_to_center = distances_to_center[possible_frames]
+    current_video = current_video[: possible_frames.shape[0]][possible_frames]
 
-    # Loop over the first frames in the video to get resolution and center of the arena
-    arena, fnum, h, w = None, 0, None, None
+    if arena_reference is not None:
+        # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
+        # hinder segmentation
+        min_distance_to_arena = cdist(
+            current_tab.values.reshape(-1, 2), arena_reference
+        ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
 
-    while cap.isOpened() and fnum < recoglimit:
-        ret, frame = cap.read()
-        # if frame is read correctly ret is True
-        if not ret:  # pragma: no cover
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
-
-        if arena_type == "circular-autodetect":
-
-            # Detect arena and extract positions
-            temp_center, temp_axes, temp_angle = circular_arena_recognition(frame)
-            temp_arena = np.array([[*temp_center, *temp_axes, temp_angle]])
-
-            # Set if not assigned, else concat and return the median
-            if arena is None:
-                arena = temp_arena
-            else:
-                arena = np.concatenate([arena, temp_arena], axis=0)
-
-            if h is None and w is None:
-                w, h = frame.shape[0], frame.shape[1]
-
-        fnum += 1
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-    # Compute the distance between animal centers and the center of the video, for
-    # the arena to be based on frames which minimize obstruction of its borders
-    if tables is not None:
-        center_distances = np.nanmax(
-            np.linalg.norm(
-                centers.to_numpy().reshape(-1, 2) - (w / 2, h / 2), axis=1
-            ).reshape(-1, centers_shape[1] // 2),
-            axis=1,
+        min_distance_to_arena = min_distance_to_arena[possible_frames]
+        current_frame = np.argmax(
+            np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
         )
-        # Within the frame recognition limit, only the 1% less obstructed will contribute to the arena
-        # fitting
-        center_quantile = np.quantile(center_distances, 0.05)
-        arena = arena[center_distances <= center_quantile]
 
-    # Compute the median across frames and return to tuple format for downstream compatibility
-    arena = np.average(arena[~np.any(np.isnan(arena), axis=1)], axis=0)
-    arena = (tuple(arena[:2].astype(int)), tuple(arena[2:4].astype(int)), arena[4])
+    else:
+        # If not, use the maximum distance to the center as a proxy
+        current_frame = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
+
+    frame = current_video[current_frame].compute()
+
+    # Get mask using the segmentation model
+    segmentation_model.set_image(frame)
+
+    frame_masks, score, logits = segmentation_model.predict(
+        point_coords=np.array([[w // 2, h // 2]]),
+        point_labels=np.array([1]),
+        multimask_output=True,
+    )
+
+    # Get arenas for all retrieved masks, and select that whose area is the closest to the reference
+    if arena_reference is not None:
+        arenas = [
+            arena_parameter_extraction(frame_mask, arena_type)
+            for frame_mask in frame_masks
+        ]
+        arena = arenas[
+            np.argmin(
+                np.abs(
+                    [Polygon(arena_reference).area - Polygon(a).area for a in arenas]
+                )
+            )
+        ]
+    else:
+        arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
+
+    if debug:
+
+        # Save frame with mask and arena detected
+        frame_with_arena = np.ascontiguousarray(frame.copy(), dtype=np.uint8)
+
+        if "circular" in arena_type:
+            cv2.ellipse(
+                img=frame_with_arena,
+                center=arena[0],
+                axes=arena[1],
+                angle=arena[2],
+                startAngle=0.0,
+                endAngle=360.0,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        elif "polygonal" in arena_type:
+
+            cv2.polylines(
+                img=frame_with_arena,
+                pts=[arena],
+                isClosed=True,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+            # Plot scale references
+            closest_side_points = closest_side(
+                simplify_polygon(arena), arena_reference[:2]
+            )
+
+            for point in closest_side_points:
+                cv2.circle(
+                    frame_with_arena,
+                    list(map(int, point)),
+                    radius=10,
+                    color=(40, 86, 236),
+                    thickness=2,
+                )
+
+        cv2.imwrite(
+            os.path.join(
+                coordinates.project_path,
+                coordinates.project_name,
+                "Arena_detection",
+                f"{videos[vid_index][:-4]}_arena_detection.png",
+            ),
+            frame_with_arena,
+        )
 
     return arena, h, w
 
@@ -1396,6 +1759,9 @@ def retrieve_corners_from_image(
         if event == cv2.EVENT_LBUTTONDOWN:
             corners.append((x, y))
 
+    # Resize frame to a standard size
+    frame = frame.copy()
+
     # Create a window and display the image
     cv2.startWindowThread()
 
@@ -1403,14 +1769,19 @@ def retrieve_corners_from_image(
         frame_copy = frame.copy()
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             frame_copy,
         )
+
         cv2.setMouseCallback(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             click_on_corners,
         )
@@ -1421,7 +1792,7 @@ def retrieve_corners_from_image(
                 cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
                 # Display lines between the corners
                 if len(corners) > 1 and c > 0:
-                    if arena_type == "polygonal-manual" or len(corners) < 5:
+                    if "polygonal" in arena_type or len(corners) < 5:
                         cv2.line(
                             frame_copy,
                             (corners[c - 1][0], corners[c - 1][1]),
@@ -1432,7 +1803,7 @@ def retrieve_corners_from_image(
 
         # Close the polygon
         if len(corners) > 2:
-            if arena_type == "polygonal-manual" or len(corners) < 5:
+            if "polygonal" in arena_type or len(corners) < 5:
                 cv2.line(
                     frame_copy,
                     (corners[0][0], corners[0][1]),
@@ -1440,7 +1811,7 @@ def retrieve_corners_from_image(
                     (40, 86, 236),
                     2,
                 )
-        if len(corners) >= 5 and arena_type == "circular-manual":
+        if len(corners) >= 5 and "circular" in arena_type:
             cv2.ellipse(
                 frame_copy,
                 *fit_ellipse_to_polygon(corners),
@@ -1451,8 +1822,10 @@ def retrieve_corners_from_image(
             )
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete) - {}/{} processed".format(
-                cur_vid, len(videos)
+            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
             ),
             frame_copy,
         )
@@ -1464,9 +1837,12 @@ def retrieve_corners_from_image(
         # Exit is user presses 'q'
         if len(corners) > 2:
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                for i in range(1, 5):
-                    cv2.waitKey(1)
                 break
+
+        # Exit and copy all coordinates if user presses 'c'
+        if cur_vid > 0 and cv2.waitKey(1) & 0xFF == ord("p"):
+            corners = None
+            break
 
     cv2.destroyAllWindows()
     cv2.waitKey(1)
@@ -1482,7 +1858,7 @@ def extract_polygonal_arena_coordinates(
 
     Args:
         video_path (str): Path to the video file.
-        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
         video_index (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
 
@@ -1496,12 +1872,23 @@ def extract_polygonal_arena_coordinates(
     current_frame = np.random.choice(current_video.shape[0])
 
     # Get and return the corners of the arena
-    arena_corners = retrieve_corners_from_image(
-        current_video[current_frame].compute(),
-        arena_type,
-        video_index,
-        videos,
-    )
+    try:
+        import google.colab
+
+        arena_corners = retrieve_corners_from_colab(
+            current_video[current_frame].compute(),
+            arena_type,
+            video_index,
+            videos,
+        )
+
+    except ImportError:
+        arena_corners = retrieve_corners_from_image(
+            current_video[current_frame].compute(),
+            arena_type,
+            video_index,
+            videos,
+        )
     return arena_corners, current_video.shape[2], current_video.shape[1]
 
 
@@ -1528,38 +1915,31 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
     return center_coordinates, axes_length, ellipse_angle
 
 
-def circular_arena_recognition(
+def arena_parameter_extraction(
     frame: np.ndarray,
+    arena_type: str,
 ) -> np.array:
     """Return x,y position of the center, the lengths of the major and minor axes, and the angle of the recognised arena.
 
     Args:
         frame (np.ndarray): numpy.ndarray representing an individual frame of a video
-
-    Returns:
-        circles (np.ndarray): 3-element-array containing x,y positions of the center
-        of the arena, and a third value indicating the radius.
+        arena_type (str): Type of arena to be used. Must be either "circular" or "polygonal".
 
     """
-    # Convert image to grayscale, threshold it and close it with a 5x5 kernel
-    kernel = np.ones((5, 5))
-    gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray_image, 255 // 4, 255, 0)
-    for _ in range(5):
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-
     # Obtain contours from the image, and retain the largest one
     cnts, _ = cv2.findContours(
-        thresh.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS
+        frame.astype(np.int64), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_TC89_KCOS
     )
     main_cnt = np.argmax([len(c) for c in cnts])
 
-    center_coordinates, axes_length, ellipse_angle = fit_ellipse_to_polygon(
-        cnts[main_cnt]
-    )
+    if "circular" in arena_type:
+        center_coordinates, axes_length, ellipse_angle = fit_ellipse_to_polygon(
+            cnts[main_cnt]
+        )
+        return center_coordinates, axes_length, ellipse_angle
 
-    # noinspection PyUnboundLocalVariable
-    return center_coordinates, axes_length, ellipse_angle
+    elif "polygonal" in arena_type:
+        return np.squeeze(cnts[main_cnt])
 
 
 def rolling_speed(

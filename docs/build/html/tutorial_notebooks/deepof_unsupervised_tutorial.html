@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Unsupervised annotation in DeepOF - exploring the behavioral space &mdash; deepof 0.2 documentation</title>
+  <title>Unsupervised annotation in DeepOF - exploring the behavioral space &mdash; deepof 0.5.1 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
@@ -40,8 +40,9 @@
 
           
           
-          <a href="../index.html" class="icon icon-home">
-            deepof
+          <a href="../index.html">
+            
+              <img src="../_static/deepof_sidebar.ico" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -404,7 +405,8 @@ div.rendered_html tbody tr:hover {
 <span class="c1"># !git clone -q https://github.com/mlfpm/deepof.git</span>
 <span class="c1"># !pip install -q -e deepof --progress-bar off</span>
 <span class="c1"># os.chdir(&quot;deepof&quot;)</span>
-<span class="c1"># !gdown -q --folder &quot;https://drive.google.com/drive/folders/1DBK-z5KIIzhpF0l-M1Shgx3kLUwpENWc?usp=sharing&quot;</span>
+<span class="c1"># !curl --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/knF7t78isQuIAr0/download</span>
+<span class="c1"># !unzip tutorial_files.zip</span>
 <span class="c1"># os.kill(os.getpid(), 9)</span>
 </pre></div>
 </div>
@@ -413,9 +415,9 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># import os, warnings</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># os.chdir(&quot;deepof&quot;)</span>
+<span class="c1"># import os, warnings</span>
 <span class="c1"># warnings.filterwarnings(&#39;ignore&#39;)</span>
-<span class="c1"># os.chdir(&quot;deepof&quot;)</span>
 </pre></div>
 </div>
 </div>
@@ -472,7 +474,7 @@ underlying patterns and behaviors of your mice, which can ultimately help you ma
 these parameters, although default values should work well in most cases.</p>
 <p>On the other hand, DeepOF offers a more advanced input pipeline that’s optimized for top-down videos. This includes representing the different created features as a graph, with nodes as body parts and edges connecting those that are adjacent in space. Thus, DeepOF can automatically annotate the animals across time with coordinates, speeds, and distances. This is particularly useful when access to crucial body parts (such as paws) are occluded (such as in top-down videos). Moreover, this input
 pipeline enables the joint embedding of multiple animals: when more than one mouse is present, all nose-nose, nose-tail, and tail-tail distances are included in the graph, and annotated with their respective distances.</p>
-<img alt="unsupervised_processing" src="../_images/deepof_unsupervised_processing.png" />
+<p><img alt="unsupervised_processing" src="../_images/deepof_unsupervised_processing.png" /></p>
 <p>Let’s see how we can generate datasets with and without graphs:</p>
 <p>Let’s start simple: we can omit the graph representations and generate DeepOF-ready datasets by running the <code class="docutils literal notranslate"><span class="pre">.preprocess()</span></code> method on any TabDict object (TabDict are the dictionary-like structures that we saw in the first tutorial).</p>
 <div class="nbinput nblast docutils container">
@@ -629,7 +631,7 @@ Edge features in the validation set have shape (14975, 25, 11)
 structure is imposed in the latent space that forms in between, so that embeddings are thought of as coming from one of a set of jointly trained components. While VaDE (left on the figure below) treats each component as a multivariate Gaussian distribution in a continuous space, VQVAE models (right on the figure below) use a codebook mapping to a discrete representation space. More details on both VaDE and VQVAE can be found
 <a class="reference external" href="https://medium.com/machine-intelligence-and-deep-learning-lab/variational-deep-embedding-403fb476ed7f">here</a> and <a class="reference external" href="https://ml.berkeley.edu/blog/posts/vq-vae/">here</a>, respectively.</p>
 <p>For now, let’s just say that VaDE models are a lot more stable (at least in our experiments) when working with graph input, so we’ve assigned them as default. You can still try the VQVAE models with your data if you’d like, though!</p>
-<img alt="unsupervised_models" src="../_images/deepof_unsupervised_models.png" />
+<p><img alt="unsupervised_models" src="../_images/deepof_unsupervised_models.png" /></p>
 <p>The third class of models use a different architecture altogether, which is based in <a class="reference external" href="https://lilianweng.github.io/posts/2021-05-31-contrastive/">contrastive learning</a>. This produces embeddings without the need for a decoder, but clustering must be conducted post-hoc, which DeepOF takes care of using a Hidden Markov Model.</p>
 <p>With all of this in mind, let’s see how this works in practice. To train a model, you need to call the <code class="docutils literal notranslate"><span class="pre">.deep_unsupervised_embedding()</span></code> method on your coordinates. Some parameters we should take into account when doing so are:</p>
 <ul class="simple">
@@ -3346,11 +3348,12 @@ The legend below shows the experiment from which each sample was taken.</p>
 </pre></div>
 </div>
 </div>
-<p><img alt="b3ac1e330185475c85e0e15f5b9eb61c" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
+<p><img alt="c65188f6a24043a3829c7e804449bc8e" class="no-scaled-link" src="../_images/deepof_unsupervised_annotation_cluster_1_sample_AdobeExpress.gif" style="width: 350px;" /></p>
 </section>
 <section id="Wrapping-up">
 <h3>Wrapping up<a class="headerlink" href="#Wrapping-up" title="Permalink to this heading"></a></h3>
-<p>Thank you for making it until the end. In this three-part tutorial series, we covered how to load data into DeepOF, and how to run and interpret results in both supervised and unsupervised pipelines. Stay tuned for more content, and make sure to raise an issue in our GitHub repository if you have any questions!</p>
+<p>Thank you for making it until the end. In this three-part tutorial series, we covered how to load data into DeepOF, and how to run and interpret results in both supervised and unsupervised pipelines. The fourth (optional) tutorial deals with using custom labelling schemes, and can be found <a class="reference external" href="https://deepof.readthedocs.io/en/latest/tutorial_notebooks/deepof_custom_labels_tutorial.html">here</a>. Stay tuned for more content, and make sure to raise an
+<a class="reference external" href="https://github.com/mlfpm/deepof/issues">issue</a> in our GitHub repository if you have any questions!</p>
 </section>
 </section>
 </section>

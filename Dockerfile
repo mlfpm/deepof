@@ -1,4 +1,5 @@
 # Use a slim version of the Python base image
+# To push a multi-platform build, use: docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t <image-name> --push .
 FROM --platform=linux/amd64 python:3.9.14-slim as python-base
 
 WORKDIR /
@@ -15,7 +16,7 @@ RUN apt-get clean \
  && apt-get install -y --no-install-recommends gcc libgl1-mesa-dev libdatrie-dev ffmpeg git \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir pipx \
- && pipx install poetry==1.4.0 \
+ && pipx install poetry==1.4.1 \
  && pipx ensurepath \
  && export PATH="$PATH:$HOME/.local/bin" \
  && poetry config virtualenvs.create false \

@@ -1,7 +1,12 @@
 deepof.data module
 ==================
 
-.. automodule:: deepof.data
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autosummary::
+   :toctree: _generated
+   :recursive:
+
+   deepof.data
+   deepof.data.load_project
+   deepof.data.Coordinates
+   deepof.data.Project
+   deepof.data.TableDict
