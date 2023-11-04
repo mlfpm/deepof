@@ -75,7 +75,7 @@ def test_get_hard_counts(soft_counts):
     assert isinstance(hard_counts, tf.Tensor)
 
 
-@settings(max_examples=1, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=18, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     embedding_model=st.sampled_from(["VQVAE", "VaDE", "Contrastive"]),
     encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
