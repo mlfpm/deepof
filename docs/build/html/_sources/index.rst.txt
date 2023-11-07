@@ -173,6 +173,20 @@ Advanced usage
 --------------
 * `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
 
+Cite us!
+========
+
+If you use DeepOF in your research, please consider citing:
+
+1. `DeepOF: a Python package for supervised and unsupervised pattern recognition in mice motion tracking data (JOSS, 2023) <https://joss.theoj.org/papers/10.21105/joss.05394>`_
+2. `Automatically annotated motion tracking identifies a distinct social behavioral profile following chronic social defeat stress (Nature Communications, 2023) <https://www.nature.com/articles/s41467-023-40040-3>`_
+
+Contributing and support
+========================
+
+If you'd like to contribute to DeepOF, please check out our `contributing guidelines <https://github.com/mlfpm/deepof/blob/master/CONTRIBUTING.md>`_. If
+you'd like to report a bug, suggest a new feature, or need help with general usage, please open an issue in our `issue tracker <https://github.com/mlfpm/deepof/issues>`_.
+
 API Reference
 =============
 
