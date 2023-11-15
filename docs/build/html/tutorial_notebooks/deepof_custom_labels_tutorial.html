@@ -443,7 +443,7 @@ div.rendered_html tbody tr:hover {
 <h3>Recap: labelling schemes supported by DeepOF<a class="headerlink" href="#Recap:-labelling-schemes-supported-by-DeepOF" title="Permalink to this heading"></a></h3>
 <p>DeepOF supports two labelling schemes out of the box: the <code class="docutils literal notranslate"><span class="pre">deepof_14</span></code> scheme, selected by default, and <code class="docutils literal notranslate"><span class="pre">deepof_8</span></code>, a reduced set of tracking labels that is common among, for example, <a class="reference external" href="https://goldenneurolab.com/simba">SimBA</a> users.</p>
 <p><strong>NOTE</strong>: This is not necessary if you use the matrix representations introduced in the previous tutorial. If you’d like to try out the graph representations we explored, however, but you have a different labelling scheme, this is the place to be.</p>
-<p><img alt="12f2edc943f24a3a87f3d78edb44c63a" class="no-scaled-link" src="../_images/deepof_DLC_tagging1.png" style="width: 800px;" /></p>
+<p><img alt="38e96d5a5e274342bb15f7e52c564b9e" class="no-scaled-link" src="../_images/deepof_DLC_tagging1.png" style="width: 800px;" /></p>
 <p>While, as mentioned above, <code class="docutils literal notranslate"><span class="pre">deepof_14</span></code> is selected by default, the provided alternative can be selected when defining a new <code class="docutils literal notranslate"><span class="pre">deepof.Project</span></code> instance:</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
@@ -532,7 +532,7 @@ Done!
 <section id="Creating-a-new-labelling-scheme">
 <h3>Creating a new labelling scheme<a class="headerlink" href="#Creating-a-new-labelling-scheme" title="Permalink to this heading"></a></h3>
 <p>Now, on for a slightly more involved task. What happens if we want another labelling scheme, not supported by DeepOF? We need to build the graph by hand using an adjacency list, and pass it to the <code class="docutils literal notranslate"><span class="pre">deepof.Project</span></code> constructor. Let’s see! We’ll adapt the <code class="docutils literal notranslate"><span class="pre">deepof_8</span></code> labelling scheme to include the full tail, which should look like this:</p>
-<p><img alt="3ae3426a30864d6faa03fc97bd354901" class="no-scaled-link" src="../_images/deepof_custom_tagging.png" style="width: 400px;" /></p>
+<p><img alt="6980d77c68f344ca8738f701c11c7f0a" class="no-scaled-link" src="../_images/deepof_custom_tagging.png" style="width: 400px;" /></p>
 <p>To start, we should create a Python dictionary specifying all connections we want. To be clear, keys in the dictionary will be connected to every element in the lists passed as values. There is no unique way of implementing this, so feel free to be creative! But an example that works is the following:</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
