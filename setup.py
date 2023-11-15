@@ -8,10 +8,10 @@ with open("requirements.txt", "r") as fp:
 
 setuptools.setup(
     name="deepof",
-    version="0.5.1",
+    version="0.6",
     author="Lucas Miranda",
     author_email="lucas_miranda@psych.mpg.de",
-    description="A suite for postprocessing time-series extracted from videos of freely moving rodents using DeepLabCut",
+    description="A suite for postprocessing time-series extracted from videos of freely moving rodents using DeepLabCut amd SLEAP",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/",
