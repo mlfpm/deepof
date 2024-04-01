@@ -21,7 +21,7 @@ sys.path.insert(0, "./")
 # -- Project information -----------------------------------------------------
 
 project = "deepof"
-copyright = "2022, Lucas Miranda"
+copyright = "2024, Lucas Miranda"
 author = "Lucas Miranda"
 
 # The full version, including alpha/beta/rc tags
@@ -36,10 +36,10 @@ release = "0.6"
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
-    'sphinx.ext.autosummary',
+    "sphinx.ext.autosummary",
     "sphinx.ext.coverage",
     "sphinx.ext.napoleon",
-    'jupyter_sphinx',
+    "jupyter_sphinx",
     "nbsphinx",
 ]
 autosummary_generate = True
@@ -58,11 +58,14 @@ exclude_patterns = []
 # a list of builtin themes.
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {
-    'logo_only': True,
-    'display_version': False,
+    "logo_only": True,
+    "display_version": False,
 }
+
+
 def setup(app):
-    app.add_css_file('custom.css')
+    app.add_css_file("custom.css")
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
