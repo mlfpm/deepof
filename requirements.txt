@@ -9,7 +9,7 @@ imblearn>=0.0
 joblib>=1.2.0
 jupyter-sphinx==0.4.0
 jupyter_sphinx>=0.4.0
-keras==2.15.0
+keras==2.11.0
 keras-tcn-macos>=1.0;platform_machine == 'arm64' and platform_system == 'Darwin'
 keras-tcn>=3.5.0;platform_machine != 'arm64' or platform_system != 'Darwin'
 keras_tuner>=1.3.3
@@ -47,11 +47,10 @@ statannotations>=0.5.0
 statsmodels>=0.13
 tables>=3.7.0
 tensorboard>=2.11.2
-tensorflow-macos>=2.11.0;platform_machine == 'arm64' and platform_system == 'Darwin'
-tensorflow>=2.11.0;platform_machine != 'arm64' or platform_system != 'Darwin'
-tensorflow_probability>=0.19.0
+tensorflow-macos==2.11.0;platform_machine == 'arm64' and platform_system == 'Darwin'
+tensorflow==2.11.0;platform_machine != 'arm64' or platform_system != 'Darwin'
+tensorflow_probability==0.19.0
 torch==2.0.0
 torchvision==0.15.1
-tqdm>=4.64.0
-tqdm>=4.65.0
-umap_learn>=0.5.3
+tqdm==4.66.1
+umap_learn==0.5.4
