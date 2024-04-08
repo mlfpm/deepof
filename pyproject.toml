@@ -41,18 +41,24 @@ imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
 h5py = "^3.7.0"
-tables = "^3.8.0"
+tables = "3.8.0"
 catboost = "^1.1.1"
 tornado = "6.1"
 jupyter-client = "7.3.2"
 pomegranate = {git = "https://git@github.com/jmschrei/pomegranate.git"}
-torchvision = "^0.15.1"
-torch = ">=2.0.0, !=2.0.1"
 segment-anything = "^1.0"
 sleap-io = "^0.0.9"
 matplotlib = "3.7.2"
 sktime = "^0.24.0"
 moviepy = "^1.0.3"
+torch = [
+    {version="2.0.1", markers="sys_platform != 'linux'"},
+    {version="2.0.1", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+]
+torchvision = [
+    {version="0.15.2", markers="sys_platform != 'linux'"},
+    {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+]
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -73,6 +79,15 @@ pipreqs = "^0.4.13"
 build = "^0.10.0"
 twine = "^4.0.2"
 jupyter-http-over-ws = "^0.0.8"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "default"
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry==1.4.1"]
