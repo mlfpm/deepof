@@ -12,6 +12,7 @@ deploy-pypi:
     name: python:3.9.14
 
   script:
+    - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - pip install deepof
     - python -c 'import deepof.data'
 
@@ -24,6 +25,7 @@ deploy-poetry:
     name: python:3.9.14
 
   script:
+    - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - curl -sSL https://install.python-poetry.org | python3 -
     - export PATH="/root/.local/bin:$PATH"
     - poetry install
