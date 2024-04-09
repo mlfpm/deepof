@@ -1,7 +1,32 @@
 stages:
+  - deploy
   - test
   - tutorials
-  - deploy
+
+deploy-pypi:
+
+  stage: deploy
+  retry: 1
+
+  image:
+    name: python:3.9.14
+
+  script:
+    - pip install deepof
+    - python -c 'import deepof.data'
+
+deploy-poetry:
+
+  stage: deploy
+  retry: 1
+
+  image:
+    name: python:3.9.14
+
+  script:
+    - curl -sSL https://install.python-poetry.org | python3 -
+    - poetry install
+    - python -c 'import deepof.data'
 
 test:
   stage: test
@@ -48,31 +73,3 @@ tutorials:
     - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb custom_labels_output.ipynb
-
-deploy-pypi:
-
-  stage: deploy
-  retry: 1
-
-  image:
-    name: python:3.9.14
-
-  script:
-    - pip install deepof
-    - python -c 'import deepof.data'
-
-deploy-poetry:
-
-  stage: deploy
-  retry: 1
-
-  image:
-    name: python:3.9.14
-
-  script:
-    - pip install pipx
-    - pipx install poetry
-    - pipx ensurepath
-    - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
-    - poetry install
-    - python -c 'import deepof.data'
