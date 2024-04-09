@@ -27,7 +27,7 @@ deploy-poetry:
     - curl -sSL https://install.python-poetry.org | python3 -
     - export PATH="/root/.local/bin:$PATH"
     - poetry install
-    - python -c 'import deepof.data'
+    - poetry run python -c 'import deepof.data'
 
 test:
   stage: test
