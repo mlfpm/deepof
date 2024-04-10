@@ -44,7 +44,7 @@ install-docker:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
-    - python -c 'import deepof.data'
+    - poetry run python -c 'import deepof.data'
 
 test:
   stage: test
