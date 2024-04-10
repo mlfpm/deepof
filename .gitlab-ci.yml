@@ -33,6 +33,9 @@ install-poetry:
 
 install-docker:
 
+  stage: install
+  retry: 1
+
   image:
     name: lucasmiranda42/deepof
     entrypoint: [""]
