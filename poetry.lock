@@ -3725,11 +3725,13 @@ six = ">=1.5.2"
 [[package]]
 name = "pomegranate"
 version = "1.0.4"
-description = ""
+description = "A PyTorch implementation of probabilistic models."
 optional = false
 python-versions = "*"
-files = []
-develop = false
+files = [
+    {file = "pomegranate-1.0.4-py3-none-any.whl", hash = "sha256:6a34f5678b228656a5343bbc406a48f4dd42d53422820a02a7545962d268615f"},
+    {file = "pomegranate-1.0.4.tar.gz", hash = "sha256:2f040e8c264d8c6134780011bf7070d82dcef6d35595ccc4b29289f3a92e5d2d"},
+]
 
 [package.dependencies]
 apricot-select = ">=0.6.1"
@@ -3738,12 +3740,6 @@ numpy = ">=1.22.2"
 scikit-learn = ">=1.0.2"
 scipy = ">=1.6.2"
 torch = ">=1.9.0"
-
-[package.source]
-type = "git"
-url = "https://git@github.com/jmschrei/pomegranate.git"
-reference = "HEAD"
-resolved_reference = "fa29944cc613dc82067042982892790eb284f0a5"
 
 [[package]]
 name = "pot"
@@ -5399,12 +5395,14 @@ files = [
 
 [[package]]
 name = "spektral"
-version = "1.2.0"
+version = "1.3.1"
 description = "Graph Neural Networks with Keras and TensorFlow."
 optional = false
 python-versions = ">=3.7"
-files = []
-develop = false
+files = [
+    {file = "spektral-1.3.1-py3-none-any.whl", hash = "sha256:12f50967d80a5fc7dd639c2a3e25a202d720934b837f61f6a6686f51ce731ba3"},
+    {file = "spektral-1.3.1.tar.gz", hash = "sha256:953d9954995b8b434dd0f464e25407ad83446d39fe7a23543a8e2fec8c01eb8b"},
+]
 
 [package.dependencies]
 joblib = "*"
@@ -5418,12 +5416,6 @@ scipy = "*"
 tensorflow = {version = ">=2.2.0", markers = "platform_machine != \"arm64\" or platform_system != \"Darwin\""}
 tensorflow-macos = {version = ">=2.5.0", markers = "platform_machine == \"arm64\" and platform_system == \"Darwin\""}
 tqdm = "*"
-
-[package.source]
-type = "git"
-url = "https://github.com/lucasmiranda42/spektral"
-reference = "HEAD"
-resolved_reference = "efe2cf1034cbf4d4ecdac3e8c08dc7b197b04540"
 
 [[package]]
 name = "sphinx"
@@ -6641,4 +6633,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "a723660e3777a83f1f2915f9fa06502aafad7a0e8cf919a392fcfbdd777d0bfe"
+content-hash = "07cd8bd008d5311b310d849c8b4c843eca3f835e80ddb4531cced934ea38f290"

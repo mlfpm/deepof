@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.6.0"
+version = "0.6.1"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
@@ -36,7 +36,7 @@ kaleido = "0.2.1"
 av = "9.2.0"
 imblearn = "^0.0"
 lxml = "^4.9.1"
-spektral = {git = "https://github.com/lucasmiranda42/spektral"}
+spektral = "1.3.1"
 imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
@@ -45,7 +45,7 @@ tables = "3.8.0"
 catboost = "^1.1.1"
 tornado = "6.1"
 jupyter-client = "7.3.2"
-pomegranate = {git = "https://git@github.com/jmschrei/pomegranate.git"}
+pomegranate = "1.0.4"
 segment-anything = "^1.0"
 sleap-io = "^0.0.9"
 matplotlib = "3.7.2"
@@ -109,6 +109,7 @@ push = true
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = [
+    'version = "{version}"',
     'current_version = "{version}"',
 ]
 "setup.py" = [
