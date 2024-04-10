@@ -8,7 +8,7 @@ with open("requirements.txt", "r") as fp:
 
 setuptools.setup(
     name="deepof",
-    version="0.6",
+    version="0.6.0",
     author="Lucas Miranda",
     author_email="lucas_miranda@psych.mpg.de",
     description="A suite for postprocessing time-series extracted from videos of freely moving rodents using DeepLabCut amd SLEAP",
@@ -20,7 +20,7 @@ setuptools.setup(
     ),
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Science/Research",
     ],
     python_requires=">3.8",

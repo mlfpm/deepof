@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.6"
+version = "0.6.0"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
 scikit-learn = "1.2.0"
-ruptures = "^1.1.7"
+ruptures = "1.1.8"
 tqdm = "^4.64.1"
 pandas = "^1.5.0"
 POT = "^0.8.2"
@@ -52,11 +52,11 @@ matplotlib = "3.7.2"
 sktime = "^0.24.0"
 moviepy = "^1.0.3"
 torch = [
-    {version="2.0.1", markers="sys_platform != 'linux'"},
+    {version="2.0.1", source="PyPI", markers="sys_platform != 'linux'"},
     {version="2.0.1", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 torchvision = [
-    {version="0.15.2", markers="sys_platform != 'linux'"},
+    {version="0.15.2", source="PyPI", markers="sys_platform != 'linux'"},
     {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 
@@ -79,10 +79,11 @@ pipreqs = "^0.4.13"
 build = "^0.10.0"
 twine = "^4.0.2"
 jupyter-http-over-ws = "^0.0.8"
+bumpver = "^2023.1129"
 
 [[tool.poetry.source]]
 name = "PyPI"
-priority = "default"
+priority = "primary"
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
@@ -92,4 +93,35 @@ priority = "explicit"
 [build-system]
 requires = ["poetry==1.4.1"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.bumpver]
+current_version = "0.6.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump version {old_version} -> {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+]
+"setup.py" = [
+    'version="{version}"',
+]
+"docs/source/conf.py" = [
+    'release = "{version}"',
+]
+"README.md" = [
+    'release-v{version}-informational',
+]
+"docs/source/index.rst" = [
+    'release-v{version}-informational',
+]
+
 
