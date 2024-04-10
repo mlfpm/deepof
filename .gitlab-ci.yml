@@ -1,11 +1,11 @@
 stages:
-  - deploy
+  - install
   - test
   - tutorials
 
-deploy-pypi:
+install-pypi:
 
-  stage: deploy
+  stage: install
   retry: 1
 
   image:
@@ -16,9 +16,9 @@ deploy-pypi:
     - pip install deepof
     - python -c 'import deepof.data'
 
-deploy-poetry:
+install-poetry:
 
-  stage: deploy
+  stage: install
   retry: 1
 
   image:
