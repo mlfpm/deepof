@@ -21,11 +21,11 @@ networkx = "^2.8.7"
 dask-image = "^2022.9.0"
 seglearn = "^1.2.5"
 keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
-tensorflow-macos = {version = "2.11.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
-tensorflow = {version = "2.11.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
+tensorflow-macos = "2.12"
+tensorflow = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
-tensorflow-probability = "0.19.0"
+tensorflow-probability = "0.20.1"
 tifffile = "^2022.8.12"
 ipykernel = "^6.16.0"
 statsmodels = "^0.13.2"
@@ -59,6 +59,7 @@ torchvision = [
     {version="0.15.2", source="PyPI", markers="sys_platform != 'linux'"},
     {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
+keras = "2.12"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
