@@ -21,7 +21,7 @@ networkx = "^2.8.7"
 dask-image = "^2022.9.0"
 seglearn = "^1.2.5"
 keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
-tensorflow-macos = "2.12"
+tensorflow-macos = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
