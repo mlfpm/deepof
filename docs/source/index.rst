@@ -18,6 +18,8 @@
    :target: https://github.com/psf/black
 .. |JOSS| image:: https://joss.theoj.org/papers/10.21105/joss.05394/status.svg
    :target: https://doi.org/10.21105/joss.05394
+.. |Docker| image:: https://img.shields.io/badge/docker-latest-informational
+   :target: https://hub.docker.com/repository/docker/lucasmiranda42/deepof/general
 
 Welcome to DeepOF!
 ==================

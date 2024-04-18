@@ -6,6 +6,7 @@
 [![MLFPM](https://img.shields.io/badge/funding-MLFPM-informational)](https://mlfpm.eu/)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.05394/status.svg)](https://doi.org/10.21105/joss.05394)
+[![Docker](https://img.shields.io/badge/docker-latest-informational)](https://hub.docker.com/repository/docker/lucasmiranda42/deepof/general)
 
 <br>
 
