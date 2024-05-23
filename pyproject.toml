@@ -110,8 +110,8 @@ push = true
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = [
-    'version = "{version}"',
-    'current_version = "{version}"',
+    '^version = "{version}"',
+    '^current_version = "{version}"',
 ]
 "setup.py" = [
     'version="{version}"',
