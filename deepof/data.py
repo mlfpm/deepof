@@ -186,6 +186,7 @@ class Project:
         self.model = model
         self.smooth_alpha = smooth_alpha
         self.frame_rate = None
+        self.downsample_factor = None
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -587,7 +588,7 @@ class Project:
 
         return angle_dict
 
-    def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
+    def get_areas_old(self, tab_dict: dict, verbose: bool = True) -> dict:
         """Compute all relevant areas (head, torso, back) per video and per frame in the data.
 
         Args:
@@ -617,7 +618,7 @@ class Project:
                     :, deepof.utils.filter_columns(tab.columns, aid)
                 ]
                 current_table = current_table.apply(
-                    lambda x: deepof.utils.compute_areas(x, animal_id=aid), axis=1
+                    lambda x: deepof.utils.compute_areas_old(x, animal_id=aid), axis=1
                 )
                 current_table = pd.DataFrame(
                     current_table.to_list(),
@@ -639,6 +640,95 @@ class Project:
             areas_dict[key] = exp_table
 
         return areas_dict
+
+
+    def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
+        """Compute all relevant areas (head, torso, back) per video and per frame in the data.
+
+        Args:
+            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+            verbose (bool): If True, prints progress. Defaults to True.
+
+        Returns:
+            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+
+        """
+
+        #landmark combinations for valid areas
+        body_part_patterns = {
+            "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
+            "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
+            "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
+            "full_area": [
+                "Nose",
+                "Left_ear",
+                "Left_fhip",
+                "Left_bhip",
+                "Tail_base",
+                "Right_bhip",
+                "Right_fhip",
+                "Right_ear",
+            ],
+        }
+
+        if verbose:
+            print("Computing areas...")
+
+        all_areas_dict = {}
+
+        #iterate over all tables
+        for key, tab in tab_dict.items():
+
+            current_table = pd.DataFrame()
+
+            #iterate over all animals in each table
+            for animal_id in self.animal_ids:
+
+                if animal_id == "":
+                    animal_id = None
+
+                # get the current table for the current animal
+                current_animal_table = tab.loc[
+                    :, deepof.utils.filter_columns(tab.columns, animal_id)
+                ]
+
+                #iterate over all types of areas to calculate list of polygon areas for each type of area
+                areas_animal_dict={}
+                for bp_pattern_key, bp_pattern in body_part_patterns.items():
+
+                    #in case of multiple animals, add animal identifier to area keys
+                    if animal_id is not None:
+                        bp_pattern = ["_".join([animal_id, body_part]) for body_part in bp_pattern]
+                    
+                    #create list of keys containing all table columns relevant for the current area
+                    bp_x_keys = [(body_part, 'x') for body_part in bp_pattern]
+                    bp_y_keys = [(body_part, 'y') for body_part in bp_pattern]
+
+                    #create a 3D numpy array [NFrames, NPoints, NDis] 
+                    x = current_animal_table[bp_x_keys].to_numpy()
+                    y = current_animal_table[bp_y_keys].to_numpy()
+                    y = y[:, :, np.newaxis]
+                    polygon_xy_stack = np.dstack((x, y))
+
+                    #dictionary of area lists (each list has dimensions [NFrames])
+                    areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
+
+
+                areas_table = pd.DataFrame(areas_animal_dict, index=current_animal_table.index)
+                if animal_id is not None:
+                    areas_table.columns = ["_".join([animal_id, col]) for col in areas_table.columns]
+                
+                if areas_table.shape[1] != 4:
+                    warnings.warn(
+                        "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
+                    )
+
+                #collect area tables for all animals
+                current_table = pd.concat([current_table, areas_table], axis=1)
+
+            all_areas_dict[key] = current_table
+
+        return all_areas_dict
 
     def create(
         self,
@@ -670,20 +760,27 @@ class Project:
         if not os.path.exists(os.path.join(self.project_path, self.project_name)):
             self.set_up_project_directory(debug=debug)
 
-        self.frame_rate = int(
-            np.round(
-                pims.ImageIOReader(
-                    os.path.join(self.video_path, self.videos[0])
-                ).frame_rate
-            )
-        )
+        #load video info
+        arbitrary_video = pims.ImageIOReader(os.path.join(self.video_path, self.videos[0]))
+        self.frame_rate = int(np.round(arbitrary_video.frame_rate))
+        video_length = arbitrary_video.sizes['t']
 
+        #load table info
         tables, quality = self.load_tables(verbose)
         if self.exp_conditions is not None:
             assert (
                 tables.keys() == self.exp_conditions.keys()
             ), "experimental IDs in exp_conditions do not match"
 
+        arbitrary_table = next(iter(tables.values()))
+        table_length = arbitrary_table.shape[0]
+
+        #assert (
+        #    (video_length+1) % (table_length) < 3
+        #), "video_length is not a multiple of table_length (+-1 Frame)"
+
+        self.downsample_factor = int(np.round(video_length / table_length))
+        
         distances = None
         angles = None
         areas = None
@@ -741,6 +838,7 @@ class Project:
             connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
             frame_rate=self.frame_rate,
+            downsample_factor = self.downsample_factor,
             exp_conditions=self.exp_conditions,
             path=self.project_path,
             quality=quality,
@@ -862,6 +960,7 @@ class Coordinates:
         quality: dict,
         scales: np.ndarray,
         frame_rate: int,
+        downsample_factor: int,
         arena_params: List,
         tables: dict,
         table_paths: List,
@@ -912,6 +1011,7 @@ class Coordinates:
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._frame_rate = frame_rate
+        self.downsample_factor = downsample_factor
         self._path = path
         self._quality = quality
         self._scales = scales
@@ -1314,7 +1414,7 @@ class Coordinates:
         )  # pragma: no cover
 
     def get_videos(self, play: bool = False):
-        """Retuens the videos associated with the dataset as a list."""
+        """Returns the videos associated with the dataset as a list."""
         if play:  # pragma: no cover
             raise NotImplementedError
 

@@ -1070,7 +1070,7 @@ def chunk_cv_splitter(
 
     Args:
         chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
-        breaks (dict): dictionary containing ruprures per video.
+        breaks (dict): dictionary containing ruptures per video.
         n_folds (int): number of cross-validation folds to compute.
 
     Returns:

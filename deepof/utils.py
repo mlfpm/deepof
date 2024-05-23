@@ -427,7 +427,7 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
-def compute_areas(coords, animal_id=None):
+def compute_areas_old(coords, animal_id=None):
     """Compute relevant areas (head, torso, back, full) for the provided coordinates.
 
     Args:
@@ -474,6 +474,22 @@ def compute_areas(coords, animal_id=None):
             continue
 
     return areas
+
+def compute_areas(polygon_xy_stack):
+    """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
+
+    Args:
+        polygon_xy_stack: 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
+
+    Returns:
+        areas: list areas for the provided xy coordinates.
+
+    """
+
+    #list of polygon areas, a list entry is set to np.nan if points forming the respective polygon are missing
+    polygon_areas = [Polygon(polygon_xy_stack[i]).area if not np.isnan(polygon_xy_stack[i]).any() else np.nan for i in range(len(polygon_xy_stack))]
+
+    return polygon_areas
 
 
 def rotate(
@@ -607,9 +623,11 @@ def load_table(
                 slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
             else:
                 slp_animal_ids = animal_ids
-            assert (
-                len(rename_bodyparts) == loaded_tab.shape[2]
-            ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
+        assert (
+            len(slp_bodyparts) == loaded_tab.shape[2]
+        ), 'Some body part names appear to be in excess or missing.\n' \
+        ' If you used the rename_bodyparts argument, check if you set it correctly.\n' \
+        ' Otherwise, there might be an issue with the tables in your Tables-folder'
 
         # Create the header as a multi index, using animals, body parts and coordinates
         if not animal_ids[0]:
@@ -2195,3 +2213,22 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
+
+def time_to_seconds(
+        time_string: str
+        ) -> float:
+    """Compute seconds as float based on a time string.
+
+    Args:
+        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
+
+    Returns:
+        seconds (float): time in seconds
+    """
+    seconds = None
+    if re.match(r'^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$', time_string) is not None:
+        time_array=np.array(re.findall(r"[-+]?\d*\.?\d+" ,time_string)).astype(float)
+        seconds=(3600*time_array[0]+60*time_array[1]+time_array[2])
+        
+    return seconds
+

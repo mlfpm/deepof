@@ -4,3 +4,11 @@
 /tests/.pytest_cache/
 /.coverage
 /.dockerignore
+/BugReprods/*
+/dof/*
+/deepof/trained_models/arena_segmentation/*
+/deepof/__pycache__/*
+/catboost_info/*
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
