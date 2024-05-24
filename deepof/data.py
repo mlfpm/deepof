@@ -186,7 +186,6 @@ class Project:
         self.model = model
         self.smooth_alpha = smooth_alpha
         self.frame_rate = None
-        self.downsample_factor = None
         self.video_format = video_format
         self.enable_iterative_imputation = enable_iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -696,23 +695,27 @@ class Project:
                 areas_animal_dict={}
                 for bp_pattern_key, bp_pattern in body_part_patterns.items():
 
-                    #in case of multiple animals, add animal identifier to area keys
-                    if animal_id is not None:
-                        bp_pattern = ["_".join([animal_id, body_part]) for body_part in bp_pattern]
+                    try:
+
+                        #in case of multiple animals, add animal identifier to area keys
+                        if animal_id is not None:
+                            bp_pattern = ["_".join([animal_id, body_part]) for body_part in bp_pattern]
+                        
+                        #create list of keys containing all table columns relevant for the current area
+                        bp_x_keys = [(body_part, 'x') for body_part in bp_pattern]
+                        bp_y_keys = [(body_part, 'y') for body_part in bp_pattern]
+
+                        #create a 3D numpy array [NFrames, NPoints, NDis] 
+                        x = current_animal_table[bp_x_keys].to_numpy()
+                        y = current_animal_table[bp_y_keys].to_numpy()
+                        y = y[:, :, np.newaxis]
+                        polygon_xy_stack = np.dstack((x, y))
+
+                        #dictionary of area lists (each list has dimensions [NFrames])
+                        areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
                     
-                    #create list of keys containing all table columns relevant for the current area
-                    bp_x_keys = [(body_part, 'x') for body_part in bp_pattern]
-                    bp_y_keys = [(body_part, 'y') for body_part in bp_pattern]
-
-                    #create a 3D numpy array [NFrames, NPoints, NDis] 
-                    x = current_animal_table[bp_x_keys].to_numpy()
-                    y = current_animal_table[bp_y_keys].to_numpy()
-                    y = y[:, :, np.newaxis]
-                    polygon_xy_stack = np.dstack((x, y))
-
-                    #dictionary of area lists (each list has dimensions [NFrames])
-                    areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
-
+                    except KeyError:
+                        continue
 
                 areas_table = pd.DataFrame(areas_animal_dict, index=current_animal_table.index)
                 if animal_id is not None:
@@ -761,9 +764,13 @@ class Project:
             self.set_up_project_directory(debug=debug)
 
         #load video info
-        arbitrary_video = pims.ImageIOReader(os.path.join(self.video_path, self.videos[0]))
-        self.frame_rate = int(np.round(arbitrary_video.frame_rate))
-        video_length = arbitrary_video.sizes['t']
+        self.frame_rate = int(
+            np.round(
+                pims.ImageIOReader(
+                    os.path.join(self.video_path, self.videos[0])
+                ).frame_rate
+            )
+        )
 
         #load table info
         tables, quality = self.load_tables(verbose)
@@ -771,15 +778,6 @@ class Project:
             assert (
                 tables.keys() == self.exp_conditions.keys()
             ), "experimental IDs in exp_conditions do not match"
-
-        arbitrary_table = next(iter(tables.values()))
-        table_length = arbitrary_table.shape[0]
-
-        #assert (
-        #    (video_length+1) % (table_length) < 3
-        #), "video_length is not a multiple of table_length (+-1 Frame)"
-
-        self.downsample_factor = int(np.round(video_length / table_length))
         
         distances = None
         angles = None
@@ -838,7 +836,6 @@ class Project:
             connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
             frame_rate=self.frame_rate,
-            downsample_factor = self.downsample_factor,
             exp_conditions=self.exp_conditions,
             path=self.project_path,
             quality=quality,
@@ -960,7 +957,6 @@ class Coordinates:
         quality: dict,
         scales: np.ndarray,
         frame_rate: int,
-        downsample_factor: int,
         arena_params: List,
         tables: dict,
         table_paths: List,
@@ -1011,7 +1007,6 @@ class Coordinates:
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._frame_rate = frame_rate
-        self.downsample_factor = downsample_factor
         self._path = path
         self._quality = quality
         self._scales = scales
