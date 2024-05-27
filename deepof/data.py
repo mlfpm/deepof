@@ -145,7 +145,7 @@ class Project:
         if self.table_format != "analysis.h5":
             self.table_format = table_format.replace(".", "")
         if self.table_format == "autodetect":
-            ex = [i for i in os.listdir(self.table_path) if not i.startswith(".")][0]
+            ex = [i for i in os.listdir(self.table_path) if (os.path.isfile(os.path.join(self.table_path, i)) and not i.startswith("."))][0]
             self.table_format = ex.split(".")[-1]
         self.videos = sorted(
             [

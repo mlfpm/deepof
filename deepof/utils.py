@@ -1480,8 +1480,8 @@ def get_arenas(
                 vid_index=vid_index,
                 path=os.path.join(project_path, project_name, "Videos"),
                 arena_type=arena,
-                segmentation_model=segmentation_model,
                 arena_reference=arena_reference,
+                segmentation_model=segmentation_model,
                 debug=debug,
             )
 
