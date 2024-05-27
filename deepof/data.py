@@ -717,6 +717,7 @@ class Project:
                     except KeyError:
                         continue
 
+                #change dictionary to table and check size
                 areas_table = pd.DataFrame(areas_animal_dict, index=current_animal_table.index)
                 if animal_id is not None:
                     areas_table.columns = ["_".join([animal_id, col]) for col in areas_table.columns]
