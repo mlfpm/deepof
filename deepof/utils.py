@@ -427,54 +427,6 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
-def compute_areas_old(coords, animal_id=None):
-    """Compute relevant areas (head, torso, back, full) for the provided coordinates.
-
-    Args:
-        coords: coordinates of the body parts for a single time point.
-        animal_id: animal id for the provided coordinates, if any.
-
-    Returns:
-        areas: list including head, torso, back, and full areas for the provided coordinates.
-
-    """
-    area_bps = {
-        "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
-        "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
-        "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
-        "full_area": [
-            "Nose",
-            "Left_ear",
-            "Left_fhip",
-            "Left_bhip",
-            "Tail_base",
-            "Right_bhip",
-            "Right_fhip",
-            "Right_ear",
-        ],
-    }
-
-    areas = {}
-
-    for name, bps in area_bps.items():
-
-        try:
-            if animal_id is not None:
-                bps = ["_".join([animal_id, bp]) for bp in bps]
-
-            x = coords.xs(key="x", level=1)[bps]
-            y = coords.xs(key="y", level=1)[bps]
-
-            if np.isnan(x).any() or np.isnan(y).any():
-                areas[name] = np.nan
-            else:
-                areas[name] = Polygon(zip(x, y)).area
-
-        except KeyError:
-            continue
-
-    return areas
-
 def compute_areas(polygon_xy_stack):
     """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
