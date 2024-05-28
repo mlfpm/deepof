@@ -587,59 +587,6 @@ class Project:
 
         return angle_dict
 
-    def get_areas_old(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Compute all relevant areas (head, torso, back) per video and per frame in the data.
-
-        Args:
-            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to True.
-
-        Returns:
-            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
-
-        """
-        if verbose:
-            print("Computing areas...")
-
-        areas_dict = {}
-
-        for key, tab in tab_dict.items():
-
-            exp_table = pd.DataFrame()
-
-            for aid in self.animal_ids:
-
-                if aid == "":
-                    aid = None
-
-                # get the current table for the current animal
-                current_table = tab.loc[
-                    :, deepof.utils.filter_columns(tab.columns, aid)
-                ]
-                current_table = current_table.apply(
-                    lambda x: deepof.utils.compute_areas_old(x, animal_id=aid), axis=1
-                )
-                current_table = pd.DataFrame(
-                    current_table.to_list(),
-                    index=current_table.index,
-                    columns=current_table.iloc[0].keys(),
-                ).add_prefix(
-                    "{}{}".format(
-                        (aid if aid is not None else ""),
-                        ("_" if aid is not None else ""),
-                    )
-                )
-                if current_table.shape[1] != 4:
-                    warnings.warn(
-                        "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
-                    )
-
-                exp_table = pd.concat([exp_table, current_table], axis=1)
-
-            areas_dict[key] = exp_table
-
-        return areas_dict
-
 
     def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
         """Compute all relevant areas (head, torso, back) per video and per frame in the data.
