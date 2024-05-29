@@ -274,7 +274,7 @@ def plot_heatmaps(
             ]
         )
     # Filter for specific time bin
-    if type(bin_size) is not None and coordinates._frame_rate is not None:
+    if bin_size is not None and coordinates._frame_rate is not None:
 
         #set starts and ends for all coord items
         bin_start = {key: 0 for key in coords}     
