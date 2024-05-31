@@ -427,53 +427,21 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
-def compute_areas(coords, animal_id=None):
-    """Compute relevant areas (head, torso, back, full) for the provided coordinates.
+def compute_areas(polygon_xy_stack):
+    """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
     Args:
-        coords: coordinates of the body parts for a single time point.
-        animal_id: animal id for the provided coordinates, if any.
+        polygon_xy_stack: 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
 
     Returns:
-        areas: list including head, torso, back, and full areas for the provided coordinates.
+        areas: list areas for the provided xy coordinates.
 
     """
-    area_bps = {
-        "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
-        "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
-        "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
-        "full_area": [
-            "Nose",
-            "Left_ear",
-            "Left_fhip",
-            "Left_bhip",
-            "Tail_base",
-            "Right_bhip",
-            "Right_fhip",
-            "Right_ear",
-        ],
-    }
 
-    areas = {}
+    #list of polygon areas, a list entry is set to np.nan if points forming the respective polygon are missing
+    polygon_areas = [Polygon(polygon_xy_stack[i]).area if not np.isnan(polygon_xy_stack[i]).any() else np.nan for i in range(len(polygon_xy_stack))]
 
-    for name, bps in area_bps.items():
-
-        try:
-            if animal_id is not None:
-                bps = ["_".join([animal_id, bp]) for bp in bps]
-
-            x = coords.xs(key="x", level=1)[bps]
-            y = coords.xs(key="y", level=1)[bps]
-
-            if np.isnan(x).any() or np.isnan(y).any():
-                areas[name] = np.nan
-            else:
-                areas[name] = Polygon(zip(x, y)).area
-
-        except KeyError:
-            continue
-
-    return areas
+    return polygon_areas
 
 
 def rotate(
@@ -607,9 +575,11 @@ def load_table(
                 slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
             else:
                 slp_animal_ids = animal_ids
-            assert (
-                len(rename_bodyparts) == loaded_tab.shape[2]
-            ), "Some body part names seem to be missing. Did you set the rename_bodyparts argument correctly?"
+        assert (
+            len(slp_bodyparts) == loaded_tab.shape[2]
+        ), 'Some body part names appear to be in excess or missing.\n' \
+        ' If you used the rename_bodyparts argument, check if you set it correctly.\n' \
+        ' Otherwise, there might be an issue with the tables in your Tables-folder'
 
         # Create the header as a multi index, using animals, body parts and coordinates
         if not animal_ids[0]:
@@ -1462,8 +1432,8 @@ def get_arenas(
                 vid_index=vid_index,
                 path=os.path.join(project_path, project_name, "Videos"),
                 arena_type=arena,
-                segmentation_model=segmentation_model,
                 arena_reference=arena_reference,
+                segmentation_model=segmentation_model,
                 debug=debug,
             )
 
@@ -2195,3 +2165,22 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
+
+def time_to_seconds(
+        time_string: str
+        ) -> float:
+    """Compute seconds as float based on a time string.
+
+    Args:
+        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
+
+    Returns:
+        seconds (float): time in seconds
+    """
+    seconds = None
+    if re.match(r'^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$', time_string) is not None:
+        time_array=np.array(re.findall(r"[-+]?\d*\.?\d+" ,time_string)).astype(float)
+        seconds=(3600*time_array[0]+60*time_array[1]+time_array[2])
+        
+    return seconds
+
