@@ -20,8 +20,10 @@
       ~VectorQuantizer.add_variable
       ~VectorQuantizer.add_weight
       ~VectorQuantizer.build
+      ~VectorQuantizer.build_from_config
       ~VectorQuantizer.call
       ~VectorQuantizer.compile
+      ~VectorQuantizer.compile_from_config
       ~VectorQuantizer.compute_loss
       ~VectorQuantizer.compute_mask
       ~VectorQuantizer.compute_metrics
@@ -30,11 +32,14 @@
       ~VectorQuantizer.count_params
       ~VectorQuantizer.evaluate
       ~VectorQuantizer.evaluate_generator
+      ~VectorQuantizer.export
       ~VectorQuantizer.finalize_state
       ~VectorQuantizer.fit
       ~VectorQuantizer.fit_generator
       ~VectorQuantizer.from_config
+      ~VectorQuantizer.get_build_config
       ~VectorQuantizer.get_code_indices
+      ~VectorQuantizer.get_compile_config
       ~VectorQuantizer.get_config
       ~VectorQuantizer.get_input_at
       ~VectorQuantizer.get_input_mask_at
@@ -89,6 +94,7 @@
       ~VectorQuantizer.input_mask
       ~VectorQuantizer.input_shape
       ~VectorQuantizer.input_spec
+      ~VectorQuantizer.jit_compile
       ~VectorQuantizer.layers
       ~VectorQuantizer.losses
       ~VectorQuantizer.metrics

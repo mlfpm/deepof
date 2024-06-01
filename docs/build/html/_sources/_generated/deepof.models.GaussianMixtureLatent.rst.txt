@@ -20,8 +20,10 @@
       ~GaussianMixtureLatent.add_variable
       ~GaussianMixtureLatent.add_weight
       ~GaussianMixtureLatent.build
+      ~GaussianMixtureLatent.build_from_config
       ~GaussianMixtureLatent.call
       ~GaussianMixtureLatent.compile
+      ~GaussianMixtureLatent.compile_from_config
       ~GaussianMixtureLatent.compute_loss
       ~GaussianMixtureLatent.compute_mask
       ~GaussianMixtureLatent.compute_metrics
@@ -30,10 +32,13 @@
       ~GaussianMixtureLatent.count_params
       ~GaussianMixtureLatent.evaluate
       ~GaussianMixtureLatent.evaluate_generator
+      ~GaussianMixtureLatent.export
       ~GaussianMixtureLatent.finalize_state
       ~GaussianMixtureLatent.fit
       ~GaussianMixtureLatent.fit_generator
       ~GaussianMixtureLatent.from_config
+      ~GaussianMixtureLatent.get_build_config
+      ~GaussianMixtureLatent.get_compile_config
       ~GaussianMixtureLatent.get_config
       ~GaussianMixtureLatent.get_input_at
       ~GaussianMixtureLatent.get_input_mask_at
@@ -88,6 +93,7 @@
       ~GaussianMixtureLatent.input_mask
       ~GaussianMixtureLatent.input_shape
       ~GaussianMixtureLatent.input_spec
+      ~GaussianMixtureLatent.jit_compile
       ~GaussianMixtureLatent.layers
       ~GaussianMixtureLatent.losses
       ~GaussianMixtureLatent.metrics

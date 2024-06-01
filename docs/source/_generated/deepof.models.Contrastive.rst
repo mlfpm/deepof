@@ -20,8 +20,10 @@
       ~Contrastive.add_variable
       ~Contrastive.add_weight
       ~Contrastive.build
+      ~Contrastive.build_from_config
       ~Contrastive.call
       ~Contrastive.compile
+      ~Contrastive.compile_from_config
       ~Contrastive.compute_loss
       ~Contrastive.compute_mask
       ~Contrastive.compute_metrics
@@ -30,10 +32,13 @@
       ~Contrastive.count_params
       ~Contrastive.evaluate
       ~Contrastive.evaluate_generator
+      ~Contrastive.export
       ~Contrastive.finalize_state
       ~Contrastive.fit
       ~Contrastive.fit_generator
       ~Contrastive.from_config
+      ~Contrastive.get_build_config
+      ~Contrastive.get_compile_config
       ~Contrastive.get_config
       ~Contrastive.get_input_at
       ~Contrastive.get_input_mask_at
@@ -88,6 +93,7 @@
       ~Contrastive.input_mask
       ~Contrastive.input_shape
       ~Contrastive.input_spec
+      ~Contrastive.jit_compile
       ~Contrastive.layers
       ~Contrastive.losses
       ~Contrastive.metrics

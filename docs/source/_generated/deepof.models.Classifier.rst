@@ -20,8 +20,10 @@
       ~Classifier.add_variable
       ~Classifier.add_weight
       ~Classifier.build
+      ~Classifier.build_from_config
       ~Classifier.call
       ~Classifier.compile
+      ~Classifier.compile_from_config
       ~Classifier.compute_loss
       ~Classifier.compute_mask
       ~Classifier.compute_metrics
@@ -30,10 +32,13 @@
       ~Classifier.count_params
       ~Classifier.evaluate
       ~Classifier.evaluate_generator
+      ~Classifier.export
       ~Classifier.finalize_state
       ~Classifier.fit
       ~Classifier.fit_generator
       ~Classifier.from_config
+      ~Classifier.get_build_config
+      ~Classifier.get_compile_config
       ~Classifier.get_config
       ~Classifier.get_input_at
       ~Classifier.get_input_mask_at
@@ -88,6 +93,7 @@
       ~Classifier.input_mask
       ~Classifier.input_shape
       ~Classifier.input_spec
+      ~Classifier.jit_compile
       ~Classifier.layers
       ~Classifier.losses
       ~Classifier.metrics

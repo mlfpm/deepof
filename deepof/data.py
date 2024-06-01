@@ -145,7 +145,14 @@ class Project:
         if self.table_format != "analysis.h5":
             self.table_format = table_format.replace(".", "")
         if self.table_format == "autodetect":
-            ex = [i for i in os.listdir(self.table_path) if (os.path.isfile(os.path.join(self.table_path, i)) and not i.startswith("."))][0]
+            ex = [
+                i
+                for i in os.listdir(self.table_path)
+                if (
+                    os.path.isfile(os.path.join(self.table_path, i))
+                    and not i.startswith(".")
+                )
+            ][0]
             self.table_format = ex.split(".")[-1]
         self.videos = sorted(
             [
@@ -587,7 +594,6 @@ class Project:
 
         return angle_dict
 
-
     def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
         """Compute all relevant areas (head, torso, back) per video and per frame in the data.
 
@@ -600,7 +606,7 @@ class Project:
 
         """
 
-        #landmark combinations for valid areas
+        # landmark combinations for valid areas
         body_part_patterns = {
             "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
             "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
@@ -622,12 +628,12 @@ class Project:
 
         all_areas_dict = {}
 
-        #iterate over all tables
+        # iterate over all tables
         for key, tab in tab_dict.items():
 
             current_table = pd.DataFrame()
 
-            #iterate over all animals in each table
+            # iterate over all animals in each table
             for animal_id in self.animal_ids:
 
                 if animal_id == "":
@@ -638,43 +644,52 @@ class Project:
                     :, deepof.utils.filter_columns(tab.columns, animal_id)
                 ]
 
-                #iterate over all types of areas to calculate list of polygon areas for each type of area
-                areas_animal_dict={}
+                # iterate over all types of areas to calculate list of polygon areas for each type of area
+                areas_animal_dict = {}
                 for bp_pattern_key, bp_pattern in body_part_patterns.items():
 
                     try:
 
-                        #in case of multiple animals, add animal identifier to area keys
+                        # in case of multiple animals, add animal identifier to area keys
                         if animal_id is not None:
-                            bp_pattern = ["_".join([animal_id, body_part]) for body_part in bp_pattern]
-                        
-                        #create list of keys containing all table columns relevant for the current area
-                        bp_x_keys = [(body_part, 'x') for body_part in bp_pattern]
-                        bp_y_keys = [(body_part, 'y') for body_part in bp_pattern]
+                            bp_pattern = [
+                                "_".join([animal_id, body_part])
+                                for body_part in bp_pattern
+                            ]
 
-                        #create a 3D numpy array [NFrames, NPoints, NDis] 
+                        # create list of keys containing all table columns relevant for the current area
+                        bp_x_keys = [(body_part, "x") for body_part in bp_pattern]
+                        bp_y_keys = [(body_part, "y") for body_part in bp_pattern]
+
+                        # create a 3D numpy array [NFrames, NPoints, NDis]
                         x = current_animal_table[bp_x_keys].to_numpy()
                         y = current_animal_table[bp_y_keys].to_numpy()
                         y = y[:, :, np.newaxis]
                         polygon_xy_stack = np.dstack((x, y))
 
-                        #dictionary of area lists (each list has dimensions [NFrames])
-                        areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
-                    
+                        # dictionary of area lists (each list has dimensions [NFrames])
+                        areas_animal_dict[bp_pattern_key] = deepof.utils.compute_areas(
+                            polygon_xy_stack
+                        )
+
                     except KeyError:
                         continue
 
-                #change dictionary to table and check size
-                areas_table = pd.DataFrame(areas_animal_dict, index=current_animal_table.index)
+                # change dictionary to table and check size
+                areas_table = pd.DataFrame(
+                    areas_animal_dict, index=current_animal_table.index
+                )
                 if animal_id is not None:
-                    areas_table.columns = ["_".join([animal_id, col]) for col in areas_table.columns]
-                
+                    areas_table.columns = [
+                        "_".join([animal_id, col]) for col in areas_table.columns
+                    ]
+
                 if areas_table.shape[1] != 4:
                     warnings.warn(
                         "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
                     )
 
-                #collect area tables for all animals
+                # collect area tables for all animals
                 current_table = pd.concat([current_table, areas_table], axis=1)
 
             all_areas_dict[key] = current_table
@@ -711,7 +726,7 @@ class Project:
         if not os.path.exists(os.path.join(self.project_path, self.project_name)):
             self.set_up_project_directory(debug=debug)
 
-        #load video info
+        # load video info
         self.frame_rate = int(
             np.round(
                 pims.ImageIOReader(
@@ -720,13 +735,13 @@ class Project:
             )
         )
 
-        #load table info
+        # load table info
         tables, quality = self.load_tables(verbose)
         if self.exp_conditions is not None:
             assert (
                 tables.keys() == self.exp_conditions.keys()
             ), "experimental IDs in exp_conditions do not match"
-        
+
         distances = None
         angles = None
         areas = None

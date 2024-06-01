@@ -20,6 +20,7 @@
       ~TransformerDecoder.add_variable
       ~TransformerDecoder.add_weight
       ~TransformerDecoder.build
+      ~TransformerDecoder.build_from_config
       ~TransformerDecoder.call
       ~TransformerDecoder.compute_mask
       ~TransformerDecoder.compute_output_shape
@@ -27,6 +28,7 @@
       ~TransformerDecoder.count_params
       ~TransformerDecoder.finalize_state
       ~TransformerDecoder.from_config
+      ~TransformerDecoder.get_build_config
       ~TransformerDecoder.get_config
       ~TransformerDecoder.get_input_at
       ~TransformerDecoder.get_input_mask_at

@@ -20,6 +20,7 @@
       ~ClusterControl.add_variable
       ~ClusterControl.add_weight
       ~ClusterControl.build
+      ~ClusterControl.build_from_config
       ~ClusterControl.call
       ~ClusterControl.compute_mask
       ~ClusterControl.compute_output_shape
@@ -27,6 +28,7 @@
       ~ClusterControl.count_params
       ~ClusterControl.finalize_state
       ~ClusterControl.from_config
+      ~ClusterControl.get_build_config
       ~ClusterControl.get_config
       ~ClusterControl.get_input_at
       ~ClusterControl.get_input_mask_at
