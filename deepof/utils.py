@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
 import numpy as np
+import numba as nb
 import os
 import pandas as pd
 import regex as re
@@ -58,7 +59,7 @@ def connect_mouse(
     Args:
         animal_ids (str): if more than one animal is tagged, specify the animal identyfier as a string.
         exclude_bodyparts (list): Remove the specified nodes from the graph.
-        graph_preset (str): Connectivity preset to use. Currently supported: "deepof_14" and "deepof_8".
+        graph_preset (str): Connectivity preset to use. Currently supported: "deepof_14", "deepof_11"  and "deepof_8".
 
     Returns:
         connectivity (nx.Graph)
@@ -82,6 +83,12 @@ def connect_mouse(
                     "Tail_base": ["Tail_1"],
                     "Tail_1": ["Tail_2"],
                     "Tail_2": ["Tail_tip"],
+                },
+                "deepof_11": {
+                    "Nose": ["Left_ear", "Right_ear"],
+                    "Spine_1": ["Center", "Left_ear", "Right_ear"],
+                    "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
+                    "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
                 },
                 "deepof_8": {
                     "Nose": ["Left_ear", "Right_ear"],
@@ -427,6 +434,54 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
+def compute_areas_old(coords, animal_id=None):
+    """Compute relevant areas (head, torso, back, full) for the provided coordinates.
+
+    Args:
+        coords: coordinates of the body parts for a single time point.
+        animal_id: animal id for the provided coordinates, if any.
+
+    Returns:
+        areas: list including head, torso, back, and full areas for the provided coordinates.
+
+    """
+    area_bps = {
+        "head_area": ["Nose", "Left_ear", "Left_fhip", "Spine_1"],
+        "torso_area": ["Spine_1", "Right_fhip", "Spine_2", "Left_fhip"],
+        "back_area": ["Spine_1", "Right_bhip", "Spine_2", "Left_bhip"],
+        "full_area": [
+            "Nose",
+            "Left_ear",
+            "Left_fhip",
+            "Left_bhip",
+            "Tail_base",
+            "Right_bhip",
+            "Right_fhip",
+            "Right_ear",
+        ],
+    }
+
+    areas = {}
+
+    for name, bps in area_bps.items():
+
+        try:
+            if animal_id is not None:
+                bps = ["_".join([animal_id, bp]) for bp in bps]
+
+            x = coords.xs(key="x", level=1)[bps]
+            y = coords.xs(key="y", level=1)[bps]
+
+            if np.isnan(x).any() or np.isnan(y).any():
+                areas[name] = np.nan
+            else:
+                areas[name] = Polygon(zip(x, y)).area
+
+        except KeyError:
+            continue
+
+    return areas
+
 def compute_areas(polygon_xy_stack):
     """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
@@ -434,19 +489,59 @@ def compute_areas(polygon_xy_stack):
         polygon_xy_stack: 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
 
     Returns:
-        areas: list areas for the provided xy coordinates.
+        areas (np.ndarray): areas for the provided xy coordinates.
 
     """
 
-    # list of polygon areas, a list entry is set to np.nan if points forming the respective polygon are missing
-    polygon_areas = [
-        Polygon(polygon_xy_stack[i]).area
-        if not np.isnan(polygon_xy_stack[i]).any()
-        else np.nan
-        for i in range(len(polygon_xy_stack))
-    ]
+    #list of polygon areas, a list entry is set to np.nan if points forming the respective polygon are missing
+    polygon_areas = np.array([Polygon(polygon_xy_stack[i]).area if not np.isnan(polygon_xy_stack[i]).any() else np.nan for i in range(len(polygon_xy_stack))])
 
     return polygon_areas
+
+
+@nb.njit(parallel=True)
+def compute_areas_numba(polygon_xy_stack):
+    """
+    Compute polygon areas for the provided stack of sets of data point-xy coordinates.
+
+    Args:
+        polygon_xy_stack (np.ndarray): 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
+
+    Returns:
+        areas (np.ndarray): areas for the provided xy coordinates.
+
+    """
+    n_polygons, n_vertices, n_dims = polygon_xy_stack.shape
+    polygon_areas = np.zeros(n_polygons, dtype=np.float64)
+    
+    for i in np.arange(n_polygons):
+        polygon_areas[i] = polygon_area_numba(polygon_xy_stack[i])
+        
+    return polygon_areas
+
+
+@nb.njit
+def polygon_area_numba(vertices):
+    """
+    Calculate the area of a single polygon given its vertices.
+    
+    Args:
+        vertices (np.ndarray): Array of shape [Npoints, 2] containing the (x, y) coordinates of the polygon's vertices.
+        
+    Returns:
+        float: Area of the polygon.
+    """
+    n = len(vertices)
+    area = 0.0
+    
+    for i in range(n):
+        j = (i + 1) % n
+        area += vertices[i, 0] * vertices[j, 1]
+        area -= vertices[j, 0] * vertices[i, 1]
+        
+    area = abs(area) / 2
+    
+    return area
 
 
 def rotate(
@@ -580,11 +675,11 @@ def load_table(
                 slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
             else:
                 slp_animal_ids = animal_ids
-        assert len(slp_bodyparts) == loaded_tab.shape[2], (
-            "Some body part names appear to be in excess or missing.\n"
-            " If you used the rename_bodyparts argument, check if you set it correctly.\n"
-            " Otherwise, there might be an issue with the tables in your Tables-folder"
-        )
+        assert (
+            len(slp_bodyparts) == loaded_tab.shape[2]
+        ), 'Some body part names appear to be in excess or missing.\n' \
+        ' If you used the rename_bodyparts argument, check if you set it correctly.\n' \
+        ' Otherwise, there might be an issue with the tables in your Tables-folder'
 
         # Create the header as a multi index, using animals, body parts and coordinates
         if not animal_ids[0]:
@@ -766,7 +861,7 @@ def kleinberg(
         return bursts
 
     offsets = np.sort(offsets)
-    gaps = np.diff(offsets)
+    gaps = np.diff(offsets).astype(np.float64)
 
     if not np.all(gaps):
         raise ValueError("Input cannot contain events with zero time between!")
@@ -777,52 +872,11 @@ def kleinberg(
     if n is None:
         n = np.size(gaps)
 
-    g_hat = T / n
-    gamma_log_n = gamma * math.log(n)
-
     if k is None:
-        k = int(math.ceil(float(1 + math.log(T, s) + math.log(1 / np.amin(gaps), s))))
+        k = int(math.ceil(float(1 + (math.log(T)/math.log(s)) + (math.log(1.0 / np.amin(gaps))/math.log(s)))))
+  
 
-    def tau(i, j):
-        if i >= j:
-            return 0
-        else:
-            return (j - i) * gamma_log_n
-
-    alpha_function = np.vectorize(lambda x: s**x / g_hat)
-    alpha = alpha_function(np.arange(k))
-
-    def f(j, x):
-        return alpha[j] * math.exp(-alpha[j] * x)
-
-    C = np.repeat(float("inf"), k)
-    C[0] = 0
-
-    q = np.empty((k, 0))
-    for t in range(np.size(gaps)):
-        C_prime = np.repeat(float("inf"), k)
-        q_prime = np.empty((k, t + 1))
-        q_prime.fill(np.nan)
-
-        for j in range(k):
-            cost_function = np.vectorize(lambda x: C[x] + tau(x, j))
-            cost = cost_function(np.arange(0, k))
-
-            el = np.argmin(cost)
-
-            if f(j, gaps[t]) > 0:
-                C_prime[j] = cost[el] - math.log(f(j, gaps[t]))
-
-            if t > 0:
-                q_prime[j, :t] = q[el, :]
-
-            q_prime[j, t] = j + 1
-
-        C = C_prime
-        q = q_prime
-
-    j = np.argmin(C)
-    q = q[j, :]
+    q = kleinberg_core_numba(gaps, np.float64(s), np.float64(gamma), int(n), np.float64(T), int(k))
 
     prev_q = 0
 
@@ -865,7 +919,53 @@ def kleinberg(
     return bursts
 
 
-def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
+@nb.njit
+def kleinberg_core_numba(gaps, s, gamma, n, T, k):
+
+    g_hat = T / n
+    gamma_log_n = gamma * math.log(n)
+
+    alpha = np.empty(k, dtype=np.float64)
+    for x in range(k):
+        alpha[x] = s ** x / g_hat
+
+    C = np.repeat(np.inf, k)
+    C[0] = 0
+    
+    q = np.empty((k,0))
+    for t in range(gaps.shape[0]):
+        C_prime = np.repeat(np.inf, k)
+        q_prime = np.empty((k, t + 1))
+        q_prime.fill(np.nan)
+
+        for j in range(k):
+            cost = np.empty(k, dtype=np.float64)
+
+            for x in range(k):
+                if x >= j:
+                    cost[x]=C[x]
+                else:
+                    cost[x]=C[x] + (j - x) * gamma_log_n
+
+            el = np.argmin(cost)
+
+            if (alpha[j] * math.exp(-alpha[j] * gaps[t])) > 0:
+                C_prime[j] = cost[el] - math.log(alpha[j] * math.exp(-alpha[j] * gaps[t]))
+
+            if t > 0:
+                q_prime[j, :t] = q[el, :]
+
+            q_prime[j, t] = j + 1
+
+        C = C_prime
+        q = q_prime
+
+    j = np.argmin(C)
+    q = q[j, :]
+    return q
+
+
+def smooth_boolean_array_old(a: np.array, scale: int = 1) -> np.array:
     """Return a boolean array in which isolated appearances of a feature are smoothed.
 
     Args:
@@ -887,6 +987,49 @@ def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
             a[int(i[1]) : int(i[2])] = True
 
     return a
+
+
+def smooth_boolean_array(a: np.array, scale: int = 1, batch_size: int = 20000) -> np.array:
+    """Return a boolean array in which isolated appearances of a feature are smoothed.
+
+    Args:
+        a (numpy.ndarray): Boolean instances.
+        scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
+        batch_size (int): Batch size for input processing
+:+
+    Returns:
+        a (numpy.ndarray): Smoothened boolean instances.
+
+    """
+    
+    n = len(a)
+    a_smooth = np.zeros(n, dtype=bool)  # Initialize the output vector
+
+    # Process the input array in batches
+    for start in range(0, n, batch_size // 2):
+        end = min(start + batch_size, n)
+        batch = a[start:end]
+
+        #check if any behavior was detected
+        offsets = np.where(batch)[0]
+        if len(offsets) == 0:
+            continue  # skip batch if tehre was no detected activity
+
+        # Process the current batch
+        batch_bursts = kleinberg(offsets, gamma=0.01)
+
+        # Apply calculated smoothing to current batch
+        a_smooth_batch = np.zeros(np.size(batch), dtype=bool)
+        for i in batch_bursts:
+            if i[0] == scale:
+                a_smooth_batch[int(i[1]) : int(i[2])] = True
+
+        # Update the output vector with the results of the current batch
+        # Overwrite second half of last batch with new values to reduce "leakage"
+        a_smooth[start:end] = a_smooth_batch
+    
+      
+    return a_smooth
 
 
 def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
@@ -1546,7 +1689,7 @@ def closest_side(polygon: list, reference_side: list):
 
 
 # noinspection PyUnboundLocalVariable
-def automatically_recognize_arena(
+def automatically_recognize_arena_old(
     coordinates: coordinates,
     tables: table_dict,
     videos: list,
@@ -1708,6 +1851,176 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
+def automatically_recognize_arena(
+    coordinates: coordinates,
+    tables: table_dict,
+    videos: list,
+    vid_index: int,
+    path: str = ".",
+    arena_type: str = "circular-autodetect",
+    arena_reference: list = None,
+    segmentation_model: torch.nn.Module = None,
+    debug: bool = False,
+) -> Tuple[np.array, int, int]:
+    """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
+
+    WARNING: estimates won't be reliable if the camera moves along the video.
+
+    Args:
+        coordinates (coordinates): Coordinates object.
+        tables (table_dict): Dictionary of tables per experiment.
+        videos (list): Relative paths of the videos to analise.
+        vid_index (int): Element of videos list to use.
+        path (str): Full path of the directory where the videos are.
+        potentially more accurate in poor lighting conditions.
+        arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
+        arena_reference (list): List of coordinates defining the reference arena annotated by the user.
+        segmentation_model (torch.nn.Module): Model used for automatic arena detection.
+        debug (bool): If True, save a video frame with the arena detected.
+
+    Returns:
+        arena (np.ndarray): 1D-array containing information about the arena. If the arena is circular, returns a 3-element-array) -> center, radius, and angle. If arena is polygonal, returns a list with x-y position of each of the n the vertices of the polygon.
+        h (int): Height of the video in pixels.
+        w (int): Width of the video in pixels.
+
+    """
+    #create video capture object and read frame info
+    current_video_cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    h=int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    w=int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+    # Select the corresponding tracklets
+    current_tab = tables[
+        get_close_matches(
+            videos[vid_index].split(".")[0],
+            [
+                vid
+                for vid in tables.keys()
+                if (
+                    vid.startswith(videos[vid_index].split(".")[0])
+                    or videos[vid_index].startswith(vid)
+                )
+            ],
+            cutoff=0.01,
+            n=1,
+        )[0]
+    ]
+
+    # Get distances of all body parts and timepoints to both center and periphery
+    distances_to_center = cdist(
+        current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
+    ).reshape(current_tab.shape[0], -1)
+
+    possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
+        distances_to_center, 5.0
+    )
+
+    #save indices of valid frames, shorten distances vector
+    possible_indices=np.where(possible_frames)[0]
+    possible_distances_to_center = distances_to_center[possible_indices]
+
+    if arena_reference is not None:
+        # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
+        # hinder segmentation
+        min_distance_to_arena = cdist(
+            current_tab.values.reshape(-1, 2), arena_reference
+        ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
+
+        min_distance_to_arena = min_distance_to_arena[possible_indices]
+        frame_index = np.argmax(
+            np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
+        )
+
+    else:
+        # If not, use the maximum distance to the center as a proxy
+        frame_index = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
+    
+    current_frame = possible_indices[frame_index]
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES,current_frame)
+    reading_successful,numpy_im = current_video_cap.read()
+    current_video_cap.release()
+
+    # Get mask using the segmentation model
+    segmentation_model.set_image(numpy_im)
+
+    frame_masks, score, logits = segmentation_model.predict(
+        point_coords=np.array([[w // 2, h // 2]]),
+        point_labels=np.array([1]),
+        multimask_output=True,
+    )
+
+    # Get arenas for all retrieved masks, and select that whose area is the closest to the reference
+    if arena_reference is not None:
+        arenas = [
+            arena_parameter_extraction(frame_mask, arena_type)
+            for frame_mask in frame_masks
+        ]
+        arena = arenas[
+            np.argmin(
+                np.abs(
+                    [Polygon(arena_reference).area - Polygon(a).area for a in arenas]
+                )
+            )
+        ]
+    else:
+        arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
+
+    if debug:
+
+        # Save frame with mask and arena detected
+        frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
+
+        if "circular" in arena_type:
+            cv2.ellipse(
+                img=frame_with_arena,
+                center=arena[0],
+                axes=arena[1],
+                angle=arena[2],
+                startAngle=0.0,
+                endAngle=360.0,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        elif "polygonal" in arena_type:
+
+            cv2.polylines(
+                img=frame_with_arena,
+                pts=[arena],
+                isClosed=True,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+            # Plot scale references
+            closest_side_points = closest_side(
+                simplify_polygon(arena), arena_reference[:2]
+            )
+
+            for point in closest_side_points:
+                cv2.circle(
+                    frame_with_arena,
+                    list(map(int, point)),
+                    radius=10,
+                    color=(40, 86, 236),
+                    thickness=2,
+                )
+
+        cv2.imwrite(
+            os.path.join(
+                coordinates.project_path,
+                coordinates.project_name,
+                "Arena_detection",
+                f"{videos[vid_index][:-4]}_arena_detection.png",
+            ),
+            frame_with_arena,
+        )
+
+    return arena, h, w
+
+
+
+
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list
 ):  # pragma: no cover
@@ -1826,7 +2139,7 @@ def retrieve_corners_from_image(
     return corners
 
 
-def extract_polygonal_arena_coordinates(
+def extract_polygonal_arena_coordinates_old(
     video_path: str, arena_type: str, video_index: int, videos: list
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
@@ -1865,6 +2178,42 @@ def extract_polygonal_arena_coordinates(
             videos,
         )
     return arena_corners, current_video.shape[2], current_video.shape[1]
+
+
+def extract_polygonal_arena_coordinates(
+    video_path: str, arena_type: str, video_index: int, videos: list
+):  # pragma: no cover
+    """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
+
+    Args:
+        video_path (str): Path to the video file.
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
+        video_index (int): Index of the current video in the list of videos.
+        videos (list): List of videos to be processed.
+
+    Returns:
+        np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
+        int: Height of the video.
+        int: Width of the video.
+
+    """
+    
+    #read random frame from video capture object
+    current_video_cap = cv2.VideoCapture(video_path)
+    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    random_frame_number=np.random.choice(total_frames)
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES,random_frame_number)
+    reading_successful,numpy_im = current_video_cap.read()
+    current_video_cap.release()
+
+    #open gui and let user pick corners
+    arena_corners = retrieve_corners_from_image(
+        numpy_im,
+        arena_type,
+        video_index,
+        videos,
+    )
+    return arena_corners, numpy_im.shape[0], numpy_im.shape[1]
 
 
 def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
@@ -2171,8 +2520,9 @@ def cluster_transition_matrix(
 
     return trans_normed
 
-
-def time_to_seconds(time_string: str) -> float:
+def time_to_seconds(
+        time_string: str
+        ) -> float:
     """Compute seconds as float based on a time string.
 
     Args:
@@ -2182,8 +2532,9 @@ def time_to_seconds(time_string: str) -> float:
         seconds (float): time in seconds
     """
     seconds = None
-    if re.match(r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-
+    if re.match(r'^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$', time_string) is not None:
+        time_array=np.array(re.findall(r"[-+]?\d*\.?\d+" ,time_string)).astype(float)
+        seconds=(3600*time_array[0]+60*time_array[1]+time_array[2])
+        
     return seconds
+
