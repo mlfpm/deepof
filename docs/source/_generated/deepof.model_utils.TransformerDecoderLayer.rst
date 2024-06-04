@@ -20,6 +20,7 @@
       ~TransformerDecoderLayer.add_variable
       ~TransformerDecoderLayer.add_weight
       ~TransformerDecoderLayer.build
+      ~TransformerDecoderLayer.build_from_config
       ~TransformerDecoderLayer.call
       ~TransformerDecoderLayer.compute_mask
       ~TransformerDecoderLayer.compute_output_shape
@@ -27,6 +28,7 @@
       ~TransformerDecoderLayer.count_params
       ~TransformerDecoderLayer.finalize_state
       ~TransformerDecoderLayer.from_config
+      ~TransformerDecoderLayer.get_build_config
       ~TransformerDecoderLayer.get_config
       ~TransformerDecoderLayer.get_input_at
       ~TransformerDecoderLayer.get_input_mask_at

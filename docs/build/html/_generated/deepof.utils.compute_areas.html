@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>deepof.utils.compute_areas &mdash; deepof 0.5.1 documentation</title>
+  <title>deepof.utils.compute_areas &mdash; deepof 0.6.2 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/jupyter-sphinx.css" type="text/css" />
@@ -110,17 +110,14 @@
 <h1>deepof.utils.compute_areas<a class="headerlink" href="#deepof-utils-compute-areas" title="Permalink to this heading"></a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="deepof.utils.compute_areas">
-<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">compute_areas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">animal_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.compute_areas" title="Permalink to this definition"></a></dt>
-<dd><p>Compute relevant areas (head, torso, back, full) for the provided coordinates.</p>
+<span class="sig-prename descclassname"><span class="pre">deepof.utils.</span></span><span class="sig-name descname"><span class="pre">compute_areas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polygon_xy_stack</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#deepof.utils.compute_areas" title="Permalink to this definition"></a></dt>
+<dd><p>Compute polygon areas for the provided stack of sets of data point-xy coordinates.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>coords</strong> – coordinates of the body parts for a single time point.</p></li>
-<li><p><strong>animal_id</strong> – animal id for the provided coordinates, if any.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>polygon_xy_stack</strong> – 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>list including head, torso, back, and full areas for the provided coordinates.</p>
+<dd class="field-even"><p>list areas for the provided xy coordinates.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>areas</p>
@@ -138,7 +135,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Lucas Miranda.</p>
+    <p>&#169; Copyright 2024, Lucas Miranda.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

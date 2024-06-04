@@ -233,8 +233,8 @@ def plot_heatmaps(
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
-    bin_size: Union[int,str] = None,
-    bin_index: Union[int,str] = 0,
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = 0,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -276,40 +276,46 @@ def plot_heatmaps(
     # Filter for specific time bin
     if bin_size is not None and coordinates._frame_rate is not None:
 
-        #set starts and ends for all coord items
-        bin_start = {key: 0 for key in coords}     
-        bin_end = {key: 0 for key in coords} 
+        # set starts and ends for all coord items
+        bin_start = {key: 0 for key in coords}
+        bin_end = {key: 0 for key in coords}
 
-        #Case 1: bins are given as integers:
-        if (type(bin_size) is int and type(bin_index) is int):
+        # Case 1: bins are given as integers:
+        if type(bin_size) is int and type(bin_index) is int:
             bin_size = bin_size * coordinates._frame_rate
-            bin_start = dict.fromkeys(coords, bin_size * bin_index)      
-            bin_end = dict.fromkeys(coords, bin_size * (bin_index + 1)) 
-        #Case 2: bins are given as time points / durations:  
-        #allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
-        pattern = r'^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$'
-        if (type(bin_size) is str and
-        re.match(pattern, bin_size) is not None and 
-        re.match(pattern, bin_index) is not None):
-            
-            #calculate bin size as int
-            bin_size_int=int(np.round(deepof.utils.time_to_seconds(bin_size)* coordinates._frame_rate))
-                   
-            #find start and end positions with sampling rate
-            for key, val in coords.items():
-                start_time=deepof.utils.time_to_seconds(np.array(val.index)[0])
-                bin_index_time=deepof.utils.time_to_seconds(bin_index)       
-                bin_start[key]=int(np.round(start_time+bin_index_time)* coordinates._frame_rate)
-                bin_end[key] = bin_size_int+bin_start[key]
+            bin_start = dict.fromkeys(coords, bin_size * bin_index)
+            bin_end = dict.fromkeys(coords, bin_size * (bin_index + 1))
+        # Case 2: bins are given as time points / durations:
+        # allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
+        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
+        if (
+            type(bin_size) is str
+            and re.match(pattern, bin_size) is not None
+            and re.match(pattern, bin_index) is not None
+        ):
 
-        #cut down coords to desired range
+            # calculate bin size as int
+            bin_size_int = int(
+                np.round(
+                    deepof.utils.time_to_seconds(bin_size) * coordinates._frame_rate
+                )
+            )
+
+            # find start and end positions with sampling rate
+            for key, val in coords.items():
+                start_time = deepof.utils.time_to_seconds(np.array(val.index)[0])
+                bin_index_time = deepof.utils.time_to_seconds(bin_index)
+                bin_start[key] = int(
+                    np.round(start_time + bin_index_time) * coordinates._frame_rate
+                )
+                bin_end[key] = bin_size_int + bin_start[key]
+
+        # cut down coords to desired range
         coords = {
-            key: val.iloc[
-                bin_start[key] : np.minimum(val.shape[0], bin_end[key])
-            ]
+            key: val.iloc[bin_start[key] : np.minimum(val.shape[0], bin_end[key])]
             for key, val in coords.items()
         }
-    
+
     if not center:  # pragma: no cover
         warnings.warn("Heatmaps look better if you center the data")
 

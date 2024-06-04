@@ -20,8 +20,10 @@
       ~VaDE.add_variable
       ~VaDE.add_weight
       ~VaDE.build
+      ~VaDE.build_from_config
       ~VaDE.call
       ~VaDE.compile
+      ~VaDE.compile_from_config
       ~VaDE.compute_loss
       ~VaDE.compute_mask
       ~VaDE.compute_metrics
@@ -30,10 +32,13 @@
       ~VaDE.count_params
       ~VaDE.evaluate
       ~VaDE.evaluate_generator
+      ~VaDE.export
       ~VaDE.finalize_state
       ~VaDE.fit
       ~VaDE.fit_generator
       ~VaDE.from_config
+      ~VaDE.get_build_config
+      ~VaDE.get_compile_config
       ~VaDE.get_config
       ~VaDE.get_input_at
       ~VaDE.get_input_mask_at
@@ -91,6 +96,7 @@
       ~VaDE.input_mask
       ~VaDE.input_shape
       ~VaDE.input_spec
+      ~VaDE.jit_compile
       ~VaDE.layers
       ~VaDE.losses
       ~VaDE.metrics

@@ -20,6 +20,7 @@
       ~TransformerEncoder.add_variable
       ~TransformerEncoder.add_weight
       ~TransformerEncoder.build
+      ~TransformerEncoder.build_from_config
       ~TransformerEncoder.call
       ~TransformerEncoder.compute_mask
       ~TransformerEncoder.compute_output_shape
@@ -27,6 +28,7 @@
       ~TransformerEncoder.count_params
       ~TransformerEncoder.finalize_state
       ~TransformerEncoder.from_config
+      ~TransformerEncoder.get_build_config
       ~TransformerEncoder.get_config
       ~TransformerEncoder.get_input_at
       ~TransformerEncoder.get_input_mask_at

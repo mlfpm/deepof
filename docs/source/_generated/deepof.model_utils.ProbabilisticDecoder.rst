@@ -20,6 +20,7 @@
       ~ProbabilisticDecoder.add_variable
       ~ProbabilisticDecoder.add_weight
       ~ProbabilisticDecoder.build
+      ~ProbabilisticDecoder.build_from_config
       ~ProbabilisticDecoder.call
       ~ProbabilisticDecoder.compute_mask
       ~ProbabilisticDecoder.compute_output_shape
@@ -27,6 +28,7 @@
       ~ProbabilisticDecoder.count_params
       ~ProbabilisticDecoder.finalize_state
       ~ProbabilisticDecoder.from_config
+      ~ProbabilisticDecoder.get_build_config
       ~ProbabilisticDecoder.get_config
       ~ProbabilisticDecoder.get_input_at
       ~ProbabilisticDecoder.get_input_mask_at

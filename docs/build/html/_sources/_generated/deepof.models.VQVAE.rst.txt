@@ -20,8 +20,10 @@
       ~VQVAE.add_variable
       ~VQVAE.add_weight
       ~VQVAE.build
+      ~VQVAE.build_from_config
       ~VQVAE.call
       ~VQVAE.compile
+      ~VQVAE.compile_from_config
       ~VQVAE.compute_loss
       ~VQVAE.compute_mask
       ~VQVAE.compute_metrics
@@ -30,10 +32,13 @@
       ~VQVAE.count_params
       ~VQVAE.evaluate
       ~VQVAE.evaluate_generator
+      ~VQVAE.export
       ~VQVAE.finalize_state
       ~VQVAE.fit
       ~VQVAE.fit_generator
       ~VQVAE.from_config
+      ~VQVAE.get_build_config
+      ~VQVAE.get_compile_config
       ~VQVAE.get_config
       ~VQVAE.get_input_at
       ~VQVAE.get_input_mask_at
@@ -88,6 +93,7 @@
       ~VQVAE.input_mask
       ~VQVAE.input_shape
       ~VQVAE.input_spec
+      ~VQVAE.jit_compile
       ~VQVAE.layers
       ~VQVAE.losses
       ~VQVAE.metrics

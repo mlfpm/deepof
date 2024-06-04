@@ -57,6 +57,7 @@
       split_with_breakpoints
       str2bool
       tab2polar
+      time_to_seconds
    
    
 
