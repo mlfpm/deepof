@@ -711,8 +711,12 @@ class Project:
                         y = y[:, :, np.newaxis]
                         polygon_xy_stack = np.dstack((x, y))
 
-                        #dictionary of area lists (each list has dimensions [NFrames])
-                        areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
+                        #dictionary of area lists (each list has dimensions [NFrames]), 
+                        #use faster calculation for large datasets
+                        if polygon_xy_stack.shape[0] > 10000:
+                            areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas_numba(polygon_xy_stack)
+                        else:
+                            areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
                     
                     except KeyError:
                         continue
