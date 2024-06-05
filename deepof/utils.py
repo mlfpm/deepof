@@ -521,7 +521,7 @@ def compute_areas_numba(polygon_xy_stack):
 
 
 @nb.njit
-def polygon_area_numba(vertices):
+def polygon_area_numba(vertices: np.ndarray):
     """
     Calculate the area of a single polygon given its vertices.
     
@@ -568,8 +568,89 @@ def rotate(
     return rotated
 
 
+@nb.njit(parallel=True)
+def rotate_all_numba(data: np.array, angles: np.array) -> np.array:
+    """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
+
+    Args:
+        p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
+        angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
+        origin (numpy.ndarray): Rotation axis (zero vector by default).
+
+    Returns:
+        - rotated (numpy.ndarray): rotated positions over time
+
+    """
+
+    #initializations
+    aligned_trajs = np.zeros(data.shape)
+    new_shape = (data.shape[1] // 2, 2)
+    rotated_frame = np.empty(new_shape,dtype=np.float64)
+    reshaped_frame = np.empty(new_shape, dtype=np.float64)
+
+    for frame in range(data.shape[0]):
+        
+        #reshape [x1,y1,x2,y2,...] to [[x1,y1],[x1,y2],...]
+        for i in range(new_shape[0]):
+            reshaped_frame[i, 0] = data[frame][2 * i]
+            reshaped_frame[i, 1] = data[frame][2 * i + 1]
+
+        #rotate frame
+        rotated_frame=rotate_numba(reshaped_frame, angles[frame])
+
+        #undo reshaping
+        for i in range(new_shape[0]):
+            for j in range(new_shape[1]):
+                aligned_trajs[frame][i * new_shape[1] + j] = rotated_frame[i, j]
+
+    return aligned_trajs
+
+
+
+
+@nb.njit
+def rotate_numba(
+    p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
+) -> np.array:
+    """Return a 2D numpy.ndarray with the initial values rotated by angles radians.
+
+    Args:
+        p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
+        angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
+        origin (numpy.ndarray): Rotation axis (zero vector by default).
+
+    Returns:
+        - rotated (numpy.ndarray): rotated positions over time
+
+    """
+    #initializations
+    arr_shape=p.shape
+    p_centered = np.zeros(arr_shape)
+    rotated = np.empty(arr_shape,dtype=np.float64)
+    
+    #define rotation matrix
+    R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
+
+    #ensure p is a 2D array
+    if p.ndim <= 1:
+        p=p.reshape(1, p.size)
+
+    #substract origin
+    for i in range(arr_shape[1]):
+        for j in range(arr_shape[0]):
+            p_centered[j][i] = p[j][i] - origin[i]
+    #rotate matrix
+    rotated_centered = (R @ p_centered.T).T
+    #re-add origin
+    for i in range(arr_shape[1]):
+        for j in range(arr_shape[0]):
+            rotated[j][i] = rotated_centered[j][i] + origin[i]
+
+    return rotated
+
+
 # noinspection PyArgumentList
-def align_trajectories(data: np.array, mode: str = "all") -> np.array:
+def align_trajectories_old(data: np.array, mode: str = "all") -> np.array:
     """Remove rotational variance on the trajectories.
 
     Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
@@ -603,6 +684,55 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         aligned_trajs[frame] = rotate(
             data[frame].reshape([-1, 2], order="C"), angles[frame]
         ).reshape(data.shape[1:], order="C")
+
+    if mode == "all" or mode == "none":
+        aligned_trajs = aligned_trajs.reshape(dshape, order="C")
+
+    return aligned_trajs
+
+
+
+# noinspection PyArgumentList
+def align_trajectories(data: np.array, mode: str = "all") -> np.array:
+    """Remove rotational variance on the trajectories.
+
+    Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
+    column of data are aligned with the y-axis.
+
+    Args:
+        data (numpy.ndarray): 3D array containing positions of body parts over time, where shape is N (sliding window instances) * m (sliding window size) * l (features)
+        mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
+
+    Returns:
+        aligned_trajs (np.ndarray): 2D aligned positions over time.
+
+    """
+    angles = np.zeros(data.shape[0])
+    data = deepcopy(data)
+    dshape = data.shape
+
+    if mode == "center":
+        center_time = (data.shape[1] - 1) // 2
+        angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
+    elif mode == "all":
+        data = data.reshape(-1, dshape[-1], order="C")
+        angles = np.arctan2(data[:, 0], data[:, 1])
+    elif mode == "none":
+        data = data.reshape(-1, dshape[-1], order="C")
+        angles = np.zeros(data.shape[0])
+
+    
+    #run numba version for large videos
+    if data.shape[0] > 10000:
+        aligned_trajs = rotate_all_numba(data, angles)
+    else:
+        aligned_trajs = np.zeros(data.shape)
+
+        for frame in range(data.shape[0]):
+            aligned_trajs[frame] = rotate(
+                data[frame].reshape([-1, 2], order="C"), angles[frame]
+            ).reshape(data.shape[1:], order="C")
+
 
     if mode == "all" or mode == "none":
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
@@ -873,7 +1003,8 @@ def kleinberg(
         n = np.size(gaps)
 
     if k is None:
-        k = int(math.ceil(float(1 + (math.log(T)/math.log(s)) + (math.log(1.0 / np.amin(gaps))/math.log(s)))))
+        #number of hidden states. Changed to be not higher than 3
+        k = np.min([3,int(math.ceil(float(1 + (math.log(T)/math.log(s)) + (math.log(1.0 / np.amin(gaps))/math.log(s)))))])
   
 
     q = kleinberg_core_numba(gaps, np.float64(s), np.float64(gamma), int(n), np.float64(T), int(k))
@@ -920,8 +1051,23 @@ def kleinberg(
 
 
 @nb.njit
-def kleinberg_core_numba(gaps, s, gamma, n, T, k):
+def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int):
+    """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
+    The algorithm models activity bursts in a time series as an
+    infinite hidden Markov model.
+
+    Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
+    and rewritten for compatibility with numba.
+
+    Args:
+        gaps (np.array): an array of gap sizes between time offsets (numeric)
+        s (float): the base of the exponential distribution that is used for modeling the event frequencies
+        gamma (float): coefficient for the transition costs between states
+        n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+        k: maximum burst level / number of hidden states
+
+    """
     g_hat = T / n
     gamma_log_n = gamma * math.log(n)
 
@@ -933,28 +1079,35 @@ def kleinberg_core_numba(gaps, s, gamma, n, T, k):
     C[0] = 0
     
     q = np.empty((k,0))
+    #iterate over all gap positions
     for t in range(gaps.shape[0]):
         C_prime = np.repeat(np.inf, k)
         q_prime = np.empty((k, t + 1))
         q_prime.fill(np.nan)
 
+        #iterate over all hidden states
         for j in range(k):
             cost = np.empty(k, dtype=np.float64)
 
-            for x in range(k):
-                if x >= j:
-                    cost[x]=C[x]
+            #calculate cost for each new state
+            for i in range(k):
+                if i >= j:
+                    cost[i]=C[i]
                 else:
-                    cost[x]=C[x] + (j - x) * gamma_log_n
+                    cost[i]=C[i] + (j - i) * gamma_log_n
 
+            #state with minimum cost
             el = np.argmin(cost)
 
+            #update Costs
             if (alpha[j] * math.exp(-alpha[j] * gaps[t])) > 0:
                 C_prime[j] = cost[el] - math.log(alpha[j] * math.exp(-alpha[j] * gaps[t]))
 
+            #update state squence
             if t > 0:
                 q_prime[j, :t] = q[el, :]
 
+            #init next iteration of state sequence
             q_prime[j, t] = j + 1
 
         C = C_prime
@@ -989,7 +1142,7 @@ def smooth_boolean_array_old(a: np.array, scale: int = 1) -> np.array:
     return a
 
 
-def smooth_boolean_array(a: np.array, scale: int = 1, batch_size: int = 20000) -> np.array:
+def smooth_boolean_array(a: np.array, scale: int = 1, batch_size: int = 50000) -> np.array:
     """Return a boolean array in which isolated appearances of a feature are smoothed.
 
     Args:
