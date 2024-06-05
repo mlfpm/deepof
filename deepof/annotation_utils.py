@@ -716,32 +716,6 @@ def supervised_tagging(
         except TypeError:
             right = [interactors[1] + "_" + suffix for suffix in bparts[-1]]
 
-        #t = time.time()
-        #a = deepof.utils.smooth_boolean_array_old(
-        #    close_single_contact(
-        #        raw_coords,
-        #        (left if not isinstance(left, list) else right),
-        #        (right if not isinstance(left, list) else left),
-        #        params["close_contact_tol"],
-        #        arena_abs,
-        #        arena_rel,
-        #    )
-        #)
-        #elapsed_a = time.time() - t
-
-        #t = time.time()
-        #b = deepof.utils.smooth_boolean_array(
-        #    close_single_contact(
-        #        raw_coords,
-        #        (left if not isinstance(left, list) else right),
-        #        (right if not isinstance(left, list) else left),
-        #        params["close_contact_tol"],
-        #        arena_abs,
-        #        arena_rel,
-        #    )
-        #)
-        #elapsed_b = time.time() - t
-
         return deepof.utils.smooth_boolean_array(
             close_single_contact(
                 raw_coords,

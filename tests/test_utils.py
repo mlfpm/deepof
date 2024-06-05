@@ -195,6 +195,9 @@ def test_angle(abc):
     )
 )
 def test_rotate(p):
+    assert np.allclose(deepof.utils.rotate_numba(p, 2 * np.pi), p)
+    assert np.allclose(deepof.utils.rotate_numba(p, np.pi), -p)
+    assert np.allclose(deepof.utils.rotate_numba(p, 0), p)
     assert np.allclose(deepof.utils.rotate(p, 2 * np.pi), p)
     assert np.allclose(deepof.utils.rotate(p, np.pi), -p)
     assert np.allclose(deepof.utils.rotate(p, 0), p)

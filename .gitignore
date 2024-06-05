@@ -3,5 +3,10 @@
 /tests/.hypothesis/
 /tests/.pytest_cache/
 /.coverage
+/.hypothesis
 /.dockerignore
+/dof/
+/tests/test_examples/
+/deepof/__pycache__/
+
 
