@@ -73,6 +73,15 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
         coordinates = pickle.load(handle)
 
     coordinates._project_path = os.path.split(project_path)[0]
+    #ensures backwards compatibility
+    if not(hasattr(coordinates, "run_numba")):
+        #check if fast_implementations_threshold is reached
+        coordinates.run_numba=False
+        video_paths= [os.path.join(coordinates._project_path,coordinates._project_name,"Videos",video) for video in coordinates._videos]
+        total_frames=deepof.utils.get_total_Frames(video_paths)
+        if total_frames> 100000:
+            coordinates.run_numba=True    
+
     return coordinates
 
 
@@ -106,6 +115,7 @@ class Project:
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        fast_implementations_threshold: int = 100000,
     ):
         """Initialize a Project object.
 
@@ -169,6 +179,13 @@ class Project:
         self.arena = arena
         self.arena_dims = video_scale
         self.ellipse_detection = None
+
+        #check if fast_implementations_threshold is reached
+        self.run_numba=False
+        video_paths= [os.path.join(video_path,video) for video in self.videos]
+        total_frames=deepof.utils.get_total_Frames(video_paths)
+        if total_frames> fast_implementations_threshold:
+            self.run_numba=True
 
         # Set the rest of the init parameters
         self.angles = True
@@ -713,7 +730,7 @@ class Project:
 
                         #dictionary of area lists (each list has dimensions [NFrames]), 
                         #use faster calculation for large datasets
-                        if polygon_xy_stack.shape[0] > 10000:
+                        if self.run_numba:
                             areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas_numba(polygon_xy_stack)
                         else:
                             areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
@@ -851,6 +868,7 @@ class Project:
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
+            run_numba=self.run_numba
         )
 
         # Save created coordinates to the project directory
@@ -975,6 +993,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        run_numba: bool = False,
     ):
         """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables.
 
@@ -1024,6 +1043,7 @@ class Coordinates:
         self._areas = areas
         self._distances = distances
         self._connectivity = connectivity
+        self.run_numba = run_numba
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -1152,7 +1172,7 @@ class Coordinates:
 
                     if align_inplace and not polar:
                         partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned), mode="all"
+                            np.array(partial_aligned), mode="all", run_numba=self.run_numba,
                         )
                         partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
                         partial_aligned = pd.DataFrame(partial_aligned)
@@ -1744,6 +1764,7 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 center=center,
                 params=params,
+                run_numba=self.run_numba
             )
 
             supervised_tags.index = tag_index

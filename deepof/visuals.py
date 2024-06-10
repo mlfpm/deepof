@@ -13,7 +13,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.signal import savgol_filter
 from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
-from typing import Any, List, NewType, Union
+from typing import Tuple, Any, List, NewType, Union
 import calendar
 import copy
 import cv2
@@ -81,11 +81,11 @@ def plot_arena(
     elif "polygonal" in coordinates._arena:
 
         if center == "arena" and i == "average":
-            arena = np.stack(coordinates._arena_params)
-            arena -= np.expand_dims(
-                np.array(coordinates._scales[:, :2]).astype(int), axis=1
-            )
-            arena = arena.mean(axis=0)
+            
+            
+            arena = calculate_average_arena(coordinates._arena_params)
+            avg_scaling=np.mean(np.array(coordinates._scales[:, :2]),0)
+            arena-=avg_scaling
 
         elif center == "arena":
             arena -= np.expand_dims(
@@ -101,6 +101,69 @@ def plot_arena(
             lw=3,
             ls="--",
         )
+
+
+def calculate_average_arena(all_vertices: List[List[Tuple[float, float]]], num_points: int = 10000) -> np.array:
+    """
+    Calculates the average arena based on a list of polynomial vertices  
+    lists representing arenas. Polynomial vertices can have different lengths and start at different positions
+
+    Args:
+        vertices (list): A list of 2D tuples representing the vertices of the arenas.
+        num_points (int): number of points in the averaged arena.
+
+    Returns:
+        numpy.ndarray: A 2D NumPy array containing the averaged arena.
+    """
+
+    #ensure that enough points are available for interpolation
+    max_length = max(len(lst) for lst in all_vertices)+1
+    assert num_points > max_length, "The num_points variable needs to be larger than the longest list of vertices!"
+
+    #initialize averaged arena polynomial
+    avg_points= np.empty([num_points,2])
+    avg_points.fill(0.0)
+
+    #iterate over all arenas
+    for i in range(len(all_vertices)):
+        #calculate relative segment lengths between vertices
+        vertices=np.stack(all_vertices[i]).astype(float)
+        vertices=np.insert(vertices,0,vertices[-1,:]).reshape(-1,2) #close polynomial
+        xy1 = vertices[:-1,:]
+        xy2 = vertices[1:,:]
+        segment_lengths=np.sqrt(((xy1 - xy2) ** 2).sum(1))
+        segment_lengths=segment_lengths/(np.sum(segment_lengths)+0.00001)
+	
+        # Calculate the number of additional points for each segment
+        N_new_points = np.round(segment_lengths * (num_points)).astype(int)
+
+        #ensure that the sum of all lengths after discretization is the chosen interpolated length
+        if np.sum(N_new_points) != (num_points):
+            N_new_points[np.argmax(N_new_points)] += (num_points - np.sum(N_new_points))
+
+        #cumulative sum for indexing and new empty arrays
+        Cumsum_points=np.insert(np.cumsum(N_new_points),0,0)
+        intp_points= np.empty([num_points,2])
+        intp_points.fill(np.nan)
+
+        #Fill interpolated arena with new values from interpolation for all edges
+        for j in range(len(vertices)-1):
+            
+            start_point = vertices[j,:]
+            end_point = vertices[j+1,:]
+            interp_points = N_new_points[j]
+
+            intp_points[Cumsum_points[j]:Cumsum_points[j+1],0] = np.linspace(start_point[0], end_point[0], interp_points)
+            intp_points[Cumsum_points[j]:Cumsum_points[j+1],1] = np.linspace(start_point[1], end_point[1], interp_points)
+        
+        #reorganize points so that array starts at top left corner and sum to average
+        min_pos=np.argmin(np.sum(intp_points,1))
+        avg_points[0:(num_points-min_pos)]+=intp_points[min_pos:]
+        avg_points[(num_points-min_pos):]+=intp_points[:min_pos]
+            
+    avg_points= avg_points/len(all_vertices)
+
+    return avg_points
 
 
 def heatmap(
