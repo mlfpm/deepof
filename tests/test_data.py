@@ -278,12 +278,15 @@ def test_get_angles(nodes, ego):
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
-    fast_implementations_threshold = st.integers().sampled_from([10, 100000]), #intended to be so low that numba runs (10) or not
+    use_numba = st.booleans(), #intended to be so low that numba runs (10) or not
 )
-def test_run(nodes, ego, fast_implementations_threshold):
+def test_run(nodes, ego, use_numba):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
+    fast_implementations_threshold=100000
+    if use_numba:
+        fast_implementations_threshold=10
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -313,9 +316,13 @@ def test_run(nodes, ego, fast_implementations_threshold):
 
 
 @given(
-    fast_implementations_threshold = st.integers().sampled_from([10, 100000]), #intended to be so low that numba runs (10) or not
+    use_numba = st.booleans(), #intended to be so low that numba runs (10) or not
 )
-def test_get_supervised_annotation(fast_implementations_threshold):
+def test_get_supervised_annotation(use_numba):
+
+    fast_implementations_threshold=100000
+    if use_numba:
+        fast_implementations_threshold=10
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -352,12 +359,16 @@ def test_get_supervised_annotation(fast_implementations_threshold):
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
-    fast_implementations_threshold = st.integers().sampled_from([10, 100000]), #intended to be so low that numba runs (10) or not
+    use_numba = st.booleans(), #intended to be so low that numba runs (10) or not
 )
-def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id,fast_implementations_threshold):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id,use_numba):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
+
+    fast_implementations_threshold=100000
+    if use_numba:
+        fast_implementations_threshold=10
 
     if mode == "multi":
         animal_ids = ["B", "W"]
