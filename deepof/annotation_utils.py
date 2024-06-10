@@ -157,6 +157,7 @@ def climb_wall(
     tol: float,
     nose: str,
     centered_data: bool = False,
+    run_numba: bool = False,
 ) -> np.array:
     """Return True if the specified mouse is climbing the wall.
 
@@ -190,7 +191,7 @@ def climb_wall(
     elif arena_type.startswith("polygon"):
 
         #intermediary for testing, will be replaced with length-based condition
-        if True:
+        if run_numba:
               
                 #extract outer arena polygon coordinates
                 xp=np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
@@ -226,6 +227,7 @@ def sniff_object(
     centered_data: bool = False,
     s_object: str = "arena",
     animal_id: str = "",
+    run_numba: bool = False
 ):
     """Return True if the specified mouse is sniffing an object.
 
@@ -277,7 +279,7 @@ def sniff_object(
         elif arena_type.startswith("polygon"):
 
             #intermediary for testing, will be replaced with length-based condition
-            if True:
+            if run_numba:
 
                 #extract outer arena polygon coordinates
                 xp=np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
@@ -623,6 +625,7 @@ def supervised_tagging(
     trained_model_path: str = None,
     center: str = "Center",
     params: dict = {},
+    run_numba: bool = False
 ) -> pd.DataFrame:
     """Output a dataframe with the registered motives per frame.
 
@@ -838,6 +841,7 @@ def supervised_tagging(
                 raw_coords,
                 params["climb_tol"],
                 _id + undercond + "Nose",
+                run_numba=run_numba
             )
         )
         tag_dict[_id + undercond + "sniffing"] = deepof.utils.smooth_boolean_array(
@@ -852,6 +856,7 @@ def supervised_tagging(
                 center_name=center,
                 s_object="arena",
                 animal_id=_id,
+                run_numba=run_numba
             )
         )
 

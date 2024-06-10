@@ -11,6 +11,7 @@ from itertools import combinations, product
 from joblib import Parallel, delayed
 from math import atan2, dist
 from scipy.signal import savgol_filter
+from scipy.interpolate import interp1d
 from scipy.spatial.distance import cdist
 from segment_anything import sam_model_registry, SamPredictor
 from shapely.geometry import Polygon
@@ -650,7 +651,7 @@ def align_trajectories_old(data: np.array, mode: str = "all") -> np.array:
 
 
 # noinspection PyArgumentList
-def align_trajectories(data: np.array, mode: str = "all") -> np.array:
+def align_trajectories(data: np.array, mode: str = "all", run_numba: bool=False) -> np.array:
     """Remove rotational variance on the trajectories.
 
     Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
@@ -680,7 +681,7 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
 
     
     #run numba version for large videos
-    if data.shape[0] > 10000:
+    if run_numba:
         aligned_trajs = rotate_all_numba(data, angles)
     else:
         aligned_trajs = np.zeros(data.shape)
@@ -963,7 +964,8 @@ def kleinberg(
         #number of hidden states. Changed to be not higher than 3
         k = np.min([3,int(math.ceil(float(1 + (math.log(T)/math.log(s)) + (math.log(1.0 / np.amin(gaps))/math.log(s)))))])
   
-
+    #no run numba option here as this function gets called extremely often in the codeand is generally pretty slow
+    #slow core part of kleinberg
     q = kleinberg_core_numba(gaps, np.float64(s), np.float64(gamma), int(n), np.float64(T), int(k))
 
     prev_q = 0
@@ -2646,3 +2648,13 @@ def time_to_seconds(time_string: str) -> float:
         seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
 
     return seconds
+
+def get_total_Frames(video_paths: List[str]) -> int:
+
+    total_frames=0  
+    for video_path in video_paths:
+        current_video_cap = cv2.VideoCapture(video_path)
+        total_frames += int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        current_video_cap.release()
+    return total_frames
+

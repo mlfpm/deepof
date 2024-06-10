@@ -6,6 +6,7 @@
 /.hypothesis
 /.dockerignore
 /dof/
+/h5/
 /tests/test_examples/
 /deepof/__pycache__/
 
