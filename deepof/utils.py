@@ -435,7 +435,7 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
-def compute_areas(polygon_xy_stack):
+def compute_areas(polygon_xy_stack: np.array) -> np.array:
     """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
     Args:
@@ -458,7 +458,7 @@ def compute_areas(polygon_xy_stack):
 
 
 @nb.njit(parallel=True)
-def compute_areas_numba(polygon_xy_stack):
+def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:
     """
     Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
@@ -479,7 +479,7 @@ def compute_areas_numba(polygon_xy_stack):
 
 
 @nb.njit
-def polygon_area_numba(vertices: np.ndarray):
+def polygon_area_numba(vertices: np.ndarray) -> float:
     """
     Calculate the area of a single polygon given its vertices.
     
@@ -1010,7 +1010,7 @@ def kleinberg(
 
 
 @nb.njit
-def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int):
+def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int) -> np.array:
     """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
     The algorithm models activity bursts in a time series as an
@@ -2648,6 +2648,28 @@ def time_to_seconds(time_string: str) -> float:
         seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
 
     return seconds
+
+def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
+    """Compute a time string based on seconds as float.
+
+    Args:
+        seconds (float): time in seconds
+
+    Returns:
+        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...)
+    """
+    time_string = None
+    _hours=np.floor(seconds/3600)  
+    _minutes=np.floor((seconds-_hours*3600)/60)
+    _seconds=np.floor((seconds-_hours*3600-_minutes*60))
+    _milli_seconds=seconds-np.floor(seconds)
+
+    if cut_milliseconds:
+        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
+    else:
+        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}:{int(_milli_seconds*10**9):09d}"
+
+    return time_string
 
 def get_total_Frames(video_paths: List[str]) -> int:
 
