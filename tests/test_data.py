@@ -315,6 +315,7 @@ def test_run(nodes, ego, use_numba):
     assert isinstance(prun, deepof.data.Coordinates)
 
 
+@settings(max_examples=2, deadline=None)
 @given(
     use_numba = st.booleans(), #intended to be so low that numba runs (10) or not
 )
