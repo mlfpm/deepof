@@ -428,6 +428,8 @@ def plot_heatmaps(
 def plot_gantt(
     coordinates: project,
     experiment_id: str,
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = 0,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
@@ -448,21 +450,66 @@ def plot_gantt(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
-    # Determine plot type
+    # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
+        N_frames= supervised_annotations[experiment_id].shape[0]
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
+        N_frames=soft_counts[experiment_id].argmax(axis=1).shape[0]
     else:
         plot_type = "mixed"
+        N_frames= supervised_annotations[experiment_id].shape[0]
+
+    #determine bins for gantt plot
+    # Filter for specific time bin
+    if bin_size is not None and coordinates._frame_rate is not None:
+
+        # init start and end
+        bin_start = np.NaN
+        bin_end = np.NaN
+
+        # Case 1: bins are given as integers:
+        if type(bin_size) is int and type(bin_index) is int:
+            bin_size_int = bin_size * coordinates._frame_rate
+            bin_start = bin_size * bin_index
+            bin_end = bin_size * (bin_index + 1)
+        # Case 2: bins are given as time points / durations:
+        # allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
+        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
+        if (
+            type(bin_size) is str
+            and re.match(pattern, bin_size) is not None
+            and re.match(pattern, bin_index) is not None
+        ):
+
+            # calculate bin size as int
+            bin_size_int = int(
+                np.round(
+                    deepof.utils.time_to_seconds(bin_size) * coordinates._frame_rate
+                )
+            )
+            # calculate bin start and end
+            bin_start = int(
+                np.round(
+                    deepof.utils.time_to_seconds(bin_index) * coordinates._frame_rate
+                )
+            )
+            bin_end=bin_start+bin_size_int
+
+    else:
+        bin_size_int = N_frames
+        bin_start=0
+        bin_end = N_frames
+
 
     if plot_type == "unsupervised":
         hard_counts = soft_counts[experiment_id].argmax(axis=1)
         n_features = hard_counts.max() + 1
         if behaviors_to_plot is not None:
-            gantt = np.zeros([len(behaviors_to_plot), hard_counts.shape[0]])
+            gantt = np.zeros([len(behaviors_to_plot), bin_size_int])
         else:
-            gantt = np.zeros([hard_counts.max() + 1, hard_counts.shape[0]])
+            gantt = np.zeros([hard_counts.max() + 1, bin_size_int])
 
     elif plot_type == "supervised":
         behavior_ids = [
@@ -475,15 +522,15 @@ def plot_gantt(
         gantt = np.zeros(
             [
                 row_shape,
-                supervised_annotations[experiment_id].shape[0],
+                bin_size_int,
             ]
         )
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
-        additional_checkpoints = additional_checkpoints.iloc[:, : gantt.shape[1]]
+        additional_checkpoints = additional_checkpoints.iloc[:, bin_start:bin_end]
         if behaviors_to_plot is not None:
-            gantt = np.zeros([len(behaviors_to_plot), hard_counts.shape[0]])
+            gantt = np.zeros([len(behaviors_to_plot), bin_size_int])
         else:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -507,7 +554,7 @@ def plot_gantt(
                     continue
             if "speed" in supervised_annotations[experiment_id].iloc[:, cluster].name:
                 continue
-            gantt[rows] = supervised_annotations[experiment_id].iloc[:, cluster]
+            gantt[rows] = supervised_annotations[experiment_id].iloc[bin_start:bin_end, cluster]
 
         gantt_cp = gantt.copy()
         gantt_cp[[i for i in range(gantt.shape[0]) if i != rows]] = np.nan
@@ -561,6 +608,15 @@ def plot_gantt(
         )
 
     plt.xticks([])
+    if coordinates._frame_rate is not None:
+        N_x_ticks=int(plt.gcf().get_size_inches()[1]*1.25)
+        plt.xticks(
+            np.linspace(0,bin_size_int,N_x_ticks),
+            [deepof.utils.seconds_to_time(t) for t in np.linspace(bin_start / coordinates._frame_rate, bin_end / coordinates._frame_rate, N_x_ticks)],
+            rotation=0
+            )
+
+
 
     plt.yticks(
         np.array(range(gantt.shape[0])) + 0.5,
@@ -583,6 +639,8 @@ def plot_gantt(
     plt.axvline(x=gantt.shape[1], color="k", linewidth=2)
 
     plt.xlabel("Time", fontsize=10)
+    if coordinates._frame_rate is not None:
+        plt.xlabel("Time in HH:MM:SS", fontsize=10)
     plt.ylabel(("Cluster" if plot_type == "unsupervised" else ""), fontsize=10)
 
     if save:

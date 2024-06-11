@@ -1003,7 +1003,7 @@ class Coordinates:
         self._areas = areas
         self._distances = distances
         self._connectivity = connectivity
-        self.run_numba = run_numba
+        self._run_numba = run_numba
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -1042,6 +1042,12 @@ class Coordinates:
             table_dict: A table_dict object containing the coordinates of each animal as values.
 
         """
+
+        #intermediary solution to prevent pickle.load related failure
+        run_numba=False
+        if hasattr(self, "_run_numba"):    
+            run_numba=self._run_numba
+
         tabs = deepof.utils.deepcopy(self._tables)
         coord_1, coord_2 = "x", "y"
         scales = self._scales
@@ -1132,7 +1138,7 @@ class Coordinates:
 
                     if align_inplace and not polar:
                         partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned), mode="all", run_numba=self.run_numba,
+                            np.array(partial_aligned), mode="all", run_numba=run_numba,
                         )
                         partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
                         partial_aligned = pd.DataFrame(partial_aligned)
