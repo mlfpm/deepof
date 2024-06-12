@@ -14,18 +14,18 @@ from itertools import combinations
 import networkx as nx
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
+from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
 from shutil import rmtree
 
 import deepof.data
-import deepof.visuals
+from deepof.visuals import calculate_average_arena, time_to_seconds, seconds_to_time
 
 # TESTING SOME AUXILIARY FUNCTIONS #
 
@@ -44,9 +44,16 @@ import deepof.visuals
 def test_calculate_average_arena(all_vertices, num_points):
     max_length = max(len(lst) for lst in all_vertices)+1
     if num_points > max_length:
-        avg_arena=deepof.visuals.calculate_average_arena(all_vertices, num_points)
+        avg_arena=calculate_average_arena(all_vertices, num_points)
         assert len(avg_arena)==num_points
 
+@given(
+        second=st.floats(min_value=0, max_value=100000),
+        full_second=st.integers(min_value=0, max_value=100000))
+def test_time_conversion(second,full_second):
+    assert full_second == time_to_seconds(seconds_to_time(float(full_second)))
+    second=np.round(second*10**9)/10**9
+    assert second == time_to_seconds(seconds_to_time(second, False))
 
 
     

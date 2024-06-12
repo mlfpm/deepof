@@ -1673,6 +1673,11 @@ class Coordinates:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
 
         """
+        #intermediary solution to prevent pickle.load related failure
+        run_numba=False
+        if hasattr(self, "_run_numba"):    
+            run_numba=self._run_numba
+
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
         raw_coords = self.get_coords(center=None)
@@ -1730,7 +1735,7 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 center=center,
                 params=params,
-                run_numba=self.run_numba
+                run_numba=run_numba
             )
 
             supervised_tags.index = tag_index
