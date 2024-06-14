@@ -987,7 +987,7 @@ def annotate_time_chunks(
         test_videos=0,
         shuffle=False,
         window_size=(
-            window_size if window_size is not None else deepof_project._frame_rate
+            window_size if window_size is not None else int(np.round(deepof_project._frame_rate))
         ),
         window_step=window_step,
         filter_low_variance=False,

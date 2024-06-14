@@ -442,7 +442,7 @@ class Project:
             for key, tab in tab_dict.items():
                 tab_dict[key].index = pd.timedelta_range(
                     "00:00:00",
-                    pd.to_timedelta((tab.shape[0] // self.frame_rate), unit="sec"),
+                    pd.to_timedelta(int(np.round(tab.shape[0] // self.frame_rate)), unit="sec"),
                     periods=tab.shape[0] + 1,
                     closed="left",
                 ).map(lambda t: str(t)[7:])
@@ -746,13 +746,12 @@ class Project:
             self.set_up_project_directory(debug=debug)
 
         # load video info
-        self.frame_rate = int(
-            np.round(
+        self.frame_rate = float(
                 pims.ImageIOReader(
                     os.path.join(self.video_path, self.videos[0])
                 ).frame_rate
             )
-        )
+        
 
         # load table info
         tables, quality = self.load_tables(verbose)
@@ -939,7 +938,7 @@ class Coordinates:
         path: str,
         quality: dict,
         scales: np.ndarray,
-        frame_rate: int,
+        frame_rate: float,
         arena_params: List,
         tables: dict,
         table_paths: List,
@@ -966,7 +965,7 @@ class Coordinates:
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
             scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
-            frame_rate (int): frame rate of the processed videos.
+            frame_rate (float): frame rate of the processed videos.
             arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f

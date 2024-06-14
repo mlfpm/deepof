@@ -282,7 +282,7 @@ def plot_heatmaps(
 
         # Case 1: bins are given as integers:
         if type(bin_size) is int and type(bin_index) is int:
-            bin_size = bin_size * coordinates._frame_rate
+            bin_size = int(np.round(bin_size * coordinates._frame_rate))
             bin_start = dict.fromkeys(coords, bin_size * bin_index)
             bin_end = dict.fromkeys(coords, bin_size * (bin_index + 1))
         # Case 2: bins are given as time points / durations:
@@ -297,14 +297,14 @@ def plot_heatmaps(
             # calculate bin size as int
             bin_size_int = int(
                 np.round(
-                    deepof.utils.time_to_seconds(bin_size) * coordinates._frame_rate
+                    time_to_seconds(bin_size) * coordinates._frame_rate
                 )
             )
 
             # find start and end positions with sampling rate
             for key, val in coords.items():
-                start_time = deepof.utils.time_to_seconds(np.array(val.index)[0])
-                bin_index_time = deepof.utils.time_to_seconds(bin_index)
+                start_time = time_to_seconds(np.array(val.index)[0])
+                bin_index_time = time_to_seconds(bin_index)
                 bin_start[key] = int(
                     np.round(start_time + bin_index_time) * coordinates._frame_rate
                 )
@@ -365,8 +365,8 @@ def plot_heatmaps(
 def plot_gantt(
     coordinates: project,
     experiment_id: str,
-    bin_size: Union[int, str] = None,
-    bin_index: Union[int, str] = 0,
+    plot_start: Union[int, str] = 0,
+    plot_duration: Union[int, str] = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
@@ -379,6 +379,8 @@ def plot_gantt(
     Args:
         coordinates (project): deepOF project where the data is stored.
         experiment_id (str): Name of the experiment to display.
+        plot_start Union[int, str]: frame or time point at which the plot starts. Time should be given as "HH:MM:SS.SSS..." (micro seconds are optional).
+        plot_duration Union[int, str]: number of frames or time duration that isplotted. Time should be given as "HH:MM:SS.SSS..." (micro seconds are optional).
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -398,38 +400,37 @@ def plot_gantt(
         plot_type = "mixed"
         N_frames= supervised_annotations[experiment_id].shape[0]
 
-    #determine bins for gantt plot
-    # Filter for specific time bin
-    if bin_size is not None and coordinates._frame_rate is not None:
+
+    if plot_duration is not None and coordinates._frame_rate is not None:
 
         # init start and end
         bin_start = np.NaN
         bin_end = np.NaN
 
         # Case 1: bins are given as integers:
-        if type(bin_size) is int and type(bin_index) is int:
-            bin_size_int = bin_size * coordinates._frame_rate
-            bin_start = bin_size * bin_index
-            bin_end = bin_size * (bin_index + 1)
+        if type(plot_duration) is int and type(plot_start) is int:       
+            bin_start = np.min([N_frames, plot_start])
+            bin_size_int = np.min([N_frames-bin_start,plot_duration])
+            bin_end=bin_start+bin_size_int
         # Case 2: bins are given as time points / durations:
         # allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
         pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
         if (
-            type(bin_size) is str
-            and re.match(pattern, bin_size) is not None
-            and re.match(pattern, bin_index) is not None
+            type(plot_duration) is str
+            and re.match(pattern, plot_duration) is not None
+            and re.match(pattern, plot_start) is not None
         ):
 
-            # calculate bin size as int
-            bin_size_int = int(
-                np.round(
-                    deepof.utils.time_to_seconds(bin_size) * coordinates._frame_rate
-                )
-            )
             # calculate bin start and end
             bin_start = int(
                 np.round(
-                    deepof.utils.time_to_seconds(bin_index) * coordinates._frame_rate
+                    np.min([N_frames,time_to_seconds(plot_start)* coordinates._frame_rate]) 
+                )
+            )
+            # calculate bin size as int
+            bin_size_int = int(
+                np.round(
+                    np.min([N_frames-bin_start,time_to_seconds(plot_duration)* coordinates._frame_rate])
                 )
             )
             bin_end=bin_start+bin_size_int
@@ -439,6 +440,13 @@ def plot_gantt(
         bin_start=0
         bin_end = N_frames
 
+    #make sure the user entered an interval for depiction that makes sense
+    assert (
+        bin_end-bin_start > 0
+        ),(
+        "Error! please make sure plot_start is within the time range. i.e < {} or {}"
+            .format(seconds_to_time(N_frames/coordinates._frame_rate),N_frames)
+        )
 
     if plot_type == "unsupervised":
         hard_counts = soft_counts[experiment_id].argmax(axis=1)
@@ -484,7 +492,7 @@ def plot_gantt(
             if behaviors_to_plot is not None:
                 if cluster not in behaviors_to_plot:
                     continue
-            gantt[rows] = hard_counts == cluster
+            gantt[rows] = hard_counts[bin_start:bin_end] == cluster
         elif plot_type == "supervised":
             if behaviors_to_plot is not None:
                 if behavior_ids[cluster] not in behaviors_to_plot:
@@ -501,7 +509,7 @@ def plot_gantt(
                 signal_overlay.max() - signal_overlay.min()
             )
             sns.lineplot(
-                x=signal_overlay.index, y=standard_signal + rows, color="black"
+                x=signal_overlay.index[0:bin_end-bin_start], y=standard_signal[bin_start:bin_end] + rows, color="black"
             )
 
         rows += 1
@@ -549,7 +557,7 @@ def plot_gantt(
         N_x_ticks=int(plt.gcf().get_size_inches()[1]*1.25)
         plt.xticks(
             np.linspace(0,bin_size_int,N_x_ticks),
-            [deepof.utils.seconds_to_time(t) for t in np.linspace(bin_start / coordinates._frame_rate, bin_end / coordinates._frame_rate, N_x_ticks)],
+            [seconds_to_time(t) for t in np.linspace(bin_start / coordinates._frame_rate, bin_end / coordinates._frame_rate, N_x_ticks)],
             rotation=0
             )
 
@@ -675,7 +683,7 @@ def plot_enrichment(
         breaks=breaks,
         supervised_annotations=supervised_annotations,
         exp_conditions=exp_conditions,
-        bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
+        bin_size=(int(np.round(coordinates._frame_rate * bin_size)) if bin_size is not None else None),
         bin_index=bin_index,
         precomputed=precomputed_bins,
         normalize=normalize,
@@ -834,7 +842,7 @@ def plot_transitions(
         soft_counts,
         breaks,
         exp_conditions,
-        bin_size=(coordinates._frame_rate * bin_size if bin_size is not None else None),
+        bin_size=(int(np.round(coordinates._frame_rate * bin_size)) if bin_size is not None else None),
         bin_index=bin_index,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
@@ -996,7 +1004,7 @@ def plot_stationary_entropy(
         soft_counts,
         breaks,
         exp_conditions,
-        bin_size=(bin_size * coordinates._frame_rate if bin_size is not None else None),
+        bin_size=(int(np.round(bin_size * coordinates._frame_rate)) if bin_size is not None else None),
         bin_index=bin_index,
         aggregate=False,
         normalize=True,
@@ -1124,13 +1132,13 @@ def _filter_embeddings(
                 embeddings,
                 soft_counts,
                 breaks,
-                bin_size=coordinates._frame_rate * bin_size,
+                bin_size=int(np.round(coordinates._frame_rate * bin_size)),
                 bin_index=bin_index,
             )
         elif supervised_annotations is not None:
             _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
                 supervised_annotations=supervised_annotations,
-                bin_size=coordinates._frame_rate * bin_size,
+                bin_size=int(np.round(coordinates._frame_rate * bin_size)),
                 bin_index=bin_index,
             )
 
@@ -1485,14 +1493,31 @@ def plot_embeddings(
     )
 
     if aggregate_experiments and show_aggregated_density:
-        sns.kdeplot(
-            data=embedding_dataset,
-            x="PCA-1",
-            y="PCA-2",
-            hue="experimental condition",
-            zorder=0,
-            ax=ax,
-        )
+        #group dataset according to all experiment condition combinations
+        exp_conditions=list(embedding_dataset.keys()[2:])
+        grouped=embedding_dataset.groupby(exp_conditions, group_keys=True)
+        #check colinearit for each condition combination
+        is_colinear=False
+        for key in grouped.groups.keys():
+            data=np.array(grouped.get_group(key)[['PCA-1','PCA-2']])
+            data-=data[0]
+            if np.linalg.matrix_rank(data, tol=0.00001)<2:
+                is_colinear=True
+                break
+        # if no colinearity was detected, plot kdeplot
+        if not(is_colinear):
+            sns.kdeplot(
+                data=embedding_dataset,
+                x="PCA-1",
+                y="PCA-2",
+                hue="experimental condition",
+                zorder=0,
+                ax=ax,
+            )
+        else:
+            print(f"\033[91mError! Failed to plot continuous probability density curve!\033[0m")
+            print(f"\033[91mSome Experimental condition combinations do not span at least two dimensions!\033[0m")
+            print(f"\033[91mThis Error may happen due to an insufficient amount of data.\033[0m")
 
     if not aggregate_experiments:
         if ax is None:
@@ -1940,7 +1965,7 @@ def animate_skeleton(
         fig,
         func=animation_frame,
         frames=np.minimum(data.shape[0], frame_limit),
-        interval=2000 // coordinates._frame_rate,
+        interval=int(np.round(2000 // coordinates._frame_rate)),
     )
 
     ax2.set_title(
@@ -2215,7 +2240,7 @@ def output_videos_per_cluster(
     video_paths: list,
     breaks: list,
     soft_counts: list,
-    frame_rate: int = 25,
+    frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
     single_output_resolution: tuple = None,
     window_length: int = None,
@@ -2296,7 +2321,7 @@ def output_unsupervised_annotated_video(
     video_path: str,
     breaks: list,
     soft_counts: np.ndarray,
-    frame_rate: int = 25,
+    frame_rate: float = 25,
     frame_limit: int = np.inf,
     window_length: int = None,
     cluster_names: dict = {},
@@ -2404,7 +2429,7 @@ def export_annotated_video(
 
     # If no bout duration is provided, use half the frame rate
     if min_bout_duration is None:
-        min_bout_duration = coordinates._frame_rate // 2
+        min_bout_duration = int(np.round(coordinates._frame_rate // 2))
 
     # Compute sliding window lenth, to determine the frame/annotation offset
     first_key = list(coordinates.get_quality().keys())[0]
@@ -2538,9 +2563,9 @@ def plot_distance_between_conditions(
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
         },
-        10 * coordinates._frame_rate,
+        int(np.round(10 * coordinates._frame_rate)),
         np.min([val.shape[0] for val in soft_counts.values()]),
-        coordinates._frame_rate,
+        int(np.round(coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         metric=distance_metric,
         n_jobs=n_jobs,
@@ -2557,9 +2582,9 @@ def plot_distance_between_conditions(
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
         },
-        10 * coordinates._frame_rate,
+        int(np.round(10 * coordinates._frame_rate)),
         np.min([val.shape[0] for val in soft_counts.values()]),
-        optimal_bin * coordinates._frame_rate,
+        int(np.round(optimal_bin * coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         scan_mode="per-bin",
         metric=distance_metric,

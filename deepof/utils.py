@@ -2632,45 +2632,6 @@ def cluster_transition_matrix(
 
     return trans_normed
 
-
-def time_to_seconds(time_string: str) -> float:
-    """Compute seconds as float based on a time string.
-
-    Args:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
-
-    Returns:
-        seconds (float): time in seconds
-    """
-    seconds = None
-    if re.match(r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-
-    return seconds
-
-def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
-    """Compute a time string based on seconds as float.
-
-    Args:
-        seconds (float): time in seconds
-
-    Returns:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...)
-    """
-    time_string = None
-    _hours=np.floor(seconds/3600)  
-    _minutes=np.floor((seconds-_hours*3600)/60)
-    _seconds=np.floor((seconds-_hours*3600-_minutes*60))
-    _milli_seconds=seconds-np.floor(seconds)
-
-    if cut_milliseconds:
-        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
-    else:
-        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}:{int(_milli_seconds*10**9):09d}"
-
-    return time_string
-
 def get_total_Frames(video_paths: List[str]) -> int:
 
     total_frames=0  
