@@ -457,7 +457,7 @@ def compute_areas(polygon_xy_stack: np.array) -> np.array:
     return polygon_areas
 
 
-@nb.njit(parallel=True)
+#@nb.njit(parallel=True)
 def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:
     """
     Compute polygon areas for the provided stack of sets of data point-xy coordinates.
@@ -478,7 +478,7 @@ def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:
     return polygon_areas
 
 
-@nb.njit
+#@nb.njit
 def polygon_area_numba(vertices: np.ndarray) -> float:
     """
     Calculate the area of a single polygon given its vertices.
@@ -526,7 +526,7 @@ def rotate(
     return rotated
 
 
-@nb.njit(parallel=True)
+#@nb.njit(parallel=True)
 def rotate_all_numba(data: np.array, angles: np.array) -> np.array:
     """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
@@ -566,7 +566,7 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:
 
 
 
-@nb.njit
+#@nb.njit
 def rotate_numba(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:
@@ -1009,7 +1009,7 @@ def kleinberg(
     return bursts
 
 
-@nb.njit
+#@nb.njit
 def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int) -> np.array:
     """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
