@@ -31,6 +31,7 @@ import time
 import warnings
 
 import deepof.post_hoc
+from deepof.visuals_utils import time_to_seconds, seconds_to_time, calculate_average_arena
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -280,6 +281,7 @@ def plot_heatmaps(
         bin_start = {key: 0 for key in coords}
         bin_end = {key: 0 for key in coords}
 
+        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
         # Case 1: bins are given as integers:
         if type(bin_size) is int and type(bin_index) is int:
             bin_size = int(np.round(bin_size * coordinates._frame_rate))
@@ -287,9 +289,9 @@ def plot_heatmaps(
             bin_end = dict.fromkeys(coords, bin_size * (bin_index + 1))
         # Case 2: bins are given as time points / durations:
         # allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
-        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
-        if (
+        elif (
             type(bin_size) is str
+            and type(bin_index) is str
             and re.match(pattern, bin_size) is not None
             and re.match(pattern, bin_index) is not None
         ):
@@ -309,6 +311,13 @@ def plot_heatmaps(
                     np.round(start_time + bin_index_time) * coordinates._frame_rate
                 )
                 bin_end[key] = bin_size_int + bin_start[key]
+        else:
+            #plot short default bin, if user entered bins incorrectly
+            print(f"\033[91mError! bin_index or bin_size were given in an incorrect format!\033[0m")
+            print(f"\033[91mProceed to plot default binning (bin_index = 0, bin_size = 60)!\033[0m")
+            bin_size = int(np.round(60 * coordinates._frame_rate))
+            bin_start = dict.fromkeys(coords, bin_size * 0)
+            bin_end = dict.fromkeys(coords, bin_size * (0 + 1))
 
         # cut down coords to desired range
         coords = {
@@ -365,8 +374,8 @@ def plot_heatmaps(
 def plot_gantt(
     coordinates: project,
     experiment_id: str,
-    plot_start: Union[int, str] = 0,
-    plot_duration: Union[int, str] = None,
+    bin_index: Union[int, str] = 0,
+    bin_size: Union[int, str] = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
@@ -379,8 +388,8 @@ def plot_gantt(
     Args:
         coordinates (project): deepOF project where the data is stored.
         experiment_id (str): Name of the experiment to display.
-        plot_start Union[int, str]: frame or time point at which the plot starts. Time should be given as "HH:MM:SS.SSS..." (micro seconds are optional).
-        plot_duration Union[int, str]: number of frames or time duration that isplotted. Time should be given as "HH:MM:SS.SSS..." (micro seconds are optional).
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -401,39 +410,47 @@ def plot_gantt(
         N_frames= supervised_annotations[experiment_id].shape[0]
 
 
-    if plot_duration is not None and coordinates._frame_rate is not None:
+    if bin_size is not None and coordinates._frame_rate is not None:
 
         # init start and end
         bin_start = np.NaN
         bin_end = np.NaN
 
+        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
         # Case 1: bins are given as integers:
-        if type(plot_duration) is int and type(plot_start) is int:       
-            bin_start = np.min([N_frames, plot_start])
-            bin_size_int = np.min([N_frames-bin_start,plot_duration])
-            bin_end=bin_start+bin_size_int
+        if type(bin_size) is int and type(bin_index) is int:       
+            bin_size_int = int(np.round(bin_size * coordinates._frame_rate))
+            bin_start = bin_size_int * bin_index
+            bin_end = np.min([bin_size_int * (bin_index + 1), N_frames])
         # Case 2: bins are given as time points / durations:
         # allowed string format is any XX:XX:XX number with optional .XXXX... number (limit 9 X)
-        pattern = r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$"
-        if (
-            type(plot_duration) is str
-            and re.match(pattern, plot_duration) is not None
-            and re.match(pattern, plot_start) is not None
+        elif (
+            type(bin_size) is str
+            and type(bin_index) is str
+            and re.match(pattern, bin_size) is not None
+            and re.match(pattern, bin_index) is not None
         ):
 
             # calculate bin start and end
             bin_start = int(
                 np.round(
-                    np.min([N_frames,time_to_seconds(plot_start)* coordinates._frame_rate]) 
+                    np.min([N_frames,time_to_seconds(bin_index)* coordinates._frame_rate]) 
                 )
             )
             # calculate bin size as int
             bin_size_int = int(
                 np.round(
-                    np.min([N_frames-bin_start,time_to_seconds(plot_duration)* coordinates._frame_rate])
+                    np.min([N_frames-bin_start,time_to_seconds(bin_size)* coordinates._frame_rate])
                 )
             )
             bin_end=bin_start+bin_size_int
+        else:
+            #plot short default bin, if user entered bins incorrectly
+            print(f"\033[91mError! bin_index or bin_size were given in an incorrect format!\033[0m")
+            print(f"\033[91mProceed to plot default binning (bin_index = 0, bin_size = 60)!\033[0m")
+            bin_size_int = int(np.round(60 * coordinates._frame_rate))
+            bin_start = bin_size_int * 0
+            bin_end = bin_size_int * (0 + 1)  
 
     else:
         bin_size_int = N_frames
@@ -444,17 +461,17 @@ def plot_gantt(
     assert (
         bin_end-bin_start > 0
         ),(
-        "Error! please make sure plot_start is within the time range. i.e < {} or {}"
-            .format(seconds_to_time(N_frames/coordinates._frame_rate),N_frames)
+        "Error! please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}"
+            .format(seconds_to_time(N_frames/coordinates._frame_rate),int(np.ceil(N_frames/bin_size_int)),bin_size)
         )
 
     if plot_type == "unsupervised":
         hard_counts = soft_counts[experiment_id].argmax(axis=1)
         n_features = hard_counts.max() + 1
         if behaviors_to_plot is not None:
-            gantt = np.zeros([len(behaviors_to_plot), bin_size_int])
+            gantt = np.zeros([len(behaviors_to_plot), bin_end-bin_start])
         else:
-            gantt = np.zeros([hard_counts.max() + 1, bin_size_int])
+            gantt = np.zeros([hard_counts.max() + 1, bin_end-bin_start])
 
     elif plot_type == "supervised":
         behavior_ids = [
@@ -467,7 +484,7 @@ def plot_gantt(
         gantt = np.zeros(
             [
                 row_shape,
-                bin_size_int,
+                bin_end-bin_start,
             ]
         )
 
@@ -475,7 +492,7 @@ def plot_gantt(
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, bin_start:bin_end]
         if behaviors_to_plot is not None:
-            gantt = np.zeros([len(behaviors_to_plot), bin_size_int])
+            gantt = np.zeros([len(behaviors_to_plot), bin_end-bin_start])
         else:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -556,7 +573,7 @@ def plot_gantt(
     if coordinates._frame_rate is not None:
         N_x_ticks=int(plt.gcf().get_size_inches()[1]*1.25)
         plt.xticks(
-            np.linspace(0,bin_size_int,N_x_ticks),
+            np.linspace(0,bin_end-bin_start,N_x_ticks),
             [seconds_to_time(t) for t in np.linspace(bin_start / coordinates._frame_rate, bin_end / coordinates._frame_rate, N_x_ticks)],
             rotation=0
             )
@@ -2953,110 +2970,3 @@ def annotate_video(
     cv2.destroyAllWindows()
 
     return True
-
-######
-#Utility functions for visuals, might get outsourced in new file if grown enough
-######
-
-
-def time_to_seconds(time_string: str) -> float:
-    """Compute seconds as float based on a time string.
-
-    Args:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
-
-    Returns:
-        seconds (float): time in seconds
-    """
-    seconds = None
-    if re.match(r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-
-    return seconds
-
-
-def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
-    """Compute a time string based on seconds as float.
-
-    Args:
-        seconds (float): time in seconds
-
-    Returns:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...)
-    """
-    time_string = None
-    _hours=np.floor(seconds/3600)  
-    _minutes=np.floor((seconds-_hours*3600)/60)
-    _seconds=np.floor((seconds-_hours*3600-_minutes*60))
-    _milli_seconds=seconds-np.floor(seconds)
-
-    if cut_milliseconds:
-        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
-    else:
-        time_string=f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
-
-    return time_string
-
-
-def calculate_average_arena(all_vertices: List[List[Tuple[float, float]]], num_points: int = 10000) -> np.array:
-    """
-    Calculates the average arena based on a list of polynomial vertices  
-    lists representing arenas. Polynomial vertices can have different lengths and start at different positions
-
-    Args:
-        vertices (list): A list of 2D tuples representing the vertices of the arenas.
-        num_points (int): number of points in the averaged arena.
-
-    Returns:
-        numpy.ndarray: A 2D NumPy array containing the averaged arena.
-    """
-
-    #ensure that enough points are available for interpolation
-    max_length = max(len(lst) for lst in all_vertices)+1
-    assert num_points > max_length, "The num_points variable needs to be larger than the longest list of vertices!"
-
-    #initialize averaged arena polynomial
-    avg_points= np.empty([num_points,2])
-    avg_points.fill(0.0)
-
-    #iterate over all arenas
-    for i in range(len(all_vertices)):
-        #calculate relative segment lengths between vertices
-        vertices=np.stack(all_vertices[i]).astype(float)
-        vertices=np.insert(vertices,0,vertices[-1,:]).reshape(-1,2) #close polynomial
-        xy1 = vertices[:-1,:]
-        xy2 = vertices[1:,:]
-        segment_lengths=np.sqrt(((xy1 - xy2) ** 2).sum(1))
-        segment_lengths=segment_lengths/(np.sum(segment_lengths)+0.00001)
-	
-        # Calculate the number of additional points for each segment
-        N_new_points = np.round(segment_lengths * (num_points)).astype(int)
-
-        #ensure that the sum of all lengths after discretization is the chosen interpolated length
-        if np.sum(N_new_points) != (num_points):
-            N_new_points[np.argmax(N_new_points)] += (num_points - np.sum(N_new_points))
-
-        #cumulative sum for indexing and new empty arrays
-        Cumsum_points=np.insert(np.cumsum(N_new_points),0,0)
-        intp_points= np.empty([num_points,2])
-        intp_points.fill(np.nan)
-
-        #Fill interpolated arena with new values from interpolation for all edges
-        for j in range(len(vertices)-1):
-            
-            start_point = vertices[j,:]
-            end_point = vertices[j+1,:]
-            interp_points = N_new_points[j]
-
-            intp_points[Cumsum_points[j]:Cumsum_points[j+1],0] = np.linspace(start_point[0], end_point[0], interp_points)
-            intp_points[Cumsum_points[j]:Cumsum_points[j+1],1] = np.linspace(start_point[1], end_point[1], interp_points)
-        
-        #reorganize points so that array starts at top left corner and sum to average
-        min_pos=np.argmin(np.sum(intp_points,1))
-        avg_points[0:(num_points-min_pos)]+=intp_points[min_pos:]
-        avg_points[(num_points-min_pos):]+=intp_points[:min_pos]
-            
-    avg_points= avg_points/len(all_vertices)
-
-    return avg_points
