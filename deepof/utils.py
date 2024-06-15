@@ -457,8 +457,8 @@ def compute_areas(polygon_xy_stack: np.array) -> np.array:
     return polygon_areas
 
 
-#@nb.njit(parallel=True)
-def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:
+@nb.njit(parallel=True)
+def compute_areas_numba(polygon_xy_stack: np.array) -> np.array: # pragma: no cover
     """
     Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
@@ -478,8 +478,8 @@ def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:
     return polygon_areas
 
 
-#@nb.njit
-def polygon_area_numba(vertices: np.ndarray) -> float:
+@nb.njit
+def polygon_area_numba(vertices: np.ndarray) -> float: # pragma: no cover
     """
     Calculate the area of a single polygon given its vertices.
     
@@ -526,8 +526,8 @@ def rotate(
     return rotated
 
 
-#@nb.njit(parallel=True)
-def rotate_all_numba(data: np.array, angles: np.array) -> np.array:
+@nb.njit(parallel=True)
+def rotate_all_numba(data: np.array, angles: np.array) -> np.array: # pragma: no cover
     """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
     Args:
@@ -566,10 +566,10 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:
 
 
 
-#@nb.njit
+@nb.njit
 def rotate_numba(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
-) -> np.array:
+) -> np.array: # pragma: no cover
     """Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
     Args:
@@ -608,50 +608,7 @@ def rotate_numba(
 
 
 # noinspection PyArgumentList
-def align_trajectories_old(data: np.array, mode: str = "all") -> np.array:
-    """Remove rotational variance on the trajectories.
-
-    Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
-    column of data are aligned with the y-axis.
-
-    Args:
-        data (numpy.ndarray): 3D array containing positions of body parts over time, where shape is N (sliding window instances) * m (sliding window size) * l (features)
-        mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
-
-    Returns:
-        aligned_trajs (np.ndarray): 2D aligned positions over time.
-
-    """
-    angles = np.zeros(data.shape[0])
-    data = deepcopy(data)
-    dshape = data.shape
-
-    if mode == "center":
-        center_time = (data.shape[1] - 1) // 2
-        angles = np.arctan2(data[:, center_time, 0], data[:, center_time, 1])
-    elif mode == "all":
-        data = data.reshape(-1, dshape[-1], order="C")
-        angles = np.arctan2(data[:, 0], data[:, 1])
-    elif mode == "none":
-        data = data.reshape(-1, dshape[-1], order="C")
-        angles = np.zeros(data.shape[0])
-
-    aligned_trajs = np.zeros(data.shape)
-
-    for frame in range(data.shape[0]):
-        aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2], order="C"), angles[frame]
-        ).reshape(data.shape[1:], order="C")
-
-    if mode == "all" or mode == "none":
-        aligned_trajs = aligned_trajs.reshape(dshape, order="C")
-
-    return aligned_trajs
-
-
-
-# noinspection PyArgumentList
-def align_trajectories(data: np.array, mode: str = "all", run_numba: bool=False) -> np.array:
+def align_trajectories(data: np.array, mode: str = "all", run_numba: bool=False) -> np.array: # pragma: no cover
     """Remove rotational variance on the trajectories.
 
     Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
@@ -1009,8 +966,8 @@ def kleinberg(
     return bursts
 
 
-#@nb.njit
-def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int) -> np.array:
+@nb.njit
+def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T:np.float64, k:int) -> np.array: # pragma: no cover
     """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
     The algorithm models activity bursts in a time series as an
@@ -1075,30 +1032,6 @@ def kleinberg_core_numba(gaps:np.array, s:np.float64, gamma:np.float64, n:int, T
     j = np.argmin(C)
     q = q[j, :]
     return q
-
-
-def smooth_boolean_array_old(a: np.array, scale: int = 1) -> np.array:
-    """Return a boolean array in which isolated appearances of a feature are smoothed.
-
-    Args:
-        a (numpy.ndarray): Boolean instances.
-        scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
-
-    Returns:
-        a (numpy.ndarray): Smoothened boolean instances.
-
-    """
-    offsets = np.where(a)[0]
-    if len(offsets) == 0:
-        return a  # no detected activity
-
-    bursts = kleinberg(offsets, gamma=0.01)
-    a = np.zeros(np.size(a), dtype=bool)
-    for i in bursts:
-        if i[0] == scale:
-            a[int(i[1]) : int(i[2])] = True
-
-    return a
 
 
 def smooth_boolean_array(a: np.array, scale: int = 1, batch_size: int = 50000) -> np.array:
@@ -1800,169 +1733,6 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
-# noinspection PyUnboundLocalVariable
-def automatically_recognize_arena_old(
-    coordinates: coordinates,
-    tables: table_dict,
-    videos: list,
-    vid_index: int,
-    path: str = ".",
-    arena_type: str = "circular-autodetect",
-    arena_reference: list = None,
-    segmentation_model: torch.nn.Module = None,
-    debug: bool = False,
-) -> Tuple[np.array, int, int]:
-    """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
-
-    WARNING: estimates won't be reliable if the camera moves along the video.
-
-    Args:
-        coordinates (coordinates): Coordinates object.
-        tables (table_dict): Dictionary of tables per experiment.
-        videos (list): Relative paths of the videos to analise.
-        vid_index (int): Element of videos list to use.
-        path (str): Full path of the directory where the videos are.
-        potentially more accurate in poor lighting conditions.
-        arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
-        arena_reference (list): List of coordinates defining the reference arena annotated by the user.
-        segmentation_model (torch.nn.Module): Model used for automatic arena detection.
-        debug (bool): If True, save a video frame with the arena detected.
-
-    Returns:
-        arena (np.ndarray): 1D-array containing information about the arena. If the arena is circular, returns a 3-element-array) -> center, radius, and angle. If arena is polygonal, returns a list with x-y position of each of the n the vertices of the polygon.
-        h (int): Height of the video in pixels.
-        w (int): Width of the video in pixels.
-
-    """
-    # Read video as a 3D array
-    current_video = imread(os.path.join(path, videos[vid_index]))
-    h, w = current_video[0].shape[:2]
-
-    # Select the corresponding tracklets
-    current_tab = tables[
-        get_close_matches(
-            videos[vid_index].split(".")[0],
-            [
-                vid
-                for vid in tables.keys()
-                if (
-                    vid.startswith(videos[vid_index].split(".")[0])
-                    or videos[vid_index].startswith(vid)
-                )
-            ],
-            cutoff=0.01,
-            n=1,
-        )[0]
-    ]
-
-    # Get distances of all body parts and timepoints to both center and periphery
-    distances_to_center = cdist(
-        current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
-    ).reshape(current_tab.shape[0], -1)
-
-    possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
-        distances_to_center, 5.0
-    )
-    possible_distances_to_center = distances_to_center[possible_frames]
-    current_video = current_video[: possible_frames.shape[0]][possible_frames]
-
-    if arena_reference is not None:
-        # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
-        # hinder segmentation
-        min_distance_to_arena = cdist(
-            current_tab.values.reshape(-1, 2), arena_reference
-        ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
-
-        min_distance_to_arena = min_distance_to_arena[possible_frames]
-        current_frame = np.argmax(
-            np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
-        )
-
-    else:
-        # If not, use the maximum distance to the center as a proxy
-        current_frame = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
-
-    frame = current_video[current_frame].compute()
-
-    # Get mask using the segmentation model
-    segmentation_model.set_image(frame)
-
-    frame_masks, score, logits = segmentation_model.predict(
-        point_coords=np.array([[w // 2, h // 2]]),
-        point_labels=np.array([1]),
-        multimask_output=True,
-    )
-
-    # Get arenas for all retrieved masks, and select that whose area is the closest to the reference
-    if arena_reference is not None:
-        arenas = [
-            arena_parameter_extraction(frame_mask, arena_type)
-            for frame_mask in frame_masks
-        ]
-        arena = arenas[
-            np.argmin(
-                np.abs(
-                    [Polygon(arena_reference).area - Polygon(a).area for a in arenas]
-                )
-            )
-        ]
-    else:
-        arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
-
-    if debug:
-
-        # Save frame with mask and arena detected
-        frame_with_arena = np.ascontiguousarray(frame.copy(), dtype=np.uint8)
-
-        if "circular" in arena_type:
-            cv2.ellipse(
-                img=frame_with_arena,
-                center=arena[0],
-                axes=arena[1],
-                angle=arena[2],
-                startAngle=0.0,
-                endAngle=360.0,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-        elif "polygonal" in arena_type:
-
-            cv2.polylines(
-                img=frame_with_arena,
-                pts=[arena],
-                isClosed=True,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-            # Plot scale references
-            closest_side_points = closest_side(
-                simplify_polygon(arena), arena_reference[:2]
-            )
-
-            for point in closest_side_points:
-                cv2.circle(
-                    frame_with_arena,
-                    list(map(int, point)),
-                    radius=10,
-                    color=(40, 86, 236),
-                    thickness=2,
-                )
-
-        cv2.imwrite(
-            os.path.join(
-                coordinates.project_path,
-                coordinates.project_name,
-                "Arena_detection",
-                f"{videos[vid_index][:-4]}_arena_detection.png",
-            ),
-            frame_with_arena,
-        )
-
-    return arena, h, w
-
-
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,
@@ -2249,47 +2019,6 @@ def retrieve_corners_from_image(
 
     # Return the corners
     return corners
-
-
-def extract_polygonal_arena_coordinates_old(
-    video_path: str, arena_type: str, video_index: int, videos: list
-):  # pragma: no cover
-    """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
-
-    Args:
-        video_path (str): Path to the video file.
-        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
-        video_index (int): Index of the current video in the list of videos.
-        videos (list): List of videos to be processed.
-
-    Returns:
-        np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
-        int: Height of the video.
-        int: Width of the video.
-
-    """
-    current_video = imread(video_path)
-    current_frame = np.random.choice(current_video.shape[0])
-
-    # Get and return the corners of the arena
-    try:
-        import google.colab
-
-        arena_corners = retrieve_corners_from_colab(
-            current_video[current_frame].compute(),
-            arena_type,
-            video_index,
-            videos,
-        )
-
-    except ImportError:
-        arena_corners = retrieve_corners_from_image(
-            current_video[current_frame].compute(),
-            arena_type,
-            video_index,
-            videos,
-        )
-    return arena_corners, current_video.shape[2], current_video.shape[1]
 
 
 def extract_polygonal_arena_coordinates(
