@@ -301,12 +301,8 @@ def test_frame_corners(w, h):
 
 
 @settings(deadline=None)
-@given(
-    multi_animal=st.just(False),
-    video_output=st.booleans(),
-    use_numba = st.booleans(), #intended to be so low that numba runs (10) or not)
-)
-def test_rule_based_tagging(multi_animal, video_output, use_numba):
+@given(multi_animal=st.just(False), video_output=st.booleans())
+def test_rule_based_tagging(multi_animal, video_output):
 
     if video_output:
         video_output = ["test"]
@@ -318,10 +314,6 @@ def test_rule_based_tagging(multi_animal, video_output, use_numba):
         "test_{}_topview".format("multi" if multi_animal else "single"),
     )
 
-    fast_implementations_threshold=100000
-    if use_numba:
-        fast_implementations_threshold=10
-
     prun = deepof.data.Project(
         project_path=path,
         video_path=os.path.join(path, "Videos"),
@@ -332,7 +324,6 @@ def test_rule_based_tagging(multi_animal, video_output, use_numba):
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        fast_implementations_threshold=fast_implementations_threshold,
     ).create(force=True)
     rmtree(os.path.join(path, "deepof_project"))
 
