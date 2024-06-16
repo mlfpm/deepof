@@ -339,8 +339,9 @@ def test_rule_based_tagging(multi_animal, video_output):
 polygons = [
     [[0, 0], [1, 0], [1, 1], [0, 1]],  # Square
     [[0, 0], [2, 0], [1, 2], [0, 0]],  # Triangle
-    [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]],  # Rectangle
-    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]]  # Complex polygon
+    [[-4, 0], [2, 0], [2, 2], [-4, 2], [-4, 0]],  # Rectangle
+    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]],  # Complex polygon
+    [[0, 0], [6, 0], [6, 4], [4, 4], [4, 2], [2, 2], [2, 4], [0, 4], [0, 0]]  # U-shape
 ]
 
 @settings(max_examples=100,deadline=None)
