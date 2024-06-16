@@ -15,6 +15,7 @@ from shutil import rmtree
 import numpy as np
 import pandas as pd
 import pytest
+from shapely.geometry import Point, Polygon
 from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
@@ -333,3 +334,28 @@ def test_rule_based_tagging(multi_animal, video_output):
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
     assert list(hardcoded_tags.values())[0].shape[1] == (22 if multi_animal else 6)
+
+#list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations 
+polygons = [
+    [[0, 0], [1, 0], [1, 1], [0, 1]],  # Square
+    [[0, 0], [2, 0], [1, 2], [0, 0]],  # Triangle
+    [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]],  # Rectangle
+    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]]  # Complex polygon
+]
+
+@settings(max_examples=100,deadline=None)
+@given(
+    points=st.lists(
+        st.lists(
+        st.floats(min_value=-100, max_value=100, width=32),
+        min_size=2, max_size=2),
+    min_size=1, max_size=100), 
+    polygons=st.sampled_from(polygons), 
+    )
+def test_point_in_polygon(points, polygons):
+
+    points=np.array(points)
+    polygons=np.array(polygons)
+    assert all(deepof.annotation_utils.point_in_polygon_numba(points, polygons)==
+               deepof.annotation_utils.point_in_polygon(points, Polygon(polygons)))
+

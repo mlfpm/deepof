@@ -203,9 +203,7 @@ def climb_wall(
         
         else:
 
-            climbing = np.array(
-                [not Polygon(arena).buffer(tol).contains(Point(n)) for n in nose.values]
-        )
+            climbing=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(tol)))
 
     else:
         raise NotImplementedError(
@@ -297,15 +295,9 @@ def sniff_object(
 
             else:
 
-                nosing_min = np.array(
-                    [
-                        not Polygon(arena).buffer(-tol).contains(Point(n))
-                        for n in nose.values
-                    ]
-                )
-                nosing_max = np.array(
-                    [not Polygon(arena).buffer(tol).contains(Point(n)) for n in nose.values]
-                )
+                nosing_min=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(-tol)))
+                nosing_max=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(tol)))
+
 
         # noinspection PyUnboundLocalVariable
         #get nose positions that are close to the outer edge of the arena 
@@ -320,6 +312,25 @@ def sniff_object(
 
     return sniffing
 
+
+def point_in_polygon(points: np.array, polygon: Polygon) -> np.array:
+    """
+    Check if a set of points is inside a polygon.
+
+    Args:
+        points (np.ndarray): An array of shape (M, 2) containing the coordinates of the points.
+        polygon (shapely.geometry.polygon.Polygon): Shapely polygon.
+
+    Returns:
+        np.ndarray: A boolean array of shape (M,) indicating whether each point is inside the polygon.
+    """
+    inside = np.array(
+        [
+            polygon.contains(Point(n))
+            for n in points
+        ]
+    )
+    return inside
 
 @nb.njit(parallel=True)
 def point_in_polygon_numba(points: np.array, polygon: np.array) -> np.array: # pragma: no cover
