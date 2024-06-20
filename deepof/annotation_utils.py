@@ -13,6 +13,8 @@ from shapely.geometry import Point, Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from itertools import combinations
+from natsort import os_sorted
+
 
 import numpy as np
 import numba as nb
@@ -526,15 +528,15 @@ def following_path(
 
     # Check that the animals are oriented follower's nose -> followed's tail
     right_orient1 = (
-        distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
+        distance_dframe[tuple(os_sorted([follower + "_Nose", followed + "_Tail_base"]))]
         < distance_dframe[
-            tuple(sorted([follower + "_Tail_base", followed + "_Tail_base"]))
+            tuple(os_sorted([follower + "_Tail_base", followed + "_Tail_base"]))
         ]
     )
 
     right_orient2 = (
-        distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Tail_base"]))]
-        < distance_dframe[tuple(sorted([follower + "_Nose", followed + "_Nose"]))]
+        distance_dframe[tuple(os_sorted([follower + "_Nose", followed + "_Tail_base"]))]
+        < distance_dframe[tuple(os_sorted([follower + "_Nose", followed + "_Nose"]))]
     )
 
     # noinspection PyArgumentList
