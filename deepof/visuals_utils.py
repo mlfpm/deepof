@@ -27,7 +27,7 @@ def time_to_seconds(time_string: str) -> float:
         seconds (float): time in seconds
     """
     seconds = None
-    if re.match(r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$", time_string) is not None:
+    if re.match(r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,9})?$", time_string) is not None:
         time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
         seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
 

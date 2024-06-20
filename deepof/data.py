@@ -41,6 +41,7 @@ import re
 import shutil
 import umap
 import warnings
+from natsort import os_sorted
 
 import deepof.model_utils
 import deepof.models
@@ -74,13 +75,13 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
 
     coordinates._project_path = os.path.split(project_path)[0]
     #ensures backwards compatibility
-    if not(hasattr(coordinates, "run_numba")):
+    if not(hasattr(coordinates, "_run_numba")):
         #check if fast_implementations_threshold is reached
-        coordinates.run_numba=False
+        coordinates._run_numba=False
         video_paths= [os.path.join(coordinates._project_path,coordinates._project_name,"Videos",video) for video in coordinates._videos]
         total_frames=deepof.utils.get_total_Frames(video_paths)
         if total_frames> 100000:
-            coordinates.run_numba=True    
+            coordinates._run_numba=True    
 
     return coordinates
 
@@ -164,14 +165,14 @@ class Project:
                 )
             ][0]
             self.table_format = ex.split(".")[-1]
-        self.videos = sorted(
+        self.videos = os_sorted(
             [
                 vid
                 for vid in os.listdir(self.video_path)
                 if vid.endswith(video_format) and not vid.startswith(".")
             ]
         )
-        self.tables = sorted(
+        self.tables = os_sorted(
             [
                 tab
                 for tab in os.listdir(self.table_path)
@@ -181,6 +182,8 @@ class Project:
         assert len(self.videos) == len(
             self.tables
         ), "Unequal number of videos and tables. Please check your file structure"
+
+
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -483,7 +486,7 @@ class Project:
                 temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
                 temp.columns = pd.MultiIndex.from_product(
-                    [sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
+                    [os_sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
 
@@ -1249,7 +1252,7 @@ class Coordinates:
                         list(
                             set(
                                 [
-                                    tuple(sorted(e))
+                                    tuple(os_sorted(e))
                                     for e in deepof.utils.connect_mouse(
                                         animal_ids=self._animal_ids,
                                         graph_preset=self._bodypart_graph,
@@ -1404,6 +1407,27 @@ class Coordinates:
             raise NotImplementedError
 
         return self._videos
+    
+    def get_start_times(self):
+        """Returns the start time for each table"""
+        start_times={}
+        for key in self._tables:
+            start_times[key]=self._tables[key].index[0]
+        return start_times
+
+    def get_end_times(self):
+        """Returns the end time for each table"""
+        end_times={}
+        for key in self._tables:
+            end_times[key]=self._tables[key].index[-1]
+        return end_times
+
+    def get_table_lengths(self):
+        """Returns the length for each table"""
+        table_lengths={}
+        for key in self._tables:
+            table_lengths[key]=self._tables[key].shape[0]
+        return table_lengths
 
     @property
     def get_exp_conditions(self):
@@ -1583,7 +1607,7 @@ class Coordinates:
                     node_sorting_indices.append(j)
 
         inner_link_bool_mask = []
-        for e in [tuple(sorted(e)) for e in list(graph.edges)]:
+        for e in [tuple(os_sorted(e)) for e in list(graph.edges)]:
             for j, f in enumerate(edge_feature_names):
                 if e == f:
                     edge_sorting_indices.append(j)

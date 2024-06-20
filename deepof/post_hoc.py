@@ -33,6 +33,7 @@ import shap
 import tqdm
 import umap
 import warnings
+from natsort import os_sorted
 
 import deepof.data
 
@@ -247,7 +248,7 @@ def get_time_on_cluster(
 
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
-    counter_df = counter_df[sorted(counter_df.columns)]
+    counter_df = counter_df[os_sorted(counter_df.columns)]
 
     if reduce_dim:
 
@@ -361,13 +362,29 @@ def select_time_bin(
         breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
 
     else:
-        supervised_annotations = {
-            key: val.iloc[
-                bin_size
-                * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
-            ]
-            for key, val in supervised_annotations.items()
-        }
+        if precomputed is not None:  # pragma: no cover
+            for key, val in supervised_annotations.items():
+                if supervised_annotations[key].shape[0] > len(precomputed):
+                    supervised_annotations[key] = val.iloc[
+                        np.concatenate(
+                        [
+                            precomputed,
+                            [False] * (supervised_annotations[key].shape[0] - len(precomputed)),
+                        ]
+                    ).astype(bool)
+                    ]
+                else:
+                    supervised_annotations[key] = val.iloc[precomputed[: supervised_annotations[key].shape[0]]]
+        
+        else:
+        
+            supervised_annotations = {
+                key: val.iloc[
+                    bin_size
+                    * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
+                ]
+                for key, val in supervised_annotations.items()
+            }
 
     return embedding, soft_counts, breaks, supervised_annotations
 
@@ -591,16 +608,21 @@ def enrichment_across_conditions(
 
     if precomputed is not None:  # pragma: no cover
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding,
-            soft_counts,
-            breaks,
+            embedding=embedding,
+            soft_counts=soft_counts,
+            breaks=breaks,
             supervised_annotations=supervised_annotations,
             precomputed=precomputed,
         )
 
     elif bin_size is not None and bin_index is not None:
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding, soft_counts, breaks, supervised_annotations, bin_size, bin_index
+            embedding=embedding, 
+            soft_counts=soft_counts, 
+            breaks=breaks, 
+            supervised_annotations=supervised_annotations, 
+            bin_size=bin_size, 
+            bin_index=bin_index
         )
 
     if supervised_annotations is None:
@@ -613,15 +635,24 @@ def enrichment_across_conditions(
         )
     else:
         # Extract time on each behaviour for all videos and add experimental information
-        counter_df = pd.DataFrame(
-            {key: np.sum(val) for key, val in supervised_annotations.items()}
-        ).T
+        if normalize:
+            counter_df = pd.DataFrame(
+                {key: np.sum(val) / len(val) for key, val in supervised_annotations.items()}
+            ).T
+        else:
+            counter_df = pd.DataFrame(
+                {key: np.sum(val) for key, val in supervised_annotations.items()}
+            ).T
 
-    counter_df["exp condition"] = counter_df.index.map(exp_conditions)
 
-    return counter_df.melt(
+    counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
+
+    enrichment = counter_df.melt(
         id_vars=["exp condition"], var_name="cluster", value_name="time on cluster"
     )
+    enrichment["cluster"] = enrichment["cluster"].astype(str)
+
+    return enrichment
 
 
 def get_transitions(state_sequence: list, n_states: int):
@@ -650,6 +681,7 @@ def compute_transition_matrix_per_condition(
     silence_diagonal: bool = False,
     bin_size: int = None,
     bin_index: int = None,
+    precomputed: np.ndarray = None,
     aggregate: str = True,
     normalize: str = True,
 ):
@@ -662,7 +694,8 @@ def compute_transition_matrix_per_condition(
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.     
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 
@@ -679,6 +712,7 @@ def compute_transition_matrix_per_condition(
             breaks,
             bin_size=bin_size,
             bin_index=bin_index,
+            precomputed=precomputed,
         )
 
     # Get hard counts per video
