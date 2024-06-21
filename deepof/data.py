@@ -16,6 +16,7 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 from collections import defaultdict
 from difflib import get_close_matches
+from natsort import os_sorted
 from pkg_resources import resource_filename
 from shutil import rmtree
 from sklearn import random_projection
@@ -154,14 +155,14 @@ class Project:
                 )
             ][0]
             self.table_format = ex.split(".")[-1]
-        self.videos = sorted(
+        self.videos = os_sorted(
             [
                 vid
                 for vid in os.listdir(self.video_path)
                 if vid.endswith(video_format) and not vid.startswith(".")
             ]
         )
-        self.tables = sorted(
+        self.tables = os_sorted(
             [
                 tab
                 for tab in os.listdir(self.table_path)
@@ -466,7 +467,7 @@ class Project:
                 temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
                 temp.columns = pd.MultiIndex.from_product(
-                    [sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
+                    [os_sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
 

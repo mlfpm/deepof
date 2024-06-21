@@ -60,6 +60,7 @@ torchvision = [
     {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 keras = "2.12"
+natsort = "8.4.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
