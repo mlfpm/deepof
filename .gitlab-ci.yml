@@ -43,6 +43,7 @@ test:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
+    - pip install natsort
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py
     - coverage xml -o deepof_cov.xml
@@ -72,6 +73,7 @@ tutorials:
     - unzip tutorial_files.zip
 
   script:
+    - pip install natsort
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
