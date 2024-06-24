@@ -240,7 +240,7 @@ def get_time_on_cluster(
     }
 
     if normalize:
-        # Normalize the above counters
+        # Normalize the above counters to total length of cluster assignments (sum of all counters)
         hard_count_counters = {
             key: {k: v / sum(list(counter.values())) for k, v in counter.items()}
             for key, counter in hard_count_counters.items()
@@ -604,8 +604,8 @@ def enrichment_across_conditions(
         A long format dataframe with the population of each cluster across conditions.
 
     """
-    # Select time bin and filter all relevant objects
-
+    
+    # Select time bin and filter all relevant objects based on chosen type of binning
     if precomputed is not None:  # pragma: no cover
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
             embedding=embedding,
@@ -634,7 +634,8 @@ def enrichment_across_conditions(
             soft_counts, breaks, normalize=normalize, reduce_dim=False
         )
     else:
-        # Extract time on each behaviour for all videos and add experimental information
+        # Extract time on each behaviour for all videos and add experimental information, 
+        # normalize to total experiment time if normalization is requested 
         if normalize:
             counter_df = pd.DataFrame(
                 {key: np.sum(val) / len(val) for key, val in supervised_annotations.items()}
