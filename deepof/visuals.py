@@ -275,7 +275,7 @@ def plot_heatmaps(
             ]
         )
     #preprocess information given for time binning 
-    bin_size_int, bin_index_int, _, bin_starts, bin_ends, _ = _process_time_bins(coordinates, bin_size, bin_index)
+    bin_size_int, bin_index_int, _, bin_starts, bin_ends, _ = _preprocess_time_bins(coordinates, bin_size, bin_index)
     
     #cut coords accordingly to given start and end points
     if bin_starts is not None and bin_ends is not None:
@@ -379,7 +379,7 @@ def plot_gantt(
         raise NotImplementedError
 
     #preprocess information given for time binning 
-    bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _process_time_bins(coordinates, bin_size, bin_index, experiment_id=experiment_id)
+    bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _preprocess_time_bins(coordinates, bin_size, bin_index, experiment_id=experiment_id)
     
     if bin_processing_failed:
         return
@@ -398,7 +398,7 @@ def plot_gantt(
     #set behavior ids
     if plot_type == "unsupervised":
         hard_counts = soft_counts[experiment_id].argmax(axis=1)
-        behavior_ids = [str(k) for k in range(0,hard_counts.max() + 1)]
+        behavior_ids = [f"Cluster {str(k)}" for k in range(0,hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
             col
@@ -489,18 +489,9 @@ def plot_gantt(
             )
 
     # Set behavior labels for y-axis
-    if plot_type == "unsupervised":
-        behavior_ticks = np.array(
-            [
-                f"Cluster {cluster}"
-                for cluster in range(n_features)
-                if behaviors_to_plot is None or cluster in behaviors_to_plot
-            ]
-        )
-    elif plot_type == "supervised":
-        behavior_ticks = (
-            behavior_ids if behaviors_to_plot is None else behaviors_to_plot
-        )
+    behavior_ticks = (
+        behavior_ids if behaviors_to_plot is None else behaviors_to_plot
+    )
 
     #set x-ticks
     plt.xticks([])
@@ -565,7 +556,7 @@ def plot_enrichment(
     soft_counts: table_dict = None,
     breaks: table_dict = None,
     supervised_annotations: table_dict = None,
-    plot_proportions: bool = True,
+    plot_speed: bool = False,
     add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_index: Union[int, str] = 0,
@@ -587,7 +578,7 @@ def plot_enrichment(
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
-        plot_proportions (bool): if supervised annotations are provided, display only traits that are measured as proportions instead of real values. Useful to visualize traits with different scales.
+        plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         bin_size (Union[int,str]): bin size for time filtering.
@@ -600,6 +591,22 @@ def plot_enrichment(
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
     """
+    
+    #Checks to throw errors or warn about conflicting inputs
+    if supervised_annotations is not None and any(
+        [embeddings is not None,
+        soft_counts is not None,
+        breaks is not None]
+    ):
+        print(f"\033[91mError! This function only accepts either supervised or unsupervised annotations as inputs!\033[0m")
+        return None
+    
+    if precomputed_bins is not None and any(
+        [bin_index is not None,
+        bin_size is not None]
+    ):
+        print("\033[38;5;208mWarning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!\033[0m")
+    
     # Get requested experimental condition. If none is provided, default to the first one available.
     if exp_condition is None:
         exp_conditions = {
@@ -612,12 +619,13 @@ def plot_enrichment(
             for key, val in coordinates.get_exp_conditions.items()
         }
 
+    #set default exp_condition_order if none isprovided
     if exp_condition_order is None:
         exp_condition_order=np.unique(list(exp_conditions.values())).astype(str)
 
-
+    #specific case
     if supervised_annotations is not None:
-        if plot_proportions:
+        if not plot_speed:
             supervised_annotations = {
                 key: val.loc[:, [col for col in val.columns if "speed" not in col]]
                 for key, val in supervised_annotations.items()
@@ -631,8 +639,9 @@ def plot_enrichment(
     #preprocess information given for time binning 
     bin_index_int= None
     bin_size_int = None
+    bin_processing_failed=False
     if precomputed_bins is None:
-        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _process_time_bins(coordinates, bin_size, bin_index)
+        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _preprocess_time_bins(coordinates, bin_size, bin_index)
     
     if bin_processing_failed:
         return
@@ -660,6 +669,17 @@ def plot_enrichment(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
+    #adjust label to fit with normalization setting
+
+    if not plot_speed and supervised_annotations is not None:
+        y_axis_label="sum of total speed"
+    elif normalize:
+        y_axis_label="time on cluster in %"
+        enrichment['time on cluster']=enrichment['time on cluster']*100
+    else:
+        y_axis_label="time on cluster in s"
+        enrichment['time on cluster']=enrichment['time on cluster']/coordinates._frame_rate
+
     # Plot a barchart grouped per experimental conditions
     sns.barplot(
         data=enrichment,
@@ -678,12 +698,14 @@ def plot_enrichment(
         dodge=True,
     )
 
+    ax.set_ylabel(y_axis_label)
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(
         handles[2:], labels[2:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
     )
 
     if add_stats:
+        #creating pairs containing information about which data gets compared
         pairs = list(
             product(
                 set(
@@ -710,6 +732,7 @@ def plot_enrichment(
             and p[1][0] in enrichment["cluster"].values
         ]
 
+        #do actual testing with annotator package
         annotator = Annotator(
             ax,
             pairs=pairs,
@@ -734,10 +757,11 @@ def plot_enrichment(
                 coordinates._project_path,
                 coordinates._project_name,
                 "Figures",
-                "deepof_enrichment{}_bin_size={}_bin_index={}_{}.pdf".format(
+                "deepof_enrichment{}_bin_size={}_bin_index={}_test={}_{}.pdf".format(
                     (f"_{save}" if isinstance(save, str) else ""),
                     bin_size,
                     bin_index,
+                    add_stats,
                     calendar.timegm(time.gmtime()),
                 ),
             )
@@ -801,8 +825,9 @@ def plot_transitions(
     #preprocess information given for time binning 
     bin_index_int= None
     bin_size_int = None
+    bin_processing_failed=False
     if precomputed_bins is None:
-        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _process_time_bins(coordinates, bin_size, bin_index)
+        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _preprocess_time_bins(coordinates, bin_size, bin_index)
     
     if bin_processing_failed:
         return
@@ -975,8 +1000,9 @@ def plot_stationary_entropy(
     #preprocess information given for time binning 
     bin_index_int= None
     bin_size_int = None
+    bin_processing_failed=False
     if precomputed_bins is None:
-        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _process_time_bins(coordinates, bin_size, bin_index)
+        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _preprocess_time_bins(coordinates, bin_size, bin_index)
     
     if bin_processing_failed:
         return
@@ -1304,7 +1330,7 @@ def plot_embeddings(
     verbose: bool = False,
     # Visualization design and data parameters
     exp_condition: str = None,
-    aggregate_experiments: str = False,
+    aggregate_experiments: str = None,
     samples: int = 500,
     show_aggregated_density: bool = True,
     colour_by: str = "cluster",
@@ -1337,11 +1363,28 @@ def plot_embeddings(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
+    #Checks to throw errors or warn about conflicting inputs
+    if supervised_annotations is not None and any(
+        [embeddings is not None,
+        soft_counts is not None,
+        breaks is not None]
+    ):
+        print(f"\033[91mError! This function only accepts either supervised or unsupervised annotations as inputs!\033[0m")
+        return None
+    
+    if precomputed_bins is not None and any(
+        [bin_index is not None,
+        bin_size is not None]
+    ):
+        print("\033[38;5;208mWarning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!\033[0m")
+
+
     #preprocess information given for time binning 
     bin_index_int= None
     bin_size_int = None
+    bin_processing_failed=False
     if precomputed_bins is None:
-        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _process_time_bins(coordinates, bin_size, bin_index)
+        bin_size_int, bin_index_int, precomputed_bins, _, _, bin_processing_failed = _preprocess_time_bins(coordinates, bin_size, bin_index)
 
     if bin_processing_failed:
         return
@@ -1429,8 +1472,14 @@ def plot_embeddings(
 
     else:
 
-        if not aggregate_experiments:
+        #set aggregate_experiments default based on type of plot
+        if ((not aggregate_experiments or aggregate_experiments == "time on cluster") 
+        and sup_annots_to_plot is not None):
+            aggregate_experiments = "mean" #makes more sense to capture 0-1 behaviors
+            print(f"\033[33mInfo! Set aggregate_experiments to -mean-!\033[0m")
+        elif not aggregate_experiments and emb_to_plot is not None:
             aggregate_experiments = "median"
+            print(f"\033[33mInfo! Set aggregate_experiments to -median-!\033[0m")
 
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
@@ -1530,11 +1579,13 @@ def plot_embeddings(
                 coordinates._project_path,
                 coordinates._project_name,
                 "Figures",
-                "deepof_embeddings{}_colour={}_agg={}_min_conf={}_{}.pdf".format(
+                "deepof_embeddings{}_colour={}_agg={}_min_conf={}_bin_size={}_bin_index={}_{}.pdf".format(
                     (f"_{save}" if isinstance(save, str) else ""),
                     colour_by,
                     aggregate_experiments,
                     min_confidence,
+                    bin_size,
+                    bin_index,
                     calendar.timegm(time.gmtime()),
                 ),
             )
@@ -2953,7 +3004,7 @@ def annotate_video(
 
     return True
 
-def _process_time_bins(
+def _preprocess_time_bins(
         coordinates: coordinates,
         bin_size: Union [int,str],
         bin_index: Union [int,str],
@@ -2988,11 +3039,16 @@ def _process_time_bins(
     #get start and end times for each table
     start_times = coordinates.get_start_times() 
     table_lengths = coordinates.get_table_lengths()
+    #if a specific experiment is given, calculate time bin info only for this experiment
+    if experiment_id is not None:
+        start_times = {experiment_id: start_times[experiment_id]}
+        table_lengths = {experiment_id: table_lengths[experiment_id]}
 
     
     pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,9})?$"
     #Case 1: Integer bins are only adjusted using the frame rate
     if type(bin_size) is int and type(bin_index) is int:
+
         bin_size_int=int(np.round(bin_size* coordinates._frame_rate))
         bin_index_int=bin_index
         bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index)
@@ -3007,10 +3063,7 @@ def _process_time_bins(
             and re.match(pattern, bin_index) is not None
         ):
 
-        #if a specific experiment is given, calculate time bin info only for thsi experiment
-        if experiment_id is not None:
-            start_times = {experiment_id: start_times[experiment_id]}
-            table_lengths = {experiment_id: table_lengths[experiment_id]}
+
 
         # set starts and ends for all coord items
         bin_starts = {key: 0 for key in table_lengths}
@@ -3043,22 +3096,32 @@ def _process_time_bins(
         print(f"\033[91mError! bin_index or bin_size were given in an incorrect format!\033[0m")
         print(f"\033[91mPlease use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\033[0m")
         print(f"\033[91mProceed to plot default binning (bin_index = 0, bin_size = 60)!\033[0m")
+        
+        
         bin_size_int = int(np.round(60 * coordinates._frame_rate))
         bin_index_int = 0
         bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index_int)
         bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index_int + 1))
 
-    if bin_size is None and bin_index is None:
+    if bin_size is not None and bin_index is not None:
         #warning messages in case of weird indexing
         bin_warning = False
         for key in table_lengths:
-            if bin_starts[key] > table_lengths[key]:
+            if bin_size_int==0:
+                if not bin_processing_failed:
+                    print(
+                        "\033[91mError! Please make sure bin_size is > 0\033[0m"
+                    )
+                    bin_processing_failed=True
+                    break  
+            elif bin_starts[key] > table_lengths[key]:
                 if not bin_processing_failed:
                     print(
                         "\033[91mError! Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}\033[0m"
                         .format(seconds_to_time(table_lengths[key]/coordinates._frame_rate, False),int(np.ceil(table_lengths[key]/bin_size_int)),bin_size)
                     )
-                    bin_processing_failed=True  
+                    bin_processing_failed=True
+                    break  
             elif bin_ends[key] > table_lengths[key]:
                 bin_ends[key] = table_lengths[key]
                 if not bin_warning:
@@ -3067,10 +3130,11 @@ def _process_time_bins(
                         "\033[38;5;208mTherefore, the chosen bin was truncated to a length of {}\033[0m"
                         .format(seconds_to_time((bin_ends[key]-bin_starts[key])/coordinates._frame_rate, False))
                     )
-                    print(
-                        "\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m"
-                        .format(seconds_to_time((table_lengths[key]-bin_size_int)/coordinates._frame_rate, False),int(np.ceil(table_lengths[key]/bin_size_int))-2,bin_size)
-                    )
+                    if table_lengths[key]-bin_size_int > 0:
+                        print(
+                            "\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m"
+                            .format(seconds_to_time((table_lengths[key]-bin_size_int)/coordinates._frame_rate, False),int(np.ceil(table_lengths[key]/bin_size_int))-2,bin_size)
+                        )
                     bin_warning = True
 
 
