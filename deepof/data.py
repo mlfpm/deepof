@@ -1252,7 +1252,7 @@ class Coordinates:
                         list(
                             set(
                                 [
-                                    tuple(os_sorted(e))
+                                    tuple(sorted(e))
                                     for e in deepof.utils.connect_mouse(
                                         animal_ids=self._animal_ids,
                                         graph_preset=self._bodypart_graph,
@@ -1607,7 +1607,7 @@ class Coordinates:
                     node_sorting_indices.append(j)
 
         inner_link_bool_mask = []
-        for e in [tuple(os_sorted(e)) for e in list(graph.edges)]:
+        for e in [tuple(sorted(e)) for e in list(graph.edges)]:
             for j, f in enumerate(edge_feature_names):
                 if e == f:
                     edge_sorting_indices.append(j)

@@ -33,7 +33,6 @@ import shap
 import tqdm
 import umap
 import warnings
-from natsort import os_sorted
 
 import deepof.data
 
@@ -248,7 +247,7 @@ def get_time_on_cluster(
 
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
-    counter_df = counter_df[os_sorted(counter_df.columns)]
+    counter_df = counter_df[sorted(counter_df.columns)]
 
     if reduce_dim:
 
@@ -348,7 +347,7 @@ def select_time_bin(
             # to check whether a certain instance falls into the desired bin
             breaks_mask_dict = {
                 key: (np.cumsum(value) >= bin_size * bin_index)
-                & (np.cumsum(value) < bin_size * (bin_index + 1))
+                & (np.cumsum(value) <= bin_size * (bin_index + 1))
                 for key, value in breaks.items()
             }
 
@@ -706,7 +705,7 @@ def compute_transition_matrix_per_condition(
 
     """
     # Filter data to get desired subset
-    if bin_size is not None and bin_index is not None:
+    if (bin_size is not None and bin_index is not None) or precomputed is not None:
         embedding, soft_counts, breaks, _ = select_time_bin(
             embedding,
             soft_counts,
