@@ -16,6 +16,7 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 from collections import defaultdict
 from difflib import get_close_matches
+from natsort import os_sorted
 from pkg_resources import resource_filename
 from shutil import rmtree
 from sklearn import random_projection
@@ -55,7 +56,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-# CLASSES FOR PREPROCESSING AND DATA WRANGLING
+#  CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
 def load_project(project_path: str) -> coordinates:  # pragma: no cover
