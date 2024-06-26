@@ -55,7 +55,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-# CLASSES FOR PREPROCESSING AND DATA WRANGLING
+#  CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
 def load_project(project_path: str) -> coordinates:  # pragma: no cover
