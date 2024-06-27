@@ -1407,7 +1407,12 @@ def plot_embeddings(
         aggregate_experiments=aggregate_experiments, 
         colour_by=colour_by, 
         )
-    
+    #prevents crash due to axis issues
+    if (not aggregate_experiments and embeddings is not None and normative_model
+    or not aggregate_experiments and embeddings is not None and type(ax)==list):
+        raise ValueError(
+            "\"normative_model\" cannot be used without \"aggregate_experiments\", hence \"ax\" cannot be a list"
+        )     
     #Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
         [embeddings is not None,
@@ -1442,13 +1447,7 @@ def plot_embeddings(
         bin_index_int,
         precomputed_bins,
     )
-    show = True
-
-    if normative_model and not any(normative_model in x for x in concat_hue):               
-        raise ValueError(
-            "The chosen exp_condition \"{}\" does not contain any values named \"{}\" as were selected for the normative_model"
-            .format(exp_condition, normative_model)
-            )    
+    show = True  
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
@@ -1526,10 +1525,7 @@ def plot_embeddings(
         if ((not aggregate_experiments or aggregate_experiments == "time on cluster") 
         and sup_annots_to_plot is not None):
             aggregate_experiments = "mean" #makes more sense to capture 0-1 behaviors
-            print(f"\033[33mInfo! Set aggregate_experiments to -mean-!\033[0m")
-        elif not aggregate_experiments and emb_to_plot is not None:
-            aggregate_experiments = "median"
-            print(f"\033[33mInfo! Set aggregate_experiments to -median-!\033[0m")
+            print(f"\033[33mInfo! Set aggregate_experiments to -mean- since supervised annotations were given!\033[0m")
 
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
@@ -3283,9 +3279,9 @@ def _check_enum_inputs(
         raise ValueError(
             "\"exp_condition\" needs to be one of the following: {}".format(str(exp_condition_options_list)[1:-1])
         )
-    if exp_condition_order is not None and not set(exp_condition_order).issubset(set(exp_condition_options_list)):
+    if exp_condition_order is not None and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
         raise ValueError(
-            "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(exp_condition_options_list)[1:-1])
+            "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
         )
     if condition_value is not None and condition_value not in condition_value_options_list:
         raise ValueError(
