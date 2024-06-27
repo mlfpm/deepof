@@ -255,7 +255,7 @@ def plot_heatmaps(
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
         save (str):  if provided, the figure is saved to the specified path.
-        experiment_id (str): index of the animal to plot.
+        experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged. 
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         dpi (int): resolution of the figure.
@@ -269,6 +269,7 @@ def plot_heatmaps(
     #initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        origin="plot_heatmaps",
         bodyparts=bodyparts, 
         center=center, 
         experiment_id=experiment_id, 
@@ -1020,12 +1021,12 @@ def plot_stationary_entropy(
     if exp_condition is None:
         exp_conditions = {
             key: str(val.iloc[:, 0].values[0])
-            for key, val in embeddings._exp_conditions.items()
+            for key, val in coordinates.get_exp_conditions.items()
         }
     else:
         exp_conditions = {
             key: str(val.loc[:, exp_condition].values[0])
-            for key, val in embeddings._exp_conditions.items()
+            for key, val in coordinates.get_exp_conditions.items()
         }
 
     soft_counts = soft_counts.filter_videos(embeddings.keys())
@@ -1912,7 +1913,7 @@ def animate_skeleton(
     _check_enum_inputs(
         coordinates,
         experiment_id=experiment_id, 
-        #animal_id=animal_id, 
+        animal_id=animal_id, 
         center=center, 
         )
     
@@ -3217,11 +3218,13 @@ def _preprocess_time_bins(
 
 def _check_enum_inputs(
     coordinates: coordinates,
+    origin: object = None,
     experiment_id: str = None,
     exp_condition: str = None,
     exp_condition_order: list = None,
     condition_value: str = None,
     bodyparts: list = None,
+    animal_id: str = None,
     center: str = None,
     visualization: str = None,
     normative_model: str = None,
@@ -3246,24 +3249,34 @@ def _check_enum_inputs(
     """
     
     #Generate lists of possible options for all enum-likes (solution will be improved in the future)
-    experiment_id_options_list=["average"]+os_sorted(list(coordinates._exp_conditions.keys()))
-    exp_condition_options_list=np.unique(
-        np.concatenate(
-            [condition.columns.values[:] for condition in coordinates._exp_conditions.values()]
+    if origin=="plot_heatmaps":
+        experiment_id_options_list=["average"]+os_sorted(list(coordinates._tables.keys()))
+    else:
+        experiment_id_options_list=os_sorted(list(coordinates._tables.keys()))
+
+    if coordinates.get_exp_conditions is not None:
+        exp_condition_options_list = np.unique(
+            np.concatenate(
+                [condition.columns.values[:] for condition in coordinates.get_exp_conditions.values()]
+                )
             )
-        )
+    else:
+        exp_condition_options_list = []
     if exp_condition is not None and exp_condition in exp_condition_options_list:
         condition_value_options_list=np.unique(
             np.concatenate(
-                [condition[exp_condition].values.astype(str) for condition in coordinates._exp_conditions.values()]
+                [condition[exp_condition].values.astype(str) for condition in coordinates.get_exp_conditions.values()]
                 )
-            )    
-    bodyparts_options_list=np.unique(
-        np.concatenate(
-            [coordinates.get_quality()[key].columns.values[:] for key in coordinates._exp_conditions.keys()]
             )
+    else:
+        condition_value_options_list=[]    
+    bodyparts_options_list = np.unique(
+        np.concatenate(
+            [coordinates._tables[key].columns.levels[0] for key in coordinates._tables.keys()]
         )
+    )
     bodyparts_options_list=[item for item in bodyparts_options_list if item not in coordinates._excluded]
+    animal_id_options_list=coordinates._animal_ids
     #fixed option lists
     center_options_list=["arena"]
     visualization_options_list=["networks","heatmaps"]
@@ -3276,24 +3289,40 @@ def _check_enum_inputs(
             "\"experiment_id\" needs to be one of the following: {} ... ".format(str(experiment_id_options_list[0:4])[1:-1])
         )
     if exp_condition is not None and exp_condition not in exp_condition_options_list:
-        raise ValueError(
-            "\"exp_condition\" needs to be one of the following: {}".format(str(exp_condition_options_list)[1:-1])
-        )
+        if exp_condition_options_list:
+            raise ValueError(
+                "\"exp_condition\" needs to be one of the following: {}".format(str(exp_condition_options_list)[1:-1])
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
     if exp_condition_order is not None and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
-        raise ValueError(
-            "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
-        )
+        if condition_value_options_list:
+            raise ValueError(
+                "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
     if condition_value is not None and condition_value not in condition_value_options_list:
-        raise ValueError(
-            "\"condition_value\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
-        )
+        if condition_value_options_list:
+            raise ValueError(
+                "\"condition_value\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
     if normative_model is not None and normative_model not in condition_value_options_list:
-        raise ValueError(
-            "\"normative_model\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
-        )
+        if condition_value_options_list:
+            raise ValueError(
+                "\"normative_model\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
     if bodyparts is not None and not set(bodyparts).issubset(set(bodyparts_options_list)):
         raise ValueError(
             "One or more bodyparts in \"bodyparts\" are not part of: {}".format(str(bodyparts_options_list)[1:-1])
+        )
+    if animal_id is not None and animal_id not in animal_id_options_list:   
+        raise ValueError(
+            "\"animal_id\" needs to be one of the following: {}".format(str(animal_id_options_list))
         )    
     if center is not None and center not in center_options_list:   
         raise ValueError(
