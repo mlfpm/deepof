@@ -47,6 +47,7 @@ import deepof.model_utils
 import deepof.models
 import deepof.annotation_utils
 import deepof.utils
+from deepof.utils import suppress_warning
 import deepof.visuals
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -73,15 +74,14 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
     ) as handle:
         coordinates = pickle.load(handle)
 
-    coordinates._project_path = os.path.split(project_path)[0]
-    #ensures backwards compatibility
+    coordinates._project_path = os.path.split(project_path[0:-1])[0]
+    #Error for not compatible versions
     if not(hasattr(coordinates, "_run_numba")):
-        #check if fast_implementations_threshold is reached
-        coordinates._run_numba=False
-        video_paths= [os.path.join(coordinates._project_path,coordinates._project_name,"Videos",video) for video in coordinates._videos]
-        total_frames=deepof.utils.get_total_Frames(video_paths)
-        if total_frames> 100000:
-            coordinates._run_numba=True    
+
+        raise ValueError(
+            """You are trying to load a deepOF project that was created with version 0.6.3 or earlier.\n
+            These older versions are not compatible with the current version"""
+        )        
 
     return coordinates
 
@@ -101,7 +101,7 @@ class Project:
         enable_iterative_imputation: bool = True,
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
-        interpolate_outliers: bool = True,
+        remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
@@ -206,7 +206,7 @@ class Project:
         self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
-        self.interpolate_outliers = interpolate_outliers
+        self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
@@ -490,13 +490,13 @@ class Project:
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
 
-        if self.interpolate_outliers:
+        if self.remove_outliers:
 
             if verbose:
                 print("Interpolating outliers...")
 
             for k, tab in tab_dict.items():
-                tab_dict[k] = deepof.utils.interpolate_outliers(
+                tab_dict[k] = deepof.utils.remove_outliers(
                     tab,
                     lik_dict[k],
                     likelihood_tolerance=self.likelihood_tolerance,
@@ -1045,10 +1045,12 @@ class Coordinates:
 
         """
 
-        #intermediary solution to prevent pickle.load related failure
-        run_numba=False
-        if hasattr(self, "_run_numba"):    
-            run_numba=self._run_numba
+        #Additional old version error for better user feedback, can get removed in a few versions
+        if not(hasattr(self, "_run_numba")):    
+            raise ValueError(
+            """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+            This is not supported byt he current version of deepof"""
+        )   
 
         tabs = deepof.utils.deepcopy(self._tables)
         coord_1, coord_2 = "x", "y"
@@ -1140,7 +1142,7 @@ class Coordinates:
 
                     if align_inplace and not polar:
                         partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned), mode="all", run_numba=run_numba,
+                            np.array(partial_aligned), mode="all", run_numba=self._run_numba,
                         )
                         partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
                         partial_aligned = pd.DataFrame(partial_aligned)
@@ -1449,6 +1451,9 @@ class Coordinates:
             for exp_id in exp_conditions.iloc[:, 0]
         }
         self._exp_conditions = exp_conditions
+        
+        # Save loaded conditions within project
+        self.save(timestamp=False)
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
@@ -1528,6 +1533,8 @@ class Coordinates:
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    
+    @suppress_warning(warn_messages=["adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."])
     def get_graph_dataset(
         self,
         animal_id: str = None,
@@ -1696,10 +1703,12 @@ class Coordinates:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
 
         """
-        #intermediary solution to prevent pickle.load related failure
-        run_numba=False
-        if hasattr(self, "_run_numba"):    
-            run_numba=self._run_numba
+        #Additional old version error for better user feedback, can get removed in a few versions
+        if not(hasattr(self, "_run_numba")):    
+            raise ValueError(
+            """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+            This is not supported byt he current version of deepof"""
+        )   
 
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
@@ -1758,7 +1767,7 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 center=center,
                 params=params,
-                run_numba=run_numba
+                run_numba=self._run_numba
             )
 
             supervised_tags.index = tag_index
