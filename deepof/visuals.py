@@ -30,6 +30,8 @@ import shap
 import tensorflow as tf
 import time
 import warnings
+from deepof.utils import suppress_warning
+
 
 import deepof.post_hoc
 from deepof.visuals_utils import time_to_seconds, seconds_to_time, calculate_average_arena
@@ -39,6 +41,8 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
+#activate warnings
+warnings.simplefilter('always', UserWarning)
 
 # PLOTTING FUNCTIONS #
 
@@ -305,7 +309,7 @@ def plot_heatmaps(
         }
     
     if not center:  # pragma: no cover
-        warnings.warn("Heatmaps look better if you center the data")
+        warnings.warn("\033[38;5;208mWarning! Heatmaps look better if you center the data\033[0m")
 
     # Add experimental conditions to title, if provided
     title_suffix = experiment_id
@@ -485,11 +489,19 @@ def plot_gantt(
         #plot line for axis to separate between features
         plt.axhline(y=rows, color="k", linewidth=0.5)
 
+        #workaround for cases in which the entire segment to plot is only 1s 
+        #(would result in a white plot otherwise)
+        vals=np.unique(gantt_cp)
+        if not any(vals==0):
+            colors=[color, "white"]
+        else:
+            colors=["white", color]
+        
         #plot actual heatmap for current feature
         sns.heatmap(
             data=gantt_cp,
             cbar=False,
-            cmap=LinearSegmentedColormap.from_list("deepof", ["white", color], N=2),
+            cmap=LinearSegmentedColormap.from_list("deepof", colors, N=2),
             ax = ax,
         )
         rows+=1
@@ -621,15 +633,15 @@ def plot_enrichment(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
-    """
-    
+    """    
     #initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
         exp_condition=exp_condition, 
         exp_condition_order=exp_condition_order,
         )
-    
+    if normalize and plot_speed:
+        print("\033[33mInfo! When plotting speed the normalization option \"normalize\" is ignored!\033[0m")  
     #Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
         [embeddings is not None,
@@ -682,6 +694,7 @@ def plot_enrichment(
         breaks=breaks,
         supervised_annotations=supervised_annotations,
         exp_conditions=exp_conditions,
+        plot_speed=plot_speed,
         bin_size=(bin_size_int if bin_size is not None else None),
         bin_index=bin_index_int,
         precomputed=precomputed_bins,
@@ -692,22 +705,31 @@ def plot_enrichment(
     enrichment["exp condition"] = pd.Categorical(
         enrichment["exp condition"], exp_condition_order
     )
+    if supervised_annotations is not None and not plot_speed:
+        #this assumes that all entries in supervised_annotations always have the same keys
+        first_key = next(iter(supervised_annotations))
+        cluster_categories = supervised_annotations[first_key].columns
+        enrichment["cluster"] = pd.Categorical(enrichment["cluster"], categories = cluster_categories)
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
+    enrichment["cluster"] = enrichment["cluster"].astype(str)
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
-    #adjust label to fit with normalization setting
-
-    if not plot_speed and supervised_annotations is not None:
-        y_axis_label="sum of total speed"
+    
+    #adjust label and y-axis scaling to meaningful units
+    if plot_speed and supervised_annotations is not None:
+        y_axis_label="average speed in pixel / s"
     elif normalize:
         y_axis_label="time on cluster in %"
         enrichment['time on cluster']=enrichment['time on cluster']*100
-    else:
+    elif coordinates._frame_rate is not None:
         y_axis_label="time on cluster in s"
         enrichment['time on cluster']=enrichment['time on cluster']/coordinates._frame_rate
+    else:
+        y_axis_label="time on cluster in frames"
 
+        
     # Plot a barchart grouped per experimental conditions
     sns.barplot(
         data=enrichment,
@@ -779,6 +801,19 @@ def plot_enrichment(
         )
         annotator.apply_and_annotate()
 
+
+    #set x-ticks
+    
+    if ax:
+        bbox = ax.get_window_extent().transformed(plt.gcf().dpi_scale_trans.inverted())
+        X_size=(bbox.width)
+        N_X_ticks=len(ax.xaxis.get_ticklabels())
+        ax.set_xticks(ax.get_xticks(),ax.get_xticklabels(),rotation=int(np.max([np.min([90.0,(N_X_ticks/X_size-1)*30]),0.0])))
+    else:
+        X_size=plt.gcf().get_size_inches()[1]
+        N_X_ticks=len(plt.xticks()[0])
+        plt.xticks(rotation=int(np.max([np.min([90.0,(N_X_ticks/X_size-1)*30]),0.0])))
+        
     if save:
         plt.savefig(
             os.path.join(
@@ -844,6 +879,7 @@ def plot_transitions(
     #initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        origin="plot_transitions",
         exp_condition=exp_condition, 
         visualization=visualization,
         )
@@ -1069,6 +1105,9 @@ def plot_stationary_entropy(
     if ax is None:
         fig, ax = plt.subplots(1, 1)
 
+    
+    #sort for uniform plotting
+    ungrouped_entropy_scores.sort_values(by=ungrouped_entropy_scores.columns[2], inplace=True)
     # Draw violin/strip plots with full-video entropy
     sns.violinplot(
         data=ungrouped_entropy_scores,
@@ -1370,7 +1409,7 @@ def plot_embeddings(
     aggregate_experiments: str = None,
     samples: int = 500,
     show_aggregated_density: bool = True,
-    colour_by: str = "cluster",
+    colour_by: str = "exp_condition",
     show_break_size_as_radius: bool = False,
     ax: Any = None,
     save: bool = False,
@@ -1518,7 +1557,6 @@ def plot_embeddings(
         embedding_dataset = embedding_dataset.loc[
             embedding_dataset.confidence > min_confidence
         ]
-        embedding_dataset.sort_values("cluster", inplace=True)
 
     else:
 
@@ -1552,6 +1590,7 @@ def plot_embeddings(
                 "experimental condition": concat_hue,
             }
         )
+        embedding_dataset.sort_values(by=embedding_dataset.columns[2], inplace=True)
 
         if normative_model:
             embedding_dataset, show, ax = plot_normative_log_likelihood(
@@ -1574,7 +1613,8 @@ def plot_embeddings(
     else:
         hue=(colour_by)
 
-
+    #resort
+    embedding_dataset.sort_values(by=embedding_dataset.columns[2], inplace=True)
     # Plot selected embeddings using the specified settings
     sns.scatterplot(
         data=embedding_dataset,
@@ -1616,9 +1656,15 @@ def plot_embeddings(
                 ax=ax,
             )
         else:
-            print(f"\033[38;5;208mWarning! Failed to plot continuous probability density curve!\033[0m")
-            print(f"\033[38;5;208mSome Experimental condition combinations do not span at least two dimensions!\033[0m")
-            print(f"\033[38;5;208mThis Error may happen due to an insufficient amount of data.\033[0m")
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! Failed to plot continuous probability density curve!\n"
+                "Some Experimental condition combinations do not span at least two dimensions!\n"
+                "This Error may happen due to an insufficient amount of data."
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+
 
     if not aggregate_experiments:
         if ax is None:
@@ -2115,6 +2161,7 @@ def animate_skeleton(
     return animation.to_html5_video()
 
 
+@suppress_warning(["iteritems is deprecated and will be removed in a future version. Use .items instead."])
 def plot_cluster_detection_performance(
     coordinates: coordinates,
     chunk_stats: pd.DataFrame,
@@ -2122,7 +2169,7 @@ def plot_cluster_detection_performance(
     hard_counts: np.ndarray,
     groups: list,
     save: bool = False,
-    matrix_visualization: str = "confusion_matrix",
+    visualization: str = "confusion_matrix",
     ax: plt.Axes = None,
 ):
     """Plot either a confusion matrix or a bar chart with balanced accuracy for cluster detection cross validated models.
@@ -2140,6 +2187,12 @@ def plot_cluster_detection_performance(
         ax (plt.Axes): axis where to plot the figure. If None, a new figure is created.
 
     """
+    _check_enum_inputs(
+        coordinates,
+        origin="plot_cluster_detection_performance",
+        visualization=visualization,
+        )
+    
     n_clusters = len(np.unique(hard_counts))
     confusion_matrices = []
 
@@ -2157,7 +2210,7 @@ def plot_cluster_detection_performance(
 
     cluster_names = ["cluster {}".format(i) for i in sorted(list(set(hard_counts)))]
 
-    if matrix_visualization == "confusion_matrix":
+    if visualization == "confusion_matrix":
 
         cm = np.stack(confusion_matrices).sum(axis=0)
         cm = cm / cm.sum(axis=1)[:, np.newaxis]
@@ -2174,7 +2227,7 @@ def plot_cluster_detection_performance(
         sns.heatmap(cm, annot=True, cmap="Blues", ax=ax)
         ax.set_yticks(ax.get_yticks(), ax.get_yticklabels(), rotation=0)
 
-    elif matrix_visualization == "balanced_accuracy":
+    elif visualization == "balanced_accuracy":
 
         def compute_balanced_accuracy(cm, cluster_index):
             """
@@ -2202,6 +2255,7 @@ def plot_cluster_detection_performance(
 
         ax.set_title("Supervised cluster mapping performance")
 
+        #both throw iteritems deprecation warning
         sns.barplot(
             data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3], ax=ax
         )
@@ -2229,7 +2283,7 @@ def plot_cluster_detection_performance(
                 "Figures",
                 "deepof_supervised_cluster_detection_type={}{}_{}.pdf".format(
                     (f"_{save}" if isinstance(save, str) else ""),
-                    matrix_visualization,
+                    visualization,
                     calendar.timegm(time.gmtime()),
                 ),
             )
@@ -3109,8 +3163,12 @@ def _preprocess_time_bins(
         [bin_index is not None,
         bin_size is not None]
     ):
-        print("\033[38;5;208mWarning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!\033[0m")
-
+        warning_message = (
+            "\033[38;5;208m\n"  
+            "Warning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!"
+            "\033[0m"  
+        )
+        warnings.warn(warning_message)
     #init outputs
     bin_size_int=None
     bin_index_int=None
@@ -3174,9 +3232,15 @@ def _preprocess_time_bins(
         #Case 3: If nonsensical input was given, return error and default bins
         elif bin_size is not None:
             #plot short default bin, if user entered bins incorrectly
-            print(f"\033[38;5;208mWarning! bin_index or bin_size were given in an incorrect format!\033[0m")
-            print(f"\033[38;5;208mPlease use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\033[0m")
-            print(f"\033[38;5;208mProceed to plot default binning (bin_index = 0, bin_size = 60)!\033[0m")
+
+            warning_message = (
+                "\033[38;5;208m\n"  
+                "Warning! bin_index or bin_size were given in an incorrect format!\n"
+                "Please use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\n"
+                "Proceed to plot default binning (bin_index = 0, bin_size = 60)!"
+                "\033[0m"  
+            )
+            warnings.warn(warning_message)
                    
             bin_size_int = int(np.round(60 * coordinates._frame_rate))
             bin_index_int = 0
@@ -3200,11 +3264,14 @@ def _preprocess_time_bins(
                 elif bin_ends[key] > table_lengths[key]:
                     bin_ends[key] = table_lengths[key]
                     if not bin_warning:
-                        print("\033[38;5;208mWarning! The chosen time range exceeds the signal length for at least one data set!\033[0m")
-                        print(
-                            "\033[38;5;208mTherefore, the chosen bin was truncated to a length of {}\033[0m"
-                            .format(seconds_to_time((bin_ends[key]-bin_starts[key])/coordinates._frame_rate, False))
+                        truncated_length = seconds_to_time((bin_ends[key] - bin_starts[key]) / coordinates._frame_rate, False)
+                        warning_message = (
+                            "\033[38;5;208m\n"  
+                            "Warning! The chosen time range exceeds the signal length for at least one data set!\n"
+                            f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
+                            "\033[0m" 
                         )
+                        warnings.warn(warning_message)                       
                         if table_lengths[key]-bin_size_int > 0:
                             print(
                                 "\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m"
@@ -3247,7 +3314,10 @@ def _check_enum_inputs(
     colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
         
     """
-    
+    #activate warnings (again, because just putting it at the beginning of the skript
+    #appears to yield inconsitent results)
+    warnings.simplefilter('always', UserWarning)
+
     #Generate lists of possible options for all enum-likes (solution will be improved in the future)
     if origin=="plot_heatmaps":
         experiment_id_options_list=["average"]+os_sorted(list(coordinates._tables.keys()))
@@ -3279,7 +3349,10 @@ def _check_enum_inputs(
     animal_id_options_list=coordinates._animal_ids
     #fixed option lists
     center_options_list=["arena"]
-    visualization_options_list=["networks","heatmaps"]
+    if origin=="plot_transitions":
+        visualization_options_list=["networks","heatmaps"]
+    else:
+        visualization_options_list=["confusion_matrix","balanced_accuracy"]
     aggregate_experiments_options_list=["time on cluster", "mean", "median"]
     colour_by_options_list=["cluster", "exp_condition", "exp_id"]
 
@@ -3289,28 +3362,28 @@ def _check_enum_inputs(
             "\"experiment_id\" needs to be one of the following: {} ... ".format(str(experiment_id_options_list[0:4])[1:-1])
         )
     if exp_condition is not None and exp_condition not in exp_condition_options_list:
-        if exp_condition_options_list:
+        if len(exp_condition_options_list)>0:
             raise ValueError(
                 "\"exp_condition\" needs to be one of the following: {}".format(str(exp_condition_options_list)[1:-1])
             )
         else:
             raise ValueError("No experiment conditions loaded!")
     if exp_condition_order is not None and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
-        if condition_value_options_list:
+        if len(condition_value_options_list)>0:
             raise ValueError(
                 "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
             )
         else:
             raise ValueError("No experiment conditions loaded!")
     if condition_value is not None and condition_value not in condition_value_options_list:
-        if condition_value_options_list:
+        if len(condition_value_options_list)>0:
             raise ValueError(
                 "\"condition_value\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
             )
         else:
             raise ValueError("No experiment conditions loaded!")
     if normative_model is not None and normative_model not in condition_value_options_list:
-        if condition_value_options_list:
+        if len(condition_value_options_list)>0:
             raise ValueError(
                 "\"normative_model\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
             )

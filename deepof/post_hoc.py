@@ -35,6 +35,8 @@ import umap
 import warnings
 
 import deepof.data
+from deepof.utils import suppress_warning
+
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -581,6 +583,7 @@ def enrichment_across_conditions(
     breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     exp_conditions: dict = None,
+    plot_speed: bool =False,
     bin_size: int = None,
     bin_index: int = None,
     precomputed: np.ndarray = None,
@@ -635,7 +638,7 @@ def enrichment_across_conditions(
     else:
         # Extract time on each behaviour for all videos and add experimental information, 
         # normalize to total experiment time if normalization is requested 
-        if normalize:
+        if normalize or plot_speed:
             counter_df = pd.DataFrame(
                 {key: np.sum(val) / len(val) for key, val in supervised_annotations.items()}
             ).T
@@ -1196,6 +1199,7 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
+@suppress_warning(warn_messages=["The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"])
 def explain_clusters(
     chunk_stats: pd.DataFrame,
     hard_counts: np.ndarray,
@@ -1219,7 +1223,7 @@ def explain_clusters(
     """
     # Pass the data through the scaler and oversampler before computing SHAP values
     processed_stats = full_cluster_clf.named_steps["normalization"].transform(
-        chunk_stats
+        chunk_stats.values
     )
     processed_stats = full_cluster_clf.named_steps["oversampling"].fit_resample(
         processed_stats, hard_counts

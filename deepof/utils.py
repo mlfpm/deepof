@@ -46,6 +46,18 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
+# DEFINE WARNINGS FUNCTION
+def suppress_warning(warn_messages):
+    def somedec_outer(fn):
+        def somedec_inner(*args, **kwargs):
+            #I don't know why, but some warnings do not get filtered when record is not True
+            with warnings.catch_warnings(record=True):
+                for k in range(0,len(warn_messages)):
+                    warnings.filterwarnings("ignore", message=warn_messages[k])
+                response = fn(*args, **kwargs)
+            return response
+        return somedec_inner
+    return somedec_outer
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
@@ -259,20 +271,30 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
         for k, tab in tab_dict.filter_id(animal_id).items():
 
             try:
-                scaler = StandardScaler()
-                imputed = Imputer(method="drift",).fit_transform(
-                    scaler.fit_transform(
-                        tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                #scaler = StandardScaler()
+                #imputed = Imputer(method="drift",).fit_transform(
+                #    scaler.fit_transform(
+                #        (tab.iloc[np.where(presence_masks[k][animal_id].values)[0]])
+                #    )
+                #)
+
+                #imputed = pd.DataFrame(
+                #    scaler.inverse_transform(imputed),
+                #    index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
+                #    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
+                #)
+
+                #imputed_tabs[k].update(imputed)
+
+                sub_table=tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                imputed = Imputer(method="linear",).fit_transform(                   
+                    np.array(
+                        sub_table
                     )
                 )
-
-                imputed = pd.DataFrame(
-                    scaler.inverse_transform(imputed),
-                    index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
-                    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
-                )
-
-                imputed_tabs[k].update(imputed)
+                
+                new_df = pd.DataFrame(imputed, index=sub_table.index, columns=sub_table.columns)       
+                imputed_tabs[k].update(new_df)
 
                 if tab.shape[1] != imputed.shape[1]:
                     warnings.warn(
@@ -1260,9 +1282,24 @@ def smooth_mult_trajectory(
     if alpha is None:
         return series
 
+    # savgol_filter cannot handle NaNs (i.e. it turns vast chuncks of neighboring frames 
+    # of nans to nans after processing). Hence this workaround.
+    # get positions of nans in signal
+    #nan_positions = np.isnan(series)
+
+    # interpolate nans
+    #interpolated_series = pd.DataFrame(series)
+    #interpolated_series.interpolate(
+    #    method="linear", limit_direction="both", inplace=True
+    #)
+
+    # apply filter
     smoothed_series = savgol_filter(
         series, polyorder=(w_length - alpha), window_length=w_length, axis=0
     )
+
+    # re-add nans
+    #smoothed_series[nan_positions]=np.nan
 
     assert smoothed_series.shape == series.shape
 
@@ -1381,7 +1418,7 @@ def full_outlier_mask(
     return full_mask
 
 
-def interpolate_outliers(
+def remove_outliers(
     experiment: pd.DataFrame,
     likelihood: pd.DataFrame,
     likelihood_tolerance: float,
@@ -1417,13 +1454,13 @@ def interpolate_outliers(
     )
 
     interpolated_exp[mask] = np.nan
-    interpolated_exp.interpolate(
-        method="linear", limit=limit, limit_direction="both", inplace=True
-    )
+    #interpolated_exp.interpolate(
+    #    method="linear", limit=1, limit_direction="both", inplace=True
+    #)
     # Add original frames to what happens before lag
-    interpolated_exp = pd.concat(
-        [experiment.iloc[:lag, :], interpolated_exp.iloc[lag:, :]]
-    )
+    #interpolated_exp = pd.concat(
+    #    [experiment.iloc[:1, :], interpolated_exp.iloc[1:, :]]
+    #)
 
     return interpolated_exp
 
@@ -1733,6 +1770,7 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
+@suppress_warning(warn_messages=["All-NaN slice encountered"])
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,
@@ -1793,6 +1831,7 @@ def automatically_recognize_arena(
         current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
     ).reshape(current_tab.shape[0], -1)
 
+    #throws "All-NaN slice encountered" if in at least one frame no body parts could be detected
     possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
         distances_to_center, 5.0
     )
