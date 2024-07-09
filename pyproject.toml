@@ -18,7 +18,7 @@ opencv-python = "^4.6.0.66"
 llvmlite = "^0.39.1"
 shap = "^0.41.0"
 networkx = "^2.8.7"
-dask-image = "^2022.9.0"
+dask-image = "2022.9.0"
 seglearn = "^1.2.5"
 keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow-macos = {version = "2.12.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
@@ -61,6 +61,7 @@ torchvision = [
 ]
 keras = "2.12"
 natsort = "8.4.0"
+dask = "2024.5.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
