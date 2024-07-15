@@ -3,22 +3,22 @@
 # module deepof
 
 """Functions and general utilities for the deepof package."""
+from collections import OrderedDict
 import copy
 from copy import deepcopy
-from dask_image.imread import imread
 from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
 from math import atan2, dist
 from scipy.signal import savgol_filter
-from scipy.interpolate import interp1d
 from scipy.spatial.distance import cdist
 from segment_anything import sam_model_registry, SamPredictor
 from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-from sktime.transformations.series.impute import Imputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
@@ -38,6 +38,8 @@ import ruptures as rpt
 import sleap_io as sio
 import torch
 import warnings
+
+
 
 import deepof.data
 
@@ -60,6 +62,299 @@ def suppress_warning(warn_messages):
     return somedec_outer
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
+
+@nb.njit
+def rts_smoother(measurements, F, H, Q, R):
+    """
+    Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
+
+    This function performs both forward and backward passes to estimate the optimal state
+    sequence given a set of noisy measurements. It first applies the Kalman filter in a
+    forward pass and then refines the estimates using the RTS smoother in a backward pass.
+
+    Args:
+        measurements (np.ndarray): Array of measurements, shape (n_timesteps, n_dim_measurement).
+        F (np.ndarray): State transition matrix, shape (n_dim_state, n_dim_state).
+        H (np.ndarray): Observation matrix, shape (n_dim_measurement, n_dim_state).
+        Q (np.ndarray): Process noise covariance matrix, shape (n_dim_state, n_dim_state).
+        R (np.ndarray): Measurement noise covariance matrix, shape (n_dim_measurement, n_dim_measurement).
+
+    Returns:
+        smoothed_states (np.ndarray): Smoothed state estimates, shape (n_timesteps, n_dim_state).
+
+    """
+    n_timesteps, n_dim_measurement = measurements.shape
+    n_dim_state = F.shape[0]
+    
+    # Ensure all inputs are float64
+    measurements = measurements.astype(np.float64)
+    F = F.astype(np.float64)
+    H = H.astype(np.float64)
+    Q = Q.astype(np.float64)
+    R = R.astype(np.float64)
+    
+    # Forward pass (Kalman filter)
+    filtered_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    filtered_covariances = np.zeros((n_timesteps, n_dim_state, n_dim_state), dtype=np.float64)
+    predicted_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    predicted_covariances = np.zeros((n_timesteps, n_dim_state, n_dim_state), dtype=np.float64)
+    
+    # Initialize
+    filtered_states[0] = measurements[0]
+    filtered_covariances[0] = np.eye(n_dim_state, dtype=np.float64) * 1000  # Large initial uncertainty
+    
+    for t in range(1, n_timesteps):
+        # Predict
+        predicted_states[t] = F @ filtered_states[t-1]
+        predicted_covariances[t] = F @ filtered_covariances[t-1] @ F.T + Q
+        
+        # Update
+        innovation = measurements[t] - H @ predicted_states[t]
+        S = H @ predicted_covariances[t] @ H.T + R
+        K = predicted_covariances[t] @ H.T @ np.linalg.inv(S)
+        filtered_states[t] = predicted_states[t] + K @ innovation
+        filtered_covariances[t] = (np.eye(n_dim_state, dtype=np.float64) - K @ H) @ predicted_covariances[t]
+    
+    # Backward pass (RTS smoother)
+    smoothed_states = np.zeros_like(filtered_states)
+    smoothed_covariances = np.zeros_like(filtered_covariances)
+    smoothed_states[-1] = filtered_states[-1]
+    smoothed_covariances[-1] = filtered_covariances[-1]
+    
+    for t in range(n_timesteps - 2, -1, -1):
+        C = filtered_covariances[t] @ F.T @ np.linalg.inv(predicted_covariances[t+1])
+        smoothed_states[t] = filtered_states[t] + C @ (smoothed_states[t+1] - predicted_states[t+1])
+        smoothed_covariances[t] = filtered_covariances[t] + C @ (smoothed_covariances[t+1] - predicted_covariances[t+1]) @ C.T
+    
+    return smoothed_states
+
+@nb.njit
+def enforce_skeleton_constraints(data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5):
+    """
+    Adjusts the positions of body parts in each frame to ensure that the distances between connected parts 
+    adhere to predefined skeleton constraints within a specified tolerance.
+
+    Args:
+        data (np.ndarray): Motion capture data, shape (n_frames, n_body_parts, 2).
+        skeleton_constraints (list): List of tuples (part1, part2, dist) defining the
+                                     constraints between body parts and their expected distances.
+        original_pos (np.ndarray): Boolean array indicating original (non-interpolated) positions,
+                                   shape (n_frames, n_body_parts, 2).
+        tolerance (float): Allowable deviation from the constraint distance (default: 0.1).
+        correction_factor (float): Factor to control the strength of position adjustments (default: 0.5).
+
+    Returns:
+        np.ndarray: Adjusted motion capture data with enforced skeleton constraints.
+
+    """
+    n_frames, _, _ = data.shape
+    for frame in range(n_frames):
+
+        if np.all(original_pos[frame, :, 0]):
+            continue  # Skip this frame
+
+        for (part1, part2, dist) in skeleton_constraints:
+            p1, p2 = data[frame, part1], data[frame, part2]
+            current_dist = np.sqrt(np.sum((p1 - p2)**2))
+            if (current_dist > dist*(1+tolerance) or current_dist < dist*(1-tolerance)):
+                correction = (current_dist - dist) / (2 * current_dist+0.00001) * correction_factor
+                pm=(data[frame, part1]+data[frame, part2])/2
+                if original_pos[frame, part1][0]:
+                    data[frame, part2] += 2*correction * (pm - p2)
+                elif original_pos[frame, part2][0]:
+                    data[frame, part1] += 2*correction * (pm - p1)
+                else:
+                    data[frame, part1] += correction * (pm - p1)
+                    data[frame, part2] += correction * (pm - p2)
+    return data
+
+class MouseTrackingImputer:
+    """
+    A class for imputing and processing mouse tracking data.
+
+    This class provides methods for interpolating missing data points, enforcing skeleton
+    constraints, and smoothing trajectories in mouse tracking experiments.
+
+    Attributes:
+        n_iterations (int): Number of iterations for imputation (default: 10).
+        connectivity (object): Connectivity information for body parts.
+        full_imputation (bool): Whether to perform full imputation or only a partial linear imputation (default: False).
+        body_part_indices (OrderedDict): Mapping of body part names to indices.
+        skeleton_constraints (list): List of skeleton constraints.
+        mouse_body_estimation_samples (int): Number of sample frames with non-nan data to estimate valid mouse shapes (default: 100).
+        lin_interp_limit (int): Limit for linear interpolation (default: 3).
+    """
+    def __init__(self, n_iterations=10, connectivity=None, full_imputation=False):
+        self.full_imputation = full_imputation
+        self.n_iterations = n_iterations
+        self.connectivity = connectivity
+        self.body_part_indices = None
+        self.skeleton_constraints = None
+        self.mouse_body_estimation_samples = 100
+        self.lin_interp_limit=3
+
+    def _initialize_constraints(self, data):  
+        """
+        Initializes the body part constraints based on a sample of frames with complete mouse data
+
+        Args:
+            data (pd.DataFrame): Input tracking data.
+
+        Raises:
+            ValueError: If no complete frames are found in the data.
+        """
+        # Map body part names to indices
+        self.body_part_indices = OrderedDict()
+        for i, col in enumerate(data.columns):
+            body_part_name = col[0]
+            if body_part_name != 'Row':
+                self.body_part_indices[body_part_name] = int((i-1)/2) #workaround as "np.unique" changes sorting 
+
+        # Find frames that contain no nans
+        complete_frames = []
+        for i, row in data.iterrows():
+            if not row.isna().any():
+                complete_frames.append(row)
+
+        if not complete_frames:
+            raise ValueError("No complete frames found in the data. Cannot initialize constraints.")
+        
+        #Sample a subset of complete frames
+        total_frames = len(complete_frames)
+        step = max(1, total_frames // self.mouse_body_estimation_samples)
+        sampled_frames = [complete_frames[i] for i in range(0, total_frames, step)]
+    
+        # Generate skeleton constraints from average distance between sample of connected body parts
+        self.skeleton_constraints = []
+        for part1, connected_parts in self.connectivity.adj.items():
+            for part2 in connected_parts:
+                if part1 in self.body_part_indices and part2 in self.body_part_indices:
+                    idx1, idx2 = self.body_part_indices[part1], self.body_part_indices[part2]
+                    dists = [np.sqrt(np.sum((np.array([row[part1]['x'], row[part1]['y']]) -
+                                     np.array([row[part2]['x'], row[part2]['y']]))**2)) for row in sampled_frames]
+                    self.skeleton_constraints.append((idx1, idx2, np.mean(dists)))
+
+
+    def fit_transform(self, data, key):
+        """
+        Performs linear interpolation for small gaps and, if full_imputation is True
+        applies a multi-step imputation process for larger gaps. 
+
+        Args:
+            data (pd.DataFrame): Input tracking data.
+
+        Returns:
+            np.ndarray: Processed tracking data.
+        """
+
+        #interpolate small gaps linearily
+        data.interpolate(
+        method="linear", limit=self.lin_interp_limit, limit_direction="both", inplace=True
+        )
+
+        #slow multi step imputation to also close larger gaps
+        if self.full_imputation and any((np.isnan(data.iloc[:,:])).any()):
+            if self.skeleton_constraints is None:
+                self._initialize_constraints(data)
+            
+            #reshape to 3D numpy array for processing
+            reshaped_data = data.values.reshape(len(data), -1, 2)
+
+            #save non-missing position indices
+            original_pos= ~np.isnan(reshaped_data)
+
+            #get data rows with nans and neighboring rows as reference
+            nan_frames = [(~original_pos[k,:]).any() for k in range(0,original_pos.shape[0])]
+            nan_frames = np.convolve(nan_frames, np.ones(15), mode="same")>0
+            data_snippets=reshaped_data[nan_frames]
+            print(f"{key} {np.sum(nan_frames)}")
+
+            #complete data with iterative imputation  
+            completed_data=copy.copy(reshaped_data)                             
+            if data_snippets.shape[0]>50:      
+                completed_data[nan_frames] = self._iterative_imputation(data_snippets)
+            else:
+                completed_data = self._iterative_imputation(reshaped_data)
+            completed_data[original_pos]=reshaped_data[original_pos]
+                
+            #smooth data
+            smoothed_data = self._kalman_smoothing(completed_data)
+            #fill back in original positions
+            smoothed_data[original_pos]=reshaped_data[original_pos]
+
+            #enforce skeleton constraints                                                         
+            constrained_data = enforce_skeleton_constraints(smoothed_data, self.skeleton_constraints, original_pos)   
+
+            return constrained_data.reshape(data.shape)
+        else:
+            return data 
+
+
+    def _kalman_smoothing(self, data):
+        """
+        Apply Kalman smoothing to the tracking data. Uses a Rauch-Tung-Striebel (RTS) smoother 
+        to smooth the trajectories of each body part coordinate.
+
+        Args:
+            data (np.ndarray): Input tracking data, shape (n_timesteps, n_body_parts, n_coords).
+
+        Returns:
+            np.ndarray: Smoothed tracking data.
+        """
+        _, n_body_parts, n_coords = data.shape
+        
+        # Define model parameters (you may need to adjust these)
+        dt = 1.0  # time step
+        F = np.array([[1, dt], [0, 1]])  # State transition matrix
+        H = np.array([[1, 0]])  # Measurement matrix
+        Q = np.array([[0.25*dt**4, 0.5*dt**3], 
+                    [0.5*dt**3, dt**2]]) * 0.01  # Process noise covariance
+        R = np.array([[0.1]])  # Measurement noise covariance
+        
+        smoothed_data = np.zeros_like(data)
+        
+        for bp in range(n_body_parts):
+            for coord in range(n_coords):
+                measurements = data[:, bp, coord].reshape(-1, 1)
+                smoothed_states = rts_smoother(measurements, F, H, Q, R)
+                smoothed_data[:, bp, coord] = smoothed_states[:, 0]
+        
+        return smoothed_data
+
+    @suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
+    def _iterative_imputation(elf,data):
+        """
+        Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer 
+        to fill in missing values in the data.
+
+        Args:
+            data (np.ndarray): Input tracking data.
+
+        Returns:
+            np.ndarray: Imputed tracking data.
+        """
+        
+        #reshape data for imputation
+        scaler = StandardScaler()           
+        original_shape = data.shape
+        to_impute=data.reshape(*data.shape[:-2], -1)
+        
+        #scale and impute
+        imputed = IterativeImputer(
+            skip_complete=True,
+            max_iter=100,
+            n_nearest_features=8,
+            tol=1e-1,
+        ).fit_transform(
+            scaler.fit_transform(
+                to_impute
+            )
+        )
+
+        #undo scaling
+        imputed = scaler.inverse_transform(imputed)
+        data = imputed.reshape(original_shape)
+        return data
 
 
 def connect_mouse(
@@ -248,13 +543,14 @@ def compute_animal_presence_mask(
     )
 
 
-def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
+def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False):
     """Perform iterative imputation on occluded body parts. Run per animal and experiment.
 
     Args:
         project (project): Project object.
         tab_dict (dict): Dictionary with the coordinates of the body parts.
         lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
+        full_imputation (bool): Determines if only small gaps get linearily imputed (False) or additionally IterativeImputer and a few otehr steps are executed to close all gaps (True)
 
     Returns:
         tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
@@ -271,30 +567,26 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
         for k, tab in tab_dict.filter_id(animal_id).items():
 
             try:
-                #scaler = StandardScaler()
-                #imputed = Imputer(method="drift",).fit_transform(
-                #    scaler.fit_transform(
-                #        (tab.iloc[np.where(presence_masks[k][animal_id].values)[0]])
-                #    )
-                #)
 
-                #imputed = pd.DataFrame(
-                #    scaler.inverse_transform(imputed),
-                #    index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
-                #    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
-                #)
-
-                #imputed_tabs[k].update(imputed)
-
+                #get table for current animal
                 sub_table=tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
-                imputed = Imputer(method="linear",).fit_transform(                   
-                    np.array(
-                        sub_table
-                    )
+                #add row number info (twice as it makes things easier later when splitting in x and y)
+                sub_table.insert(0, ("Row", "x"), np.where(presence_masks[k][animal_id].values)[0])
+                sub_table.insert(0, ("Row", "y"), np.where(presence_masks[k][animal_id].values)[0])
+
+                #impute missing values
+                imputer = MouseTrackingImputer(n_iterations=5, connectivity=project.connectivity[animal_id], full_imputation=full_imputation)
+                imputed = imputer.fit_transform(sub_table, k)
+
+                #reshape back to original format and update values
+                imputed = pd.DataFrame(
+                     imputed,
+                     index=sub_table.index, 
+                     columns=sub_table.columns,
                 )
-                
-                new_df = pd.DataFrame(imputed, index=sub_table.index, columns=sub_table.columns)       
-                imputed_tabs[k].update(new_df)
+                imputed=imputed.drop(("Row", "x"),axis=1)
+                imputed=imputed.drop(("Row", "y"),axis=1)
+                imputed_tabs[k].update(imputed)
 
                 if tab.shape[1] != imputed.shape[1]:
                     warnings.warn(
@@ -2246,11 +2538,13 @@ def filter_short_bouts(
 
     # Compute average confidence per bout
     cum_bout_lengths = np.concatenate([[0], np.cumsum(bout_lengths)])
+    
     bout_average_confidence = np.array(
         [
             cluster_confidence[confidence_indices][
                 cum_bout_lengths[i] : cum_bout_lengths[i + 1]
-            ].mean()
+            ].mean() if any(confidence_indices[cum_bout_lengths[i] : cum_bout_lengths[i + 1]])
+            else float('nan')
             for i in range(len(bout_lengths))
         ]
     )

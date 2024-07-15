@@ -2293,6 +2293,7 @@ def plot_cluster_detection_performance(
         plt.show()
 
 
+@suppress_warning(["No data for colormapping provided via 'c'. Parameters 'vmin', 'vmax' will be ignored"])
 def plot_shap_swarm_per_cluster(
     coordinates: coordinates,
     data_to_explain: pd.DataFrame,
