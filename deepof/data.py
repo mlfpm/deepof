@@ -98,7 +98,7 @@ class Project:
         animal_ids: List = None,
         arena: str = "polygonal-autodetect",
         bodypart_graph: Union[str, dict] = "deepof_14",
-        enable_iterative_imputation: bool = True,
+        iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
         remove_outliers: bool = True,
@@ -116,7 +116,7 @@ class Project:
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
-        fast_implementations_threshold: int = 100000,
+        fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
 
@@ -124,7 +124,7 @@ class Project:
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
-            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts.
+            iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             interpolate_outliers (bool): whether to interpolate missing data.
@@ -214,7 +214,7 @@ class Project:
         self.smooth_alpha = smooth_alpha
         self.frame_rate = None
         self.video_format = video_format
-        self.enable_iterative_imputation = enable_iterative_imputation
+        self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
         self.segmentation_path = sam_checkpoint_path
         self.rename_bodyparts = rename_bodyparts
@@ -493,7 +493,7 @@ class Project:
         if self.remove_outliers:
 
             if verbose:
-                print("Interpolating outliers...")
+                print("Removing outliers...")
 
             for k, tab in tab_dict.items():
                 tab_dict[k] = deepof.utils.remove_outliers(
@@ -505,12 +505,15 @@ class Project:
                     n_std=self.interpolation_std,
                 )
 
-        if self.enable_iterative_imputation:
+        if self.iterative_imputation:
 
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
-            tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict)
+            if self.iterative_imputation=="full":
+                tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict, full_imputation=True)
+            else:    
+                tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict, full_imputation=False)
 
         # Set table_dict to NaN if animals are missing
         tab_dict = deepof.utils.set_missing_animals(self, tab_dict, lik_dict)
