@@ -64,7 +64,7 @@ def suppress_warning(warn_messages):
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 @nb.njit
-def rts_smoother(measurements, F, H, Q, R):
+def rts_smoother_numba(measurements, F, H, Q, R):
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
@@ -129,7 +129,7 @@ def rts_smoother(measurements, F, H, Q, R):
     return smoothed_states
 
 @nb.njit
-def enforce_skeleton_constraints(data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5):
+def enforce_skeleton_constraints_numba(data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5):
     """
     Adjusts the positions of body parts in each frame to ensure that the distances between connected parts 
     adhere to predefined skeleton constraints within a specified tolerance.
@@ -233,8 +233,15 @@ class MouseTrackingImputer:
                     dists = [np.sqrt(np.sum((np.array([row[part1]['x'], row[part1]['y']]) -
                                      np.array([row[part2]['x'], row[part2]['y']]))**2)) for row in sampled_frames]
                     self.skeleton_constraints.append((idx1, idx2, np.mean(dists)))
+        
+        assert len(self.skeleton_constraints) >0, (
+            " None of the table headers and mouse connectivity dict entries did match during constraint initialization.\n"
+            " This usually happens if none or incorrect animal ids were given.\n"
+            " Please check if you provided the correct animal_ids as input for the Project."
+        )
 
 
+    @suppress_warning(["A value is trying to be set on a copy of a slice from a DataFrame"])
     def fit_transform(self, data, key):
         """
         Performs linear interpolation for small gaps and, if full_imputation is True
@@ -267,7 +274,7 @@ class MouseTrackingImputer:
             nan_frames = [(~original_pos[k,:]).any() for k in range(0,original_pos.shape[0])]
             nan_frames = np.convolve(nan_frames, np.ones(15), mode="same")>0
             data_snippets=reshaped_data[nan_frames]
-            print(f"{key} {np.sum(nan_frames)}")
+            #print(f"{key} {np.sum(nan_frames)}")
 
             #complete data with iterative imputation  
             completed_data=copy.copy(reshaped_data)                             
@@ -283,7 +290,7 @@ class MouseTrackingImputer:
             smoothed_data[original_pos]=reshaped_data[original_pos]
 
             #enforce skeleton constraints                                                         
-            constrained_data = enforce_skeleton_constraints(smoothed_data, self.skeleton_constraints, original_pos)   
+            constrained_data = enforce_skeleton_constraints_numba(smoothed_data, self.skeleton_constraints, original_pos)   
 
             return constrained_data.reshape(data.shape)
         else:
@@ -316,7 +323,7 @@ class MouseTrackingImputer:
         for bp in range(n_body_parts):
             for coord in range(n_coords):
                 measurements = data[:, bp, coord].reshape(-1, 1)
-                smoothed_states = rts_smoother(measurements, F, H, Q, R)
+                smoothed_states = rts_smoother_numba(measurements, F, H, Q, R)
                 smoothed_data[:, bp, coord] = smoothed_states[:, 0]
         
         return smoothed_data
