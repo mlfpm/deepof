@@ -308,6 +308,7 @@ def test_interpolate_outliers(mode):
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        iterative_imputation="full",
     ).create(force=True)
     rmtree(
         os.path.join(
@@ -370,6 +371,7 @@ def test_recognize_arena_and_subfunctions(indexes, detection_mode):
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        iterative_imputation="partial",
     )
     tables = prun.create(force=True, test=True).get_coords()
     rmtree(
