@@ -300,6 +300,7 @@ def test_run(nodes, ego, use_numba):
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
+        iterative_imputation="full",
         fast_implementations_threshold=fast_implementations_threshold
     )
 
