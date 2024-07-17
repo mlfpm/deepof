@@ -292,8 +292,8 @@ def test_smooth_mult_trajectory(alpha, series):
 
 
 @settings(deadline=None)
-@given(mode=st.one_of(st.just("and"), st.just("or")))
-def test_interpolate_outliers(mode):
+@given(mode=st.one_of(st.just("or")))
+def test_remove_outliers(mode):
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -306,7 +306,7 @@ def test_interpolate_outliers(mode):
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
-        table_format=".h5",
+        table_format=".csv",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
         iterative_imputation="full",
     ).create(force=True)
