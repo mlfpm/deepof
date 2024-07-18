@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.6.3"
+version = "0.6.4"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
@@ -18,7 +18,7 @@ opencv-python = "^4.6.0.66"
 llvmlite = "^0.39.1"
 shap = "^0.41.0"
 networkx = "^2.8.7"
-dask-image = "^2022.9.0"
+dask-image = "2022.9.0"
 seglearn = "^1.2.5"
 keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow-macos = {version = "2.12.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
@@ -28,7 +28,6 @@ keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platfor
 tensorflow-probability = "0.20.1"
 tifffile = "^2022.8.12"
 ipykernel = "^6.16.0"
-statsmodels = "^0.13.2"
 umap-learn = "^0.5.3"
 ipywidgets = "^8.0.2"
 openpyxl = "^3.0.10"
@@ -61,6 +60,8 @@ torchvision = [
 ]
 keras = "2.12"
 natsort = "8.4.0"
+dask = "2024.5.1"
+statsmodels = "^0.14.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -98,7 +99,7 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.bumpver]
-current_version = "0.6.3"
+current_version = "0.6.4"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"

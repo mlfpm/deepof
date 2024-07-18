@@ -14,7 +14,7 @@ install-pypi:
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - pip install deepof
-    #- python -c 'import deepof.data'
+    - python -c 'import deepof.data'
 
 install-poetry:
 

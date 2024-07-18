@@ -25,7 +25,7 @@ copyright = "2024, Lucas Miranda"
 author = "Lucas Miranda"
 
 # The full version, including alpha/beta/rc tags
-release = "0.6.3"
+release = "0.6.4"
 
 
 # -- General configuration ---------------------------------------------------
