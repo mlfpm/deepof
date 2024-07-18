@@ -885,13 +885,13 @@ def plot_transitions(
         )
     
     # Get requested experimental condition. If none is provided, default to the first one available.
-    if exp_condition is None:
-        exp_conditions = exp_condition
-    else:
-        exp_conditions = {
-            key: str(val.loc[:, exp_condition].values[0])
-            for key, val in coordinates.get_exp_conditions.items()
-        }
+    if coordinates.get_exp_conditions is not None and exp_condition is None:
+        exp_condition = coordinates.get_exp_conditions[list(coordinates.get_exp_conditions.keys())[0]].columns[0]
+    
+    exp_conditions = {
+        key: str(val.loc[:, exp_condition].values[0])
+        for key, val in coordinates.get_exp_conditions.items()
+    }
 
     #preprocess information given for time binning 
     bin_index_int= None

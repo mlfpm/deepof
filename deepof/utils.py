@@ -64,7 +64,7 @@ def suppress_warning(warn_messages):
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 @nb.njit
-def rts_smoother_numba(measurements, F, H, Q, R):
+def rts_smoother_numba(measurements, F, H, Q, R): # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
@@ -129,7 +129,7 @@ def rts_smoother_numba(measurements, F, H, Q, R):
     return smoothed_states
 
 @nb.njit
-def enforce_skeleton_constraints_numba(data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5):
+def enforce_skeleton_constraints_numba(data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5): # pragma: no cover
     """
     Adjusts the positions of body parts in each frame to ensure that the distances between connected parts 
     adhere to predefined skeleton constraints within a specified tolerance.
@@ -2548,9 +2548,9 @@ def filter_short_bouts(
     
     bout_average_confidence = np.array(
         [
-            cluster_confidence[confidence_indices][
+            cluster_confidence[
                 cum_bout_lengths[i] : cum_bout_lengths[i + 1]
-            ].mean() if any(confidence_indices[cum_bout_lengths[i] : cum_bout_lengths[i + 1]])
+            ].mean() if np.any(confidence_indices[cum_bout_lengths[i] : cum_bout_lengths[i + 1]])
             else float('nan')
             for i in range(len(bout_lengths))
         ]
