@@ -2367,36 +2367,38 @@ def output_cluster_video(
         frame_limit: maximum number of frames to render
 
     """
+    frame_idx=np.where(frame_mask)[0]
+    frame_limit = np.min([frame_limit, len(frame_idx)])
     i = 0
-    j = 0
-    while cap.isOpened() and j < frame_limit:
+    while cap.isOpened() and i < frame_limit:
+        if i==0 or (i>0 and frame_idx[i]-frame_idx[i-1]>1):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx[i])
         ret, frame = cap.read()
         if ret == False:
             break
 
         try:
-            if frame_mask[i]:
+        
+            res_frame = cv2.resize(frame, [v_width, v_height])
+            re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
 
-                res_frame = cv2.resize(frame, [v_width, v_height])
-                re_path = re.findall(".+/(.+)DLC", path)[0]
+            if path is not None:
+                cv2.putText(
+                    res_frame,
+                    re_path,
+                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.75,
+                    (255, 255, 255),
+                    2,
+                )
 
-                if path is not None:
-                    cv2.putText(
-                        res_frame,
-                        re_path,
-                        (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                        cv2.FONT_HERSHEY_DUPLEX,
-                        0.75,
-                        (255, 255, 255),
-                        2,
-                    )
-
-                out.write(res_frame)
-                j += 1
-
+            out.write(res_frame)
             i += 1
+            
         except IndexError:
             ret = False
+            i += 1
 
     cap.release()
     cv2.destroyAllWindows()
@@ -2481,6 +2483,8 @@ def output_videos_per_cluster(
                 path,
                 frame_limit_per_video,
             )
+
+        out.release()
 
 
 def output_unsupervised_annotated_video(
