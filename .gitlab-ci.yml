@@ -3,7 +3,7 @@ stages:
   - test
   - tutorials
 
-install-pypi:
+.install-pypi:
 
   stage: install
   retry: 1
@@ -16,7 +16,7 @@ install-pypi:
     - pip install deepof
     - python -c 'import deepof.data'
 
-install-poetry:
+.install-poetry:
 
   stage: install
   retry: 1
@@ -31,7 +31,7 @@ install-poetry:
     - poetry install
     - poetry run python -c 'import deepof.data'
 
-test:
+.test:
   stage: test
   retry: 1
 
@@ -74,7 +74,7 @@ tutorials:
 
   script:
     - pip install natsort
+    - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
-    - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb custom_labels_output.ipynb
