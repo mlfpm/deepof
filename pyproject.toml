@@ -83,7 +83,7 @@ jupyter-sphinx = "^0.4.0"
 deptry = "^0.8.0"
 pipreqs = "^0.4.13"
 build = "^0.10.0"
-twine = "^4.0.2"
+twine = "5.1.1"
 jupyter-http-over-ws = "^0.0.8"
 bumpver = "^2023.1129"
 
