@@ -28,13 +28,14 @@ compare user-defined experimental groups. The package is compatible with single 
 The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
 ```bash
-conda create -n deepof python=3.9
+conda create -n deepof python=3.10
 ```
 
 Then, activate the environment and install DeepOF:
 
 ```bash
 conda activate deepof
+conda install -c anaconda pytables==3.8.0 # Only needed for Apple Silicon
 pip install deepof
 ```
 

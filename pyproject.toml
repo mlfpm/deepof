@@ -8,6 +8,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
 scikit-learn = "1.2.0"
+scipy = "1.8.1"
+numpy = "^1.22.0"
+numba = "0.56.4"
 ruptures = "1.1.8"
 tqdm = "^4.64.1"
 pandas = "^1.5.0"
@@ -20,7 +23,7 @@ shap = "^0.41.0"
 networkx = "^2.8.7"
 dask-image = "2022.9.0"
 seglearn = "^1.2.5"
-keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
+keras-tuner = "^1.4.7"
 tensorflow-macos = {version = "2.12.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
 tensorflow = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
@@ -40,7 +43,7 @@ imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
 h5py = "^3.7.0"
-tables = "3.8.0"
+tables = {version = "3.8.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 catboost = "^1.1.1"
 tornado = "6.1"
 jupyter-client = "7.3.2"
