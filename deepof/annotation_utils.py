@@ -193,20 +193,22 @@ def climb_wall(
 
     elif arena_type.startswith("polygon"):
 
-        #intermediary for testing, will be replaced with length-based condition
+        # intermediary for testing, will be replaced with length-based condition
         if run_numba:
-              
-                #extract outer arena polygon coordinates
-                xp=np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
-                yp=np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
-                outer_polygon = np.transpose(np.array([xp,yp]))
-                
-                #get nose positions outside of arena polygon
-                climbing = np.invert(point_in_polygon_numba(nose.values, outer_polygon))
-        
+
+            # extract outer arena polygon coordinates
+            xp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
+            yp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
+            outer_polygon = np.transpose(np.array([xp, yp]))
+
+            # get nose positions outside of arena polygon
+            climbing = np.invert(point_in_polygon_numba(nose.values, outer_polygon))
+
         else:
 
-            climbing=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(tol)))
+            climbing = np.invert(
+                point_in_polygon(nose.values, Polygon(arena).buffer(tol))
+            )
 
     else:
         raise NotImplementedError(
@@ -228,7 +230,7 @@ def sniff_object(
     centered_data: bool = False,
     s_object: str = "arena",
     animal_id: str = "",
-    run_numba: bool = False
+    run_numba: bool = False,
 ):
     """Return True if the specified mouse is sniffing an object.
 
@@ -279,32 +281,39 @@ def sniff_object(
 
         elif arena_type.startswith("polygon"):
 
-            #intermediary for testing, will be replaced with length-based condition
+            # intermediary for testing, will be replaced with length-based condition
             if run_numba:
 
-                #extract outer arena polygon coordinates
-                xp=np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
-                yp=np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[1])
-                inner_polygon = np.transpose(np.array([xp,yp]))
-                
-                #extract inner arena polygon coordinates
-                xp=np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
-                yp=np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
-                outer_polygon = np.transpose(np.array([xp,yp]))
+                # extract outer arena polygon coordinates
+                xp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
+                yp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[1])
+                inner_polygon = np.transpose(np.array([xp, yp]))
 
-                #get nose positions outside of outer and inner arena polygon
-                nosing_min = np.invert(point_in_polygon_numba(nose.values, inner_polygon))
-                nosing_max = np.invert(point_in_polygon_numba(nose.values, outer_polygon))
+                # extract inner arena polygon coordinates
+                xp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
+                yp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
+                outer_polygon = np.transpose(np.array([xp, yp]))
+
+                # get nose positions outside of outer and inner arena polygon
+                nosing_min = np.invert(
+                    point_in_polygon_numba(nose.values, inner_polygon)
+                )
+                nosing_max = np.invert(
+                    point_in_polygon_numba(nose.values, outer_polygon)
+                )
 
             else:
 
-                nosing_min=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(-tol)))
-                nosing_max=np.invert(point_in_polygon(nose.values, Polygon(arena).buffer(tol)))
-
+                nosing_min = np.invert(
+                    point_in_polygon(nose.values, Polygon(arena).buffer(-tol))
+                )
+                nosing_max = np.invert(
+                    point_in_polygon(nose.values, Polygon(arena).buffer(tol))
+                )
 
         # noinspection PyUnboundLocalVariable
-        #get nose positions that are close to the outer edge of the arena 
-        #(not in smaller polygon and [not not] in larger polygon)
+        # get nose positions that are close to the outer edge of the arena
+        # (not in smaller polygon and [not not] in larger polygon)
         nosing = nosing_min & (~nosing_max)
 
     else:
@@ -327,16 +336,14 @@ def point_in_polygon(points: np.array, polygon: Polygon) -> np.array:
     Returns:
         np.ndarray: A boolean array of shape (M,) indicating whether each point is inside the polygon.
     """
-    inside = np.array(
-        [
-            polygon.contains(Point(n))
-            for n in points
-        ]
-    )
+    inside = np.array([polygon.contains(Point(n)) for n in points])
     return inside
 
+
 @nb.njit(parallel=True)
-def point_in_polygon_numba(points: np.array, polygon: np.array) -> np.array: # pragma: no cover
+def point_in_polygon_numba(
+    points: np.array, polygon: np.array
+) -> np.array:  # pragma: no cover
     """
     This function was generated by Perplexity.ai
     Check if a set of points is inside a polygon.
@@ -360,7 +367,9 @@ def point_in_polygon_numba(points: np.array, polygon: np.array) -> np.array: # p
 
 
 @nb.njit
-def _is_point_inside_numba(x: float, y: float, polygon: np.array) -> bool: # pragma: no cover
+def _is_point_inside_numba(
+    x: float, y: float, polygon: np.array
+) -> bool:  # pragma: no cover
     """
     This function was generated by Perplexity.ai
     Check if a point is inside a polygon using the ray casting algorithm.
@@ -639,7 +648,7 @@ def supervised_tagging(
     trained_model_path: str = None,
     center: str = "Center",
     params: dict = {},
-    run_numba: bool = False
+    run_numba: bool = False,
 ) -> pd.DataFrame:
     """Output a dataframe with the registered motives per frame.
 
@@ -856,7 +865,7 @@ def supervised_tagging(
                 raw_coords,
                 params["climb_tol"],
                 _id + undercond + "Nose",
-                run_numba=run_numba
+                run_numba=run_numba,
             )
         )
         tag_dict[_id + undercond + "sniffing"] = deepof.utils.smooth_boolean_array(
@@ -871,7 +880,7 @@ def supervised_tagging(
                 center_name=center,
                 s_object="arena",
                 animal_id=_id,
-                run_numba=run_numba
+                run_numba=run_numba,
             )
         )
 
