@@ -43,7 +43,6 @@ test:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
-    - pip install natsort
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py
     - coverage xml -o deepof_cov.xml
@@ -51,6 +50,7 @@ test:
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
   artifacts:
+    expose_as: 'coverage_report'
     reports:
       coverage_report:
         coverage_format: cobertura
@@ -58,6 +58,9 @@ test:
 
 tutorials:
   stage: tutorials
+
+  artifacts:
+    expose_as: 'tutorials_report'
 
   image:
     name: lucasmiranda42/deepof
