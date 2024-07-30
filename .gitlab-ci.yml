@@ -50,7 +50,6 @@ test:
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
   artifacts:
-    expose_as: 'coverage_report'
     reports:
       coverage_report:
         coverage_format: cobertura
@@ -61,6 +60,11 @@ tutorials:
 
   artifacts:
     expose_as: 'tutorials_report'
+    paths:
+      - deepof_preprocessing_tutorial.ipynb
+      - deepof_supervised_tutorial.ipynb
+      - deepof_unsupervised_tutorial.ipynb
+      - deepof_custom_labels_tutorial.ipynb
 
   image:
     name: lucasmiranda42/deepof
