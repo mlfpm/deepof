@@ -3,9 +3,9 @@
 # module deepof
 
 """Functions and general utilities for the deepof package."""
+from collections import OrderedDict
 import copy
 from copy import deepcopy
-from dask_image.imread import imread
 from difflib import get_close_matches
 from itertools import combinations, product
 from joblib import Parallel, delayed
@@ -17,7 +17,8 @@ from shapely.geometry import Polygon
 from sklearn import mixture
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-from sktime.transformations.series.impute import Imputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
@@ -28,6 +29,7 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import networkx as nx
 import numpy as np
+import numba as nb
 import os
 import pandas as pd
 import regex as re
@@ -44,8 +46,369 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
+# DEFINE WARNINGS FUNCTION
+def suppress_warning(warn_messages):
+    def somedec_outer(fn):
+        def somedec_inner(*args, **kwargs):
+            # Some warnings do not get filtered when record is not True
+            with warnings.catch_warnings(record=True):
+                for k in range(0, len(warn_messages)):
+                    warnings.filterwarnings("ignore", message=warn_messages[k])
+                response = fn(*args, **kwargs)
+            return response
+
+        return somedec_inner
+
+    return somedec_outer
+
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
+
+
+@nb.njit
+def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
+    """
+    Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
+
+    This function performs both forward and backward passes to estimate the optimal state
+    sequence given a set of noisy measurements. It first applies the Kalman filter in a
+    forward pass and then refines the estimates using the RTS smoother in a backward pass.
+
+    Args:
+        measurements (np.ndarray): Array of measurements, shape (n_timesteps, n_dim_measurement).
+        F (np.ndarray): State transition matrix, shape (n_dim_state, n_dim_state).
+        H (np.ndarray): Observation matrix, shape (n_dim_measurement, n_dim_state).
+        Q (np.ndarray): Process noise covariance matrix, shape (n_dim_state, n_dim_state).
+        R (np.ndarray): Measurement noise covariance matrix, shape (n_dim_measurement, n_dim_measurement).
+
+    Returns:
+        smoothed_states (np.ndarray): Smoothed state estimates, shape (n_timesteps, n_dim_state).
+
+    """
+    n_timesteps, n_dim_measurement = measurements.shape
+    n_dim_state = F.shape[0]
+
+    # Ensure all inputs are float64
+    measurements = measurements.astype(np.float64)
+    F = F.astype(np.float64)
+    H = H.astype(np.float64)
+    Q = Q.astype(np.float64)
+    R = R.astype(np.float64)
+
+    # Forward pass (Kalman filter)
+    filtered_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    filtered_covariances = np.zeros(
+        (n_timesteps, n_dim_state, n_dim_state), dtype=np.float64
+    )
+    predicted_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    predicted_covariances = np.zeros(
+        (n_timesteps, n_dim_state, n_dim_state), dtype=np.float64
+    )
+
+    # Initialize
+    filtered_states[0] = measurements[0]
+    filtered_covariances[0] = (
+        np.eye(n_dim_state, dtype=np.float64) * 1000
+    )  # Large initial uncertainty
+
+    for t in range(1, n_timesteps):
+        # Predict
+        predicted_states[t] = F @ filtered_states[t - 1]
+        predicted_covariances[t] = F @ filtered_covariances[t - 1] @ F.T + Q
+
+        # Update
+        innovation = measurements[t] - H @ predicted_states[t]
+        S = H @ predicted_covariances[t] @ H.T + R
+        K = predicted_covariances[t] @ H.T @ np.linalg.inv(S)
+        filtered_states[t] = predicted_states[t] + K @ innovation
+        filtered_covariances[t] = (
+            np.eye(n_dim_state, dtype=np.float64) - K @ H
+        ) @ predicted_covariances[t]
+
+    # Backward pass (RTS smoother)
+    smoothed_states = np.zeros_like(filtered_states)
+    smoothed_covariances = np.zeros_like(filtered_covariances)
+    smoothed_states[-1] = filtered_states[-1]
+    smoothed_covariances[-1] = filtered_covariances[-1]
+
+    for t in range(n_timesteps - 2, -1, -1):
+        C = filtered_covariances[t] @ F.T @ np.linalg.inv(predicted_covariances[t + 1])
+        smoothed_states[t] = filtered_states[t] + C @ (
+            smoothed_states[t + 1] - predicted_states[t + 1]
+        )
+        smoothed_covariances[t] = (
+            filtered_covariances[t]
+            + C @ (smoothed_covariances[t + 1] - predicted_covariances[t + 1]) @ C.T
+        )
+
+    return smoothed_states
+
+
+@nb.njit
+def enforce_skeleton_constraints_numba(
+    data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5
+):  # pragma: no cover
+    """
+    Adjusts the positions of body parts in each frame to ensure that the distances between connected parts
+    adhere to predefined skeleton constraints within a specified tolerance.
+
+    Args:
+        data (np.ndarray): Motion capture data, shape (n_frames, n_body_parts, 2).
+        skeleton_constraints (list): List of tuples (part1, part2, dist) defining the
+                                     constraints between body parts and their expected distances.
+        original_pos (np.ndarray): Boolean array indicating original (non-interpolated) positions,
+                                   shape (n_frames, n_body_parts, 2).
+        tolerance (float): Allowable deviation from the constraint distance (default: 0.1).
+        correction_factor (float): Factor to control the strength of position adjustments (default: 0.5).
+
+    Returns:
+        np.ndarray: Adjusted motion capture data with enforced skeleton constraints.
+
+    """
+    n_frames, _, _ = data.shape
+    for frame in range(n_frames):
+
+        if np.all(original_pos[frame, :, 0]):
+            continue  # Skip this frame
+
+        for (part1, part2, dist) in skeleton_constraints:
+            p1, p2 = data[frame, part1], data[frame, part2]
+            current_dist = np.sqrt(np.sum((p1 - p2) ** 2))
+            if current_dist > dist * (1 + tolerance) or current_dist < dist * (
+                1 - tolerance
+            ):
+                correction = (
+                    (current_dist - dist)
+                    / (2 * current_dist + 0.00001)
+                    * correction_factor
+                )
+                pm = (data[frame, part1] + data[frame, part2]) / 2
+                if original_pos[frame, part1][0]:
+                    data[frame, part2] += 2 * correction * (pm - p2)
+                elif original_pos[frame, part2][0]:
+                    data[frame, part1] += 2 * correction * (pm - p1)
+                else:
+                    data[frame, part1] += correction * (pm - p1)
+                    data[frame, part2] += correction * (pm - p2)
+    return data
+
+
+class MouseTrackingImputer:
+    """
+    A class for imputing and processing mouse tracking data.
+
+    This class provides methods for interpolating missing data points, enforcing skeleton
+    constraints, and smoothing trajectories in mouse tracking experiments.
+
+    Attributes:
+        n_iterations (int): Number of iterations for imputation (default: 10).
+        connectivity (object): Connectivity information for body parts.
+        full_imputation (bool): Whether to perform full imputation or only a partial linear imputation (default: False).
+        body_part_indices (OrderedDict): Mapping of body part names to indices.
+        skeleton_constraints (list): List of skeleton constraints.
+        mouse_body_estimation_samples (int): Number of sample frames with non-nan data to estimate valid mouse shapes (default: 100).
+        lin_interp_limit (int): Limit for linear interpolation (default: 3).
+    """
+
+    def __init__(self, n_iterations=10, connectivity=None, full_imputation=False):
+        self.full_imputation = full_imputation
+        self.n_iterations = n_iterations
+        self.connectivity = connectivity
+        self.body_part_indices = None
+        self.skeleton_constraints = None
+        self.mouse_body_estimation_samples = 100
+        self.lin_interp_limit = 3
+
+    def _initialize_constraints(self, data):
+        """
+        Initializes the body part constraints based on a sample of frames with complete mouse data
+
+        Args:
+            data (pd.DataFrame): Input tracking data.
+
+        Raises:
+            ValueError: If no complete frames are found in the data.
+        """
+        # Map body part names to indices
+        self.body_part_indices = OrderedDict()
+        for i, col in enumerate(data.columns):
+            body_part_name = col[0]
+            if body_part_name != "Row":
+                self.body_part_indices[body_part_name] = int(
+                    (i - 1) / 2
+                )  # workaround as "np.unique" changes sorting
+
+        # Find frames that contain no nans
+        complete_frames = []
+        for i, row in data.iterrows():
+            if not row.isna().any():
+                complete_frames.append(row)
+
+        if not complete_frames:
+            raise ValueError(
+                "No complete frames found in the data. Cannot initialize constraints."
+            )
+
+        # Sample a subset of complete frames
+        total_frames = len(complete_frames)
+        step = max(1, total_frames // self.mouse_body_estimation_samples)
+        sampled_frames = [complete_frames[i] for i in range(0, total_frames, step)]
+
+        # Generate skeleton constraints from average distance between sample of connected body parts
+        self.skeleton_constraints = []
+        for part1, connected_parts in self.connectivity.adj.items():
+            for part2 in connected_parts:
+                if part1 in self.body_part_indices and part2 in self.body_part_indices:
+                    idx1, idx2 = (
+                        self.body_part_indices[part1],
+                        self.body_part_indices[part2],
+                    )
+                    dists = [
+                        np.sqrt(
+                            np.sum(
+                                (
+                                    np.array([row[part1]["x"], row[part1]["y"]])
+                                    - np.array([row[part2]["x"], row[part2]["y"]])
+                                )
+                                ** 2
+                            )
+                        )
+                        for row in sampled_frames
+                    ]
+                    self.skeleton_constraints.append((idx1, idx2, np.mean(dists)))
+
+        assert len(self.skeleton_constraints) > 0, (
+            " None of the table headers and mouse connectivity dict entries did match during constraint initialization.\n"
+            " This usually happens if none or incorrect animal ids were given.\n"
+            " Please check if you provided the correct animal_ids as input for the Project."
+        )
+
+    @suppress_warning(
+        ["A value is trying to be set on a copy of a slice from a DataFrame"]
+    )
+    def fit_transform(self, data, key):
+        """
+        Performs linear interpolation for small gaps and, if full_imputation is True
+        applies a multi-step imputation process for larger gaps.
+
+        Args:
+            data (pd.DataFrame): Input tracking data.
+
+        Returns:
+            np.ndarray: Processed tracking data.
+        """
+
+        # interpolate small gaps linearily
+        data.interpolate(
+            method="linear",
+            limit=self.lin_interp_limit,
+            limit_direction="both",
+            inplace=True,
+        )
+
+        # slow multi step imputation to also close larger gaps
+        if self.full_imputation and any((np.isnan(data.iloc[:, :])).any()):
+            if self.skeleton_constraints is None:
+                self._initialize_constraints(data)
+
+            # reshape to 3D numpy array for processing
+            reshaped_data = data.values.reshape(len(data), -1, 2)
+
+            # save non-missing position indices
+            original_pos = ~np.isnan(reshaped_data)
+
+            # get data rows with nans and neighboring rows as reference
+            nan_frames = [
+                (~original_pos[k, :]).any() for k in range(0, original_pos.shape[0])
+            ]
+            nan_frames = np.convolve(nan_frames, np.ones(15), mode="same") > 0
+            data_snippets = reshaped_data[nan_frames]
+            # print(f"{key} {np.sum(nan_frames)}")
+
+            # complete data with iterative imputation
+            completed_data = copy.copy(reshaped_data)
+            if data_snippets.shape[0] > 50:
+                completed_data[nan_frames] = self._iterative_imputation(data_snippets)
+            else:
+                completed_data = self._iterative_imputation(reshaped_data)
+            completed_data[original_pos] = reshaped_data[original_pos]
+
+            # smooth data
+            smoothed_data = self._kalman_smoothing(completed_data)
+            # fill back in original positions
+            smoothed_data[original_pos] = reshaped_data[original_pos]
+
+            # enforce skeleton constraints
+            constrained_data = enforce_skeleton_constraints_numba(
+                smoothed_data, self.skeleton_constraints, original_pos
+            )
+
+            return constrained_data.reshape(data.shape)
+        else:
+            return data
+
+    def _kalman_smoothing(self, data):
+        """
+        Apply Kalman smoothing to the tracking data. Uses a Rauch-Tung-Striebel (RTS) smoother
+        to smooth the trajectories of each body part coordinate.
+
+        Args:
+            data (np.ndarray): Input tracking data, shape (n_timesteps, n_body_parts, n_coords).
+
+        Returns:
+            np.ndarray: Smoothed tracking data.
+        """
+        _, n_body_parts, n_coords = data.shape
+
+        # Define model parameters (you may need to adjust these)
+        dt = 1.0  # time step
+        F = np.array([[1, dt], [0, 1]])  # State transition matrix
+        H = np.array([[1, 0]])  # Measurement matrix
+        Q = (
+            np.array([[0.25 * dt**4, 0.5 * dt**3], [0.5 * dt**3, dt**2]]) * 0.01
+        )  # Process noise covariance
+        R = np.array([[0.1]])  # Measurement noise covariance
+
+        smoothed_data = np.zeros_like(data)
+
+        for bp in range(n_body_parts):
+            for coord in range(n_coords):
+                measurements = data[:, bp, coord].reshape(-1, 1)
+                smoothed_states = rts_smoother_numba(measurements, F, H, Q, R)
+                smoothed_data[:, bp, coord] = smoothed_states[:, 0]
+
+        return smoothed_data
+
+    @suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
+    def _iterative_imputation(elf, data):
+        """
+        Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer
+        to fill in missing values in the data.
+
+        Args:
+            data (np.ndarray): Input tracking data.
+
+        Returns:
+            np.ndarray: Imputed tracking data.
+        """
+
+        # reshape data for imputation
+        scaler = StandardScaler()
+        original_shape = data.shape
+        to_impute = data.reshape(*data.shape[:-2], -1)
+
+        # scale and impute
+        imputed = IterativeImputer(
+            skip_complete=True,
+            max_iter=100,
+            n_nearest_features=8,
+            tol=1e-1,
+        ).fit_transform(scaler.fit_transform(to_impute))
+
+        # undo scaling
+        imputed = scaler.inverse_transform(imputed)
+        data = imputed.reshape(original_shape)
+        return data
 
 
 def connect_mouse(
@@ -58,7 +421,7 @@ def connect_mouse(
     Args:
         animal_ids (str): if more than one animal is tagged, specify the animal identyfier as a string.
         exclude_bodyparts (list): Remove the specified nodes from the graph.
-        graph_preset (str): Connectivity preset to use. Currently supported: "deepof_14" and "deepof_8".
+        graph_preset (str): Connectivity preset to use. Currently supported: "deepof_14", "deepof_11"  and "deepof_8".
 
     Returns:
         connectivity (nx.Graph)
@@ -82,6 +445,12 @@ def connect_mouse(
                     "Tail_base": ["Tail_1"],
                     "Tail_1": ["Tail_2"],
                     "Tail_2": ["Tail_tip"],
+                },
+                "deepof_11": {
+                    "Nose": ["Left_ear", "Right_ear"],
+                    "Spine_1": ["Center", "Left_ear", "Right_ear"],
+                    "Center": ["Left_fhip", "Right_fhip", "Spine_2"],
+                    "Spine_2": ["Left_bhip", "Right_bhip", "Tail_base"],
                 },
                 "deepof_8": {
                     "Nose": ["Left_ear", "Right_ear"],
@@ -228,13 +597,16 @@ def compute_animal_presence_mask(
     )
 
 
-def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
+def iterative_imputation(
+    project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False
+):
     """Perform iterative imputation on occluded body parts. Run per animal and experiment.
 
     Args:
         project (project): Project object.
         tab_dict (dict): Dictionary with the coordinates of the body parts.
         lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
+        full_imputation (bool): Determines if only small gaps get linearily imputed (False) or additionally IterativeImputer and a few otehr steps are executed to close all gaps (True)
 
     Returns:
         tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
@@ -251,19 +623,33 @@ def iterative_imputation(project: project, tab_dict: dict, lik_dict: dict):
         for k, tab in tab_dict.filter_id(animal_id).items():
 
             try:
-                scaler = StandardScaler()
-                imputed = Imputer(method="drift",).fit_transform(
-                    scaler.fit_transform(
-                        tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
-                    )
+
+                # get table for current animal
+                sub_table = tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                # add row number info (twice as it makes things easier later when splitting in x and y)
+                sub_table.insert(
+                    0, ("Row", "x"), np.where(presence_masks[k][animal_id].values)[0]
+                )
+                sub_table.insert(
+                    0, ("Row", "y"), np.where(presence_masks[k][animal_id].values)[0]
                 )
 
+                # impute missing values
+                imputer = MouseTrackingImputer(
+                    n_iterations=5,
+                    connectivity=project.connectivity[animal_id],
+                    full_imputation=full_imputation,
+                )
+                imputed = imputer.fit_transform(sub_table, k)
+
+                # reshape back to original format and update values
                 imputed = pd.DataFrame(
-                    scaler.inverse_transform(imputed),
-                    index=tab.index[np.where(presence_masks[k][animal_id].values)[0]],
-                    columns=tab.loc[:, tab.isnull().mean(axis=0) != 1.0].columns,
+                    imputed,
+                    index=sub_table.index,
+                    columns=sub_table.columns,
                 )
-
+                imputed = imputed.drop(("Row", "x"), axis=1)
+                imputed = imputed.drop(("Row", "y"), axis=1)
                 imputed_tabs[k].update(imputed)
 
                 if tab.shape[1] != imputed.shape[1]:
@@ -427,26 +813,73 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
-def compute_areas(polygon_xy_stack):
+def compute_areas(polygon_xy_stack: np.array) -> np.array:
     """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
     Args:
         polygon_xy_stack: 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
 
     Returns:
-        areas: list areas for the provided xy coordinates.
+        areas (np.ndarray): areas for the provided xy coordinates.
 
     """
 
     # list of polygon areas, a list entry is set to np.nan if points forming the respective polygon are missing
-    polygon_areas = [
-        Polygon(polygon_xy_stack[i]).area
-        if not np.isnan(polygon_xy_stack[i]).any()
-        else np.nan
-        for i in range(len(polygon_xy_stack))
-    ]
+    polygon_areas = np.array(
+        [
+            Polygon(polygon_xy_stack[i]).area
+            if not np.isnan(polygon_xy_stack[i]).any()
+            else np.nan
+            for i in range(len(polygon_xy_stack))
+        ]
+    )
 
     return polygon_areas
+
+
+@nb.njit(parallel=True)
+def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no cover
+    """
+    Compute polygon areas for the provided stack of sets of data point-xy coordinates.
+
+    Args:
+        polygon_xy_stack (np.ndarray): 3D numpy array [NPolygons (i.e. NFrames), Npoints, NDim (x,y)]
+
+    Returns:
+        areas (np.ndarray): areas for the provided xy coordinates.
+
+    """
+    n_polygons, n_vertices, n_dims = polygon_xy_stack.shape
+    polygon_areas = np.zeros(n_polygons, dtype=np.float64)
+
+    for i in np.arange(n_polygons):
+        polygon_areas[i] = polygon_area_numba(polygon_xy_stack[i])
+
+    return polygon_areas
+
+
+@nb.njit
+def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
+    """
+    Calculate the area of a single polygon given its vertices.
+
+    Args:
+        vertices (np.ndarray): Array of shape [Npoints, 2] containing the (x, y) coordinates of the polygon's vertices.
+
+    Returns:
+        float: Area of the polygon.
+    """
+    n = len(vertices)
+    area = 0.0
+
+    for i in range(n):
+        j = (i + 1) % n
+        area += vertices[i, 0] * vertices[j, 1]
+        area -= vertices[j, 0] * vertices[i, 1]
+
+    area = abs(area) / 2
+
+    return area
 
 
 def rotate(
@@ -473,8 +906,89 @@ def rotate(
     return rotated
 
 
+@nb.njit(parallel=True)
+def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: no cover
+    """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
+
+    Args:
+        p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
+        angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
+        origin (numpy.ndarray): Rotation axis (zero vector by default).
+
+    Returns:
+        - rotated (numpy.ndarray): rotated positions over time
+
+    """
+
+    # initializations
+    aligned_trajs = np.zeros(data.shape)
+    new_shape = (data.shape[1] // 2, 2)
+    rotated_frame = np.empty(new_shape, dtype=np.float64)
+    reshaped_frame = np.empty(new_shape, dtype=np.float64)
+
+    for frame in range(data.shape[0]):
+
+        # reshape [x1,y1,x2,y2,...] to [[x1,y1],[x1,y2],...]
+        for i in range(new_shape[0]):
+            reshaped_frame[i, 0] = data[frame][2 * i]
+            reshaped_frame[i, 1] = data[frame][2 * i + 1]
+
+        # rotate frame
+        rotated_frame = rotate_numba(reshaped_frame, angles[frame])
+
+        # undo reshaping
+        for i in range(new_shape[0]):
+            for j in range(new_shape[1]):
+                aligned_trajs[frame][i * new_shape[1] + j] = rotated_frame[i, j]
+
+    return aligned_trajs
+
+
+@nb.njit
+def rotate_numba(
+    p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
+) -> np.array:  # pragma: no cover
+    """Return a 2D numpy.ndarray with the initial values rotated by angles radians.
+
+    Args:
+        p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
+        angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
+        origin (numpy.ndarray): Rotation axis (zero vector by default).
+
+    Returns:
+        - rotated (numpy.ndarray): rotated positions over time
+
+    """
+    # initializations
+    arr_shape = p.shape
+    p_centered = np.zeros(arr_shape)
+    rotated = np.empty(arr_shape, dtype=np.float64)
+
+    # define rotation matrix
+    R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
+
+    # ensure p is a 2D array
+    if p.ndim <= 1:
+        p = p.reshape(1, p.size)
+
+    # substract origin
+    for i in range(arr_shape[1]):
+        for j in range(arr_shape[0]):
+            p_centered[j][i] = p[j][i] - origin[i]
+    # rotate matrix
+    rotated_centered = (R @ p_centered.T).T
+    # re-add origin
+    for i in range(arr_shape[1]):
+        for j in range(arr_shape[0]):
+            rotated[j][i] = rotated_centered[j][i] + origin[i]
+
+    return rotated
+
+
 # noinspection PyArgumentList
-def align_trajectories(data: np.array, mode: str = "all") -> np.array:
+def align_trajectories(
+    data: np.array, mode: str = "all", run_numba: bool = False
+) -> np.array:  # pragma: no cover
     """Remove rotational variance on the trajectories.
 
     Returns a numpy.array with the positions rotated in a way that the center (0 vector), and body part in the first
@@ -502,12 +1016,16 @@ def align_trajectories(data: np.array, mode: str = "all") -> np.array:
         data = data.reshape(-1, dshape[-1], order="C")
         angles = np.zeros(data.shape[0])
 
-    aligned_trajs = np.zeros(data.shape)
+    # run numba version for large videos
+    if run_numba:
+        aligned_trajs = rotate_all_numba(data, angles)
+    else:
+        aligned_trajs = np.zeros(data.shape)
 
-    for frame in range(data.shape[0]):
-        aligned_trajs[frame] = rotate(
-            data[frame].reshape([-1, 2], order="C"), angles[frame]
-        ).reshape(data.shape[1:], order="C")
+        for frame in range(data.shape[0]):
+            aligned_trajs[frame] = rotate(
+                data[frame].reshape([-1, 2], order="C"), angles[frame]
+            ).reshape(data.shape[1:], order="C")
 
     if mode == "all" or mode == "none":
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
@@ -766,7 +1284,7 @@ def kleinberg(
         return bursts
 
     offsets = np.sort(offsets)
-    gaps = np.diff(offsets)
+    gaps = np.diff(offsets).astype(np.float64)
 
     if not np.all(gaps):
         raise ValueError("Input cannot contain events with zero time between!")
@@ -777,52 +1295,28 @@ def kleinberg(
     if n is None:
         n = np.size(gaps)
 
-    g_hat = T / n
-    gamma_log_n = gamma * math.log(n)
-
     if k is None:
-        k = int(math.ceil(float(1 + math.log(T, s) + math.log(1 / np.amin(gaps), s))))
+        # number of hidden states. Changed to be not higher than 3
+        k = np.min(
+            [
+                3,
+                int(
+                    math.ceil(
+                        float(
+                            1
+                            + (math.log(T) / math.log(s))
+                            + (math.log(1.0 / np.amin(gaps)) / math.log(s))
+                        )
+                    )
+                ),
+            ]
+        )
 
-    def tau(i, j):
-        if i >= j:
-            return 0
-        else:
-            return (j - i) * gamma_log_n
-
-    alpha_function = np.vectorize(lambda x: s**x / g_hat)
-    alpha = alpha_function(np.arange(k))
-
-    def f(j, x):
-        return alpha[j] * math.exp(-alpha[j] * x)
-
-    C = np.repeat(float("inf"), k)
-    C[0] = 0
-
-    q = np.empty((k, 0))
-    for t in range(np.size(gaps)):
-        C_prime = np.repeat(float("inf"), k)
-        q_prime = np.empty((k, t + 1))
-        q_prime.fill(np.nan)
-
-        for j in range(k):
-            cost_function = np.vectorize(lambda x: C[x] + tau(x, j))
-            cost = cost_function(np.arange(0, k))
-
-            el = np.argmin(cost)
-
-            if f(j, gaps[t]) > 0:
-                C_prime[j] = cost[el] - math.log(f(j, gaps[t]))
-
-            if t > 0:
-                q_prime[j, :t] = q[el, :]
-
-            q_prime[j, t] = j + 1
-
-        C = C_prime
-        q = q_prime
-
-    j = np.argmin(C)
-    q = q[j, :]
+    # no run numba option here as this function gets called extremely often in the codeand is generally pretty slow
+    # slow core part of kleinberg
+    q = kleinberg_core_numba(
+        gaps, np.float64(s), np.float64(gamma), int(n), np.float64(T), int(k)
+    )
 
     prev_q = 0
 
@@ -865,28 +1359,120 @@ def kleinberg(
     return bursts
 
 
-def smooth_boolean_array(a: np.array, scale: int = 1) -> np.array:
-    """Return a boolean array in which isolated appearances of a feature are smoothed.
+@nb.njit
+def kleinberg_core_numba(
+    gaps: np.array, s: np.float64, gamma: np.float64, n: int, T: np.float64, k: int
+) -> np.array:  # pragma: no cover
+    """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
+
+    The algorithm models activity bursts in a time series as an
+    infinite hidden Markov model.
+
+    Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
+    and rewritten for compatibility with numba.
 
     Args:
-        a (numpy.ndarray): Boolean instances.
-        scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
-
-    Returns:
-        a (numpy.ndarray): Smoothened boolean instances.
+        gaps (np.array): an array of gap sizes between time offsets (numeric)
+        s (float): the base of the exponential distribution that is used for modeling the event frequencies
+        gamma (float): coefficient for the transition costs between states
+        n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+        k: maximum burst level / number of hidden states
 
     """
-    offsets = np.where(a)[0]
-    if len(offsets) == 0:
-        return a  # no detected activity
+    g_hat = T / n
+    gamma_log_n = gamma * math.log(n)
 
-    bursts = kleinberg(offsets, gamma=0.01)
-    a = np.zeros(np.size(a), dtype=bool)
-    for i in bursts:
-        if i[0] == scale:
-            a[int(i[1]) : int(i[2])] = True
+    alpha = np.empty(k, dtype=np.float64)
+    for x in range(k):
+        alpha[x] = s**x / g_hat
 
-    return a
+    C = np.repeat(np.inf, k)
+    C[0] = 0
+
+    q = np.empty((k, 0))
+    # iterate over all gap positions
+    for t in range(gaps.shape[0]):
+        C_prime = np.repeat(np.inf, k)
+        q_prime = np.empty((k, t + 1))
+        q_prime.fill(np.nan)
+
+        # iterate over all hidden states
+        for j in range(k):
+            cost = np.empty(k, dtype=np.float64)
+
+            # calculate cost for each new state
+            for i in range(k):
+                if i >= j:
+                    cost[i] = C[i]
+                else:
+                    cost[i] = C[i] + (j - i) * gamma_log_n
+
+            # state with minimum cost
+            el = np.argmin(cost)
+
+            # update Costs
+            if (alpha[j] * math.exp(-alpha[j] * gaps[t])) > 0:
+                C_prime[j] = cost[el] - math.log(
+                    alpha[j] * math.exp(-alpha[j] * gaps[t])
+                )
+
+            # update state squence
+            if t > 0:
+                q_prime[j, :t] = q[el, :]
+
+            # init next iteration of state sequence
+            q_prime[j, t] = j + 1
+
+        C = C_prime
+        q = q_prime
+
+    j = np.argmin(C)
+    q = q[j, :]
+    return q
+
+
+def smooth_boolean_array(
+    a: np.array, scale: int = 1, batch_size: int = 50000
+) -> np.array:
+    """Return a boolean array in which isolated appearances of a feature are smoothed.
+
+        Args:
+            a (numpy.ndarray): Boolean instances.
+            scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
+            batch_size (int): Batch size for input processing
+    :+
+        Returns:
+            a (numpy.ndarray): Smoothened boolean instances.
+
+    """
+
+    n = len(a)
+    a_smooth = np.zeros(n, dtype=bool)  # Initialize the output vector
+
+    # Process the input array in batches
+    for start in range(0, n, batch_size // 2):
+        end = min(start + batch_size, n)
+        batch = a[start:end]
+
+        # check if any behavior was detected
+        offsets = np.where(batch)[0]
+        if len(offsets) == 0:
+            continue  # skip batch if tehre was no detected activity
+
+        # Process the current batch
+        batch_bursts = kleinberg(offsets, gamma=0.01)
+
+        # Apply calculated smoothing to current batch
+        a_smooth_batch = np.zeros(np.size(batch), dtype=bool)
+        for i in batch_bursts:
+            if i[0] == scale:
+                a_smooth_batch[int(i[1]) : int(i[2])] = True
+
+        # Update the output vector with the results of the current batch
+        # Overwrite second half of last batch with new values to reduce "leakage"
+        a_smooth[start:end] = a_smooth_batch
+
+    return a_smooth
 
 
 def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
@@ -1072,9 +1658,24 @@ def smooth_mult_trajectory(
     if alpha is None:
         return series
 
+    # savgol_filter cannot handle NaNs (i.e. it turns vast chuncks of neighboring frames
+    # of nans to nans after processing). Hence this workaround.
+    # get positions of nans in signal
+    # nan_positions = np.isnan(series)
+
+    # interpolate nans
+    # interpolated_series = pd.DataFrame(series)
+    # interpolated_series.interpolate(
+    #    method="linear", limit_direction="both", inplace=True
+    # )
+
+    # apply filter
     smoothed_series = savgol_filter(
         series, polyorder=(w_length - alpha), window_length=w_length, axis=0
     )
+
+    # re-add nans
+    # smoothed_series[nan_positions]=np.nan
 
     assert smoothed_series.shape == series.shape
 
@@ -1193,7 +1794,7 @@ def full_outlier_mask(
     return full_mask
 
 
-def interpolate_outliers(
+def remove_outliers(
     experiment: pd.DataFrame,
     likelihood: pd.DataFrame,
     likelihood_tolerance: float,
@@ -1229,13 +1830,13 @@ def interpolate_outliers(
     )
 
     interpolated_exp[mask] = np.nan
-    interpolated_exp.interpolate(
-        method="linear", limit=limit, limit_direction="both", inplace=True
-    )
+    # interpolated_exp.interpolate(
+    #    method="linear", limit=1, limit_direction="both", inplace=True
+    # )
     # Add original frames to what happens before lag
-    interpolated_exp = pd.concat(
-        [experiment.iloc[:lag, :], interpolated_exp.iloc[lag:, :]]
-    )
+    # interpolated_exp = pd.concat(
+    #    [experiment.iloc[:1, :], interpolated_exp.iloc[1:, :]]
+    # )
 
     return interpolated_exp
 
@@ -1545,7 +2146,7 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
-# noinspection PyUnboundLocalVariable
+@suppress_warning(warn_messages=["All-NaN slice encountered"])
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,
@@ -1579,9 +2180,10 @@ def automatically_recognize_arena(
         w (int): Width of the video in pixels.
 
     """
-    # Read video as a 3D array
-    current_video = imread(os.path.join(path, videos[vid_index]))
-    h, w = current_video[0].shape[:2]
+    # create video capture object and read frame info
+    current_video_cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    h = int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
     # Select the corresponding tracklets
     current_tab = tables[
@@ -1605,11 +2207,14 @@ def automatically_recognize_arena(
         current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
     ).reshape(current_tab.shape[0], -1)
 
+    # throws "All-NaN slice encountered" if in at least one frame no body parts could be detected
     possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
         distances_to_center, 5.0
     )
-    possible_distances_to_center = distances_to_center[possible_frames]
-    current_video = current_video[: possible_frames.shape[0]][possible_frames]
+
+    # save indices of valid frames, shorten distances vector
+    possible_indices = np.where(possible_frames)[0]
+    possible_distances_to_center = distances_to_center[possible_indices]
 
     if arena_reference is not None:
         # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
@@ -1618,19 +2223,22 @@ def automatically_recognize_arena(
             current_tab.values.reshape(-1, 2), arena_reference
         ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
 
-        min_distance_to_arena = min_distance_to_arena[possible_frames]
-        current_frame = np.argmax(
+        min_distance_to_arena = min_distance_to_arena[possible_indices]
+        frame_index = np.argmax(
             np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
         )
 
     else:
         # If not, use the maximum distance to the center as a proxy
-        current_frame = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
+        frame_index = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
 
-    frame = current_video[current_frame].compute()
+    current_frame = possible_indices[frame_index]
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+    reading_successful, numpy_im = current_video_cap.read()
+    current_video_cap.release()
 
     # Get mask using the segmentation model
-    segmentation_model.set_image(frame)
+    segmentation_model.set_image(numpy_im)
 
     frame_masks, score, logits = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
@@ -1657,7 +2265,7 @@ def automatically_recognize_arena(
     if debug:
 
         # Save frame with mask and arena detected
-        frame_with_arena = np.ascontiguousarray(frame.copy(), dtype=np.uint8)
+        frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
 
         if "circular" in arena_type:
             cv2.ellipse(
@@ -1843,28 +2451,23 @@ def extract_polygonal_arena_coordinates(
         int: Width of the video.
 
     """
-    current_video = imread(video_path)
-    current_frame = np.random.choice(current_video.shape[0])
 
-    # Get and return the corners of the arena
-    try:
-        import google.colab
+    # read random frame from video capture object
+    current_video_cap = cv2.VideoCapture(video_path)
+    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    random_frame_number = np.random.choice(total_frames)
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
+    reading_successful, numpy_im = current_video_cap.read()
+    current_video_cap.release()
 
-        arena_corners = retrieve_corners_from_colab(
-            current_video[current_frame].compute(),
-            arena_type,
-            video_index,
-            videos,
-        )
-
-    except ImportError:
-        arena_corners = retrieve_corners_from_image(
-            current_video[current_frame].compute(),
-            arena_type,
-            video_index,
-            videos,
-        )
-    return arena_corners, current_video.shape[2], current_video.shape[1]
+    # open gui and let user pick corners
+    arena_corners = retrieve_corners_from_image(
+        numpy_im,
+        arena_type,
+        video_index,
+        videos,
+    )
+    return arena_corners, numpy_im.shape[0], numpy_im.shape[1]
 
 
 def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
@@ -2017,11 +2620,12 @@ def filter_short_bouts(
 
     # Compute average confidence per bout
     cum_bout_lengths = np.concatenate([[0], np.cumsum(bout_lengths)])
+
     bout_average_confidence = np.array(
         [
-            cluster_confidence[confidence_indices][
-                cum_bout_lengths[i] : cum_bout_lengths[i + 1]
-            ].mean()
+            cluster_confidence[cum_bout_lengths[i] : cum_bout_lengths[i + 1]].mean()
+            if np.any(confidence_indices[cum_bout_lengths[i] : cum_bout_lengths[i + 1]])
+            else float("nan")
             for i in range(len(bout_lengths))
         ]
     )
@@ -2172,18 +2776,11 @@ def cluster_transition_matrix(
     return trans_normed
 
 
-def time_to_seconds(time_string: str) -> float:
-    """Compute seconds as float based on a time string.
+def get_total_Frames(video_paths: List[str]) -> int:
 
-    Args:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
-
-    Returns:
-        seconds (float): time in seconds
-    """
-    seconds = None
-    if re.match(r"^\b\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-
-    return seconds
+    total_frames = 0
+    for video_path in video_paths:
+        current_video_cap = cv2.VideoCapture(video_path)
+        total_frames += int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        current_video_cap.release()
+    return total_frames

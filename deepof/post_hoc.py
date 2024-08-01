@@ -35,6 +35,8 @@ import umap
 import warnings
 
 import deepof.data
+import deepof.utils
+
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -239,7 +241,7 @@ def get_time_on_cluster(
     }
 
     if normalize:
-        # Normalize the above counters
+        # Normalize the above counters to total length of cluster assignments (sum of all counters)
         hard_count_counters = {
             key: {k: v / sum(list(counter.values())) for k, v in counter.items()}
             for key, counter in hard_count_counters.items()
@@ -347,7 +349,7 @@ def select_time_bin(
             # to check whether a certain instance falls into the desired bin
             breaks_mask_dict = {
                 key: (np.cumsum(value) >= bin_size * bin_index)
-                & (np.cumsum(value) < bin_size * (bin_index + 1))
+                & (np.cumsum(value) <= bin_size * (bin_index + 1))
                 for key, value in breaks.items()
             }
 
@@ -361,13 +363,35 @@ def select_time_bin(
         breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
 
     else:
-        supervised_annotations = {
-            key: val.iloc[
-                bin_size
-                * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
-            ]
-            for key, val in supervised_annotations.items()
-        }
+        if precomputed is not None:  # pragma: no cover
+            for key, val in supervised_annotations.items():
+                if supervised_annotations[key].shape[0] > len(precomputed):
+                    supervised_annotations[key] = val.iloc[
+                        np.concatenate(
+                            [
+                                precomputed,
+                                [False]
+                                * (
+                                    supervised_annotations[key].shape[0]
+                                    - len(precomputed)
+                                ),
+                            ]
+                        ).astype(bool)
+                    ]
+                else:
+                    supervised_annotations[key] = val.iloc[
+                        precomputed[: supervised_annotations[key].shape[0]]
+                    ]
+
+        else:
+
+            supervised_annotations = {
+                key: val.iloc[
+                    bin_size
+                    * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
+                ]
+                for key, val in supervised_annotations.items()
+            }
 
     return embedding, soft_counts, breaks, supervised_annotations
 
@@ -565,6 +589,7 @@ def enrichment_across_conditions(
     breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     exp_conditions: dict = None,
+    plot_speed: bool = False,
     bin_size: int = None,
     bin_index: int = None,
     precomputed: np.ndarray = None,
@@ -587,20 +612,25 @@ def enrichment_across_conditions(
         A long format dataframe with the population of each cluster across conditions.
 
     """
-    # Select time bin and filter all relevant objects
 
+    # Select time bin and filter all relevant objects based on chosen type of binning
     if precomputed is not None:  # pragma: no cover
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding,
-            soft_counts,
-            breaks,
+            embedding=embedding,
+            soft_counts=soft_counts,
+            breaks=breaks,
             supervised_annotations=supervised_annotations,
             precomputed=precomputed,
         )
 
     elif bin_size is not None and bin_index is not None:
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding, soft_counts, breaks, supervised_annotations, bin_size, bin_index
+            embedding=embedding,
+            soft_counts=soft_counts,
+            breaks=breaks,
+            supervised_annotations=supervised_annotations,
+            bin_size=bin_size,
+            bin_index=bin_index,
         )
 
     if supervised_annotations is None:
@@ -612,16 +642,28 @@ def enrichment_across_conditions(
             soft_counts, breaks, normalize=normalize, reduce_dim=False
         )
     else:
-        # Extract time on each behaviour for all videos and add experimental information
-        counter_df = pd.DataFrame(
-            {key: np.sum(val) for key, val in supervised_annotations.items()}
-        ).T
+        # Extract time on each behaviour for all videos and add experimental information,
+        # normalize to total experiment time if normalization is requested
+        if normalize or plot_speed:
+            counter_df = pd.DataFrame(
+                {
+                    key: np.sum(val) / len(val)
+                    for key, val in supervised_annotations.items()
+                }
+            ).T
+        else:
+            counter_df = pd.DataFrame(
+                {key: np.sum(val) for key, val in supervised_annotations.items()}
+            ).T
 
-    counter_df["exp condition"] = counter_df.index.map(exp_conditions)
+    counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
 
-    return counter_df.melt(
+    enrichment = counter_df.melt(
         id_vars=["exp condition"], var_name="cluster", value_name="time on cluster"
     )
+    enrichment["cluster"] = enrichment["cluster"].astype(str)
+
+    return enrichment
 
 
 def get_transitions(state_sequence: list, n_states: int):
@@ -650,6 +692,7 @@ def compute_transition_matrix_per_condition(
     silence_diagonal: bool = False,
     bin_size: int = None,
     bin_index: int = None,
+    precomputed: np.ndarray = None,
     aggregate: str = True,
     normalize: str = True,
 ):
@@ -663,6 +706,7 @@ def compute_transition_matrix_per_condition(
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 
@@ -672,13 +716,14 @@ def compute_transition_matrix_per_condition(
 
     """
     # Filter data to get desired subset
-    if bin_size is not None and bin_index is not None:
+    if (bin_size is not None and bin_index is not None) or precomputed is not None:
         embedding, soft_counts, breaks, _ = select_time_bin(
             embedding,
             soft_counts,
             breaks,
             bin_size=bin_size,
             bin_index=bin_index,
+            precomputed=precomputed,
         )
 
     # Get hard counts per video
@@ -987,7 +1032,9 @@ def annotate_time_chunks(
         test_videos=0,
         shuffle=False,
         window_size=(
-            window_size if window_size is not None else deepof_project._frame_rate
+            window_size
+            if window_size is not None
+            else int(np.round(deepof_project._frame_rate))
         ),
         window_step=window_step,
         filter_low_variance=False,
@@ -1162,6 +1209,11 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
+@deepof.utils.suppress_warning(
+    warn_messages=[
+        "The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"
+    ]
+)
 def explain_clusters(
     chunk_stats: pd.DataFrame,
     hard_counts: np.ndarray,
@@ -1185,7 +1237,7 @@ def explain_clusters(
     """
     # Pass the data through the scaler and oversampler before computing SHAP values
     processed_stats = full_cluster_clf.named_steps["normalization"].transform(
-        chunk_stats
+        chunk_stats.values
     )
     processed_stats = full_cluster_clf.named_steps["oversampling"].fit_resample(
         processed_stats, hard_counts

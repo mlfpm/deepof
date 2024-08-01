@@ -16,7 +16,6 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 from collections import defaultdict
 from difflib import get_close_matches
-from natsort import os_sorted
 from pkg_resources import resource_filename
 from shutil import rmtree
 from sklearn import random_projection
@@ -42,6 +41,7 @@ import re
 import shutil
 import umap
 import warnings
+from natsort import os_sorted
 
 import deepof.model_utils
 import deepof.models
@@ -55,7 +55,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-#  CLASSES FOR PREPROCESSING AND DATA WRANGLING
+# CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
 def load_project(project_path: str) -> coordinates:  # pragma: no cover
@@ -73,7 +73,15 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
     ) as handle:
         coordinates = pickle.load(handle)
 
-    coordinates._project_path = os.path.split(project_path)[0]
+    coordinates._project_path = os.path.split(project_path[0:-1])[0]
+    # Error for not compatible versions
+    if not (hasattr(coordinates, "_run_numba")):
+
+        raise ValueError(
+            """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
+            These older versions are not compatible with the current version"""
+        )
+
     return coordinates
 
 
@@ -89,10 +97,10 @@ class Project:
         animal_ids: List = None,
         arena: str = "polygonal-autodetect",
         bodypart_graph: Union[str, dict] = "deepof_14",
-        enable_iterative_imputation: bool = True,
+        iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
-        interpolate_outliers: bool = True,
+        remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
@@ -107,6 +115,7 @@ class Project:
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
 
@@ -114,7 +123,7 @@ class Project:
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
-            enable_iterative_imputation (bool): whether to use iterative imputation for occluded body parts.
+            iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             interpolate_outliers (bool): whether to interpolate missing data.
@@ -178,6 +187,13 @@ class Project:
         self.arena_dims = video_scale
         self.ellipse_detection = None
 
+        # check if fast_implementations_threshold is reached
+        self.run_numba = False
+        video_paths = [os.path.join(video_path, video) for video in self.videos]
+        total_frames = deepof.utils.get_total_Frames(video_paths)
+        if total_frames > fast_implementations_threshold:
+            self.run_numba = True
+
         # Set the rest of the init parameters
         self.angles = True
         self.animal_ids = animal_ids if animal_ids is not None else [""]
@@ -187,7 +203,7 @@ class Project:
         self.distances = "all"
         self.ego = False
         self.exp_conditions = exp_conditions
-        self.interpolate_outliers = interpolate_outliers
+        self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
@@ -195,7 +211,7 @@ class Project:
         self.smooth_alpha = smooth_alpha
         self.frame_rate = None
         self.video_format = video_format
-        self.enable_iterative_imputation = enable_iterative_imputation
+        self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
         self.segmentation_path = sam_checkpoint_path
         self.rename_bodyparts = rename_bodyparts
@@ -426,7 +442,9 @@ class Project:
             for key, tab in tab_dict.items():
                 tab_dict[key].index = pd.timedelta_range(
                     "00:00:00",
-                    pd.to_timedelta((tab.shape[0] // self.frame_rate), unit="sec"),
+                    pd.to_timedelta(
+                        int(np.round(tab.shape[0] // self.frame_rate)), unit="sec"
+                    ),
                     periods=tab.shape[0] + 1,
                     closed="left",
                 ).map(lambda t: str(t)[7:])
@@ -467,17 +485,20 @@ class Project:
                 temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
                 temp.columns = pd.MultiIndex.from_product(
-                    [os_sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
+                    [
+                        os_sorted(list(set([i[j] for i in temp.columns])))
+                        for j in range(2)
+                    ]
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
 
-        if self.interpolate_outliers:
+        if self.remove_outliers:
 
             if verbose:
-                print("Interpolating outliers...")
+                print("Removing outliers...")
 
             for k, tab in tab_dict.items():
-                tab_dict[k] = deepof.utils.interpolate_outliers(
+                tab_dict[k] = deepof.utils.remove_outliers(
                     tab,
                     lik_dict[k],
                     likelihood_tolerance=self.likelihood_tolerance,
@@ -486,12 +507,19 @@ class Project:
                     n_std=self.interpolation_std,
                 )
 
-        if self.enable_iterative_imputation:
+        if self.iterative_imputation:
 
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
-            tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict)
+            if self.iterative_imputation == "full":
+                tab_dict = deepof.utils.iterative_imputation(
+                    self, tab_dict, lik_dict, full_imputation=True
+                )
+            else:
+                tab_dict = deepof.utils.iterative_imputation(
+                    self, tab_dict, lik_dict, full_imputation=False
+                )
 
         # Set table_dict to NaN if animals are missing
         tab_dict = deepof.utils.set_missing_animals(self, tab_dict, lik_dict)
@@ -668,10 +696,16 @@ class Project:
                         y = y[:, :, np.newaxis]
                         polygon_xy_stack = np.dstack((x, y))
 
-                        # dictionary of area lists (each list has dimensions [NFrames])
-                        areas_animal_dict[bp_pattern_key] = deepof.utils.compute_areas(
-                            polygon_xy_stack
-                        )
+                        # dictionary of area lists (each list has dimensions [NFrames]),
+                        # use faster calculation for large datasets
+                        if self.run_numba:
+                            areas_animal_dict[
+                                bp_pattern_key
+                            ] = deepof.utils.compute_areas_numba(polygon_xy_stack)
+                        else:
+                            areas_animal_dict[
+                                bp_pattern_key
+                            ] = deepof.utils.compute_areas(polygon_xy_stack)
 
                     except KeyError:
                         continue
@@ -728,12 +762,8 @@ class Project:
             self.set_up_project_directory(debug=debug)
 
         # load video info
-        self.frame_rate = int(
-            np.round(
-                pims.ImageIOReader(
-                    os.path.join(self.video_path, self.videos[0])
-                ).frame_rate
-            )
+        self.frame_rate = float(
+            pims.ImageIOReader(os.path.join(self.video_path, self.videos[0])).frame_rate
         )
 
         # load table info
@@ -810,6 +840,7 @@ class Project:
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
+            run_numba=self.run_numba,
         )
 
         # Save created coordinates to the project directory
@@ -920,7 +951,7 @@ class Coordinates:
         path: str,
         quality: dict,
         scales: np.ndarray,
-        frame_rate: int,
+        frame_rate: float,
         arena_params: List,
         tables: dict,
         table_paths: List,
@@ -934,6 +965,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        run_numba: bool = False,
     ):
         """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables.
 
@@ -946,7 +978,7 @@ class Coordinates:
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
             scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
-            frame_rate (int): frame rate of the processed videos.
+            frame_rate (float): frame rate of the processed videos.
             arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
@@ -983,6 +1015,7 @@ class Coordinates:
         self._areas = areas
         self._distances = distances
         self._connectivity = connectivity
+        self._run_numba = run_numba
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -1021,6 +1054,14 @@ class Coordinates:
             table_dict: A table_dict object containing the coordinates of each animal as values.
 
         """
+
+        # Additional old version error for better user feedback, can get removed in a few versions
+        if not (hasattr(self, "_run_numba")):
+            raise ValueError(
+                """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+            This is not supported byt he current version of deepof"""
+            )
+
         tabs = deepof.utils.deepcopy(self._tables)
         coord_1, coord_2 = "x", "y"
         scales = self._scales
@@ -1111,7 +1152,9 @@ class Coordinates:
 
                     if align_inplace and not polar:
                         partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned), mode="all"
+                            np.array(partial_aligned),
+                            mode="all",
+                            run_numba=self._run_numba,
                         )
                         partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
                         partial_aligned = pd.DataFrame(partial_aligned)
@@ -1379,6 +1422,27 @@ class Coordinates:
 
         return self._videos
 
+    def get_start_times(self):
+        """Returns the start time for each table"""
+        start_times = {}
+        for key in self._tables:
+            start_times[key] = self._tables[key].index[0]
+        return start_times
+
+    def get_end_times(self):
+        """Returns the end time for each table"""
+        end_times = {}
+        for key in self._tables:
+            end_times[key] = self._tables[key].index[-1]
+        return end_times
+
+    def get_table_lengths(self):
+        """Returns the length for each table"""
+        table_lengths = {}
+        for key in self._tables:
+            table_lengths[key] = self._tables[key].shape[0]
+        return table_lengths
+
     @property
     def get_exp_conditions(self):
         """Return the stored dictionary with experimental conditions per subject."""
@@ -1399,6 +1463,9 @@ class Coordinates:
             for exp_id in exp_conditions.iloc[:, 0]
         }
         self._exp_conditions = exp_conditions
+
+        # Save loaded conditions within project
+        self.save(timestamp=False)
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
@@ -1478,6 +1545,11 @@ class Coordinates:
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    @deepof.utils.suppress_warning(
+        warn_messages=[
+            "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
+        ]
+    )
     def get_graph_dataset(
         self,
         animal_id: str = None,
@@ -1646,6 +1718,13 @@ class Coordinates:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
 
         """
+        # Additional old version error for better user feedback, can get removed in a few versions
+        if not (hasattr(self, "_run_numba")):
+            raise ValueError(
+                """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+            This is not supported byt he current version of deepof"""
+            )
+
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
         raw_coords = self.get_coords(center=None)
@@ -1703,6 +1782,7 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 center=center,
                 params=params,
+                run_numba=self._run_numba,
             )
 
             supervised_tags.index = tag_index

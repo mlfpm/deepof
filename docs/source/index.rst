@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.6.5-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.7.0-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/
@@ -81,6 +81,7 @@ Or use `poetry <https://python-poetry.org/>`_:
    poetry install # from the main directory
 
 **NOTE**: If you'd like to install DeepOF on Apple Silicon, you should also install hdf5 using `homebrew <https://brew.sh/>`_, as described in `this <https://github.com/mlfpm/deepof/issues/15>`_ issue.
+
 
 What you need
 -------------

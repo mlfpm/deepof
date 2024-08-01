@@ -21,8 +21,10 @@ import numpy as np
 import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
+import warnings
 
 import deepof.model_utils
+import deepof.utils
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -35,6 +37,11 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 # noinspection PyCallingNonCallable
+@deepof.utils.suppress_warning(
+    warn_messages=[
+        "The initializer GlorotUniform is unseeded and being called multiple times, which will return identical values  each time (even if the initializer is unseeded). Please update your code to provide a seed to the initializer, or avoid using the same initalizer instance more than once."
+    ]
+)
 def get_recurrent_encoder(
     input_shape: tuple,
     edge_feature_shape: tuple,

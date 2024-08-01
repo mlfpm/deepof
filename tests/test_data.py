@@ -278,11 +278,15 @@ def test_get_angles(nodes, ego):
 @given(
     nodes=st.integers(min_value=0, max_value=1),
     ego=st.integers(min_value=0, max_value=2),
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
-def test_run(nodes, ego):
+def test_run(nodes, ego, use_numba):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -295,7 +299,9 @@ def test_run(nodes, ego):
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
-        table_format=".h5",
+        table_format=".csv",
+        iterative_imputation="full",
+        fast_implementations_threshold=fast_implementations_threshold,
     )
 
     prun.distances = nodes
@@ -310,7 +316,15 @@ def test_run(nodes, ego):
     assert isinstance(prun, deepof.data.Coordinates)
 
 
-def test_get_supervised_annotation():
+@settings(max_examples=2, deadline=None)
+@given(
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+)
+def test_get_supervised_annotation(use_numba):
+
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
@@ -325,6 +339,7 @@ def test_get_supervised_annotation():
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
+        fast_implementations_threshold=fast_implementations_threshold,
     ).create(force=True)
     rmtree(
         os.path.join(
@@ -346,11 +361,16 @@ def test_get_supervised_annotation():
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
-def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
+
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -380,6 +400,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id):
             "test": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
             "test2": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
         },
+        fast_implementations_threshold=fast_implementations_threshold,
     )
 
     if mode == "single":
