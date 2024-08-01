@@ -54,12 +54,12 @@ matplotlib = "3.7.2"
 sktime = "^0.24.0"
 moviepy = "^1.0.3"
 torch = [
-    {version="2.0.1", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="2.0.1", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="2.2.2", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="2.2.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 torchvision = [
-    {version="0.15.2", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="0.17.2", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="0.17.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 keras = "2.12"
 natsort = "8.4.0"
