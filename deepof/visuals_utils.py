@@ -172,10 +172,10 @@ def cohend(array_a: np.array, array_b: np.array):
     Returns:
         Cohens d (int): 
     
-    Cohen’s d can be used to calculate the standardized difference between two categories, e.g. difference between means 
-    The value of Cohen’s d varies from 0 to infinity. Sign indicates directionality?
+    Cohen's d can be used to calculate the standardized difference between two categories, e.g. difference between means 
+    The value of Cohen's d varies from 0 to infinity. Sign indicates directionality?
     show both hypothesis test (likelihood of observing the data given an assumption (null hypothesis) w p-value) and effect size (quantify the size of the effect assuming that the effect is present)
-    Cohen’s d measures the difference between the mean from two Gaussian-distributed variables. 
+    Cohen's d measures the difference between the mean from two Gaussian-distributed variables. 
     It is a standard score that summarizes the difference in terms of the number of standard deviations. 
     Because the score is standardized, there is a table for the interpretation of the result, summarized as:
 

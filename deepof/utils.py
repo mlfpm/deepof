@@ -71,11 +71,6 @@ def rts_smoother_numba(measurements, F, H, Q, R): # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
-@nb.njit
-def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
-    """
-    Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
-
     This function performs both forward and backward passes to estimate the optimal state
     sequence given a set of noisy measurements. It first applies the Kalman filter in a
     forward pass and then refines the estimates using the RTS smoother in a backward pass.
@@ -2784,8 +2779,6 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
-
-def get_total_Frames(video_paths: List[str]) -> int:
 
 def get_total_Frames(video_paths: List[str]) -> int:
 
