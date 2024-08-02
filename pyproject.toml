@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.6.4"
+version = "0.7.0"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
@@ -8,6 +8,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
 scikit-learn = "1.2.0"
+scipy = "1.8.1"
+numpy = "^1.22.0"
+numba = "0.56.4"
 ruptures = "1.1.8"
 tqdm = "^4.64.1"
 pandas = "^1.5.0"
@@ -20,7 +23,7 @@ shap = "^0.41.0"
 networkx = "^2.8.7"
 dask-image = "2022.9.0"
 seglearn = "^1.2.5"
-keras-tuner = {version = "^1.0.3", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
+keras-tuner = "^1.4.7"
 tensorflow-macos = {version = "2.12.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
 tensorflow = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
@@ -40,7 +43,7 @@ imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
 h5py = "^3.7.0"
-tables = "3.8.0"
+tables = {version = "3.8.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 catboost = "^1.1.1"
 tornado = "6.1"
 jupyter-client = "7.3.2"
@@ -51,12 +54,12 @@ matplotlib = "3.7.2"
 sktime = "^0.24.0"
 moviepy = "^1.0.3"
 torch = [
-    {version="2.0.1", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="2.0.1", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="2.2.2", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="2.2.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 torchvision = [
-    {version="0.15.2", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="0.15.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="0.17.2", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="0.17.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 keras = "2.12"
 natsort = "8.4.0"
@@ -80,7 +83,7 @@ jupyter-sphinx = "^0.4.0"
 deptry = "^0.8.0"
 pipreqs = "^0.4.13"
 build = "^0.10.0"
-twine = "^4.0.2"
+twine = "^5.1.1"
 jupyter-http-over-ws = "^0.0.8"
 bumpver = "^2023.1129"
 
@@ -99,7 +102,7 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.bumpver]
-current_version = "0.6.4"
+current_version = "0.7.0"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"

@@ -35,7 +35,7 @@ import umap
 import warnings
 
 import deepof.data
-from deepof.utils import suppress_warning
+import deepof.utils
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -585,7 +585,7 @@ def enrichment_across_conditions(
     breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     exp_conditions: dict = None,
-    plot_speed: bool =False,
+    plot_speed: bool = False,
     bin_size: int = None,
     bin_index: int = None,
     precomputed: np.ndarray = None,
@@ -608,7 +608,7 @@ def enrichment_across_conditions(
         A long format dataframe with the population of each cluster across conditions.
 
     """
-    
+
     # Select time bin and filter all relevant objects based on chosen type of binning
     if precomputed is not None:  # pragma: no cover
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
@@ -621,12 +621,12 @@ def enrichment_across_conditions(
 
     elif bin_size is not None and bin_index is not None:
         embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding=embedding, 
-            soft_counts=soft_counts, 
-            breaks=breaks, 
-            supervised_annotations=supervised_annotations, 
-            bin_size=bin_size, 
-            bin_index=bin_index
+            embedding=embedding,
+            soft_counts=soft_counts,
+            breaks=breaks,
+            supervised_annotations=supervised_annotations,
+            bin_size=bin_size,
+            bin_index=bin_index,
         )
 
     if supervised_annotations is None:
@@ -638,17 +638,19 @@ def enrichment_across_conditions(
             soft_counts, breaks, normalize=normalize, reduce_dim=False
         )
     else:
-        # Extract time on each behaviour for all videos and add experimental information, 
-        # normalize to total experiment time if normalization is requested 
+        # Extract time on each behaviour for all videos and add experimental information,
+        # normalize to total experiment time if normalization is requested
         if normalize or plot_speed:
             counter_df = pd.DataFrame(
-                {key: np.sum(val) / len(val) for key, val in supervised_annotations.items()}
+                {
+                    key: np.sum(val) / len(val)
+                    for key, val in supervised_annotations.items()
+                }
             ).T
         else:
             counter_df = pd.DataFrame(
                 {key: np.sum(val) for key, val in supervised_annotations.items()}
             ).T
-
 
     counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
 
@@ -700,6 +702,7 @@ def compute_transition_matrix_per_condition(
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
         bin_index (int): The index of the bin to use. If None, the embeddings are not binned.     
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
@@ -1026,7 +1029,9 @@ def annotate_time_chunks(
         test_videos=0,
         shuffle=False,
         window_size=(
-            window_size if window_size is not None else int(np.round(deepof_project._frame_rate))
+            window_size
+            if window_size is not None
+            else int(np.round(deepof_project._frame_rate))
         ),
         window_step=window_step,
         filter_low_variance=False,
@@ -1201,7 +1206,11 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
-@suppress_warning(warn_messages=["The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"])
+@deepof.utils.suppress_warning(
+    warn_messages=[
+        "The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"
+    ]
+)
 def explain_clusters(
     chunk_stats: pd.DataFrame,
     hard_counts: np.ndarray,

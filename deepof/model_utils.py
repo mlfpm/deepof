@@ -1351,30 +1351,31 @@ def embedding_model_fitting(
         run_eagerly=False,
     )
 
-    if embedding_model == "VaDE":
-        ae_full_model.pretrain(
-            train_dataset,
-            embed_x=Xs,
-            embed_a=a_train,
-            epochs=(np.minimum(10, epochs) if not pretrained else 0),
+    if not pretrained:
+        if embedding_model == "VaDE":
+            ae_full_model.pretrain(
+                train_dataset,
+                embed_x=Xs,
+                embed_a=a_train,
+                epochs=(np.minimum(10, epochs) if not pretrained else 0),
+                **kwargs,
+            )
+            ae_full_model.optimizer._iterations.assign(0)
+
+        ae_full_model.fit(
+            x=train_dataset,
+            epochs=epochs,
+            validation_data=val_dataset,
+            callbacks=callbacks_,
             **kwargs,
         )
-        ae_full_model.optimizer._iterations.assign(0)
 
-    ae_full_model.fit(
-        x=train_dataset,
-        epochs=(epochs if not pretrained else 0),
-        validation_data=val_dataset,
-        callbacks=callbacks_,
-        **kwargs,
-    )
+        if embedding_model == "VaDE" and recluster == True:  # pragma: no cover
+            ae_full_model.pretrain(
+                train_dataset, embed_x=Xs, embed_a=a_train, epochs=0, **kwargs
+            )
 
-    if embedding_model == "VaDE" and recluster == True:  # pragma: no cover
-        ae_full_model.pretrain(
-            train_dataset, embed_x=Xs, embed_a=a_train, epochs=0, **kwargs
-        )
-
-    if pretrained:  # pragma: no cover
+    else:  # pragma: no cover
         # If pretrained models are specified, load weights and return
         ae_full_model.build([X_train.shape, a_train.shape])
         ae_full_model.load_weights(pretrained)

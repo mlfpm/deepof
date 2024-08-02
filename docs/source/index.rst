@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.6.4-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.7.0-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/
@@ -51,7 +51,7 @@ The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepo
 
 .. code:: python
 
-   conda create -n deepof python=3.9
+   conda create -n deepof python=3.10
 
 
 Then, activate the environment and install DeepOF:
@@ -59,6 +59,7 @@ Then, activate the environment and install DeepOF:
 .. code:: python
 
    conda activate deepof
+   conda install -c anaconda pytables==3.8.0 # Only needed for Apple Silicon
    pip install deepof
 
 
@@ -79,8 +80,8 @@ Or use `poetry <https://python-poetry.org/>`_:
    # after installing poetry and cloning the DeepOF repository, just run
    poetry install # from the main directory
 
-**NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
-please use either poetry or Docker. You should also install hdf5 using `homebrew <https://brew.sh/>`_, as described in `this <https://github.com/mlfpm/deepof/issues/15>`_ issue.
+**NOTE**: If you'd like to install DeepOF on Apple Silicon, you should also install hdf5 using `homebrew <https://brew.sh/>`_, as described in `this <https://github.com/mlfpm/deepof/issues/15>`_ issue.
+
 
 What you need
 -------------

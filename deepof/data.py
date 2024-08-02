@@ -16,7 +16,6 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 
 from collections import defaultdict
 from difflib import get_close_matches
-from natsort import os_sorted
 from pkg_resources import resource_filename
 from shutil import rmtree
 from sklearn import random_projection
@@ -57,7 +56,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-#  CLASSES FOR PREPROCESSING AND DATA WRANGLING
+# CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
 def load_project(project_path: str) -> coordinates:  # pragma: no cover
@@ -76,13 +75,13 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
         coordinates = pickle.load(handle)
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
-    #Error for not compatible versions
-    if not(hasattr(coordinates, "_run_numba")):
+    # Error for not compatible versions
+    if not (hasattr(coordinates, "_run_numba")):
 
         raise ValueError(
-            """You are trying to load a deepOF project that was created with version 0.6.3 or earlier.\n
+            """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
-        )        
+        )
 
     return coordinates
 
@@ -191,12 +190,12 @@ class Project:
         self.arena_dims = video_scale
         self.ellipse_detection = None
 
-        #check if fast_implementations_threshold is reached
-        self.run_numba=False
-        video_paths= [os.path.join(video_path,video) for video in self.videos]
-        total_frames=deepof.utils.get_total_Frames(video_paths)
-        if total_frames> fast_implementations_threshold:
-            self.run_numba=True
+        # check if fast_implementations_threshold is reached
+        self.run_numba = False
+        video_paths = [os.path.join(video_path, video) for video in self.videos]
+        total_frames = deepof.utils.get_total_Frames(video_paths)
+        if total_frames > fast_implementations_threshold:
+            self.run_numba = True
 
         # Set the rest of the init parameters
         self.angles = True
@@ -446,7 +445,9 @@ class Project:
             for key, tab in tab_dict.items():
                 tab_dict[key].index = pd.timedelta_range(
                     "00:00:00",
-                    pd.to_timedelta(int(np.round(tab.shape[0] // self.frame_rate)), unit="sec"),
+                    pd.to_timedelta(
+                        int(np.round(tab.shape[0] // self.frame_rate)), unit="sec"
+                    ),
                     periods=tab.shape[0] + 1,
                     closed="left",
                 ).map(lambda t: str(t)[7:])
@@ -487,7 +488,10 @@ class Project:
                 temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
                 temp.columns = pd.MultiIndex.from_product(
-                    [os_sorted(list(set([i[j] for i in temp.columns]))) for j in range(2)]
+                    [
+                        os_sorted(list(set([i[j] for i in temp.columns])))
+                        for j in range(2)
+                    ]
                 )
                 tab_dict[k] = temp.sort_index(axis=1)
 
@@ -511,10 +515,14 @@ class Project:
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
-            if self.iterative_imputation=="full":
-                tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict, full_imputation=True)
-            else:    
-                tab_dict = deepof.utils.iterative_imputation(self, tab_dict, lik_dict, full_imputation=False)
+            if self.iterative_imputation == "full":
+                tab_dict = deepof.utils.iterative_imputation(
+                    self, tab_dict, lik_dict, full_imputation=True
+                )
+            else:
+                tab_dict = deepof.utils.iterative_imputation(
+                    self, tab_dict, lik_dict, full_imputation=False
+                )
 
         # Set table_dict to NaN if animals are missing
         tab_dict = deepof.utils.set_missing_animals(self, tab_dict, lik_dict)
@@ -691,13 +699,17 @@ class Project:
                         y = y[:, :, np.newaxis]
                         polygon_xy_stack = np.dstack((x, y))
 
-                        #dictionary of area lists (each list has dimensions [NFrames]), 
-                        #use faster calculation for large datasets
+                        # dictionary of area lists (each list has dimensions [NFrames]),
+                        # use faster calculation for large datasets
                         if self.run_numba:
-                            areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas_numba(polygon_xy_stack)
+                            areas_animal_dict[
+                                bp_pattern_key
+                            ] = deepof.utils.compute_areas_numba(polygon_xy_stack)
                         else:
-                            areas_animal_dict[bp_pattern_key]=deepof.utils.compute_areas(polygon_xy_stack)
-                    
+                            areas_animal_dict[
+                                bp_pattern_key
+                            ] = deepof.utils.compute_areas(polygon_xy_stack)
+
                     except KeyError:
                         continue
 
@@ -834,7 +846,7 @@ class Project:
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_resolution=self.video_resolution,
-            run_numba=self.run_numba
+            run_numba=self.run_numba,
         )
 
         # Save created coordinates to the project directory
@@ -1049,12 +1061,12 @@ class Coordinates:
 
         """
 
-        #Additional old version error for better user feedback, can get removed in a few versions
-        if not(hasattr(self, "_run_numba")):    
+        # Additional old version error for better user feedback, can get removed in a few versions
+        if not (hasattr(self, "_run_numba")):
             raise ValueError(
-            """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+                """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported byt he current version of deepof"""
-        )   
+            )
 
         tabs = deepof.utils.deepcopy(self._tables)
         coord_1, coord_2 = "x", "y"
@@ -1146,7 +1158,9 @@ class Coordinates:
 
                     if align_inplace and not polar:
                         partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned), mode="all", run_numba=self._run_numba,
+                            np.array(partial_aligned),
+                            mode="all",
+                            run_numba=self._run_numba,
                         )
                         partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
                         partial_aligned = pd.DataFrame(partial_aligned)
@@ -1421,18 +1435,25 @@ class Coordinates:
             start_times[key]=self._tables[key].index[0]
         return start_times
 
+    def get_start_times(self):
+        """Returns the start time for each table"""
+        start_times = {}
+        for key in self._tables:
+            start_times[key] = self._tables[key].index[0]
+        return start_times
+
     def get_end_times(self):
         """Returns the end time for each table"""
-        end_times={}
+        end_times = {}
         for key in self._tables:
-            end_times[key]=self._tables[key].index[-1]
+            end_times[key] = self._tables[key].index[-1]
         return end_times
 
     def get_table_lengths(self):
         """Returns the length for each table"""
-        table_lengths={}
+        table_lengths = {}
         for key in self._tables:
-            table_lengths[key]=self._tables[key].shape[0]
+            table_lengths[key] = self._tables[key].shape[0]
         return table_lengths
 
     @property
@@ -1456,6 +1477,9 @@ class Coordinates:
         }
         self._exp_conditions = exp_conditions
         
+        # Save loaded conditions within project
+        self.save(timestamp=False)
+
         # Save loaded conditions within project
         self.save(timestamp=False)
 
@@ -1537,8 +1561,11 @@ class Coordinates:
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    
-    @suppress_warning(warn_messages=["adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."])
+    @deepof.utils.suppress_warning(
+        warn_messages=[
+            "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
+        ]
+    )
     def get_graph_dataset(
         self,
         animal_id: str = None,
@@ -1707,12 +1734,12 @@ class Coordinates:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
 
         """
-        #Additional old version error for better user feedback, can get removed in a few versions
-        if not(hasattr(self, "_run_numba")):    
+        # Additional old version error for better user feedback, can get removed in a few versions
+        if not (hasattr(self, "_run_numba")):
             raise ValueError(
-            """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
+                """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported byt he current version of deepof"""
-        )   
+            )
 
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
@@ -1771,7 +1798,7 @@ class Coordinates:
                 trained_model_path=self._trained_model_path,
                 center=center,
                 params=params,
-                run_numba=self._run_numba
+                run_numba=self._run_numba,
             )
 
             supervised_tags.index = tag_index

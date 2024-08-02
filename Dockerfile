@@ -1,6 +1,6 @@
 # Use a slim version of the Python base image
 # To push a multi-platform build, use: docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t <image-name> --push .
-FROM --platform=linux/amd64 python:3.9.14-slim as python-base
+FROM --platform=linux/amd64 python:3.10.14-slim as python-base
 
 WORKDIR /
 
