@@ -118,3 +118,96 @@ def calculate_average_arena(all_vertices: List[List[Tuple[float, float]]], num_p
     avg_points= avg_points/len(all_vertices)
 
     return avg_points
+
+
+def create_bin_pairs(L_array: int, N_time_bins: int):
+    """
+    Creates a List of bin_index and bin_size pairs when splitting a list in N_time_bins
+
+    Args:
+        L_array (int): Length of the array to index.
+        N_time_bins (int): number of time bins to create.
+
+    Returns:
+        bin_pairs (list(tuple)): A 2D list containing start and end positions of each bin.
+    """
+
+    # Calculate the base bin size and the number of bins that need an extra element
+    base_bin_size = L_array // N_time_bins
+    extra_elements = L_array % N_time_bins
+    
+    bin_pairs = []
+    current_index = 0
+    
+    for i in range(N_time_bins):
+        # Determine the size of the current bin
+        if i < extra_elements:
+            bin_size = base_bin_size + 1
+        else:
+            bin_size = base_bin_size
+        
+        # Add the pair (bin_size, bin_index) to the result
+        bin_pairs.append([current_index, current_index+bin_size-1])
+        
+        # Update the current_index for the next iteration
+        current_index += bin_size
+    
+    return bin_pairs
+
+
+def cohend(array_a: np.array, array_b: np.array):
+    """
+    calculate Cohen's d effect size. Does not assume equal population standard deviations, and can still be used for unequal sample sizes
+
+    Args:
+        array_a (np.array): First array of values to compare.
+        array_b (np.array): Second array of values to compare.
+
+    Returns:
+        Cohens d (int): 
+    
+    Cohen’s d can be used to calculate the standardized difference between two categories, e.g. difference between means 
+    The value of Cohen’s d varies from 0 to infinity. Sign indicates directionality?
+    show both hypothesis test (likelihood of observing the data given an assumption (null hypothesis) w p-value) and effect size (quantify the size of the effect assuming that the effect is present)
+    Cohen’s d measures the difference between the mean from two Gaussian-distributed variables. 
+    It is a standard score that summarizes the difference in terms of the number of standard deviations. 
+    Because the score is standardized, there is a table for the interpretation of the result, summarized as:
+
+        Small Effect Size: d=0.20
+        Medium Effect Size: d=0.50
+        Large Effect Size: d=0.80.
+    """
+    # Calculate the size of samples
+    n1, n2 = len(array_a), len(array_b)
+    # Calculate the means of the samples
+    u1, u2 = np.mean(array_a), np.mean(array_b)
+    # Calculate the pooled standard deviation, unbiased estimate of the variance (with ddof=1), and it adjusts for the degrees of freedom in the calculation.
+    s = np.sqrt(((n1 - 1) * np.var(array_a, ddof=1) + (n2 - 1) * np.var(array_b, ddof=1)) / (n1 + n2 - 2))
+    # Check if the pooled standard deviation is 0
+    if s == 0:
+        # Handle the case when the standard deviation is 0 by setting effect size to 0
+        print("Standard deviation is 0. Setting Cohen's d to 0.")
+        return 0
+    else:
+        # Calculate the effect size (Cohen's d)
+        return (u1 - u2) / s
+    
+def cohend_effect_size(d: float):
+    """
+    categorizes Cohen's d effect size.
+
+    Args:
+        d (float): Cohens d 
+
+    Returns:
+        Categorized effect size (int):
+    """ 
+
+    if abs(d) >= 0.8:
+        return 3  # Large effect
+    elif abs(d) >= 0.5:
+        return 2  # Medium effect
+    elif abs(d) < 0.5:
+        return 1  # Small effect
+    else:
+        return 0 
