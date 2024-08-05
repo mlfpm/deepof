@@ -283,7 +283,7 @@ def plot_heatmaps(
         center=center,
         experiment_id=experiment_id,
         exp_condition=exp_condition,
-        condition_value=condition_value,
+        condition_values=[condition_value],
     )
 
     coords = coordinates.get_coords(center=center, align=align)
