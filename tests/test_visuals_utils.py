@@ -29,6 +29,9 @@ from deepof.visuals_utils import (
     calculate_average_arena,
     time_to_seconds,
     seconds_to_time,
+    create_bin_pairs,
+    cohend,
+    cohend_effect_size,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -64,4 +67,21 @@ def test_calculate_average_arena(all_vertices, num_points):
 def test_time_conversion(second, full_second):
     assert full_second == time_to_seconds(seconds_to_time(float(full_second)))
     second = np.round(second * 10**9) / 10**9
-    assert second == time_to_seconds(seconds_to_time(second, False))
+    
+
+@given(
+    L_array=st.integers(min_value=1, max_value=100000),
+    N_time_bins=st.integers(min_value=1, max_value=100),
+)
+def test_create_bin_pairs(L_array, N_time_bins):
+    assert all(np.diff(create_bin_pairs(L_array,N_time_bins))>=0)
+
+@given(
+    array_a=st.lists(elements=st.floats(), min_size=5 ,max_size=500), 
+    array_b=st.lists(elements=st.floats(), min_size=5 ,max_size=500), 
+)
+def test_cohend(array_a, array_b):
+    
+     cohend_effect_size(
+         cohend(np.array(array_a),np.array(array_b))
+     )

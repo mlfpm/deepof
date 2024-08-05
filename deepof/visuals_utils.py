@@ -126,6 +126,8 @@ def calculate_average_arena(
     avg_points = avg_points / len(all_vertices)
 
     return avg_points
+
+
 def create_bin_pairs(L_array: int, N_time_bins: int):
     """
     Creates a List of bin_index and bin_size pairs when splitting a list in N_time_bins
@@ -137,6 +139,10 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     Returns:
         bin_pairs (list(tuple)): A 2D list containing start and end positions of each bin.
     """
+
+    if L_array < N_time_bins:
+        L_array=N_time_bins
+        print("Number of bins needs to be smaller or equal array length! Set L_array=N_time_bins!")
 
     # Calculate the base bin size and the number of bins that need an extra element
     base_bin_size = L_array // N_time_bins
@@ -198,7 +204,8 @@ def cohend(array_a: np.array, array_b: np.array):
         # Calculate the effect size (Cohen's d)
         return (u1 - u2) / s
     
-def cohend_effect_size(d: float):
+
+def cohend_effect_size(d: float): #pragma: no cover
     """
     categorizes Cohen's d effect size.
 

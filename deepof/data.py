@@ -419,11 +419,20 @@ class Project:
             tab_copy = tab_copy.iloc[2:].astype(float)
             tab_dict[key] = tab_copy.reset_index(drop=True)
 
+        #reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
+        reinstated_bodyparts=list(set([
+            bp 
+            if bp[0:len(aid)+1] not in [aid + "_" for aid in self.animal_ids] 
+            else bp[len(aid)+1:] 
+            for aid in self.animal_ids 
+            for bp in self.exclude_bodyparts
+            ]))
+
         # Update body part connectivity graph, taking detected or specified body parts into account
         model_dict = {
             "{}mouse_topview".format(aid): deepof.utils.connect_mouse(
                 aid,
-                exclude_bodyparts=self.exclude_bodyparts,
+                exclude_bodyparts=reinstated_bodyparts,
                 graph_preset=self.bodypart_graph,
             )
             for aid in self.animal_ids
@@ -433,11 +442,11 @@ class Project:
         }
 
         # Remove specified body parts from the mice graph
-        if len(self.animal_ids) > 1 and self.exclude_bodyparts != tuple([""]):
+        if len(self.animal_ids) > 1 and reinstated_bodyparts != tuple([""]):
             self.exclude_bodyparts = [
                 aid + "_" + bp
                 for aid in self.animal_ids
-                for bp in self.exclude_bodyparts
+                for bp in reinstated_bodyparts
             ]
 
         # Pass a time-based index, if specified in init
@@ -615,7 +624,7 @@ class Project:
                 angle_dict[key] = dats
         except KeyError:
             raise KeyError(
-                "Are you using a custom labelling scheme? Out tutorials may help! "
+                "Are you using a custom labelling scheme? Our tutorials may help! "
                 "In case you're not, are there multiple animals in your single-animal DLC video? Make sure to set the "
                 "animal_ids parameter in deepof.data.Project"
             )
@@ -801,7 +810,7 @@ class Project:
 
             # Merge and expand coordinate objects
             angles = TableDict({**_to_extend._angles, **angles}, typ="angles")
-            # areas = TableDict({**_to_extend._areas, **areas}, typ="areas")
+            areas = TableDict({**_to_extend._areas, **areas}, typ="areas")
             distances = TableDict(
                 {**_to_extend._distances, **distances}, typ="distances"
             )
@@ -872,6 +881,8 @@ class Project:
     def extend(
         self,
         project_to_extend: coordinates,
+        video_path: str = None,
+        table_path: str = None,
         verbose: bool = True,
         debug: bool = True,
         test: bool = False,
@@ -880,6 +891,8 @@ class Project:
 
         Args:
             project_to_extend (coordinates): Coordinates object to extend with the current dataset.
+            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
+            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
             verbose (bool): If True, prints progress. Defaults to True.
             debug (bool): If True, saves arena detection images to disk. Defaults to False.
             test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
@@ -888,10 +901,30 @@ class Project:
             coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
 
         """
+
+        if not video_path:
+            video_path=self.video_path
+        if not table_path:
+            table_path=self.table_path
         if verbose:
             print("Loading previous project...")
 
         previous_project = load_project(project_to_extend)
+
+        self.videos = os_sorted(
+            [
+                vid
+                for vid in os.listdir(video_path)
+                if vid.endswith(self.video_format) and not vid.startswith(".")
+            ]
+        )
+        self.tables = os_sorted(
+            [
+                tab
+                for tab in os.listdir(table_path)
+                if tab.endswith(self.table_format) and not tab.startswith(".")
+            ]
+        )
 
         # Keep only those videos and tables that were not in the original dataset
         self.videos = [
@@ -901,10 +934,35 @@ class Project:
             tab for tab in self.tables if tab not in previous_project._table_paths
         ]
 
+        # Copy videos and tables to the new directories
+        for vid in self.videos:
+            if vid.endswith(self.video_format):
+                shutil.copy2(
+                    os.path.join(video_path, vid),
+                    os.path.join(
+                        self.project_path, self.project_name, "Videos", vid
+                    ),
+                )
+
+        for tab in self.tables:
+            if tab.endswith(self.table_format):
+                shutil.copy2(
+                    os.path.join(table_path, tab),
+                    os.path.join(
+                        self.project_path, self.project_name, "Tables", tab
+                    ),
+                )
+
         if verbose:
             print(f"Processing data from {len(self.videos)} experiments...")
 
         if len(self.videos) > 0:
+            self.video_path = os.path.join(
+                self.project_path, self.project_name, "Videos"
+            )
+            self.table_path = os.path.join(
+                self.project_path, self.project_name, "Tables"
+            )
 
             # Use the same directory as the original project
             extended_coords = self.create(
@@ -915,33 +973,11 @@ class Project:
                 _to_extend=previous_project,
             )
 
-            # Copy old files to the new directory
-            for vid, tab in zip(
-                previous_project._videos, previous_project._table_paths
-            ):
-                if vid not in self.tables:
-
-                    shutil.copy(
-                        os.path.join(
-                            previous_project._project_path,
-                            "Videos",
-                            vid,
-                        ),
-                        os.path.join(self.project_path, self.project_name, "Videos"),
-                    )
-                    shutil.copy(
-                        os.path.join(
-                            previous_project._project_path,
-                            "Tables",
-                            tab,
-                        ),
-                        os.path.join(self.project_path, self.project_name, "Tables"),
-                    )
-
             return extended_coords
 
         else:
             print("No new experiments to process. Exiting...")
+            print("You may need to explicitely set \"video_path\" and \"table_path\" inputs")
 
 
 class Coordinates:

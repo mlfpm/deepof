@@ -3695,16 +3695,34 @@ def polar_plot(
                 "\033[0m" 
             )
             warnings.warn(warning_message)  
-        
-    #set active axes if provided
-    if ax:
-        plt.sca(ax)
 
-    # Define the figure type, size, aspect ratio 
-    if polar_depiction:
+    
+    show=False
+    # Update active axes 
+    if ax and polar_depiction:
+        #switch out the input axes object with a polar axis 
+        fig = ax.figure
+        position = ax.get_position()        
+        # Remove the existing axis
+        fig.delaxes(ax)        
+        # Create a new polar axis
+        new_ax = fig.add_axes(position, projection='polar')        
+        # Update the original ax reference to point to the new axis
+        ax.__dict__.clear()
+        ax.__dict__.update(new_ax.__dict__)
+        ax.__class__ = new_ax.__class__        
+        # Replace the new_ax with ax in the figure's axes list
+        fig.axes[fig.axes.index(new_ax)] = ax        
+        # Clean up
+        del new_ax
+    elif ax and not polar_depiction:
+        plt.sca(ax)
+    elif polar_depiction:
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
+        show=True
     else:
         fig, ax = plt.subplots(figsize=(12, 4))
+        show=True
 
 
     # Determine plot type based on inputs
@@ -3892,28 +3910,16 @@ def polar_plot(
         ax.fill_between(masked_mid_angles, mean_values[i] + smooth_sem_values[i], mean_values[i] - smooth_sem_values[i], color=colors[i], alpha=0.15)
 
 
-    # Add legend and title
-    legend_1 = ax.legend(handles=[marker_handles[0][0],marker_handles[1][0]],
-              labels=[condition_values[0],condition_values[1]],
-              fontsize=12,
-              loc='upper right',
-              bbox_to_anchor=(1.3, 1.2)
-              )
-    #ax.add_artist(legend_1)
+
     ax.set_title(f'DeepOF - {behavior_to_plot}', fontsize=18, y=1.15)
 
     # Set custom ticks and labels for the inside y axes 
     max_value = np.max(mean_values)
     y_ticks = np.arange(0, max_value*1.5, max_value*1.5/6)  # Adjust the interval as needed
     ax.set_yticks(y_ticks)
-    #y_tick_labels = ['0', '', '2000', '3000', '4000', '', '']  # Provide labels for each tick position
-    #ax.set_yticklabels(y_tick_labels, fontsize=10)
 
     # Set custom ticks and labels for the outside x axes
     xticklabels = [str(i) for i in range(1, num_hours+1)]
-
-    #ax.set_xticklabels(xticklabels)
-    plt.tight_layout()
 
     if polar_depiction:
 
@@ -3926,10 +3932,25 @@ def polar_plot(
         ax.set_rlabel_position(0)
         ax.set_rlim(0, max_value*1.8)
         top = max_value*1.5 #change inside circle size
+        legend_1 = ax.legend(handles=[marker_handles[0][0],marker_handles[1][0]],
+            labels=[condition_values[0],condition_values[1]],
+            fontsize=12,
+            loc='upper right',
+            bbox_to_anchor=(1.0, 1.1)
+            )
     else:
         ax.set_xticks(mid_angles)
         ax.set_xticklabels(xticklabels)
         top = ax.get_ylim()[0]
+
+        # Add legend and title
+        legend_1 = ax.legend(handles=[marker_handles[0][0],marker_handles[1][0]],
+              labels=[condition_values[0],condition_values[1]],
+              fontsize=12,
+              loc='upper right',
+              )
+        
+    ax.add_artist(legend_1)
 
     ax.grid(True)
     values = hourly_effect_sizes_df["Effect_Size_Category"]*max_value*0.1
@@ -3960,13 +3981,8 @@ def polar_plot(
     for i, label in enumerate(legend_labels):
         bar_handles[i]= Patch(color=legend_colors[i], label=label)
 
-    ax.add_artist(legend_1)
-    #plt.tight_layout()
-    #plt.savefig(fig_title +'2.png', dpi=300)
 
     if polar_depiction:
-
-        ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="lower right", bbox_to_anchor=(1.3, 0.9), fontsize=8)
 
         for midangle, label in zip(mid_angles, xticklabels):
             ax.text(midangle, ax.get_rmax()*1.05, label, 
@@ -3981,10 +3997,12 @@ def polar_plot(
                 z+=1
         lower_lim=ax.get_ylim()[0]
         ax.set_rlim(lower_lim, ax.get_rmax())
-    
+
+        legend_2=ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="upper left", bbox_to_anchor=(0.0, 1.1), fontsize=8)
+        ax.add_artist(legend_2)
     else:
 
-        ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="lower right", bbox_to_anchor=(1.3, 0.65), fontsize=8)
+        ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="upper left", fontsize=8)#, bbox_to_anchor=(1.3, 0.65), fontsize=8)
 
         if add_stats:
             z=0
@@ -3996,7 +4014,8 @@ def polar_plot(
         ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1])
 
 
-    plt.show()
+    if show:
+        plt.show()
 
     if save:
         plt.savefig(
