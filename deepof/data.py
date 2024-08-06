@@ -912,7 +912,7 @@ class Project:
         previous_project = load_project(project_to_extend)
 
         assert (
-            previous_project._project_path == self.project_path
+            os.path.abspath(previous_project._project_path) == os.path.abspath(self.project_path)
             ), "The project to be extended and the project used for extension need to have the same project paths!"
 
         self.videos = os_sorted(
