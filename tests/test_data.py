@@ -89,14 +89,16 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
 
 def test_project_extend():
 
+    video_init=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        )
+    table_init=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        )
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
+        video_path=video_init,
+        table_path=table_init,
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
@@ -105,15 +107,17 @@ def test_project_extend():
         table_format="h5",
     )
 
+    video_extend = os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        )
+    table_extend = os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Tables"
+        )
     ext_prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "Tables"
-        ),
-        project_name=f"test_extended",
+        video_path=video_extend,
+        table_path=table_extend,
+        project_name=f"test_extend",
         rename_bodyparts=None,
         animal_ids=["B", "W"],
         arena="circular-autodetect",
@@ -131,10 +135,14 @@ def test_project_extend():
     )
 
     prun.create(test=True, force=True)
-    ext_prun.extend(prun_path)
+    ext_prun.extend(prun_path, video_path=video_extend, table_path=table_extend)
+
+    #ensure that new project has all four datasets from both sources
+    assert len(ext_prun.tables)==4
+    assert len(ext_prun.videos)==4
+    assert len(ext_prun.arena_params)==4
 
     rmtree(prun_path)
-    rmtree(prun_path + "ed")
 
 
 def test_project_properties():

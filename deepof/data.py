@@ -442,7 +442,7 @@ class Project:
         }
 
         # Remove specified body parts from the mice graph
-        if len(self.animal_ids) > 1 and reinstated_bodyparts != tuple([""]):
+        if len(self.animal_ids) > 1 and reinstated_bodyparts != ['']:
             self.exclude_bodyparts = [
                 aid + "_" + bp
                 for aid in self.animal_ids
@@ -910,6 +910,10 @@ class Project:
             print("Loading previous project...")
 
         previous_project = load_project(project_to_extend)
+
+        assert (
+            previous_project._project_path == self.project_path
+            ), "The project to be extended and the project used for extension need to have the same project paths!"
 
         self.videos = os_sorted(
             [
