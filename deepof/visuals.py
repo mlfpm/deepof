@@ -3723,7 +3723,11 @@ def plot_behavior_trends(
     
     # Init hidden bins if not given
     if not hide_time_bins:
-        hide_time_bins=[False]*len(custom_time_bins) 
+        hide_time_bins=[False]*len(custom_time_bins)
+    elif not len(hide_time_bins) == len(custom_time_bins):
+        raise ValueError(
+            f"The variables \"hide_time_bins\" and \"custom_time_bins\" need to have the same length!"
+        )
     
     # Set behavior ids
     if plot_type == "unsupervised":
@@ -3765,6 +3769,10 @@ def plot_behavior_trends(
             raise ValueError(
             f"Each element of \"custom_time_bins\" needs to contain either two integers > 0 and int2 > int1\n"
               "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
+            )
+        elif np.max(custom_time_bins) >= L_shortest:
+            raise ValueError(
+            f"\"custom_time_bins\" contains at least one element that exceeds the length of your shortest data set!"
             )
         # Warn in case of overlapping elements
         elif not (list(chain(*custom_time_bins))== sorted(list(chain(*custom_time_bins)))):
@@ -3813,7 +3821,7 @@ def plot_behavior_trends(
             
             # Collect data in datatable
             cond = coordinates.get_exp_conditions[key][exp_condition][0]
-            new_row = pd.DataFrame([{"time_bin": z, "exp_condition": cond, behavior_to_plot: behavior_timebin}])
+            new_row = pd.DataFrame([{"time_bin": z, "exp_condition": str(cond), behavior_to_plot: behavior_timebin}])
             df = pd.concat([df, new_row], ignore_index=True)
         z+=1
 
