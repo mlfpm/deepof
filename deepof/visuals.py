@@ -2450,6 +2450,7 @@ def plot_cluster_detection_performance(
         dataset = pd.DataFrame(dataset)
 
         ax.set_title("Supervised cluster mapping performance")
+        xticklabels=[str(column) for column in dataset.columns]
 
         # both throw iteritems deprecation warning
         sns.barplot(
@@ -2461,6 +2462,7 @@ def plot_cluster_detection_performance(
         ax.set_ylim(0, 1)
 
         ax.set_xlabel("Cluster")
+        ax.set_xticklabels(xticklabels)
         ax.set_ylabel("Balanced accuracy")
 
     else:
