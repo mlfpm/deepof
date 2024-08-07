@@ -201,3 +201,8 @@ API Reference
 * `deepof.model_utils (deep machine learning models' auxiliary functions) <_generated/deepof.model_utils.html>`_
 * `deepof.visuals (visualization functions) <_generated/deepof.visuals.html>`_
 * `deepof.post_hoc (post-hoc analysis functions) <_generated/deepof.post_hoc.html>`_
+
+Changelog
+=========
+
+* You can find the complete changelog for new releases `here <changelog.html>`_.

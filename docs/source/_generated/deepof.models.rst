@@ -16,7 +16,6 @@
       get_TCN_decoder
       get_TCN_encoder
       get_recurrent_decoder
-      get_recurrent_encoder
       get_transformer_decoder
       get_transformer_encoder
       get_vade

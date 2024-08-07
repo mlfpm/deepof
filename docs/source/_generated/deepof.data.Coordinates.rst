@@ -20,8 +20,11 @@
       ~Coordinates.get_areas
       ~Coordinates.get_coords
       ~Coordinates.get_distances
+      ~Coordinates.get_end_times
       ~Coordinates.get_graph_dataset
       ~Coordinates.get_quality
+      ~Coordinates.get_start_times
+      ~Coordinates.get_table_lengths
       ~Coordinates.get_videos
       ~Coordinates.load_exp_conditions
       ~Coordinates.save

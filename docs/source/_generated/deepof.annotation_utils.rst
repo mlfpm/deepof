@@ -23,6 +23,8 @@
       look_around
       max_behaviour
       outside_ellipse
+      point_in_polygon
+      point_in_polygon_numba
       rotate
       sniff_object
       supervised_tagging
