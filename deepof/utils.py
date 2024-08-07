@@ -47,7 +47,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 # DEFINE WARNINGS FUNCTION
-def suppress_warning(warn_messages):
+def _suppress_warning(warn_messages):
     def somedec_outer(fn):
         def somedec_inner(*args, **kwargs):
             # Some warnings do not get filtered when record is not True
@@ -283,7 +283,7 @@ class MouseTrackingImputer:
             " Please check if you provided the correct animal_ids as input for the Project."
         )
 
-    @suppress_warning(
+    @_suppress_warning(
         ["A value is trying to be set on a copy of a slice from a DataFrame"]
     )
     def fit_transform(self, data, key):
@@ -379,7 +379,7 @@ class MouseTrackingImputer:
 
         return smoothed_data
 
-    @suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
+    @_suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
     def _iterative_imputation(elf, data):
         """
         Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer
@@ -2146,7 +2146,7 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
-@suppress_warning(warn_messages=["All-NaN slice encountered"])
+@_suppress_warning(warn_messages=["All-NaN slice encountered"])
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,

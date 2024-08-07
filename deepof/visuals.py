@@ -30,7 +30,7 @@ import shap
 import tensorflow as tf
 import time
 import warnings
-from deepof.utils import suppress_warning
+from deepof.utils import _suppress_warning
 
 
 import deepof.post_hoc
@@ -129,14 +129,16 @@ def heatmap(
     If more than one bodypart is passed, it returns one subplot for each.
 
     Args:
-        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1)
-        xlim (float): limits of the x-axis
-        ylim (float): limits of the y-axis
-        title (str): title of the figure
-        mask (np.ndarray): mask to apply to the heatmap across time
+        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1).
+        bodyparts (list): list of body parts to plot.
+        xlim (float): limits of the x-axis.
+        ylim (float): limits of the y-axis.
+        title (str): title of the figure.
+        mask (np.ndarray): mask to apply to the heatmap across time.
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
@@ -268,6 +270,7 @@ def plot_heatmaps(
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
@@ -393,6 +396,7 @@ def plot_gantt(
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         behaviors_to_plot (list): list of behaviors to plot. If None, all behaviors are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -914,6 +918,7 @@ def plot_transitions(
 
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
 
@@ -2224,7 +2229,7 @@ def animate_skeleton(
     return animation.to_html5_video()
 
 
-@suppress_warning(
+@_suppress_warning(
     [
         "iteritems is deprecated and will be removed in a future version. Use .items instead."
     ]
@@ -2360,7 +2365,7 @@ def plot_cluster_detection_performance(
         plt.show()
 
 
-@suppress_warning(
+@_suppress_warning(
     [
         "No data for colormapping provided via 'c'. Parameters 'vmin', 'vmax' will be ignored"
     ]

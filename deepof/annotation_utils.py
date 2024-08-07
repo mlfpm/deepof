@@ -24,7 +24,7 @@ import regex as re
 import sklearn.pipeline
 
 import deepof.utils
-from deepof.utils import suppress_warning
+from deepof.utils import _suppress_warning
 import deepof.post_hoc
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -770,7 +770,7 @@ def supervised_tagging(
             )
         )
 
-    @suppress_warning(warn_messages=["All-NaN slice encountered"])
+    @_suppress_warning(warn_messages=["All-NaN slice encountered"])
     def overall_speed(ovr_speeds, _id, ucond):
         """Return the overall speed of a mouse."""
         bparts = [

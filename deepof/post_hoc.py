@@ -1209,7 +1209,7 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
-@deepof.utils.suppress_warning(
+@deepof.utils._suppress_warning(
     warn_messages=[
         "The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"
     ]

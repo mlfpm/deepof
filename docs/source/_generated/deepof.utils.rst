@@ -64,7 +64,6 @@
       smooth_mult_trajectory
       split_with_breakpoints
       str2bool
-      suppress_warning
       tab2polar
    
    
