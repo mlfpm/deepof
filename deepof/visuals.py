@@ -3646,7 +3646,7 @@ def plot_behavior_trends(
     behavior_to_plot: str = None,
     normalize: bool = False, 
     N_time_bins: int=24, 
-    custom_time_bins: List[List[int]] = None,
+    custom_time_bins: List[List[Union[int,str]]] = None,
     hide_time_bins: List[bool] = None,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem", 
@@ -3668,7 +3668,7 @@ def plot_behavior_trends(
     behavior_to_plot (str): Behavior to compare for selected condition.
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
     N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-    custom_time_bins (List[List[int]]): Custom time bins array. Overrides N_time_bins if provided.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
     save (bool): If True, saves the plot to a file. Defaults to False.

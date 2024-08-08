@@ -77,11 +77,10 @@ def test_create_bin_pairs(L_array, N_time_bins):
     assert all(np.diff(create_bin_pairs(L_array,N_time_bins))>=0)
 
 @given(
-    array_a=st.lists(elements=st.floats(), min_size=5 ,max_size=500), 
-    array_b=st.lists(elements=st.floats(), min_size=5 ,max_size=500), 
+    array_a=st.lists(elements=st.floats(min_value=-10E10, max_value=10E10), min_size=5 ,max_size=500), 
+    array_b=st.lists(elements=st.floats(min_value=-10E10, max_value=10E10), min_size=5 ,max_size=500), 
 )
 def test_cohend(array_a, array_b):
-    
-     cohend_effect_size(
-         cohend(np.array(array_a),np.array(array_b))
-     )
+    #tests for symmetry, scaling and constant invariance of cohends d
+    assert cohend(np.array(array_a)*2,np.array(array_b)*2)+cohend(np.array(array_b)+1,np.array(array_a)+1) < 10E-10
+     
