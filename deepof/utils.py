@@ -1930,6 +1930,7 @@ def get_arenas(
     project_path: str,
     project_name: str,
     segmentation_model_path: str,
+    video_path: str,
     videos: list = None,
     debug: bool = False,
     test: bool = False,
@@ -1962,11 +1963,11 @@ def get_arenas(
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
         propagate_last = False
-        for i, video_path in enumerate(videos):
+        for i, video_name in enumerate(videos):
 
             if not propagate_last:
                 arena_corners, h, w = extract_polygonal_arena_coordinates(
-                    os.path.join(project_path, project_name, "Videos", video_path),
+                    os.path.join(video_path, video_name),
                     arena,
                     i,
                     videos,
@@ -2024,7 +2025,7 @@ def get_arenas(
                 arena_reference = np.zeros((4, 2))
             else:
                 arena_reference = extract_polygonal_arena_coordinates(
-                    os.path.join(project_path, project_name, "Videos", videos[0]),
+                    os.path.join(video_path, videos[0]),
                     arena,
                     0,
                     [videos[0]],
@@ -2039,7 +2040,7 @@ def get_arenas(
                 tables=tables,
                 videos=videos,
                 vid_index=vid_index,
-                path=os.path.join(project_path, project_name, "Videos"),
+                path=video_path,
                 arena_type=arena,
                 arena_reference=arena_reference,
                 segmentation_model=segmentation_model,

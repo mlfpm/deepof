@@ -261,7 +261,6 @@ class Project:
 
         if not os.path.exists(project_path):
             os.makedirs(project_path)
-            os.makedirs(os.path.join(self.project_path, self.project_name, "Videos"))
             os.makedirs(os.path.join(self.project_path, self.project_name, "Tables"))
             os.makedirs(
                 os.path.join(self.project_path, self.project_name, "Coordinates")
@@ -274,32 +273,6 @@ class Project:
                     )
                 )
 
-            # Copy videos and tables to the new directories
-            for vid in os.listdir(self.video_path):
-                if vid.endswith(self.video_format):
-                    shutil.copy2(
-                        os.path.join(self.video_path, vid),
-                        os.path.join(
-                            self.project_path, self.project_name, "Videos", vid
-                        ),
-                    )
-
-            for tab in os.listdir(self.table_path):
-                if tab.endswith(self.table_format):
-                    shutil.copy2(
-                        os.path.join(self.table_path, tab),
-                        os.path.join(
-                            self.project_path, self.project_name, "Tables", tab
-                        ),
-                    )
-
-            # Re-set video and table directories to the newly created paths
-            self.video_path = os.path.join(
-                self.project_path, self.project_name, "Videos"
-            )
-            self.table_path = os.path.join(
-                self.project_path, self.project_name, "Tables"
-            )
 
         else:
             raise OSError(
@@ -323,7 +296,7 @@ class Project:
 
     def get_arena(
         self,
-        tables: list,
+        tables: dict,
         verbose: bool = False,
         debug: str = False,
         test: bool = False,
@@ -331,7 +304,7 @@ class Project:
         """Return the arena as recognised from the videos.
 
         Args:
-            tables (list): list of coordinate tables
+            tables (dict): dictionary containing coordinate tables
             verbose (bool): if True, logs to console
             debug (str): if True, saves intermediate results to disk
             test (bool): if True, runs the function in test mode
@@ -351,12 +324,15 @@ class Project:
             self.project_path,
             self.project_name,
             self.segmentation_path,
+            self.video_path,
             self.videos,
             debug,
             test,
         )
 
-    def load_tables(self, verbose: bool = True) -> Tuple:
+    #from memory_profiler import profile
+    #@profile
+    def preprocess_tables(self, verbose: bool = True) -> Tuple:
         """Load videos and tables into dictionaries.
 
         Args:
@@ -372,172 +348,210 @@ class Project:
                 "Tracking files must be in h5 (DLC or SLEAP), csv, npy, or slp format"
             )  # pragma: no cover
 
-        if verbose:
-            print("Loading trajectories...")
 
-        tab_dict = {}
-        for tab in self.tables:
+        lik_dict={}
+        tab_dict={}
+        total_tables = len(self.tables)
 
-            loaded_tab = deepof.utils.load_table(
-                tab,
-                self.table_path,
-                self.table_format,
-                self.rename_bodyparts,
-                self.animal_ids,
-            )
+        with tqdm(total=total_tables, desc="Preprocessing tables", unit="table") as pbar:
+            for tab in self.tables:
+                               
+                pbar.set_postfix(step="Loading trajectories")
 
-            # Remove the DLC suffix from the table name
-            try:
-                tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
-            except IndexError:
-                tab_name = tab.split(".")[0]
-
-            tab_dict[tab_name] = loaded_tab
-
-        # Check in the files come from a multi-animal DLC project
-        if "individuals" in list(tab_dict.values())[0].index:
-
-            self.animal_ids = list(
-                list(tab_dict.values())[0].loc["individuals", :].unique()
-            )
-
-            for key, tab in tab_dict.items():
-                # Adapt each table to work with the downstream pipeline
-                tab_dict[key].loc["bodyparts"] = (
-                    tab.loc["individuals"] + "_" + tab.loc["bodyparts"]
-                )
-                tab_dict[key].drop("individuals", axis=0, inplace=True)
-
-        # Convert the first rows of each dataframe to a multi-index
-        for key, tab in tab_dict.items():
-
-            tab_copy = tab.copy()
-
-            tab_copy.columns = pd.MultiIndex.from_arrays(
-                [tab.iloc[i] for i in range(2)]
-            )
-            tab_copy = tab_copy.iloc[2:].astype(float)
-            tab_dict[key] = tab_copy.reset_index(drop=True)
-
-        #reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
-        reinstated_bodyparts=list(set([
-            bp 
-            if bp[0:len(aid)+1] not in [aid + "_" for aid in self.animal_ids] 
-            else bp[len(aid)+1:] 
-            for aid in self.animal_ids 
-            for bp in self.exclude_bodyparts
-            ]))
-
-        # Update body part connectivity graph, taking detected or specified body parts into account
-        model_dict = {
-            "{}mouse_topview".format(aid): deepof.utils.connect_mouse(
-                aid,
-                exclude_bodyparts=reinstated_bodyparts,
-                graph_preset=self.bodypart_graph,
-            )
-            for aid in self.animal_ids
-        }
-        self.connectivity = {
-            aid: model_dict[aid + self.model] for aid in self.animal_ids
-        }
-
-        # Remove specified body parts from the mice graph
-        if len(self.animal_ids) > 1 and reinstated_bodyparts != ['']:
-            self.exclude_bodyparts = [
-                aid + "_" + bp
-                for aid in self.animal_ids
-                for bp in reinstated_bodyparts
-            ]
-
-        # Pass a time-based index, if specified in init
-        if self.frame_rate is not None:
-            for key, tab in tab_dict.items():
-                tab_dict[key].index = pd.timedelta_range(
-                    "00:00:00",
-                    pd.to_timedelta(
-                        int(np.round(tab.shape[0] // self.frame_rate)), unit="sec"
-                    ),
-                    periods=tab.shape[0] + 1,
-                    closed="left",
-                ).map(lambda t: str(t)[7:])
-
-        lik_dict = defaultdict()
-
-        for key, tab in tab_dict.items():
-
-            x = tab.xs("x", level="coords", axis=1, drop_level=False)
-            y = tab.xs("y", level="coords", axis=1, drop_level=False)
-            lik = tab.xs("likelihood", level="coords", axis=1, drop_level=True)
-
-            tab_dict[key] = pd.concat([x, y], axis=1).sort_index(axis=1)
-            lik_dict[key] = lik.fillna(0.0)
-
-        lik_dict = TableDict(lik_dict, typ="quality", animal_ids=self.animal_ids)
-
-        if self.smooth_alpha:
-
-            if verbose:
-                print("Smoothing trajectories...")
-
-            for key, tab in tab_dict.items():
-                cur_idx = tab.index
-                cur_cols = tab.columns
-                smooth = pd.DataFrame(
-                    deepof.utils.smooth_mult_trajectory(
-                        np.array(tab), alpha=self.smooth_alpha, w_length=15
-                    )
-                ).reset_index(drop=True)
-                smooth.columns = cur_cols
-                smooth.index = cur_idx
-                tab_dict[key] = smooth
-
-        if self.exclude_bodyparts != tuple([""]):
-
-            for k, tab in tab_dict.items():
-                temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
-                temp.sort_index(axis=1, inplace=True)
-                temp.columns = pd.MultiIndex.from_product(
-                    [
-                        os_sorted(list(set([i[j] for i in temp.columns])))
-                        for j in range(2)
-                    ]
-                )
-                tab_dict[k] = temp.sort_index(axis=1)
-
-        if self.remove_outliers:
-
-            if verbose:
-                print("Removing outliers...")
-
-            for k, tab in tab_dict.items():
-                tab_dict[k] = deepof.utils.remove_outliers(
+                loaded_tab = deepof.utils.load_table(
                     tab,
-                    lik_dict[k],
-                    likelihood_tolerance=self.likelihood_tolerance,
-                    mode="or",
-                    limit=self.interpolation_limit,
-                    n_std=self.interpolation_std,
+                    self.table_path,
+                    self.table_format,
+                    self.rename_bodyparts,
+                    self.animal_ids,
                 )
 
-        if self.iterative_imputation:
+                # Remove the DLC suffix from the table name
+                try:
+                    tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
+                except IndexError:
+                    tab_name = tab.split(".")[0]
 
-            if verbose:
-                print("Iterative imputation of ocluded bodyparts...")
+                # Check if the files come from a multi-animal DLC project
+                if "individuals" in loaded_tab.index:
 
-            if self.iterative_imputation == "full":
-                tab_dict = deepof.utils.iterative_imputation(
-                    self, tab_dict, lik_dict, full_imputation=True
+                    self.animal_ids = list(
+                        loaded_tab.loc["individuals", :].unique()
+                    )
+        
+                    # Adapt each table to work with the downstream pipeline
+                    loaded_tab.loc["bodyparts"] = (
+                        loaded_tab.loc["individuals"] + "_" + loaded_tab.loc["bodyparts"]
+                    )
+                    loaded_tab.drop("individuals", axis=0, inplace=True)
+
+                pbar.set_postfix(step="Adjusting headers")
+
+                # Convert the first rows of each dataframe to a multi-index
+                tab_copy = loaded_tab.copy()
+
+                tab_copy.columns = pd.MultiIndex.from_arrays(
+                    [loaded_tab.iloc[i] for i in range(2)]
                 )
-            else:
-                tab_dict = deepof.utils.iterative_imputation(
-                    self, tab_dict, lik_dict, full_imputation=False
-                )
+                tab_copy = tab_copy.iloc[2:].astype(float)
+                loaded_tab = tab_copy.reset_index(drop=True)
 
-        # Set table_dict to NaN if animals are missing
-        tab_dict = deepof.utils.set_missing_animals(self, tab_dict, lik_dict)
+                pbar.set_postfix(step="Updating bodypart graphs")
 
-        return tab_dict, lik_dict
+                #reinstate "vanilla" bodyparts without animal ids in case animal ids were already fused with the bp list
+                reinstated_bodyparts=list(set([
+                    bp 
+                    if bp[0:len(aid)+1] not in [aid + "_" for aid in self.animal_ids] 
+                    else bp[len(aid)+1:] 
+                    for aid in self.animal_ids 
+                    for bp in self.exclude_bodyparts
+                    ]))
 
+                # Update body part connectivity graph, taking detected or specified body parts into account
+                model_dict = {
+                    "{}mouse_topview".format(aid): deepof.utils.connect_mouse(
+                        aid,
+                        exclude_bodyparts=reinstated_bodyparts,
+                        graph_preset=self.bodypart_graph,
+                    )
+                    for aid in self.animal_ids
+                }
+                self.connectivity = {
+                    aid: model_dict[aid + self.model] for aid in self.animal_ids
+                }
+
+                # Remove specified body parts from the mice graph
+                if len(self.animal_ids) > 1 and reinstated_bodyparts != ['']:
+                    self.exclude_bodyparts = [
+                        aid + "_" + bp
+                        for aid in self.animal_ids
+                        for bp in reinstated_bodyparts
+                    ]
+
+                # Pass a time-based index, if specified in init
+                if self.frame_rate is not None:
+                
+                    if (pbar.n+1) % 20 != 0:
+                        pbar.set_postfix(step="Updating time index")
+                    #These two lines of code here are absolutely necessary 
+                    else:
+                        pbar.set_postfix(step="Planning AI uprising")
+                    
+                    loaded_tab.index = pd.timedelta_range(
+                        "00:00:00",
+                        pd.to_timedelta(
+                            int(np.round(loaded_tab.shape[0] // self.frame_rate)), unit="sec"
+                        ),
+                        periods=loaded_tab.shape[0] + 1,
+                        closed="left",
+                    ).map(lambda t: str(t)[7:])
+
+                x = loaded_tab.xs("x", level="coords", axis=1, drop_level=False)
+                y = loaded_tab.xs("y", level="coords", axis=1, drop_level=False)
+                lik = loaded_tab.xs("likelihood", level="coords", axis=1, drop_level=True)
+
+                loaded_tab = pd.concat([x, y], axis=1).sort_index(axis=1)
+                likely_dict = {tab_name : lik.fillna(0.0)}
+
+                likely_dict = TableDict(likely_dict, typ="quality", animal_ids=self.animal_ids)
+
+                if self.smooth_alpha:
+
+                    pbar.set_postfix(step="Smoothing trajectories")
+
+                    cur_idx = loaded_tab.index
+                    cur_cols = loaded_tab.columns
+                    smooth = pd.DataFrame(
+                        deepof.utils.smooth_mult_trajectory(
+                            np.array(loaded_tab), alpha=self.smooth_alpha, w_length=15
+                        )
+                    ).reset_index(drop=True)
+                    smooth.columns = cur_cols
+                    smooth.index = cur_idx
+                    loaded_tab = smooth
+
+                if self.exclude_bodyparts != tuple([""]):
+
+                    temp = loaded_tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
+                    temp.sort_index(axis=1, inplace=True)
+                    temp.columns = pd.MultiIndex.from_product(
+                        [
+                            os_sorted(list(set([i[j] for i in temp.columns])))
+                            for j in range(2)
+                        ]
+                    )
+                    loaded_tab = temp.sort_index(axis=1)
+                
+                table_dict={tab_name:loaded_tab}
+
+                if self.remove_outliers:
+
+                    pbar.set_postfix(step="Removing outliers")
+
+                    for k, table in table_dict.items():
+                        table_dict[k] = deepof.utils.remove_outliers(
+                            table,
+                            likely_dict[k],
+                            likelihood_tolerance=self.likelihood_tolerance,
+                            mode="or",
+                            limit=self.interpolation_limit,
+                            n_std=self.interpolation_std,
+                        )
+                    
+                if self.iterative_imputation:
+
+                    pbar.set_postfix(step="Iterative imputation of ocluded bodyparts")
+
+                    if self.iterative_imputation == "full":
+                        table_dict = deepof.utils.iterative_imputation(
+                            self, table_dict, likely_dict, full_imputation=True
+                        )
+                    else:
+                        table_dict = deepof.utils.iterative_imputation(
+                            self, table_dict, likely_dict, full_imputation=False
+                        )
+
+                # Set table_dict to NaN if animals are missing
+                table_dict = deepof.utils.set_missing_animals(self, table_dict, likely_dict)
+
+                pbar.set_postfix(step="Saving data")
+
+                #create folder for current data set
+                directory = os.path.join(self.project_path, self.project_name, 'Tables', tab_name)
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+                # save paths for tables
+                quality_path = os.path.join(directory, tab_name + '_likelyhood')
+                table_path = os.path.join(directory, tab_name)
+                #save table with parquet for fast loading later on
+                likely_dict[tab_name].to_parquet(quality_path, engine='pyarrow')
+                table_dict[tab_name].to_parquet(table_path, engine='pyarrow')
+
+                #save path to data in dict for large amounts of data, save full table for small amounts
+                if self.run_numba:
+                    tab_dict[tab_name] = table_path
+                    lik_dict[tab_name] = quality_path
+                else:
+                    tab_dict[tab_name] = table_dict[tab_name]
+                    lik_dict[tab_name] = likely_dict[tab_name]
+
+                #cleanup
+                del table_dict[tab_name]
+                del loaded_tab
+                del likely_dict
+
+                pbar.update() 
+        
+        #update table path 
+        self.table_path = os.path.join(
+            self.project_path, self.project_name, "Tables"
+        )
+
+        return tab_dict, TableDict(lik_dict, typ="quality", animal_ids=self.animal_ids)
+
+
+    #from memory_profiler import profile
+    #@profile
     def get_distances(self, tab_dict: dict, verbose: bool = True) -> dict:
         """Compute the distances between all selected body parts over time. If ego is provided, it only returns distances to a specified bodypart.
 
@@ -552,35 +566,53 @@ class Project:
         if verbose:
             print("Computing distances...")
 
+        if type(tab_dict[list(tab_dict.keys())[0]])==str:
+            first_tab=pd.read_parquet(tab_dict[list(tab_dict.keys())[0]], engine='pyarrow')
+        else:
+            first_tab=tab_dict[list(tab_dict.keys())[0]]
+
         nodes = self.distances
         if nodes == "all":
-            nodes = tab_dict[list(tab_dict.keys())[0]].columns.levels[0]
+            nodes = first_tab.columns.levels[0]
 
         assert [
-            i in list(tab_dict.values())[0].columns.levels[0] for i in nodes
+            i in first_tab.columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
         scales = self.scales[:, 2:]
 
-        distance_dict = {
-            key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
-            for i, (key, tab) in enumerate(tab_dict.items())
-        }
+        distance_dict = {}
+        for i, (key, tab) in enumerate(tab_dict.items()):
+            if i==0:
+                tab = first_tab
+            elif type(tab)==str:
+                tab = pd.read_parquet(tab, engine='pyarrow')
 
-        for key in distance_dict.keys():
-            distance_dict[key] = distance_dict[key].loc[
-                :, [np.all([i in nodes for i in j]) for j in distance_dict[key].columns]
-            ]
-
-        if self.ego:
-            for key, val in distance_dict.items():
-                distance_dict[key] = val.loc[
-                    :, [dist for dist in val.columns if self.ego in dist]
+            distance_tab = deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
+            distance_tab = distance_tab.loc[
+                    :, [np.all([i in nodes for i in j]) for j in distance_tab.columns]
                 ]
+            if self.ego:
+                distance_tab = distance_tab.loc[
+                        :, [dist for dist in distance_tab.columns if self.ego in dist]
+                    ]
+            
+            # Restore original index
+            distance_tab.index = tab.index
 
-        # Restore original index
-        for key in distance_dict.keys():
-            distance_dict[key].index = tab_dict[key].index
+            distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
+            #convert column headers to str as parquet cannot save non-str column headers
+            distance_tab.columns = [str(column) for column in distance_tab.columns]
+            #save table with parquet for fast loading later on
+            distance_tab.to_parquet(distance_path, engine='pyarrow')
+
+            #save path to data in dict for large amounts of data, save full table for small amounts
+            if self.run_numba:
+                distance_dict[key] = distance_path
+            else:
+                distance_dict[key] = distance_tab
+
+            del distance_tab
 
         return distance_dict
 
@@ -608,6 +640,9 @@ class Project:
         try:
             for key, tab in tab_dict.items():
 
+                if type(tab)==str:
+                    tab = pd.read_parquet(tab, engine='pyarrow')
+
                 dats = []
                 for clique in bridges:
                     dat = pd.DataFrame(
@@ -621,17 +656,28 @@ class Project:
 
                 dats = pd.concat(dats, axis=1)
 
-                angle_dict[key] = dats
+                # Restore original index
+                dats.index = tab.index
+
+                # get path for saving
+                angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
+                #convert column headers to str as parquet cannot save non-str column headers
+                dats.columns = [str(column) for column in dats.columns]
+                #save table with parquet for fast loading later on
+                dats.to_parquet(angle_path, engine='pyarrow')
+
+                #save path to data in dict for large amounts of data, save full table for small amounts
+                if self.run_numba:
+                    angle_dict[key] = angle_path
+                else:
+                    angle_dict[key] = dats
+
         except KeyError:
             raise KeyError(
                 "Are you using a custom labelling scheme? Our tutorials may help! "
                 "In case you're not, are there multiple animals in your single-animal DLC video? Make sure to set the "
                 "animal_ids parameter in deepof.data.Project"
             )
-
-        # Restore original index
-        for key in angle_dict.keys():
-            angle_dict[key].index = tab_dict[key].index
 
         return angle_dict
 
@@ -671,6 +717,9 @@ class Project:
 
         # iterate over all tables
         for key, tab in tab_dict.items():
+
+            if type(tab)==str:
+                tab = pd.read_parquet(tab, engine='pyarrow')
 
             current_table = pd.DataFrame()
 
@@ -739,10 +788,20 @@ class Project:
                 # collect area tables for all animals
                 current_table = pd.concat([current_table, areas_table], axis=1)
 
-            all_areas_dict[key] = current_table
+            area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
+            #save table with parquet for fast loading later on
+            current_table.to_parquet(area_path, engine='pyarrow')
+            
+            #save path to data in dict for large amounts of data, save full table for small amounts
+            if self.run_numba:
+                all_areas_dict[key] = area_path
+            else: 
+                all_areas_dict[key] = current_table
 
         return all_areas_dict
 
+    from memory_profiler import profile
+    @profile
     def create(
         self,
         verbose: bool = True,
@@ -782,7 +841,7 @@ class Project:
         
 
         # load table info
-        tables, quality = self.load_tables(verbose)
+        tables, quality = self.preprocess_tables(verbose)
         if self.exp_conditions is not None:
             assert (
                 tables.keys() == self.exp_conditions.keys()
@@ -854,6 +913,7 @@ class Project:
             table_paths=self.tables,
             trained_model_path=self.trained_path,
             videos=self.videos,
+            video_path=self.video_path,
             video_resolution=self.video_resolution,
             run_numba=self.run_numba,
         )
@@ -912,8 +972,10 @@ class Project:
         previous_project = load_project(project_to_extend)
 
         assert (
-            os.path.abspath(previous_project._project_path) == os.path.abspath(self.project_path)
-            ), "The project to be extended and the project used for extension need to have the same project paths!"
+            os.path.abspath(os.path.join(previous_project._project_path,previous_project._project_name)) == os.path.abspath(os.path.join(self.project_path,self.project_name))
+            ), ("The project to be extended and the project used for extension\n"
+        "need to have the same project paths and names! Table- and video paths can differ.\n"
+        "This is because Videos and Tables from the \"new\" project will get copied into the \"old\" one.")
 
         self.videos = os_sorted(
             [
@@ -938,35 +1000,10 @@ class Project:
             tab for tab in self.tables if tab not in previous_project._table_paths
         ]
 
-        # Copy videos and tables to the new directories
-        for vid in self.videos:
-            if vid.endswith(self.video_format):
-                shutil.copy2(
-                    os.path.join(video_path, vid),
-                    os.path.join(
-                        self.project_path, self.project_name, "Videos", vid
-                    ),
-                )
-
-        for tab in self.tables:
-            if tab.endswith(self.table_format):
-                shutil.copy2(
-                    os.path.join(table_path, tab),
-                    os.path.join(
-                        self.project_path, self.project_name, "Tables", tab
-                    ),
-                )
-
         if verbose:
             print(f"Processing data from {len(self.videos)} experiments...")
 
         if len(self.videos) > 0:
-            self.video_path = os.path.join(
-                self.project_path, self.project_name, "Videos"
-            )
-            self.table_path = os.path.join(
-                self.project_path, self.project_name, "Tables"
-            )
 
             # Use the same directory as the original project
             extended_coords = self.create(
@@ -976,6 +1013,35 @@ class Project:
                 test=test,
                 _to_extend=previous_project,
             )
+
+            #for compatibility
+            if hasattr(previous_project, '_video_path') and os.path.exists(previous_project._video_path): 
+                previous_path = previous_project._video_path
+            #older projects that do not have _video_path have the videos copied to this folder
+            else:
+                previous_path = os.path.join(previous_project._project_path, "Videos")
+
+            if verbose:
+                print(f"Copy video data from {os.path.join(video_path)}\n")
+                print(f"to {os.path.join(previous_path)}")
+
+            filtered_videos = [
+                vid
+                for vid
+                in self.videos
+                if vid not in previous_project._videos
+                and vid.endswith(self.video_format)
+                ]
+
+            # Copy new videos into old directory
+            for vid in tqdm(filtered_videos, desc="Copying videos", unit="video"):
+                if vid not in previous_project._videos and vid.endswith(self.video_format):
+                    shutil.copy2(
+                        os.path.join(video_path, vid),
+                        os.path.join(previous_path, vid),
+                    )
+            
+            self.video_path = previous_path
 
             return extended_coords
 
@@ -1003,6 +1069,7 @@ class Coordinates:
         table_paths: List,
         trained_model_path: str,
         videos: List,
+        video_path: str,
         video_resolution: List,
         angles: dict = None,
         animal_ids: List = tuple([""]),
@@ -1056,6 +1123,7 @@ class Coordinates:
         self._table_paths = table_paths
         self._trained_model_path = trained_model_path
         self._videos = videos
+        self._video_path = video_path
         self._video_resolution = video_resolution
         self._angles = angles
         self._areas = areas
@@ -1568,6 +1636,7 @@ class Coordinates:
             project_path=self._project_path,
             project_name=self._project_name,
             segmentation_model_path=None,
+            video_path=self._video_path,
             videos=videos_renamed,
         )
 
@@ -1747,6 +1816,8 @@ class Coordinates:
             return tuple(dataset), nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
+    #from memory_profiler import profile
+    #@profile
     def supervised_annotation(
         self,
         params: Dict = {},
@@ -1843,6 +1914,8 @@ class Coordinates:
 
             supervised_tags.index = tag_index
             tag_dict[key] = supervised_tags
+
+        del features_dict, dists, speeds, coords, raw_coords
 
         if propagate_labels:  # pragma: no cover
             for key, tab in tag_dict.items():
