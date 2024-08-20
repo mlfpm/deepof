@@ -148,7 +148,9 @@ class Project:
         self.project_path = project_path
         self.project_name = project_name
         self.video_path = video_path
+        #for later separation into path to source tables and path tables generated with deepof
         self.table_path = table_path
+        self.source_table_path = table_path
         self.trained_path = resource_filename(__name__, "trained_models")
 
         # Detect files to load from disk
@@ -158,9 +160,9 @@ class Project:
         if self.table_format == "autodetect":
             ex = [
                 i
-                for i in os.listdir(self.table_path)
+                for i in os.listdir(self.source_table_path)
                 if (
-                    os.path.isfile(os.path.join(self.table_path, i))
+                    os.path.isfile(os.path.join(self.source_table_path, i))
                     and not i.startswith(".")
                 )
             ][0]
@@ -175,7 +177,7 @@ class Project:
         self.tables = os_sorted(
             [
                 tab
-                for tab in os.listdir(self.table_path)
+                for tab in os.listdir(self.source_table_path)
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
@@ -249,7 +251,7 @@ class Project:
             len(
                 [
                     i
-                    for i in os.listdir(self.table_path)
+                    for i in os.listdir(self.source_table_path)
                     if i.endswith(self.table_format)
                 ]
             )
@@ -360,7 +362,7 @@ class Project:
 
                 loaded_tab = deepof.utils.load_table(
                     tab,
-                    self.table_path,
+                    self.source_table_path,
                     self.table_format,
                     self.rename_bodyparts,
                     self.animal_ids,
@@ -453,7 +455,10 @@ class Project:
                 loaded_tab = pd.concat([x, y], axis=1).sort_index(axis=1)
                 likely_dict = {tab_name : lik.fillna(0.0)}
 
-                likely_dict = TableDict(likely_dict, typ="quality", animal_ids=self.animal_ids)
+                likely_dict = TableDict(likely_dict, 
+                                        typ="quality", 
+                                        table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
+                                        animal_ids=self.animal_ids)
 
                 if self.smooth_alpha:
 
@@ -533,12 +538,15 @@ class Project:
 
                 pbar.update() 
         
-        #update table path 
+        #update table path to directory with generated tables
         self.table_path = os.path.join(
             self.project_path, self.project_name, "Tables"
         )
 
-        return tab_dict, TableDict(lik_dict, typ="quality", animal_ids=self.animal_ids)
+        return tab_dict, TableDict(lik_dict, 
+                                   typ="quality", 
+                                   table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
+                                   animal_ids=self.animal_ids)
 
 
     #from memory_profiler import profile
@@ -880,6 +888,7 @@ class Project:
             arena_params=self.arena_params,
             tables=tables,
             table_paths=self.tables,
+            source_table_path=self.source_table_path,
             trained_model_path=self.trained_path,
             videos=self.videos,
             video_path=self.video_path,
@@ -934,7 +943,7 @@ class Project:
         if not video_path:
             video_path=self.video_path
         if not table_path:
-            table_path=self.table_path
+            table_path=self.source_table_path
         if verbose:
             print("Loading previous project...")
 
@@ -974,6 +983,51 @@ class Project:
 
         if len(self.videos) > 0:
 
+            #for compatibility
+            if hasattr(previous_project, '_video_path') and os.path.exists(previous_project._video_path): 
+                previous_vid_path = previous_project._video_path
+                previous_table_path = previous_project._source_table_path
+            #older projects that do not have _video_path have the videos copied to this folder
+            else:
+                previous_vid_path = os.path.join(previous_project._project_path, "Videos")
+                previous_table_path = os.path.join(previous_project._project_path, "Tables")
+
+            if verbose:
+                print(f"Copy video data from {os.path.join(video_path)}\n")
+                print(f"to {os.path.join(previous_vid_path)}")
+
+            # Copy new videos into old directory
+            for vid in tqdm(self.videos, desc="Copying videos", unit="video"):
+                if (vid not in previous_project._videos 
+                    and vid.endswith(self.video_format)
+                    and os.path.abspath(video_path) != os.path.abspath(previous_vid_path)):
+                    
+                    shutil.copy2(
+                        os.path.join(video_path, vid),
+                        os.path.join(previous_vid_path, vid),
+                    )
+
+            if verbose:
+                print(f"Copy table data from {os.path.join(table_path)}\n")
+                print(f"to {os.path.join(previous_table_path)}")
+
+            # Copy new tables into old directory
+            for tab in tqdm(self.tables, desc="Copying tables", unit="table"):
+                if (tab not in previous_project._videos 
+                    and tab.endswith(self.table_format)
+                    and os.path.abspath(table_path) != os.path.abspath(previous_table_path)):
+                    
+                    shutil.copy2(
+                        os.path.join(table_path, tab),
+                        os.path.join(previous_table_path, tab),
+                    )
+            
+            self.video_path = previous_vid_path
+            self.source_table_path = previous_table_path
+
+            if verbose:
+                print(f"Evaluate new data...")
+
             # Use the same directory as the original project
             extended_coords = self.create(
                 verbose,
@@ -981,42 +1035,15 @@ class Project:
                 debug=debug,
                 test=test,
                 _to_extend=previous_project,
-            )
-
-            #for compatibility
-            if hasattr(previous_project, '_video_path') and os.path.exists(previous_project._video_path): 
-                previous_path = previous_project._video_path
-            #older projects that do not have _video_path have the videos copied to this folder
-            else:
-                previous_path = os.path.join(previous_project._project_path, "Videos")
-
-            if verbose:
-                print(f"Copy video data from {os.path.join(video_path)}\n")
-                print(f"to {os.path.join(previous_path)}")
-
-            filtered_videos = [
-                vid
-                for vid
-                in self.videos
-                if vid not in previous_project._videos
-                and vid.endswith(self.video_format)
-                ]
-
-            # Copy new videos into old directory
-            for vid in tqdm(filtered_videos, desc="Copying videos", unit="video"):
-                if vid not in previous_project._videos and vid.endswith(self.video_format):
-                    shutil.copy2(
-                        os.path.join(video_path, vid),
-                        os.path.join(previous_path, vid),
-                    )
-            
-            self.video_path = previous_path
+            )    
 
             return extended_coords
 
         else:
             print("No new experiments to process. Exiting...")
             print("You may need to explicitely set \"video_path\" and \"table_path\" inputs")
+
+            return 
 
 
 class Coordinates:
@@ -1035,6 +1062,7 @@ class Coordinates:
         frame_rate: float,
         arena_params: List,
         tables: dict,
+        source_table_path: str,
         table_paths: List,
         trained_model_path: str,
         videos: List,
@@ -1089,6 +1117,7 @@ class Coordinates:
         self._quality = quality
         self._scales = scales
         self._tables = tables
+        self._source_table_path = source_table_path
         self._table_paths = table_paths
         self._trained_model_path = trained_model_path
         self._videos = videos
@@ -1121,6 +1150,7 @@ class Coordinates:
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
         file_name: str = 'coords',
+        return_path: bool = False,
     ) -> table_dict:
         """Return a table_dict object with the coordinates of each animal as values.
 
@@ -1134,6 +1164,7 @@ class Coordinates:
             propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
             propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
             file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
             
         Returns:
             table_dict: A table_dict object containing the coordinates of each animal as values.
@@ -1179,11 +1210,11 @@ class Coordinates:
 
 
                 tab.loc[:, (slice("x"), [coord_1])] = (
-                    tab.loc[:, (slice("x"), [coord_1])] - scales[i][0]
+                    tab.loc[:, (slice("x"), [coord_1])] - scales[z][0]
                 )
 
                 tab.loc[:, (slice("x"), [coord_2])] = (
-                    tab.loc[:, (slice("x"), [coord_2])] - scales[i][1]
+                    tab.loc[:, (slice("x"), [coord_2])] - scales[z][1]
                 )
 
             elif isinstance(center, str) and center != "arena":
@@ -1286,7 +1317,7 @@ class Coordinates:
             
             # save paths for modified tables
             table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-            tab_dict[key] = deepof.utils.save_dt(tab,table_path,self._run_numba)
+            tab_dict[key] = deepof.utils.save_dt(tab,table_path,return_path)
 
             #cleanup
             del tab
@@ -1295,6 +1326,7 @@ class Coordinates:
         return TableDict(
             tab_dict,
             "coords",
+            table_path=os.path.join(self._project_path, self._project_name, "Tables"),
             animal_ids=self._animal_ids,
             arena=self._arena,
             arena_dims=self._scales,
@@ -1313,7 +1345,8 @@ class Coordinates:
         filter_on_graph: bool = True,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
-        file_name: str = 'distances'
+        file_name: str = 'got_distances',
+        return_path: bool = False,
     ) -> table_dict:
         """Return a table_dict object with the distances between body parts animal as values.
 
@@ -1324,6 +1357,7 @@ class Coordinates:
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
             propagate_annotations (Dict): A dictionary of annotations to propagate.
             file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
         Returns:
             table_dict: A table_dict object with the distances between body parts animal as values.
@@ -1355,15 +1389,6 @@ class Coordinates:
                 table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
                 tab = table_dict[key]
 
-                if propagate_labels:
-                    tab.loc[:, "pheno"] = self._exp_conditions[key]
-
-                if propagate_annotations:
-                    annotations = list(propagate_annotations.values())[0].columns
-
-                    for ann in annotations:
-                        tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
-
                 if filter_on_graph:
 
                     tab = tab.loc[
@@ -1384,7 +1409,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-                tabs[key] = deepof.utils.save_dt(tab,table_path,self._run_numba)
+                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
 
                 #cleanup
                 del tab
@@ -1410,6 +1435,8 @@ class Coordinates:
         selected_id: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
+        file_name: str = 'got_angles',
+        return_path: bool = False,
     ) -> table_dict:
         """Return a table_dict object with the angles between body parts animal as values.
 
@@ -1419,6 +1446,8 @@ class Coordinates:
             selected_id (str): The id of the animal to select.
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
             propagate_annotations (Dict): A dictionary of annotations to propagate.
+            file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
         Returns:
             table_dict: A table_dict object with the angles between body parts animal as values.
@@ -1427,33 +1456,38 @@ class Coordinates:
         tabs = deepof.utils.deepcopy(self._angles)
 
         if self._angles is not None:
-            if degrees:
-                tabs = {key: np.degrees(tab) for key, tab in tabs.items()}
 
-            if speed:
-                for key, tab in tabs.items():
+            for key, tab in tabs.items():
+
+                quality=self.get_quality().filter_videos([key])
+                #load table if not already loaded
+                if type(tab)==str:
+                    tab = deepof.utils.load_dt(tab)
+                    quality[key] = deepof.utils.load_dt(quality[key])
+
+                if degrees:
+                    tab = np.degrees(tab) 
+
+                if speed:
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-                    tabs[key] = vel
+                    tab = vel
 
-            if selected_id is not None:
-                for key, val in tabs.items():
-                    tabs[key] = val.loc[
-                        :, deepof.utils.filter_columns(val.columns, selected_id)
+                if selected_id is not None:
+                    tab = tab.loc[
+                        :, deepof.utils.filter_columns(tab.columns, selected_id)
                     ]
 
-            # Set table_dict to NaN if animals are missing
-            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+                table_dict={key:tab}
+                # Set table_dict to NaN if animals are missing
+                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+                tab = table_dict[key]
 
-            if propagate_labels:
-                for key, tab in tabs.items():
-                    tab["pheno"] = self._exp_conditions[key]
+                # save paths for modified tables
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
+                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
 
-            if propagate_annotations:
-                annotations = list(propagate_annotations.values())[0].columns
-
-                for key, tab in tabs.items():
-                    for ann in annotations:
-                        tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+                #cleanup
+                del tab
 
             return TableDict(
                 tabs,
@@ -1469,12 +1503,20 @@ class Coordinates:
             "Angles not computed. Read the documentation for more details"
         )  # pragma: no cover
 
-    def get_areas(self, speed: int = 0, selected_id: str = "all") -> table_dict:
+    def get_areas(
+            self, 
+            speed: int = 0,
+            selected_id: str = "all",
+            file_name: str = 'got_areas',
+            return_path: bool = False,
+            ) -> table_dict:
         """Return a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
         Args:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
+            file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
         Returns:
             table_dict: A table_dict object with the areas of the body parts animal as values.
@@ -1487,8 +1529,14 @@ class Coordinates:
                 selected_ids = self._animal_ids
             else:
                 selected_ids = [selected_id]
-
+         
             for key, tab in tabs.items():
+
+                quality=self.get_quality().filter_videos([key])
+                #load table if not already loaded
+                if type(tab)==str:
+                    tab = deepof.utils.load_dt(tab)
+                    quality[key] = deepof.utils.load_dt(quality[key])
 
                 exp_table = pd.DataFrame()
 
@@ -1503,15 +1551,23 @@ class Coordinates:
                     ]
                     exp_table = pd.concat([exp_table, current_table], axis=1)
 
-                tabs[key] = exp_table
+                tab = exp_table
 
-            if speed:
-                for key, tab in tabs.items():
+                if speed:
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
                     tabs[key] = vel
 
-            # Set table_dict to NaN if animals are missing
-            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+                table_dict={key:tab}
+                # Set table_dict to NaN if animals are missing
+                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+                tab = table_dict[key]
+
+                # save paths for modified tables
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
+                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
+
+                #cleanup
+                del tab
 
             areas = TableDict(
                 tabs,
@@ -1536,30 +1592,32 @@ class Coordinates:
     
     def get_start_times(self):
         """Returns the start time for each table"""
-        start_times={}
-        for key in self._tables:
-            start_times[key]=self._tables[key].index[0]
-        return start_times
-
-    def get_start_times(self):
-        """Returns the start time for each table"""
         start_times = {}
         for key in self._tables:
-            start_times[key] = self._tables[key].index[0]
+            if type(self._tables[key]) == str:
+                start_times[key] = deepof.utils.load_dt_metainfo(self._tables[key])['start_time']
+            else:
+                start_times[key] = self._tables[key].index[0]
         return start_times
 
     def get_end_times(self):
         """Returns the end time for each table"""
         end_times = {}
         for key in self._tables:
-            end_times[key] = self._tables[key].index[-1]
+            if type(self._tables[key]) == str:
+                end_times[key] = deepof.utils.load_dt_metainfo(self._tables[key])['end_time']
+            else:
+                end_times[key] = self._tables[key].index[-1]
         return end_times
 
     def get_table_lengths(self):
         """Returns the length for each table"""
         table_lengths = {}
         for key in self._tables:
-            table_lengths[key] = self._tables[key].shape[0]
+            if type(self._tables[key]) == str:
+                table_lengths[key] = deepof.utils.load_dt_metainfo(self._tables[key])['num_rows']
+            else:
+                table_lengths[key] = self._tables[key].shape[0]
         return table_lengths
 
     @property
@@ -1591,7 +1649,11 @@ class Coordinates:
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
-        return TableDict(self._quality, typ="quality", animal_ids=self._animal_ids)
+        return TableDict(
+            self._quality,
+            typ="quality",
+            table_path=os.path.join(self._project_path, self._project_name, "Tables"),
+            animal_ids=self._animal_ids)
 
     @property
     def get_arenas(self):
@@ -1699,16 +1761,15 @@ class Coordinates:
         """
         # Get all relevant features
         coords = self.get_coords(
-            selected_id=animal_id, center=center, align=align, polar=polar
+            selected_id=animal_id, center=center, align=align, polar=polar, return_path=self._run_numba,
         )
-        speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed')
-        dists = self.get_distances(selected_id=animal_id)
+        speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=self._run_numba)
+        dists = self.get_distances(selected_id=animal_id, return_path=self._run_numba)
 
         # Merge and extract names
         tab_dict = coords.merge(
             speeds,
             dists,
-            root_path=os.path.join(self._project_path, self._project_name),
             save_as_paths=self._run_numba
             )
 
@@ -1743,12 +1804,12 @@ class Coordinates:
 
         #read table metadata
         if type(list(dists.values())[0]) == str:
-            edge_feature_names=deepof.utils.load_dt_columns(list(dists.values())[0])
+            edge_feature_names=deepof.utils.load_dt_metainfo(list(dists.values())[0])['columns']
         else:
             edge_feature_names = list(list(dists.values())[0].columns)
 
         if type(list(tab_dict.values())[0]) == str:
-            feature_names=pd.Index(deepof.utils.load_dt_columns(list(tab_dict.values())[0]))
+            feature_names=pd.Index(deepof.utils.load_dt_metainfo(list(tab_dict.values())[0])['columns'])
         else:
             feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
 
@@ -1781,7 +1842,6 @@ class Coordinates:
         if preprocess:
             to_preprocess, global_scaler = tab_dict.preprocess(
                 **kwargs,
-                root_path=os.path.join(self._project_path, self._project_name),
                 save_as_paths=self._run_numba
                 )
             
@@ -1886,19 +1946,19 @@ class Coordinates:
 
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
-        raw_coords = self.get_coords(center=None, file_name='raw')
+        raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._run_numba)
 
         try:
-            coords = self.get_coords(center=center, align=align)
+            coords = self.get_coords(center=center, align=align, return_path=self._run_numba)
         except AssertionError:
 
             try:
-                coords = self.get_coords(center="Center", align="Spine_1")
+                coords = self.get_coords(center="Center", align="Spine_1", return_path=self._run_numba)
             except AssertionError:
-                coords = self.get_coords(center="Center", align="Nose")
+                coords = self.get_coords(center="Center", align="Nose", return_path=self._run_numba)
 
-        dists = self.get_distances()
-        speeds = self.get_coords(speed=1, file_name='speeds')
+        dists = self.get_distances(return_path=self._run_numba)
+        speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._run_numba)
         if len(self._animal_ids) <= 1:
             features_dict = (
                 deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -2136,6 +2196,7 @@ class TableDict(dict):
         self,
         tabs: Dict,
         typ: str,
+        table_path: str = None,
         arena: str = None,
         arena_dims: np.array = None,
         animal_ids: List = tuple([""]),
@@ -2153,6 +2214,7 @@ class TableDict(dict):
         Args:
             tabs (Dict): Dictionary of pandas.DataFrames with individual experiments as keys.
             typ (str): Type of the dataset. Examples are "coords", "dists", and "angles". For logging purposes only.
+            table_path (str): Path to the root directory that is going to be used to save table iterations.
             arena (str): Type of the arena. Must be one of "circular-autodetect", "circular-manual", or "polygon-manual". Handled internally.
             arena_dims (np.array): Dimensions of the arena in mm.
             animal_ids (list): list of animal ids.
@@ -2174,6 +2236,7 @@ class TableDict(dict):
         self._exp_conditions = exp_conditions
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
+        self._table_path = table_path
 
     def filter_videos(self, keys: list) -> table_dict:
         """Return a subset of the original table_dict object, containing only the specified keys.
@@ -2192,6 +2255,7 @@ class TableDict(dict):
         return TableDict(
             {k: value for k, value in table.items() if k in keys},
             self._type,
+            self._table_path,
             connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
@@ -2219,6 +2283,7 @@ class TableDict(dict):
             table = TableDict(
                 filtered_table,
                 self._type,
+                self._table_path,
                 connectivity=self._connectivity,
                 propagate_labels=self._propagate_labels,
                 propagate_annotations=self._propagate_annotations,
@@ -2358,13 +2423,14 @@ class TableDict(dict):
         return TableDict(
             tabs,
             typ=self._type,
+            table_path=self._table_path,
             connectivity=self._connectivity,
             propagate_labels=self._propagate_labels,
             propagate_annotations=self._propagate_annotations,
             exp_conditions=self._exp_conditions,
         )
 
-    def merge(self, *args, ignore_index=False, root_path=None, file_name='merged', save_as_paths=False):
+    def merge(self, *args, ignore_index=False, file_name='merged', save_as_paths=False):
         """Take a number of table_dict objects and merges them to the current one.
 
         Returns a table_dict object of type 'merged'.
@@ -2373,7 +2439,6 @@ class TableDict(dict):
         Args:
             *args (table_dict): table_dict objects to be merged.
             ignore_index (bool): ignore index when merging. Defaults to False.
-            root_path (str): Path to project folder
             file_name (str): Name that is used for saving the merged table
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
 
@@ -2414,12 +2479,13 @@ class TableDict(dict):
 
 
             # save paths for modified tables
-            table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+            table_path = os.path.join(self._table_path, key, key + '_' + file_name)
             merged_dict[key] = deepof.utils.save_dt(merged_tab,table_path,save_as_paths)           
 
         merged_tables = TableDict(
             merged_dict,
             typ="merged",
+            table_path=self._table_path,
             connectivity=self._connectivity,
             propagate_labels=propagate_labels,
             propagate_annotations=self._propagate_annotations,
@@ -2495,7 +2561,6 @@ class TableDict(dict):
         interpolate_normalized: int = 10,
         precomputed_breaks: dict = None,
         N_rows_max: int = 6000000,
-        root_path = None,
         file_name = 'preprocessed',
         save_as_paths = False,
     ) -> np.ndarray:
@@ -2517,7 +2582,6 @@ class TableDict(dict):
             interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be interpolated after normalization. Only used if scale is set to "standard".
             precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
             N_rows_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
-            root_path (str): Path to project folder
             file_name (str): Name that is used for saving the merged table
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
 
@@ -2581,7 +2645,7 @@ class TableDict(dict):
                 sampled_tabs.append(tab.sample(n=min(N_rows_table, len(tab)), random_state=42))
 
             # save paths for modified tables
-            table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+            table_path = os.path.join(self._table_path, key, key + '_' + file_name)
             table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
 
             del current_tab
@@ -2665,7 +2729,7 @@ class TableDict(dict):
                 tab = tab_interpol
 
                 # save paths for modified tables
-                table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+                table_path = os.path.join(self._table_path, key, key + '_' + file_name)
                 table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
 
             del current_tab

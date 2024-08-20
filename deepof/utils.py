@@ -2750,7 +2750,7 @@ def get_total_Frames(video_paths: List[str]) -> int:
         current_video_cap.release()
     return total_frames
 
-def save_dt(dt: pd.DataFrame, path: str, save_RAM: bool = False):
+def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
     """Saves a given data frame fast and efficient using parquet
 
     Args:
@@ -2783,7 +2783,7 @@ def save_dt(dt: pd.DataFrame, path: str, save_RAM: bool = False):
     else:
         dt = None
 
-    if save_RAM:
+    if return_path:
         return path
     else:
         return dt
@@ -2825,7 +2825,7 @@ def load_dt(path: str):
     
     return tab
 
-def load_dt_columns(path: str):
+def load_dt_metainfo(path: str):
     """Loads the columns of a given data frame
 
     Args:
@@ -2836,6 +2836,9 @@ def load_dt_columns(path: str):
     """
 
     if path is not None:
+
+        meta_info={}
+
         #read columns from metadata
         info_meta = pq.read_metadata(path)
         columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
@@ -2850,6 +2853,16 @@ def load_dt_columns(path: str):
             in columns
             ]
         
-        return columns
+        index_column = pq.read_table(path, columns=['__index_level_0__'])
+        
+        meta_info['columns'] = columns
+        meta_info['num_cols'] = info_meta.num_columns
+        meta_info['num_rows'] = info_meta.num_rows
+        meta_info['start_time'] = str(index_column[0][0])
+        meta_info['end_time'] = str(index_column[0][-1])
+
+        
+        return meta_info
     else:
         return None
+    

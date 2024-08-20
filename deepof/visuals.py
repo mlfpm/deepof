@@ -246,6 +246,7 @@ def plot_heatmaps(
     experiment_id: int = "average",
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
+    N_rows_max: int = 6000000,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -267,6 +268,7 @@ def plot_heatmaps(
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        N_rows_max (int): Maximum number of rows that is sampled from all tables for position estimation.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
@@ -286,7 +288,7 @@ def plot_heatmaps(
         condition_values=[condition_value],
     )
 
-    coords = coordinates.get_coords(center=center, align=align)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False)
 
     if exp_condition is not None and condition_value is not None:
         coords = coords.filter_videos(
@@ -300,25 +302,6 @@ def plot_heatmaps(
     bin_size_int, bin_index_int, _, bin_starts, bin_ends = _preprocess_time_bins(
         coordinates, bin_size, bin_index
     )
-
-    # cut coords accordingly to given start and end points
-    if bin_starts is not None and bin_ends is not None:
-        # cut down coords to desired range
-        coords = {
-            key: val.iloc[bin_starts[key] : np.minimum(val.shape[0], bin_ends[key])]
-            for key, val in coords.items()
-        }
-
-    elif bin_size_int is not None and bin_index_int is not None:
-        coords = {
-            key: val.iloc[
-                bin_size_int
-                * bin_index_int : np.minimum(
-                    val.shape[0], bin_size_int * (bin_index_int + 1)
-                )
-            ]
-            for key, val in coords.items()
-        }
 
     if not center:  # pragma: no cover
         warnings.warn(
@@ -338,13 +321,39 @@ def plot_heatmaps(
     if experiment_id != "average":
 
         i = np.argmax(np.array(list(coords.keys())) == experiment_id)
-        coords = coords[experiment_id]
+        coords = coords.filter_videos([experiment_id])
 
-    else:
-        i = experiment_id
-        coords = pd.concat([val for val in coords.values()], axis=0).reset_index(
-            drop=True
-        )
+    # for all tables in coords:
+    # read tables one by one
+    # cut them in shape according to time bins
+    # sample rows from cut table for plot
+    N_rows_table=int(N_rows_max/len(coords))
+    sampled_tabs = []
+
+    for key, tab in coords.items():
+
+        #load table if not already loaded
+        if type(tab)==str:
+            tab = deepof.utils.load_dt(tab)  
+        
+        #cut slice from table if required
+        if bin_starts is not None and bin_ends is not None:
+            tab=tab.iloc[bin_starts[key] : np.minimum(tab.shape[0], bin_ends[key])]
+        elif bin_size_int is not None and bin_index_int is not None:
+            tab=tab.iloc[bin_size_int * bin_index_int 
+                            : np.minimum(tab.shape[0],
+                            bin_size_int * (bin_index_int + 1))]
+
+        #sample evenly spaced rows from table
+        total_rows = len(tab)
+        step_size = np.max([1,total_rows/N_rows_table])
+        selected_indices=np.arange(0, total_rows, step_size).astype(int)
+        sampled_tabs.append(tab.iloc[selected_indices])
+
+    #concatenate table samples into one table for processing
+    coords = pd.concat([val for val in sampled_tabs], axis=0).reset_index(
+        drop=True
+    )
 
     heatmaps = heatmap(
         coords,
@@ -360,7 +369,7 @@ def plot_heatmaps(
 
     if display_arena:
         for hmap in heatmaps:
-            plot_arena(coordinates, center, "#ec5628", hmap, i)
+            plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
     if show:
         plt.show()
@@ -3384,7 +3393,7 @@ def _preprocess_time_bins(
     bin_ends = None
 
     # skip preprocessing if exact bins are already provided by the user
-    if precomputed_bins is not None:
+    if not precomputed_bins:
         # get start and end times for each table
         start_times = coordinates.get_start_times()
         table_lengths = coordinates.get_table_lengths()
@@ -3558,10 +3567,18 @@ def _check_enum_inputs(
                 )
             )
     else:
-        condition_value_options_list=[]    
+        condition_value_options_list=[]
+
+    #get lists of all body parts     
     bodyparts_options_list = np.unique(
         np.concatenate(
-            [coordinates._tables[key].columns.levels[0] for key in coordinates._tables.keys()]
+            [
+            coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
+            if type(coordinates._tables[key]) != str   #if table is not a save path
+            else [t[0] for t in deepof.utils.load_dt_metainfo(coordinates._tables[key])['columns']] #otherwise read in saved column headers and then extract first elements
+            for key 
+            in coordinates._tables.keys()
+            ]
         )
     )
     bodyparts_options_list=[item for item in bodyparts_options_list if item not in coordinates._excluded]
