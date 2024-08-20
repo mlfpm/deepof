@@ -22,6 +22,7 @@ from sklearn.impute import IterativeImputer
 from tqdm import tqdm
 from typing import Tuple, Any, List, Union, NewType
 import argparse
+import ast
 import cv2
 import h5py
 import math
@@ -32,6 +33,8 @@ import numpy as np
 import numba as nb
 import os
 import pandas as pd
+import pickle
+import pyarrow.parquet as pq
 import regex as re
 import requests
 import ruptures as rpt
@@ -1532,42 +1535,21 @@ def rolling_window(
         rolled_a (np.ndarray): N (sliding window instances) * l (sliding window size) * m (features)
 
     """
-    breakpoints = None
 
-    if automatic_changepoints:
-        # Define change point detection model using ruptures
-        # Remove dimensions with low variance (occurring when aligning the animals with the y axis)
-        if precomputed_breaks is None:
-            rpt_model = rpt.KernelCPD(
-                kernel=automatic_changepoints, min_size=window_size, jump=window_step
-            ).fit(VarianceThreshold(threshold=1e-3).fit_transform(a))
+    shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
+    strides = (a.strides[0],) + a.strides
+    rolled_a = np.lib.stride_tricks.as_strided(
+        a, shape=shape, strides=strides, writeable=True
+    )[::window_step]
 
-            # Extract change points from current experiment
-            breakpoints = rpt_model.predict(pen=4.0)
-
-        else:
-            breakpoints = np.cumsum(precomputed_breaks)
-
-        rolled_a = split_with_breakpoints(a, breakpoints)
-
-    else:
-        shape = (a.shape[0] - window_size + 1, window_size) + a.shape[1:]
-        strides = (a.strides[0],) + a.strides
-        rolled_a = np.lib.stride_tricks.as_strided(
-            a, shape=shape, strides=strides, writeable=True
-        )[::window_step]
-
-    return rolled_a, breakpoints
+    return rolled_a
 
 
 def rupture_per_experiment(
-    table_dict: table_dict,
-    to_rupture: np.ndarray,
-    rupture_indices: list,
-    automatic_changepoints: str,
+    to_rupture: table_dict,
     window_size: int,
     window_step: int,
-    precomputed_breaks: dict = None,
+    save_as_paths: bool = False,
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
 
@@ -1587,61 +1569,35 @@ def rupture_per_experiment(
         ruptured_dataset (np.ndarray): Dataset with all ruptures concatenated across the first axis.
         rupture_indices (list): Indices of ruptures.
 
-    """
-    # Generate a base ruptured training set and a set of breaks
-    ruptured_dataset, break_indices = None, None
-    cumulative_shape = 0
+    """    
     # Iterate over all experiments and populate them
-    for i, (key, tab) in enumerate(table_dict.items()):
-        if i in rupture_indices:
-            current_size = tab.shape[0]
-            current_train, current_breaks = rolling_window(
-                to_rupture[cumulative_shape : cumulative_shape + current_size],
-                window_size,
-                window_step,
-                automatic_changepoints,
-                (None if not precomputed_breaks else precomputed_breaks[key]),
-            )
-            # Add shape of the current tab as the last breakpoint,
-            # to avoid skipping breakpoints between experiments
-            if current_breaks is not None:
-                current_breaks = np.array(current_breaks) + cumulative_shape
+    for key, tab in to_rupture.items():
+            
+        #load tab from disk if not already loaded
+        tab_path=None
+        if type(tab)==str:
+            tab_path = copy.deepcopy(tab)
+            tab = load_dt(tab)  
 
-            cumulative_shape += current_size
+        tab=np.array(tab)  
 
-            try:  # pragma: no cover
-                # To concatenate the current ruptures with the ones obtained
-                # until now, pad the smallest to the length of the largest
-                # alongside axis 1 (temporal dimension) with zeros.
-                if ruptured_dataset.shape[1] >= current_train.shape[1]:
-                    current_train = np.pad(
-                        current_train,
-                        (
-                            (0, 0),
-                            (0, ruptured_dataset.shape[1] - current_train.shape[1]),
-                            (0, 0),
-                        ),
-                    )
-                elif ruptured_dataset.shape[1] < current_train.shape[1]:
-                    ruptured_dataset = np.pad(
-                        ruptured_dataset,
-                        (
-                            (0, 0),
-                            (0, current_train.shape[1] - ruptured_dataset.shape[1]),
-                            (0, 0),
-                        ),
-                    )
+        tab = rolling_window(
+            tab,
+            window_size,
+            window_step,
+        )
 
-                # Once that's taken care of, concatenate ruptures alongside axis 0
-                ruptured_dataset = np.concatenate([ruptured_dataset, current_train])
-                if current_breaks is not None:
-                    break_indices = np.concatenate([break_indices, current_breaks])
-            except (ValueError, AttributeError):
-                ruptured_dataset = current_train
-                if current_breaks is not None:
-                    break_indices = current_breaks
+        to_rupture[key] = save_dt(tab,tab_path,save_as_paths)
 
-    return ruptured_dataset, break_indices
+    # pragma: no cover
+    # To concatenate the current ruptures with the ones obtained
+    # until now, pad the smallest to the length of the largest
+    # alongside axis 1 (temporal dimension) with zeros.
+
+    # Once that's taken care of, concatenate ruptures alongside axis 0
+
+
+    return to_rupture
 
 
 def smooth_mult_trajectory(
@@ -2205,6 +2161,10 @@ def automatically_recognize_arena(
             n=1,
         )[0]
     ]
+
+    #load table if not already loaded
+    if type(current_tab)==str:
+        current_tab = pd.read_parquet(current_tab, engine='pyarrow')
 
     # Get distances of all body parts and timepoints to both center and periphery
     distances_to_center = cdist(
@@ -2789,3 +2749,107 @@ def get_total_Frames(video_paths: List[str]) -> int:
         total_frames += int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         current_video_cap.release()
     return total_frames
+
+def save_dt(dt: pd.DataFrame, path: str, save_RAM: bool = False):
+    """Saves a given data frame fast and efficient using parquet
+
+    Args:
+        dt (pd.DataFrame): dataframe for saving
+        path (str): Where to save 
+        keep_in_RAM (bool): False, If the object that gets saved should be returned, True and only the path to teh file location gets returned
+
+    Returns:
+        Either saved dataframe or path to save location
+    """
+
+    if path is None:
+        #skip saving
+        return dt
+    elif isinstance(dt, np.ndarray) or (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)):
+        path = path + '.pkl'
+        with open(path, 'wb') as file:
+            pickle.dump(dt, file)    
+    elif isinstance(dt, pd.DataFrame) and len(dt.columns)>0:
+        #convert column headers to str as parquet cannot save non-str column headers
+        columns_in = copy.deepcopy(dt.columns)
+        if not isinstance(dt.columns, pd.MultiIndex) and type(dt.columns[0]) != str:
+            dt.columns = [str(column) for column in columns_in]
+        #save table with parquet for fast loading later on
+        path = path+'.pqt'
+        dt.to_parquet(path, engine='pyarrow', index=True)
+        dt.columns = columns_in
+
+        #save path to data in dict for large amounts of data, save full table for small amounts
+    else:
+        dt = None
+
+    if save_RAM:
+        return path
+    else:
+        return dt
+
+
+def load_dt(path: str):
+    """Saves a given data frame fast and efficient using parquet
+
+    Args:
+        path (str): Where to save 
+
+    Returns:
+        Data table after laoding
+    """
+
+    if path is not None and path.endswith('.pkl'):
+        with open(path, 'rb') as file:
+            # Load the array using pickle
+            tab = pickle.load(file)
+
+    elif path is not None and path.endswith('.pqt'):
+        tab = pd.read_parquet(path, engine='pyarrow')
+
+        #restore tuple columns
+        if not isinstance(tab.columns, pd.MultiIndex): # and not isinstance(tab.columns, pd.Index):
+            cols_lit=[
+                ast.literal_eval(item)
+                if type(item) == str
+                and item.startswith("(")
+                else item 
+                for item 
+                in tab.columns
+                ]
+            
+            tab.columns=pd.Index(cols_lit)
+
+    else:
+        tab = None
+    
+    return tab
+
+def load_dt_columns(path: str):
+    """Loads the columns of a given data frame
+
+    Args:
+        path (str): path to file
+
+    Returns:
+        List of columns
+    """
+
+    if path is not None:
+        #read columns from metadata
+        info_meta = pq.read_metadata(path)
+        columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
+
+        #adjust columns
+        columns=[
+            ast.literal_eval(item)
+            if type(item) == str
+            and item.startswith("(")
+            else item 
+            for item 
+            in columns
+            ]
+        
+        return columns
+    else:
+        return None

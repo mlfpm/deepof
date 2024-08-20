@@ -3820,7 +3820,7 @@ def plot_behavior_trends(
                 behavior_timebin=behavior_timebin/len(index_dict_fn(data_snippet[key]))
             
             # Collect data in datatable
-            cond = coordinates.get_exp_conditions[key][exp_condition][0]
+            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
             new_row = pd.DataFrame([{"time_bin": z, "exp_condition": str(cond), behavior_to_plot: behavior_timebin}])
             df = pd.concat([df, new_row], ignore_index=True)
         z+=1

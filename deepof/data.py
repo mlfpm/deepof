@@ -523,17 +523,8 @@ class Project:
                 # save paths for tables
                 quality_path = os.path.join(directory, tab_name + '_likelyhood')
                 table_path = os.path.join(directory, tab_name)
-                #save table with parquet for fast loading later on
-                likely_dict[tab_name].to_parquet(quality_path, engine='pyarrow')
-                table_dict[tab_name].to_parquet(table_path, engine='pyarrow')
-
-                #save path to data in dict for large amounts of data, save full table for small amounts
-                if self.run_numba:
-                    tab_dict[tab_name] = table_path
-                    lik_dict[tab_name] = quality_path
-                else:
-                    tab_dict[tab_name] = table_dict[tab_name]
-                    lik_dict[tab_name] = likely_dict[tab_name]
+                lik_dict[tab_name] = deepof.utils.save_dt(likely_dict[tab_name],quality_path,self.run_numba)
+                tab_dict[tab_name] = deepof.utils.save_dt(table_dict[tab_name],table_path,self.run_numba)
 
                 #cleanup
                 del table_dict[tab_name]
@@ -567,7 +558,7 @@ class Project:
             print("Computing distances...")
 
         if type(tab_dict[list(tab_dict.keys())[0]])==str:
-            first_tab=pd.read_parquet(tab_dict[list(tab_dict.keys())[0]], engine='pyarrow')
+            first_tab=deepof.utils.load_dt(tab_dict[list(tab_dict.keys())[0]])
         else:
             first_tab=tab_dict[list(tab_dict.keys())[0]]
 
@@ -586,7 +577,7 @@ class Project:
             if i==0:
                 tab = first_tab
             elif type(tab)==str:
-                tab = pd.read_parquet(tab, engine='pyarrow')
+                tab = deepof.utils.load_dt(tab)
 
             distance_tab = deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
             distance_tab = distance_tab.loc[
@@ -601,17 +592,9 @@ class Project:
             distance_tab.index = tab.index
 
             distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
-            #convert column headers to str as parquet cannot save non-str column headers
-            distance_tab.columns = [str(column) for column in distance_tab.columns]
-            #save table with parquet for fast loading later on
-            distance_tab.to_parquet(distance_path, engine='pyarrow')
+            distance_dict[key] = deepof.utils.save_dt(distance_tab,distance_path,self.run_numba)
 
-            #save path to data in dict for large amounts of data, save full table for small amounts
-            if self.run_numba:
-                distance_dict[key] = distance_path
-            else:
-                distance_dict[key] = distance_tab
-
+            #clean up
             del distance_tab
 
         return distance_dict
@@ -641,7 +624,7 @@ class Project:
             for key, tab in tab_dict.items():
 
                 if type(tab)==str:
-                    tab = pd.read_parquet(tab, engine='pyarrow')
+                    tab = deepof.utils.load_dt(tab)
 
                 dats = []
                 for clique in bridges:
@@ -661,16 +644,8 @@ class Project:
 
                 # get path for saving
                 angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
-                #convert column headers to str as parquet cannot save non-str column headers
-                dats.columns = [str(column) for column in dats.columns]
-                #save table with parquet for fast loading later on
-                dats.to_parquet(angle_path, engine='pyarrow')
+                angle_dict[key] = deepof.utils.save_dt(dats,angle_path,self.run_numba)
 
-                #save path to data in dict for large amounts of data, save full table for small amounts
-                if self.run_numba:
-                    angle_dict[key] = angle_path
-                else:
-                    angle_dict[key] = dats
 
         except KeyError:
             raise KeyError(
@@ -719,7 +694,7 @@ class Project:
         for key, tab in tab_dict.items():
 
             if type(tab)==str:
-                tab = pd.read_parquet(tab, engine='pyarrow')
+                tab = deepof.utils.load_dt(tab)
 
             current_table = pd.DataFrame()
 
@@ -789,19 +764,13 @@ class Project:
                 current_table = pd.concat([current_table, areas_table], axis=1)
 
             area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
-            #save table with parquet for fast loading later on
-            current_table.to_parquet(area_path, engine='pyarrow')
-            
-            #save path to data in dict for large amounts of data, save full table for small amounts
-            if self.run_numba:
-                all_areas_dict[key] = area_path
-            else: 
-                all_areas_dict[key] = current_table
+            all_areas_dict[key] = deepof.utils.save_dt(current_table,area_path,self.run_numba)
+
 
         return all_areas_dict
 
-    from memory_profiler import profile
-    @profile
+    #from memory_profiler import profile
+    #@profile
     def create(
         self,
         verbose: bool = True,
@@ -1151,6 +1120,7 @@ class Coordinates:
         selected_id: str = None,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
+        file_name: str = 'coords',
     ) -> table_dict:
         """Return a table_dict object with the coordinates of each animal as values.
 
@@ -1163,7 +1133,8 @@ class Coordinates:
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
             propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
-
+            file_name (str): Name of the file for saving
+            
         Returns:
             table_dict: A table_dict object containing the coordinates of each animal as values.
 
@@ -1180,27 +1151,42 @@ class Coordinates:
         coord_1, coord_2 = "x", "y"
         scales = self._scales
 
-        if polar:
-            coord_1, coord_2 = "rho", "phi"
-            scales = deepof.utils.bp2polar(scales).to_numpy()
-            for key, tab in tabs.items():
-                tabs[key] = deepof.utils.tab2polar(tab)
+        tab_dict={}
+        z=0
+        for key, tab in tabs.items():
 
-        if center == "arena":
+            quality=self.get_quality().filter_videos([key])
+            #load table if not already loaded
+            if type(tab)==str:
+                tab = deepof.utils.load_dt(tab)
+                quality[key] = deepof.utils.load_dt(quality[key])
 
-            for i, (key, value) in enumerate(tabs.items()):
+            if z==0 and align:
 
-                value.loc[:, (slice("x"), [coord_1])] = (
-                    value.loc[:, (slice("x"), [coord_1])] - scales[i][0]
+                assert any(
+                    center in bp for bp in tab.columns.levels[0]
+                ), "for align to run, center must be set to the name of a bodypart"
+                assert any(
+                    align in bp for bp in tab.columns.levels[0]
+                ), "align must be set to the name of a bodypart"
+
+            if polar:
+                coord_1, coord_2 = "rho", "phi"
+                scales = deepof.utils.bp2polar(scales).to_numpy()
+                tab = deepof.utils.tab2polar(tab)
+
+            if center == "arena":
+
+
+                tab.loc[:, (slice("x"), [coord_1])] = (
+                    tab.loc[:, (slice("x"), [coord_1])] - scales[i][0]
                 )
 
-                value.loc[:, (slice("x"), [coord_2])] = (
-                    value.loc[:, (slice("x"), [coord_2])] - scales[i][1]
+                tab.loc[:, (slice("x"), [coord_2])] = (
+                    tab.loc[:, (slice("x"), [coord_2])] - scales[i][1]
                 )
 
-        elif isinstance(center, str) and center != "arena":
-
-            for i, (key, value) in enumerate(tabs.items()):
+            elif isinstance(center, str) and center != "arena":
 
                 # Center each animal independently
                 animal_ids = self._animal_ids
@@ -1209,35 +1195,27 @@ class Coordinates:
 
                 for aid in animal_ids:
                     # center on x / rho
-                    value.update(
-                        value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
+                    tab.update(
+                        tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
                         .loc[:, (slice("x"), [coord_1])]
                         .subtract(
-                            value[aid + ("_" if aid != "" else "") + center][coord_1],
+                            tab[aid + ("_" if aid != "" else "") + center][coord_1],
                             axis=0,
                         )
                     )
 
                     # center on y / phi
-                    value.update(
-                        value.loc[:, [i for i in value.columns if i[0].startswith(aid)]]
+                    tab.update(
+                        tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
                         .loc[:, (slice("x"), [coord_2])]
                         .subtract(
-                            value[aid + ("_" if aid != "" else "") + center][coord_2],
+                            tab[aid + ("_" if aid != "" else "") + center][coord_2],
                             axis=0,
                         )
                     )
 
-        if align:
+            if align:
 
-            assert any(
-                center in bp for bp in list(tabs.values())[0].columns.levels[0]
-            ), "for align to run, center must be set to the name of a bodypart"
-            assert any(
-                align in bp for bp in list(tabs.values())[0].columns.levels[0]
-            ), "align must be set to the name of a bodypart"
-
-            for key, tab in tabs.items():
                 # noinspection PyUnboundLocalVariable
                 all_index = tab.index
                 all_columns = []
@@ -1278,38 +1256,44 @@ class Coordinates:
 
                 aligned_coordinates.index = all_index
                 aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
-                tabs[key] = aligned_coordinates
+                tab = aligned_coordinates
 
-        if speed:
-            for key, tab in tabs.items():
+            if speed:
                 vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
-                tabs[key] = vel
+                tab = vel
 
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            for key, val in tabs.items():
-                tabs[key] = val.loc[
-                    :, deepof.utils.filter_columns(val.columns, selected_id)
+            # Id selected_id was specified, selects coordinates of only one animal for further processing
+            if selected_id is not None:
+                tab = tab.loc[
+                    :, deepof.utils.filter_columns(tab.columns, selected_id)
                 ]
 
-        # Set table_dict to NaN if animals are missing
-        tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
+            table_dict={key:tab}
+            # Set table_dict to NaN if animals are missing
+            table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+            tab = table_dict[key]
 
-        if propagate_annotations:
-            annotations = list(propagate_annotations.values())[0].columns
+            if propagate_annotations:
+                annotations = list(propagate_annotations.values())[0].columns
 
-            for key, tab in tabs.items():
                 for ann in annotations:
                     tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
-        if propagate_labels:
-            for key, tab in tabs.items():
+            if propagate_labels:
                 tab.loc[:, "pheno"] = np.repeat(
                     self._exp_conditions[key][propagate_labels].values, tab.shape[0]
                 )
+            
+            # save paths for modified tables
+            table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
+            tab_dict[key] = deepof.utils.save_dt(tab,table_path,self._run_numba)
+
+            #cleanup
+            del tab
+            z+=1
 
         return TableDict(
-            tabs,
+            tab_dict,
             "coords",
             animal_ids=self._animal_ids,
             arena=self._arena,
@@ -1329,6 +1313,7 @@ class Coordinates:
         filter_on_graph: bool = True,
         propagate_labels: bool = False,
         propagate_annotations: Dict = False,
+        file_name: str = 'distances'
     ) -> table_dict:
         """Return a table_dict object with the distances between body parts animal as values.
 
@@ -1338,6 +1323,7 @@ class Coordinates:
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
             propagate_labels (bool): If True, the pheno column will be propagated from the original data.
             propagate_annotations (Dict): A dictionary of annotations to propagate.
+            file_name (str): Name of the file for saving
 
         Returns:
             table_dict: A table_dict object with the distances between body parts animal as values.
@@ -1347,35 +1333,40 @@ class Coordinates:
 
         if self._distances is not None:
 
-            if speed:
-                for key, tab in tabs.items():
-                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
-                    tabs[key] = vel
+            for key, tab in tabs.items():
 
-            if selected_id is not None:
-                for key, val in tabs.items():
-                    tabs[key] = val.loc[
-                        :, deepof.utils.filter_columns(val.columns, selected_id)
+                quality=self.get_quality().filter_videos([key])
+                #load table if not already loaded
+                if type(tab)==str:
+                    tab = deepof.utils.load_dt(tab)
+                    quality[key] = deepof.utils.load_dt(quality[key])
+
+                if speed:
+                    tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
+
+                if selected_id is not None:
+                    tab = tab.loc[
+                        :, deepof.utils.filter_columns(tab.columns, selected_id)
                     ]
 
-            # Set table_dict to NaN if animals are missing
-            tabs = deepof.utils.set_missing_animals(self, tabs, self.get_quality())
 
-            if propagate_labels:
-                for key, tab in tabs.items():
+                table_dict={key:tab}
+                # Set table_dict to NaN if animals are missing
+                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+                tab = table_dict[key]
+
+                if propagate_labels:
                     tab.loc[:, "pheno"] = self._exp_conditions[key]
 
-            if propagate_annotations:
-                annotations = list(propagate_annotations.values())[0].columns
+                if propagate_annotations:
+                    annotations = list(propagate_annotations.values())[0].columns
 
-                for key, tab in tabs.items():
                     for ann in annotations:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
-            if filter_on_graph:
+                if filter_on_graph:
 
-                for key, tab in tabs.items():
-                    tabs[key] = tab.loc[
+                    tab = tab.loc[
                         :,
                         list(
                             set(
@@ -1390,6 +1381,13 @@ class Coordinates:
                             & set(tab.columns)
                         ),
                     ]
+
+                # save paths for modified tables
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
+                tabs[key] = deepof.utils.save_dt(tab,table_path,self._run_numba)
+
+                #cleanup
+                del tab
 
             return TableDict(
                 tabs,
@@ -1703,11 +1701,16 @@ class Coordinates:
         coords = self.get_coords(
             selected_id=animal_id, center=center, align=align, polar=polar
         )
-        speeds = self.get_coords(selected_id=animal_id, speed=1)
+        speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed')
         dists = self.get_distances(selected_id=animal_id)
 
         # Merge and extract names
-        tab_dict = coords.merge(speeds, dists)
+        tab_dict = coords.merge(
+            speeds,
+            dists,
+            root_path=os.path.join(self._project_path, self._project_name),
+            save_as_paths=self._run_numba
+            )
 
         if precomputed_tab_dict is not None:  # pragma: no cover
             tab_dict = precomputed_tab_dict
@@ -1737,8 +1740,18 @@ class Coordinates:
         )
 
         tab_dict._connectivity = graph
-        edge_feature_names = list(list(dists.values())[0].columns)
-        feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
+
+        #read table metadata
+        if type(list(dists.values())[0]) == str:
+            edge_feature_names=deepof.utils.load_dt_columns(list(dists.values())[0])
+        else:
+            edge_feature_names = list(list(dists.values())[0].columns)
+
+        if type(list(tab_dict.values())[0]) == str:
+            feature_names=pd.Index(deepof.utils.load_dt_columns(list(tab_dict.values())[0]))
+        else:
+            feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
+
         node_feature_names = (
             [(i, "x") for i in list(graph.nodes())]
             + [(i, "y") for i in list(graph.nodes())]
@@ -1766,54 +1779,73 @@ class Coordinates:
 
         # Create graph datasets
         if preprocess:
-            to_preprocess, global_scaler = tab_dict.preprocess(**kwargs)
-            dataset = [
-                to_preprocess[0][:, :, ~feature_names.isin(edge_feature_names)][
-                    :, :, node_sorting_indices
-                ],
-                to_preprocess[0][:, :, feature_names.isin(edge_feature_names)][
-                    :, :, edge_sorting_indices
-                ],
-                to_preprocess[1],
-            ]
-            try:
-                dataset += [
-                    to_preprocess[2][:, :, ~feature_names.isin(edge_feature_names)][
-                        :, :, node_sorting_indices
-                    ],
-                    to_preprocess[2][:, :, feature_names.isin(edge_feature_names)][
-                        :, :, edge_sorting_indices
-                    ],
-                    to_preprocess[3],
-                ]
-            except IndexError:
-                dataset += [to_preprocess[2], to_preprocess[2], to_preprocess[3]]
+            to_preprocess, global_scaler = tab_dict.preprocess(
+                **kwargs,
+                root_path=os.path.join(self._project_path, self._project_name),
+                save_as_paths=self._run_numba
+                )
+            
+            for k in range(0,len(to_preprocess)):
+            
+                for key, tab in to_preprocess[k].items():
+
+                    #load table if not already loaded
+                    table_path=''
+                    if type(tab)==str:
+                        table_path = tab
+                        tab = deepof.utils.load_dt(tab) 
+
+                    dataset = (
+                        tab[:, :, ~feature_names.isin(edge_feature_names)][
+                            :, :, node_sorting_indices
+                        ],
+                        tab[:, :, feature_names.isin(edge_feature_names)][
+                            :, :, edge_sorting_indices
+                        ],
+                    )
+
+                    # save paths for modified tables
+                    to_preprocess[k][key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
+
 
         else:  # pragma: no cover
-            to_preprocess = np.concatenate(list(tab_dict.values()))
+            to_preprocess = tab_dict #np.concatenate(list(tab_dict.values()))
 
-            # Split node features (positions, speeds) from edge features (distances)
-            dataset = (
-                to_preprocess[:, ~feature_names.isin(edge_feature_names)][
-                    :, node_sorting_indices
-                ].reshape([to_preprocess.shape[0], len(graph.nodes()), -1], order="F"),
-                deepof.utils.edges_to_weighted_adj(
-                    nx.adj_matrix(graph).todense(),
-                    to_preprocess[:, feature_names.isin(edge_feature_names)][
-                        :, edge_sorting_indices
-                    ],
-                ),
-            )
+            for key, tab in to_preprocess.items():
+
+                table_path=''
+                #load table if not already loaded
+                if type(tab)==str:
+                    table_path = tab
+                    tab = deepof.utils.load_dt(tab) 
+                
+                tab = np.array(tab)
+
+                # Split node features (positions, speeds) from edge features (distances)
+                dataset = (
+                    tab[:, ~feature_names.isin(edge_feature_names)][
+                        :, node_sorting_indices
+                    ].reshape([tab.shape[0], len(graph.nodes()), -1], order="F"),
+                    deepof.utils.edges_to_weighted_adj(
+                        nx.adj_matrix(graph).todense(),
+                        tab[:, feature_names.isin(edge_feature_names)][
+                            :, edge_sorting_indices
+                        ],
+                    ),
+                )
+
+                # save paths for modified tables
+                to_preprocess[key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
 
         try:
             return (
-                tuple(dataset),
+                to_preprocess,
                 nx.adjacency_matrix(graph).todense(),
                 tab_dict,
                 global_scaler,
             )
         except UnboundLocalError:
-            return tuple(dataset), nx.adjacency_matrix(graph).todense(), tab_dict
+            return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
     #from memory_profiler import profile
@@ -1854,7 +1886,7 @@ class Coordinates:
 
         tag_dict = {}
         params = deepof.annotation_utils.get_hparameters(params)
-        raw_coords = self.get_coords(center=None)
+        raw_coords = self.get_coords(center=None, file_name='raw')
 
         try:
             coords = self.get_coords(center=center, align=align)
@@ -1866,7 +1898,7 @@ class Coordinates:
                 coords = self.get_coords(center="Center", align="Nose")
 
         dists = self.get_distances()
-        speeds = self.get_coords(speed=1)
+        speeds = self.get_coords(speed=1, file_name='speeds')
         if len(self._animal_ids) <= 1:
             features_dict = (
                 deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -2332,7 +2364,7 @@ class TableDict(dict):
             exp_conditions=self._exp_conditions,
         )
 
-    def merge(self, *args, ignore_index=False):
+    def merge(self, *args, ignore_index=False, root_path=None, file_name='merged', save_as_paths=False):
         """Take a number of table_dict objects and merges them to the current one.
 
         Returns a table_dict object of type 'merged'.
@@ -2341,44 +2373,57 @@ class TableDict(dict):
         Args:
             *args (table_dict): table_dict objects to be merged.
             ignore_index (bool): ignore index when merging. Defaults to False.
+            root_path (str): Path to project folder
+            file_name (str): Name that is used for saving the merged table
+            save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
 
         Returns:
             table_dict: Merged table_dict object.
         """
         args = [copy.deepcopy(self)] + list(args)
-        merged_dict = defaultdict(list)
-        for tabdict in args:
-            for key, val in tabdict.items():
-                merged_dict[key].append(val)
 
         propagate_labels = any(
             [self._propagate_labels] + [tabdict._propagate_labels for tabdict in args]
         )
 
-        merged_tables = TableDict(
-            {
-                key: pd.concat(val, axis=1, ignore_index=ignore_index, join="inner")
-                for key, val in merged_dict.items()
-            },
-            typ="merged",
-            connectivity=self._connectivity,
-            propagate_labels=propagate_labels,
-            propagate_annotations=self._propagate_annotations,
-        )
+        merged_dict={}
+        for key in args[0]:
+            merged_tab = []
+            for tabdict in args:
 
-        # If there are labels passed, keep only one and append it as the last column
-        for key, tab in merged_tables.items():
+                tab = tabdict[key]
+                #load table if not already loaded
+                if type(tab)==str:
+                    tab = deepof.utils.load_dt(tab)
 
-            pheno_cols = [col for col in tab.columns if "pheno" in str(col)]
+                merged_tab.append(tab)
+
+            merged_tab=pd.concat(merged_tab, axis=1, ignore_index=ignore_index, join="inner")
+
+            # If there are labels passed, keep only one and append it as the last column
+            pheno_cols = [col for col in merged_tab.columns if "pheno" in str(col)]
             if len(pheno_cols) > 0:
 
                 pheno_col = (
                     pheno_cols[0] if len(pheno_cols[0]) == 1 else [pheno_cols[0]]
                 )
-                labels = tab.loc[:, pheno_col].iloc[:, 0]
+                labels = merged_tab.loc[:, pheno_col].iloc[:, 0]
 
-                merged_tables[key] = tab.drop(pheno_cols, axis=1)
-                merged_tables[key]["pheno"] = labels
+                merged_tab = merged_tab.drop(pheno_cols, axis=1)
+                merged_tab["pheno"] = labels
+
+
+            # save paths for modified tables
+            table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+            merged_dict[key] = deepof.utils.save_dt(merged_tab,table_path,save_as_paths)           
+
+        merged_tables = TableDict(
+            merged_dict,
+            typ="merged",
+            connectivity=self._connectivity,
+            propagate_labels=propagate_labels,
+            propagate_annotations=self._propagate_annotations,
+        )
 
         # Retake original table dict properties
         merged_tables._animal_ids = self._animal_ids
@@ -2388,7 +2433,7 @@ class TableDict(dict):
     def get_training_set(
         self, current_table_dict: table_dict, test_videos: int = 0
     ) -> tuple:
-        """Generate training and test sets as numpy.array objects for model training.
+        """Generate training and test sets as table_dicts for model training.
 
         Intended for internal usage only.
 
@@ -2397,85 +2442,41 @@ class TableDict(dict):
             test_videos (int): Number of videos to be used for testing. Defaults to 0.
 
         Returns:
-            tuple: Tuple containing training data, training labels (if any), test data, and test labels (if any).
+            tuple: Tuple containing training data, test data (as table_dicts), and test keys (if any).
         """
-        raw_data = current_table_dict.values()
 
         # Padding of videos with slightly different lengths
         # Making sure that the training and test sets end up balanced in terms of labels
-        test_index = np.array([], dtype=int)
 
-        raw_data = np.array([v.values for v in raw_data], dtype=object)
-        if self._propagate_labels:
-            concat_raw = np.concatenate(raw_data, axis=0)
+        keys=np.array(list(current_table_dict.keys()))
 
-            for label in set(list(concat_raw[:, -1])):
-                label_index = np.random.choice(
-                    [i for i in range(len(raw_data)) if raw_data[i][0, -1] == label],
-                    test_videos,
-                    replace=False,
-                )
-                test_index = np.concatenate([test_index, label_index])
-        else:
-            test_index = np.random.choice(
-                range(len(raw_data)), test_videos, replace=False
-            )
+        test_indices = np.random.choice(
+            range(len(current_table_dict)), test_videos, replace=False
+        )
 
-        y_train, X_test, y_test = np.array([]), np.array([]), np.array([])
+        test_keys = keys[test_indices]
+        train_keys = np.delete(keys, test_indices)
+
+        X_test = np.array([])
         if test_videos > 0:
             try:
-                X_test = np.concatenate(raw_data[test_index])
-                X_train = np.concatenate(np.delete(raw_data, test_index, axis=0))
+                X_test = current_table_dict.filter_videos(test_keys)   
+                X_train = current_table_dict.filter_videos(train_keys)  
             except ValueError:  # pragma: no cover
-                test_index = np.array([], dtype=int)
-                X_train = np.concatenate(list(raw_data))
+                test_keys = np.array([], dtype=int)
+                X_train = copy.deepcopy(current_table_dict)
                 warnings.warn(
                     "Could not find more than one sample for at least one condition. "
                     "Partition between training and test set was not possible."
                 )
 
         else:
-            X_train = np.concatenate(list(raw_data))
-
-        if self._propagate_labels:
-            le = LabelEncoder()
-            X_train, y_train = X_train[:, :-1], X_train[:, -1][:, np.newaxis]
-            y_train[:, 0] = le.fit_transform(y_train[:, 0])
-            try:
-                X_test, y_test = X_test[:, :-1], X_test[:, -1][:, np.newaxis]
-                y_test[:, 0] = le.transform(y_test[:, 0])
-            except IndexError:
-                pass
-
-        if self._propagate_annotations:  # pragma: no cover
-            n_annot = list(self._propagate_annotations.values())[0].shape[1]
-
-            try:
-                X_train, y_train = (
-                    X_train[:, :-n_annot],
-                    np.concatenate([y_train, X_train[:, -n_annot:]], axis=1),
-                )
-            except ValueError:
-                X_train, y_train = X_train[:, :-n_annot], X_train[:, -n_annot:]
-
-            try:
-                try:
-                    X_test, y_test = (
-                        X_test[:, :-n_annot],
-                        np.concatenate([y_test, X_test[:, -n_annot:]]),
-                    )
-                except ValueError:
-                    X_test, y_test = X_test[:, :-n_annot], X_test[:, -n_annot:]
-
-            except IndexError:
-                pass
+            X_train = copy.deepcopy(current_table_dict)
 
         return (
-            X_train.astype(float),
-            y_train.astype(float),
-            X_test.astype(float),
-            y_test.astype(float),
-            test_index,
+            X_train,
+            X_test,
+            test_keys,
         )
 
     # noinspection PyTypeChecker,PyGlobalUndefined
@@ -2493,6 +2494,10 @@ class TableDict(dict):
         filter_low_variance: bool = False,
         interpolate_normalized: int = 10,
         precomputed_breaks: dict = None,
+        N_rows_max: int = 6000000,
+        root_path = None,
+        file_name = 'preprocessed',
+        save_as_paths = False,
     ) -> np.ndarray:
         """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
@@ -2511,6 +2516,10 @@ class TableDict(dict):
             filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
             interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be interpolated after normalization. Only used if scale is set to "standard".
             precomputed_breaks (dict): If provided, changepoint detection is prevented, and provided breaks are used instead.
+            N_rows_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
+            root_path (str): Path to project folder
+            file_name (str): Name that is used for saving the merged table
+            save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
 
         Returns:
             X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features) generated from all training videos.
@@ -2527,28 +2536,35 @@ class TableDict(dict):
             "split",
         ], "handle IDs should be one of 'concat', and 'split'. See documentation for more details."
 
-        if filter_low_variance:
+        #determine max. number of rows sampled from each table
+        N_rows_table=int(N_rows_max/len(table_temp))
+        sampled_tabs = []
 
-            # Remove body parts with extremely low variance (usually the result of vertical alignment).
-            for key, tab in table_temp.items():
-                table_temp[key] = tab.iloc[
+        for key, tab in table_temp.items():
+
+            #load table if not already loaded
+            if type(tab)==str:
+                tab = deepof.utils.load_dt(tab)    
+        
+            if filter_low_variance:
+
+                # Remove body parts with extremely low variance (usually the result of vertical alignment).
+                tab = tab.iloc[
                     :,
                     list(np.where(tab.var(axis=0) > filter_low_variance)[0])
                     + list(np.where(["pheno" in str(col) for col in tab.columns])[0]),
                 ]
 
-        if scale:
-            if verbose:
-                print("Scaling data...")
+            if scale:
+                if verbose:
+                    print("Scaling data...")
 
-            if scale not in ["robust", "standard", "minmax"]:
-                raise ValueError(
-                    "Invalid scaler. Select one of standard, minmax or robust"
-                )  # pragma: no cover
+                if scale not in ["robust", "standard", "minmax"]:
+                    raise ValueError(
+                        "Invalid scaler. Select one of standard, minmax or robust"
+                    )  # pragma: no cover
 
-            # Scale each experiment independently, to control for animal size
-            for key, tab in table_temp.items():
-
+                # Scale each experiment independently, to control for animal size
                 current_tab = deepof.utils.scale_table(
                     coordinates=self,
                     feature_array=tab,
@@ -2556,12 +2572,22 @@ class TableDict(dict):
                     global_scaler=None,
                 )
 
-                table_temp[key] = pd.DataFrame(
+                tab = pd.DataFrame(
                     current_tab,
                     columns=tab.columns,
                     index=tab.index,
                 ).apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
 
+                sampled_tabs.append(tab.sample(n=min(N_rows_table, len(tab)), random_state=42))
+
+            # save paths for modified tables
+            table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+            table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
+
+            del current_tab
+
+        if scale:    
+        
             # Scale all experiments together, to control for differential stats
             if scale == "standard":
                 global_scaler = StandardScaler()
@@ -2571,14 +2597,21 @@ class TableDict(dict):
                 global_scaler = RobustScaler()
 
             if pretrained_scaler is None:
-                concat_data = pd.concat(list(table_temp.values()))
+                concat_data = pd.concat(sampled_tabs, ignore_index=True)
                 global_scaler.fit(
                     concat_data.loc[:, concat_data.dtypes == float].values
                 )
             else:
                 global_scaler = pretrained_scaler
 
-            for key, tab in table_temp.items():
+
+        for key, tab in table_temp.items():
+
+            #load table if not already loaded
+            if type(tab)==str:
+                tab = deepof.utils.load_dt(tab)   
+                
+            if scale:
 
                 current_tab = deepof.utils.scale_table(
                     coordinates=self,
@@ -2587,19 +2620,19 @@ class TableDict(dict):
                     global_scaler=global_scaler,
                 )
 
-                table_temp[key] = pd.DataFrame(
+                tab = pd.DataFrame(
                     current_tab, columns=tab.columns, index=tab.index
                 )
 
-        else:
-            global_scaler = None
+            else:
+                global_scaler = None
 
-        if scale == "standard" and interpolate_normalized:
+            if scale == "standard" and interpolate_normalized:
 
-            # Interpolate outliers after preprocessing
-            to_interpolate = copy.deepcopy(table_temp)
-            for key, tab in to_interpolate.items():
-                cur_tab = copy.deepcopy(tab.values)
+                # Interpolate outliers after preprocessing
+                tab_interpol = copy.deepcopy(tab)
+                
+                cur_tab =tab_interpol.values
 
                 try:
                     cur_tab[cur_tab > interpolate_normalized] = np.nan
@@ -2623,16 +2656,22 @@ class TableDict(dict):
                         )
                     ] = np.nan
 
-                to_interpolate[key] = (
-                    pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
-                    .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                    .interpolate(limit_direction="both")
-                )
+                    tab_interpol = (
+                        pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
+                        .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                        .interpolate(limit_direction="both")
+                    )
 
-            table_temp = to_interpolate
+                tab = tab_interpol
+
+                # save paths for modified tables
+                table_path = os.path.join(root_path, 'Tables', key, key + '_' + file_name)
+                table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
+
+            del current_tab
 
         # Split videos and generate training and test sets
-        X_train, y_train, X_test, y_test, test_index = self.get_training_set(
+        X_train, X_test, test_index = self.get_training_set(
             table_temp, test_videos
         )
 
@@ -2640,167 +2679,47 @@ class TableDict(dict):
             print("Breaking time series...")
 
         # Apply rupture method to each train experiment independently
-        X_train, train_breaks = deepof.utils.rupture_per_experiment(
-            table_dict=table_temp,
+        X_train = deepof.utils.rupture_per_experiment(
             to_rupture=X_train,
-            rupture_indices=[i for i in range(len(table_temp)) if i not in test_index],
-            automatic_changepoints=automatic_changepoints,
             window_size=window_size,
             window_step=window_step,
-            precomputed_breaks=precomputed_breaks,
+            save_as_paths=save_as_paths,
         )
 
-        # Print rupture information to screen
-        if verbose > 1 and automatic_changepoints:
-            rpt_lengths = np.all(X_train != 0, axis=2).sum(axis=1)
-            print(
-                "average rupture length: {}, standard deviation: {}".format(
-                    rpt_lengths.mean(), rpt_lengths.std()
-                )
-            )
-            print("minimum rupture length: {}".format(rpt_lengths.min()))
-            print("maximum rupture length: {}".format(rpt_lengths.max()))
-
-        if self._propagate_labels or self._propagate_annotations:
-
-            if train_breaks is None:
-                y_train, _ = deepof.utils.rupture_per_experiment(
-                    table_dict=table_temp,
-                    to_rupture=y_train,
-                    rupture_indices=[
-                        i for i in range(len(table_temp)) if i not in test_index
-                    ],
-                    automatic_changepoints=False,
-                    window_size=window_size,
-                    window_step=window_step,
-                    precomputed_breaks=precomputed_breaks,
-                )
-
-            else:
-                y_train = deepof.utils.split_with_breakpoints(y_train, train_breaks)
-
-            y_train = y_train.mean(axis=1)
 
         if test_videos and len(test_index) > 0:
 
             # Apply rupture method to each test experiment independently
-            X_test, test_breaks = deepof.utils.rupture_per_experiment(
-                table_dict=table_temp,
+            X_test = deepof.utils.rupture_per_experiment(
                 to_rupture=X_test,
-                rupture_indices=test_index,
-                automatic_changepoints=automatic_changepoints,
                 window_size=window_size,
                 window_step=window_step,
-                precomputed_breaks=precomputed_breaks,
+                save_as_paths=save_as_paths,
             )
 
-            if self._propagate_labels or self._propagate_annotations:
-                if test_breaks is None:
-                    y_test, _ = deepof.utils.rupture_per_experiment(
-                        table_dict=table_temp,
-                        to_rupture=y_test,
-                        rupture_indices=[
-                            i for i in range(len(table_temp)) if i in test_index
-                        ],
-                        automatic_changepoints=False,
-                        window_size=window_size,
-                        window_step=window_step,
-                        precomputed_breaks=precomputed_breaks,
-                    )
-                else:
-                    y_test = deepof.utils.split_with_breakpoints(y_test, test_breaks)
-                    y_test = y_test.mean(axis=1)
+            #if shuffle:
+            #    shuffle_test = np.random.choice(
+            #        X_test.shape[0], X_test.shape[0], replace=False
+            #    )
+            #    X_test = X_test[shuffle_test]
 
-            if shuffle:
-                shuffle_test = np.random.choice(
-                    X_test.shape[0], X_test.shape[0], replace=False
-                )
-                X_test = X_test[shuffle_test]
 
-                if self._propagate_labels:
-                    y_test = y_test[shuffle_test]
 
-        if shuffle:
-            shuffle_train = np.random.choice(
-                X_train.shape[0], X_train.shape[0], replace=False
-            )
-            X_train = X_train[shuffle_train]
+        #if shuffle:
+        #    shuffle_train = np.random.choice(
+        #        X_train.shape[0], X_train.shape[0], replace=False
+        #    )
+        #    X_train = X_train[shuffle_train]
 
-            if self._propagate_labels:
-                y_train = y_train[shuffle_train]
 
-        X_test, y_test = np.array(X_test), np.array(y_test)
+        #X_test = np.array(X_test)
 
         # If automatic changepoints are anabled, train and test can have different seq lengths.
         # To remove that issue, pad the shortest set to match the longest one.
-        if (
-            test_videos
-            and automatic_changepoints
-            and len(X_test.shape) > 0
-            and X_train.shape[1] != X_test.shape[1]
-        ):
-            max_seqlength = np.maximum(X_train.shape[1], X_test.shape[1])
-            if X_train.shape[1] < max_seqlength:
-                X_train = np.pad(
-                    X_train,
-                    ((0, 0), (0, max_seqlength - X_train.shape[1]), (0, 0)),
-                    constant_values=0.0,
-                )
-            else:
-                X_test = np.pad(
-                    X_test,
-                    ((0, 0), (0, max_seqlength - X_test.shape[1]), (0, 0)),
-                    constant_values=0.0,
-                )
-
         if verbose:
             print("Done!")
 
-        if y_train.shape != (0,):
-            assert (
-                X_train.shape[0] == y_train.shape[0]
-            ), "training set ({}) and labels ({}) do not have the same shape".format(
-                X_train.shape[0], y_train.shape[0]
-            )
-        if y_test.shape != (0,):
-            assert (
-                X_test.shape[0] == y_test.shape[0]
-            ), "training set and labels do not have the same shape"
-
-        # If indicated and there are more than one animal in the dataset, split all animals as separate inputs
-        if len(self._animal_ids) > 1 and handle_ids == "split":  # pragma: no cover
-            X_train_split, X_test_split = [], []
-            for aid in self._animal_ids:
-                X_train_split.append(
-                    X_train[
-                        :,
-                        :,
-                        np.where(
-                            [
-                                np.array([i]).flatten()[0].startswith(aid)
-                                for i in list(table_temp.values())[0].columns
-                            ]
-                        ),
-                    ]
-                )
-                X_test_split.append(
-                    X_test[
-                        :,
-                        :,
-                        np.where(
-                            [
-                                np.array([i]).flatten()[0].startswith(aid)
-                                for i in list(table_temp.values())[0].columns
-                            ]
-                        ),
-                    ]
-                )
-
-            X_train, X_test = np.squeeze(np.concatenate(X_train_split)), np.squeeze(
-                np.concatenate(X_test_split)
-            )
-
-        return (X_train, y_train, X_test, y_test), global_scaler
+        return (X_train, X_test), global_scaler
 
 
 if __name__ == "__main__":
