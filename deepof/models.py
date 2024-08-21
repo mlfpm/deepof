@@ -26,6 +26,7 @@ import warnings
 import deepof.model_utils
 import deepof.utils
 
+
 tfb = tfp.bijectors
 tfd = tfp.distributions
 tfpl = tfp.layers

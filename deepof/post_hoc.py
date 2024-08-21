@@ -327,6 +327,7 @@ def select_time_bin(
 
     """
     # If precomputed, filter each experiment using the provided boolean array
+    supervised_annotations_out=None
     if supervised_annotations is None:
 
         if precomputed is not None:  # pragma: no cover
@@ -363,29 +364,24 @@ def select_time_bin(
         breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
 
     else:
+        supervised_annotations_out={}
         if precomputed is not None:  # pragma: no cover
             for key, val in supervised_annotations.items():
                 if supervised_annotations[key].shape[0] > len(precomputed):
-                    supervised_annotations[key] = val.iloc[
+                    supervised_annotations_out[key] = val.iloc[
                         np.concatenate(
-                            [
-                                precomputed,
-                                [False]
-                                * (
-                                    supervised_annotations[key].shape[0]
-                                    - len(precomputed)
-                                ),
-                            ]
-                        ).astype(bool)
+                        [
+                            precomputed,
+                            [False] * (supervised_annotations[key].shape[0] - len(precomputed)),
+                        ]
+                    ).astype(bool)
                     ]
                 else:
-                    supervised_annotations[key] = val.iloc[
-                        precomputed[: supervised_annotations[key].shape[0]]
-                    ]
-
+                    supervised_annotations_out[key] = val.iloc[precomputed[: supervised_annotations[key].shape[0]]]
+        
         else:
-
-            supervised_annotations = {
+        
+            supervised_annotations_out = {
                 key: val.iloc[
                     bin_size
                     * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
@@ -393,7 +389,7 @@ def select_time_bin(
                 for key, val in supervised_annotations.items()
             }
 
-    return embedding, soft_counts, breaks, supervised_annotations
+    return embedding, soft_counts, breaks, supervised_annotations_out
 
 
 def condition_distance_binning(
@@ -705,7 +701,8 @@ def compute_transition_matrix_per_condition(
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
+        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.     
+        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.

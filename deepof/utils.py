@@ -39,6 +39,8 @@ import sleap_io as sio
 import torch
 import warnings
 
+
+
 import deepof.data
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -64,9 +66,8 @@ def _suppress_warning(warn_messages):
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
-
 @nb.njit
-def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
+def rts_smoother_numba(measurements, F, H, Q, R): # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
@@ -1027,6 +1028,7 @@ def align_trajectories(
                 data[frame].reshape([-1, 2], order="C"), angles[frame]
             ).reshape(data.shape[1:], order="C")
 
+
     if mode == "all" or mode == "none":
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
@@ -1377,7 +1379,8 @@ def kleinberg_core_numba(
         gamma (float): coefficient for the transition costs between states
         n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         k: maximum burst level / number of hidden states
-
+        batch_size (int): Batch size for input processing
+:+
     """
     g_hat = T / n
     gamma_log_n = gamma * math.log(n)
@@ -2316,6 +2319,8 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
+
+
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list
 ):  # pragma: no cover
@@ -2774,7 +2779,6 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
-
 
 def get_total_Frames(video_paths: List[str]) -> int:
 
