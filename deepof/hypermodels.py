@@ -4,10 +4,11 @@
 
 """keras_tuner hypermodels for hyperparameter tuning of deep autoencoders in deepof.models."""
 
-from keras_tuner import HyperModel
 from typing import Any, NewType
+
 import numpy as np
 import tensorflow_probability as tfp
+from keras_tuner import HyperModel
 
 import deepof.model_utils
 import deepof.models

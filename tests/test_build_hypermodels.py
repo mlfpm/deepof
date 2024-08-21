@@ -9,12 +9,10 @@ tuning models are building properly in all possible configurations
 
 """
 
-from hypothesis import given
-from hypothesis import settings
+import networkx as nx
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from keras_tuner import HyperParameters
-
-import networkx as nx
 
 import deepof.hypermodels
 

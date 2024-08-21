@@ -11,9 +11,10 @@ usage: python -m examples.model_training -h
 
 import argparse
 import calendar
-import time
 import os
 import pickle
+import time
+
 import deepof.data
 import deepof.model_utils
 import deepof.utils

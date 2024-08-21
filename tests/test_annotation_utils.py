@@ -15,15 +15,13 @@ from shutil import rmtree
 import numpy as np
 import pandas as pd
 import pytest
-from shapely.geometry import Point, Polygon
-from hypothesis import HealthCheck
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from hypothesis.extra.pandas import columns, data_frames, range_indexes
+from shapely.geometry import Point, Polygon
 
-import deepof.data
 import deepof.annotation_utils
+import deepof.data
 
 
 @settings(deadline=None)

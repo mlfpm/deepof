@@ -9,16 +9,14 @@ Testing module for deepof.model_utils
 """
 
 import os
+from shutil import rmtree
 
 import networkx as nx
 import numpy as np
 import tensorflow as tf
-from hypothesis import HealthCheck
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
-from shutil import rmtree
 
 import deepof.data
 import deepof.model_utils

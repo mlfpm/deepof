@@ -9,23 +9,29 @@
 # encoding: utf-8
 # module deepof
 
-from sklearn.mixture import GaussianMixture
-from spektral.layers import CensNetConv
-from tensorflow.keras import Input, Model
-from tensorflow.keras.initializers import he_uniform
-from tensorflow.keras.layers import Dense, GRU, RepeatVector, TimeDistributed
-from tensorflow.keras.layers import LayerNormalization, Bidirectional
-from tensorflow.keras.optimizers import Nadam
+import warnings
 from typing import Any, NewType
+
 import numpy as np
 import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
-import warnings
+from sklearn.mixture import GaussianMixture
+from spektral.layers import CensNetConv
+from tensorflow.keras import Input, Model
+from tensorflow.keras.initializers import he_uniform
+from tensorflow.keras.layers import (
+    GRU,
+    Bidirectional,
+    Dense,
+    LayerNormalization,
+    RepeatVector,
+    TimeDistributed,
+)
+from tensorflow.keras.optimizers import Nadam
 
 import deepof.model_utils
 import deepof.utils
-
 
 tfb = tfp.bijectors
 tfd = tfp.distributions

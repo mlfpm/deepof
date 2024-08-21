@@ -6,26 +6,25 @@
 
 import os
 import pickle
-import warnings
-from joblib import delayed, Parallel, parallel_backend
-from typing import Any, List, NewType, Union
-from shapely.geometry import Point, Polygon
-from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm
-from itertools import combinations
-from natsort import os_sorted
-
-
-import numpy as np
-import numba as nb
 import time
+import warnings
+from itertools import combinations
+from typing import Any, List, NewType, Union
+
+import numba as nb
+import numpy as np
 import pandas as pd
 import regex as re
 import sklearn.pipeline
+from joblib import Parallel, delayed, parallel_backend
+from natsort import os_sorted
+from shapely.geometry import Point, Polygon
+from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
+import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
-import deepof.post_hoc
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)

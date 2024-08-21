@@ -10,28 +10,25 @@ Testing module for deepof.visuals
 
 import os
 from itertools import combinations
+from shutil import rmtree
 
 import networkx as nx
 import numpy as np
 import pandas as pd
-from hypothesis import HealthCheck
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import HealthCheck, given, reproduce_failure, settings
 from hypothesis import strategies as st
-from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
-from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
-from shutil import rmtree
 
 import deepof.data
 from deepof.visuals_utils import (
     calculate_average_arena,
-    time_to_seconds,
-    seconds_to_time,
-    create_bin_pairs,
     cohend,
     cohend_effect_size,
+    create_bin_pairs,
+    seconds_to_time,
+    time_to_seconds,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -67,20 +64,28 @@ def test_calculate_average_arena(all_vertices, num_points):
 def test_time_conversion(second, full_second):
     assert full_second == time_to_seconds(seconds_to_time(float(full_second)))
     second = np.round(second * 10**9) / 10**9
-    
+
 
 @given(
     L_array=st.integers(min_value=1, max_value=100000),
     N_time_bins=st.integers(min_value=1, max_value=100),
 )
 def test_create_bin_pairs(L_array, N_time_bins):
-    assert all(np.diff(create_bin_pairs(L_array,N_time_bins))>=0)
+    assert all(np.diff(create_bin_pairs(L_array, N_time_bins)) >= 0)
+
 
 @given(
-    array_a=st.lists(elements=st.floats(min_value=-10E10, max_value=10E10), min_size=5 ,max_size=500), 
-    array_b=st.lists(elements=st.floats(min_value=-10E10, max_value=10E10), min_size=5 ,max_size=500), 
+    array_a=st.lists(
+        elements=st.floats(min_value=-10e10, max_value=10e10), min_size=5, max_size=500
+    ),
+    array_b=st.lists(
+        elements=st.floats(min_value=-10e10, max_value=10e10), min_size=5, max_size=500
+    ),
 )
 def test_cohend(array_a, array_b):
-    #tests for symmetry, scaling and constant invariance of cohends d
-    assert cohend(np.array(array_a)*2,np.array(array_b)*2)+cohend(np.array(array_b)+1,np.array(array_a)+1) < 10E-10
-     
+    # tests for symmetry, scaling and constant invariance of cohends d
+    assert (
+        cohend(np.array(array_a) * 2, np.array(array_b) * 2)
+        + cohend(np.array(array_b) + 1, np.array(array_a) + 1)
+        < 10e-10
+    )

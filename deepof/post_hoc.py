@@ -4,13 +4,24 @@
 
 """Data structures and functions for analyzing supervised and unsupervised model results."""
 
-from catboost import CatBoostClassifier
+import os
+import pickle
+import warnings
 from collections import Counter, defaultdict
+from itertools import product
+from multiprocessing import cpu_count
+from typing import Any, NewType, Union
+
+import numpy as np
+import ot
+import pandas as pd
+import shap
+import tqdm
+import umap
+from catboost import CatBoostClassifier
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
-from itertools import product
-from joblib import delayed, Parallel
-from multiprocessing import cpu_count
+from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
 from pomegranate.hmm import DenseHMM
 from scipy import stats
@@ -23,20 +34,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from typing import Any, NewType, Union
-import numpy as np
-import os
-import ot
-import pandas as pd
-import pickle
-import shap
-import tqdm
-import umap
-import warnings
 
 import deepof.data
 import deepof.utils
-
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -327,7 +327,7 @@ def select_time_bin(
 
     """
     # If precomputed, filter each experiment using the provided boolean array
-    supervised_annotations_out=None
+    supervised_annotations_out = None
     if supervised_annotations is None:
 
         if precomputed is not None:  # pragma: no cover
@@ -364,23 +364,29 @@ def select_time_bin(
         breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
 
     else:
-        supervised_annotations_out={}
+        supervised_annotations_out = {}
         if precomputed is not None:  # pragma: no cover
             for key, val in supervised_annotations.items():
                 if supervised_annotations[key].shape[0] > len(precomputed):
                     supervised_annotations_out[key] = val.iloc[
                         np.concatenate(
-                        [
-                            precomputed,
-                            [False] * (supervised_annotations[key].shape[0] - len(precomputed)),
-                        ]
-                    ).astype(bool)
+                            [
+                                precomputed,
+                                [False]
+                                * (
+                                    supervised_annotations[key].shape[0]
+                                    - len(precomputed)
+                                ),
+                            ]
+                        ).astype(bool)
                     ]
                 else:
-                    supervised_annotations_out[key] = val.iloc[precomputed[: supervised_annotations[key].shape[0]]]
-        
+                    supervised_annotations_out[key] = val.iloc[
+                        precomputed[: supervised_annotations[key].shape[0]]
+                    ]
+
         else:
-        
+
             supervised_annotations_out = {
                 key: val.iloc[
                     bin_size
@@ -701,7 +707,7 @@ def compute_transition_matrix_per_condition(
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.     
+        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
         precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
         aggregate (str): Whether to aggregate the embeddings across time.

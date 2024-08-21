@@ -14,40 +14,39 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # module deepof
 
 
+import copy
+import os
+import pickle
+import re
+import shutil
+import warnings
 from collections import defaultdict
 from difflib import get_close_matches
-from pkg_resources import resource_filename
 from shutil import rmtree
+from time import time
+from typing import Any, Dict, List, NewType, Tuple, Union
+
+import networkx as nx
+import numpy as np
+import pandas as pd
+import pims
+import umap
+from natsort import os_sorted
+from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import (
-    MinMaxScaler,
-    StandardScaler,
-    RobustScaler,
     LabelEncoder,
+    MinMaxScaler,
+    RobustScaler,
+    StandardScaler,
 )
-from time import time
 from tqdm import tqdm
-from typing import NewType, Union
-from typing import Dict, List, Tuple, Any
-import copy
-import networkx as nx
-import numpy as np
-import os
-import pandas as pd
-import pickle
-import pims
-import re
-import shutil
-import umap
-import warnings
-from natsort import os_sorted
 
+import deepof.annotation_utils
 import deepof.model_utils
 import deepof.models
-import deepof.annotation_utils
 import deepof.utils
-from deepof.utils import suppress_warning
 import deepof.visuals
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -182,8 +181,6 @@ class Project:
         assert len(self.videos) == len(
             self.tables
         ), "Unequal number of videos and tables. Please check your file structure"
-
-
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -419,14 +416,19 @@ class Project:
             tab_copy = tab_copy.iloc[2:].astype(float)
             tab_dict[key] = tab_copy.reset_index(drop=True)
 
-        #reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
-        reinstated_bodyparts=list(set([
-            bp 
-            if bp[0:len(aid)+1] not in [aid + "_" for aid in self.animal_ids] 
-            else bp[len(aid)+1:] 
-            for aid in self.animal_ids 
-            for bp in self.exclude_bodyparts
-            ]))
+        # reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
+        reinstated_bodyparts = list(
+            set(
+                [
+                    bp
+                    if bp[0 : len(aid) + 1]
+                    not in [aid + "_" for aid in self.animal_ids]
+                    else bp[len(aid) + 1 :]
+                    for aid in self.animal_ids
+                    for bp in self.exclude_bodyparts
+                ]
+            )
+        )
 
         # Update body part connectivity graph, taking detected or specified body parts into account
         model_dict = {
@@ -442,11 +444,9 @@ class Project:
         }
 
         # Remove specified body parts from the mice graph
-        if len(self.animal_ids) > 1 and reinstated_bodyparts != ['']:
+        if len(self.animal_ids) > 1 and reinstated_bodyparts != [""]:
             self.exclude_bodyparts = [
-                aid + "_" + bp
-                for aid in self.animal_ids
-                for bp in reinstated_bodyparts
+                aid + "_" + bp for aid in self.animal_ids for bp in reinstated_bodyparts
             ]
 
         # Pass a time-based index, if specified in init
@@ -775,11 +775,8 @@ class Project:
 
         # load video info
         self.frame_rate = float(
-                pims.ImageIOReader(
-                    os.path.join(self.video_path, self.videos[0])
-                ).frame_rate
-            )
-        
+            pims.ImageIOReader(os.path.join(self.video_path, self.videos[0])).frame_rate
+        )
 
         # load table info
         tables, quality = self.load_tables(verbose)
@@ -891,97 +888,76 @@ class Project:
 
         Args:
             project_to_extend (coordinates): Coordinates object to extend with the current dataset.
-            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
-            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
-            verbose (bool): If True, prints progress. Defaults to True.
-            debug (bool): If True, saves arena detection images to disk. Defaults to False.
-            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+            video_path (str): Path to the videos. If not specified, defaults to the project path.
+            table_path (str): Path to the tracks. If not specified, defaults to the project path.
+            verbose (bool): Prints progress if True. Defaults to True.
+            debug (bool): Saves arena detection images to disk if True. Defaults to False.
+            test (bool): Runs the project in test mode if True. Defaults to False.
 
         Returns:
-            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
-
+            coordinates: Deepof.Coordinates object containing the trajectories of all body parts.
         """
 
-        if not video_path:
-            video_path=self.video_path
-        if not table_path:
-            table_path=self.table_path
+        video_path = video_path or self.video_path
+        table_path = table_path or self.table_path
+
         if verbose:
             print("Loading previous project...")
 
         previous_project = load_project(project_to_extend)
 
-        assert (
-            os.path.abspath(previous_project._project_path) == os.path.abspath(self.project_path)
-            ), "The project to be extended and the project used for extension need to have the same project paths!"
+        if os.path.abspath(previous_project._project_path) != os.path.abspath(
+            self.project_path
+        ):
+            raise ValueError(
+                "The project paths must match between the current and previous projects."
+            )
 
-        self.videos = os_sorted(
-            [
-                vid
-                for vid in os.listdir(video_path)
-                if vid.endswith(self.video_format) and not vid.startswith(".")
-            ]
+        def get_new_files(dir_path, file_format, existing_files):
+            return os_sorted(
+                [
+                    file
+                    for file in os.listdir(dir_path)
+                    if file.endswith(file_format)
+                    and not file.startswith(".")
+                    and file not in existing_files
+                ]
+            )
+
+        self.videos = get_new_files(
+            video_path, self.video_format, previous_project._videos
         )
-        self.tables = os_sorted(
-            [
-                tab
-                for tab in os.listdir(table_path)
-                if tab.endswith(self.table_format) and not tab.startswith(".")
-            ]
+        self.tables = get_new_files(
+            table_path, self.table_format, previous_project._table_paths
         )
 
-        # Keep only those videos and tables that were not in the original dataset
-        self.videos = [
-            vid for vid in self.videos if vid not in previous_project._videos
-        ]
-        self.tables = [
-            tab for tab in self.tables if tab not in previous_project._table_paths
-        ]
-
-        # Copy videos and tables to the new directories
-        for vid in self.videos:
-            if vid.endswith(self.video_format):
+        def copy_files(files, src_path, dest_dir):
+            for file in files:
                 shutil.copy2(
-                    os.path.join(video_path, vid),
-                    os.path.join(
-                        self.project_path, self.project_name, "Videos", vid
-                    ),
+                    os.path.join(src_path, file),
+                    os.path.join(self.project_path, self.project_name, dest_dir, file),
                 )
 
-        for tab in self.tables:
-            if tab.endswith(self.table_format):
-                shutil.copy2(
-                    os.path.join(table_path, tab),
-                    os.path.join(
-                        self.project_path, self.project_name, "Tables", tab
-                    ),
-                )
+        copy_files(self.videos, video_path, "Videos")
+        copy_files(self.tables, table_path, "Tables")
 
         if verbose:
             print(f"Processing data from {len(self.videos)} experiments...")
 
-        if len(self.videos) > 0:
-            self.video_path = os.path.join(
-                self.project_path, self.project_name, "Videos"
-            )
-            self.table_path = os.path.join(
-                self.project_path, self.project_name, "Tables"
-            )
+        if not self.videos:
+            if verbose:
+                print("No new experiments to process. Exiting...")
+                print(
+                    'You may need to explicitly set "video_path" and "table_path" inputs'
+                )
+            return None
 
-            # Use the same directory as the original project
-            extended_coords = self.create(
-                verbose,
-                force=False,
-                debug=debug,
-                test=test,
-                _to_extend=previous_project,
-            )
+        self.video_path = os.path.join(self.project_path, self.project_name, "Videos")
+        self.table_path = os.path.join(self.project_path, self.project_name, "Tables")
 
-            return extended_coords
-
-        else:
-            print("No new experiments to process. Exiting...")
-            print("You may need to explicitely set \"video_path\" and \"table_path\" inputs")
+        return self.create(
+            verbose, force=False, debug=debug, test=test, _to_extend=previous_project
+        )
 
 
 class Coordinates:
@@ -1467,12 +1443,12 @@ class Coordinates:
             raise NotImplementedError
 
         return self._videos
-    
+
     def get_start_times(self):
         """Returns the start time for each table"""
-        start_times={}
+        start_times = {}
         for key in self._tables:
-            start_times[key]=self._tables[key].index[0]
+            start_times[key] = self._tables[key].index[0]
         return start_times
 
     def get_start_times(self):
@@ -1516,7 +1492,7 @@ class Coordinates:
             for exp_id in exp_conditions.iloc[:, 0]
         }
         self._exp_conditions = exp_conditions
-        
+
         # Save loaded conditions within project
         self.save(timestamp=False)
 

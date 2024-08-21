@@ -10,19 +10,17 @@ Testing module for deepof.post_hoc
 import os
 import pickle
 from itertools import combinations
+from shutil import rmtree
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from hypothesis import HealthCheck
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
-from shutil import rmtree
 
-import deepof.post_hoc
 import deepof.data
+import deepof.post_hoc
 
 
 @settings(deadline=None, max_examples=25)

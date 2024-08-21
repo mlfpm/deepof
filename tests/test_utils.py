@@ -10,23 +10,20 @@ Testing module for deepof.utils
 
 import os
 from itertools import combinations
+from shutil import rmtree
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from hypothesis import HealthCheck
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
-from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
-from shutil import rmtree
 
 import deepof.data
 import deepof.utils
-
 
 # AUXILIARY FUNCTIONS #
 

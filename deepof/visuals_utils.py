@@ -4,10 +4,10 @@
 # module deepof
 
 
-from typing import Tuple, Any, List, NewType, Union
-import numpy as np
 import re
+from typing import Any, List, NewType, Tuple, Union
 
+import numpy as np
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -141,29 +141,31 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     """
 
     if L_array < N_time_bins:
-        L_array=N_time_bins
-        print("Number of bins needs to be smaller or equal array length! Set L_array=N_time_bins!")
+        L_array = N_time_bins
+        print(
+            "Number of bins needs to be smaller or equal array length! Set L_array=N_time_bins!"
+        )
 
     # Calculate the base bin size and the number of bins that need an extra element
     base_bin_size = L_array // N_time_bins
     extra_elements = L_array % N_time_bins
-    
+
     bin_pairs = []
     current_index = 0
-    
+
     for i in range(N_time_bins):
         # Determine the size of the current bin
         if i < extra_elements:
             bin_size = base_bin_size + 1
         else:
             bin_size = base_bin_size
-        
+
         # Add the pair (bin_size, bin_index) to the result
-        bin_pairs.append([current_index, current_index+bin_size-1])
-        
+        bin_pairs.append([current_index, current_index + bin_size - 1])
+
         # Update the current_index for the next iteration
         current_index += bin_size
-    
+
     return bin_pairs
 
 
@@ -176,13 +178,13 @@ def cohend(array_a: np.array, array_b: np.array):
         array_b (np.array): Second array of values to compare.
 
     Returns:
-        Cohens d (int): 
-    
-    Cohen's d can be used to calculate the standardized difference between two categories, e.g. difference between means 
+        Cohens d (int):
+
+    Cohen's d can be used to calculate the standardized difference between two categories, e.g. difference between means
     The value of Cohen's d varies from 0 to infinity. Sign indicates directionality?
     show both hypothesis test (likelihood of observing the data given an assumption (null hypothesis) w p-value) and effect size (quantify the size of the effect assuming that the effect is present)
-    Cohen's d measures the difference between the mean from two Gaussian-distributed variables. 
-    It is a standard score that summarizes the difference in terms of the number of standard deviations. 
+    Cohen's d measures the difference between the mean from two Gaussian-distributed variables.
+    It is a standard score that summarizes the difference in terms of the number of standard deviations.
     Because the score is standardized, there is a table for the interpretation of the result, summarized as:
 
         Small Effect Size: d=0.20
@@ -194,7 +196,10 @@ def cohend(array_a: np.array, array_b: np.array):
     # Calculate the means of the samples
     u1, u2 = np.mean(array_a), np.mean(array_b)
     # Calculate the pooled standard deviation, unbiased estimate of the variance (with ddof=1), and it adjusts for the degrees of freedom in the calculation.
-    s = np.sqrt(((n1 - 1) * np.var(array_a, ddof=1) + (n2 - 1) * np.var(array_b, ddof=1)) / (n1 + n2 - 2))
+    s = np.sqrt(
+        ((n1 - 1) * np.var(array_a, ddof=1) + (n2 - 1) * np.var(array_b, ddof=1))
+        / (n1 + n2 - 2)
+    )
     # Check if the pooled standard deviation is 0
     if s == 0:
         # Handle the case when the standard deviation is 0 by setting effect size to 0
@@ -203,18 +208,18 @@ def cohend(array_a: np.array, array_b: np.array):
     else:
         # Calculate the effect size (Cohen's d)
         return (u1 - u2) / s
-    
 
-def cohend_effect_size(d: float): #pragma: no cover
+
+def cohend_effect_size(d: float):  # pragma: no cover
     """
     categorizes Cohen's d effect size.
 
     Args:
-        d (float): Cohens d 
+        d (float): Cohens d
 
     Returns:
         Categorized effect size (int):
-    """ 
+    """
 
     if abs(d) >= 0.8:
         return 3  # Large effect
@@ -223,4 +228,4 @@ def cohend_effect_size(d: float): #pragma: no cover
     elif abs(d) < 0.5:
         return 1  # Small effect
     else:
-        return 0 
+        return 0

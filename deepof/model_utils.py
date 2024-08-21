@@ -4,29 +4,31 @@
 
 """Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels."""
 
+import os
 from datetime import date, datetime
-from keras_tuner import BayesianOptimization, Hyperband, Objective
-from tensorboard.plugins.hparams import api as hp
-from tensorflow.keras.initializers import he_uniform
-from tensorflow.keras.layers import (
-    Bidirectional,
-    GRU,
-    LayerNormalization,
-    TimeDistributed,
-)
-from typing import Tuple, Union, Any, List, NewType
-import deepof.data
-import deepof.hypermodels
-import deepof.models
-import deepof.post_hoc
+from typing import Any, List, NewType, Tuple, Union
+
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-from spektral.layers import CensNetConv
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
 import tqdm
+from keras_tuner import BayesianOptimization, Hyperband, Objective
+from spektral.layers import CensNetConv
+from tensorboard.plugins.hparams import api as hp
+from tensorflow.keras.initializers import he_uniform
+from tensorflow.keras.layers import (
+    GRU,
+    Bidirectional,
+    LayerNormalization,
+    TimeDistributed,
+)
+
+import deepof.data
+import deepof.hypermodels
+import deepof.models
+import deepof.post_hoc
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
