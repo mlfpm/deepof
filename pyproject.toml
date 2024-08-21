@@ -24,8 +24,8 @@ networkx = "^2.8.7"
 dask-image = "2022.9.0"
 seglearn = "^1.2.5"
 keras-tuner = "^1.4.7"
-tensorflow-macos = {version = "2.12.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
-tensorflow = {version = "2.12.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
+tensorflow-macos = {version = "2.14.0", markers="platform_machine == 'arm64' or platform_system == 'Darwin'"}
+tensorflow = {version = "2.14.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow-probability = "0.20.1"
@@ -58,7 +58,7 @@ torchvision = [
     {version="0.17.2", source="PyPI", markers="sys_platform != 'linux'"},
     {version="0.17.2", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
-keras = "2.12"
+keras = "2.14"
 natsort = "8.4.0"
 dask = "2024.5.1"
 statsmodels = "^0.14.2"
