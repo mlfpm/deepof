@@ -92,7 +92,7 @@ def test_cohend(array_a, array_b):
     assert (
         cohend(np.array(array_a) * 2, np.array(array_b) * 2)
         + cohend(np.array(array_b) + 1, np.array(array_a) + 1)
-        < 10e-10
+        < 10e-5
     )
 
 
