@@ -36,10 +36,12 @@ from deepof.utils import suppress_warning
 
 
 import deepof.post_hoc
+import deepof.utils
 from deepof.visuals_utils import (
     time_to_seconds,
     seconds_to_time,
     calculate_average_arena,
+    _preprocess_time_bins,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -299,8 +301,11 @@ def plot_heatmaps(
             ]
         )
     # preprocess information given for time binning
+    e_id=None
+    if not experiment_id=="average":
+        e_id=experiment_id
     bin_size_int, bin_index_int, _, bin_starts, bin_ends = _preprocess_time_bins(
-        coordinates, bin_size, bin_index
+        coordinates, bin_size, bin_index, experiment_id=e_id
     )
 
     if not center:  # pragma: no cover
@@ -330,11 +335,10 @@ def plot_heatmaps(
     N_rows_table=int(N_rows_max/len(coords))
     sampled_tabs = []
 
-    for key, tab in coords.items():
+    for key in coords.keys():
 
         #load table if not already loaded
-        if type(tab)==str:
-            tab = deepof.utils.load_dt(tab)  
+        tab = deepof.utils.get_dt(coords, key)  
         
         #cut slice from table if required
         if bin_starts is not None and bin_ends is not None:
@@ -421,10 +425,12 @@ def plot_gantt(
     # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
-        N_frames = supervised_annotations[experiment_id].shape[0]
+        data_frame=deepof.utils.get_dt(supervised_annotations,experiment_id)
+        N_frames = data_frame.shape[0]
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
-        N_frames = soft_counts[experiment_id].argmax(axis=1).shape[0]
+        data_frame=deepof.utils.get_dt(soft_counts,experiment_id)
+        N_frames = data_frame.argmax(axis=1).shape[0]
     else:
         plot_type = "mixed"
         raise NotImplementedError(
@@ -454,7 +460,7 @@ def plot_gantt(
     elif plot_type == "supervised":
         behavior_ids = [
             col
-            for col in supervised_annotations[experiment_id].columns
+            for col in data_frame.columns
             if "speed" not in col
         ]
 
@@ -503,7 +509,7 @@ def plot_gantt(
         if plot_type == "unsupervised":
             gantt[rows] = hard_counts[bin_start:bin_end] == feature
         elif plot_type == "supervised":
-            gantt[rows] = supervised_annotations[experiment_id][
+            gantt[rows] = data_frame[
                 behavior_ids[feature]
             ].iloc[bin_start:bin_end]
 
@@ -3242,7 +3248,7 @@ def tag_annotated_frames(
 # noinspection PyProtectedMember,PyDefaultArgument
 def annotate_video(
     coordinates: coordinates,
-    tag_dict: pd.DataFrame,
+    tag_dict: Union[str, pd.DataFrame],
     vid_index: int,
     frame_limit: int = np.inf,
     debug: bool = False,
@@ -3252,12 +3258,17 @@ def annotate_video(
 
     Args:
         coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
+        tag_dict (Union[str, pd.DataFrame]): Either path to the saving location of teh dataset or the dataste itself
         debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
         vid_index: for internal usage only; index of the video to tag in coordinates._videos.
         frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
         params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
 
     """
+
+    if isinstance(tag_dict, str):
+        tag_dict=deepof.utils.load_dt(tag_dict)
+
     # Extract useful information from coordinates object
     tracks = list(coordinates._tables.keys())
     videos = coordinates._videos
@@ -3347,168 +3358,6 @@ def annotate_video(
     cv2.destroyAllWindows()
 
     return True
-
-
-def _preprocess_time_bins(
-    coordinates: coordinates,
-    bin_size: Union[int, str],
-    bin_index: Union[int, str],
-    precomputed_bins: np.ndarray = None,
-    experiment_id: str = None,
-):
-    """Return a heatmap of the movement of a specific bodypart in the arena.
-
-    If more than one bodypart is passed, it returns one subplot for each.
-
-    Args:
-        coordinates (coordinates): deepOF project where the data is stored.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        experiment_id (str): id of the experiment of time bins should
-
-    Returns:
-        bin_size_int (int): preprocessed bin size for time filtering
-        bin_index_int (int): preprocessed bin index for time filtering
-        bin_starts (dict): dictionary of start position for each bin in each condition
-        bin_ends (dict): dictionary of end position for each bin in each condition
-        precomputed_bins (np.ndarray): precomputed time bins as alternative to bin_index_int and bin_size_int
-        error (boolean): True if unusable bins were selected
-    """
-
-    # warn in case of conflicting inputs
-    if precomputed_bins is not None and any(
-        [bin_index is not None, bin_size is not None]
-    ):
-        warning_message = (
-            "\033[38;5;208m\n"
-            "Warning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!"
-            "\033[0m"
-        )
-        warnings.warn(warning_message)
-    # init outputs
-    bin_size_int = None
-    bin_index_int = None
-    bin_starts = None
-    bin_ends = None
-
-    # skip preprocessing if exact bins are already provided by the user
-    if not precomputed_bins:
-        # get start and end times for each table
-        start_times = coordinates.get_start_times()
-        table_lengths = coordinates.get_table_lengths()
-        # if a specific experiment is given, calculate time bin info only for this experiment
-        if experiment_id is not None:
-            start_times = {experiment_id: start_times[experiment_id]}
-            table_lengths = {experiment_id: table_lengths[experiment_id]}
-
-        pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,9})?$"
-        # Case 1: Integer bins are only adjusted using the frame rate
-        if type(bin_size) is int and type(bin_index) is int:
-
-            bin_size_int = int(np.round(bin_size * coordinates._frame_rate))
-            bin_index_int = bin_index
-            bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index)
-            bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index + 1))
-
-        # Case 2: Bins given as valid time ranges are used to fill precomputed_bins
-        # to reflect the time ranges given
-        elif (
-            type(bin_size) is str
-            and type(bin_index) is str
-            and re.match(pattern, bin_size) is not None
-            and re.match(pattern, bin_index) is not None
-        ):
-
-            # set starts and ends for all coord items
-            bin_starts = {key: 0 for key in table_lengths}
-            bin_ends = {key: 0 for key in table_lengths}
-
-            # precumputed bins is based on the longest table
-            key_to_longest = max(table_lengths.items(), key=lambda x: x[1])[0]
-            precomputed_bins = np.full(table_lengths[key_to_longest], False, dtype=bool)
-
-            # calculate bin size as int
-            bin_size_int = int(
-                np.round(time_to_seconds(bin_size) * coordinates._frame_rate)
-            )
-
-            # find start and end positions with sampling rate
-            for key in table_lengths:
-                start_time = time_to_seconds(start_times[key])
-                bin_index_time = time_to_seconds(bin_index)
-                bin_starts[key] = int(
-                    np.round((start_time + bin_index_time) * coordinates._frame_rate)
-                )
-                bin_ends[key] = bin_size_int + bin_starts[key]
-
-            precomputed_bins[
-                bin_starts[key_to_longest] : (bin_ends[key_to_longest])
-            ] = True
-        # Case 3: If nonsensical input was given, return error and default bins
-        elif bin_size is not None:
-            # plot short default bin, if user entered bins incorrectly
-
-            warning_message = (
-                "\033[38;5;208m\n"
-                "Warning! bin_index or bin_size were given in an incorrect format!\n"
-                "Please use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\n"
-                "Proceed to plot default binning (bin_index = 0, bin_size = 60)!"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
-
-            bin_size_int = int(np.round(60 * coordinates._frame_rate))
-            bin_index_int = 0
-            bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index_int)
-            bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index_int + 1))
-
-        # Validity checks and warnings for created bins
-        if bin_size is not None and bin_index is not None:
-            # warning messages in case of weird indexing
-            bin_warning = False
-            for key in table_lengths:
-                if bin_size_int == 0:
-                    raise ValueError("Please make sure bin_size is > 0")
-                elif bin_starts[key] > table_lengths[key]:
-                    raise ValueError(
-                        "Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}".format(
-                            seconds_to_time(
-                                table_lengths[key] / coordinates._frame_rate, False
-                            ),
-                            int(np.ceil(table_lengths[key] / bin_size_int)),
-                            bin_size,
-                        )
-                    )
-                elif bin_ends[key] > table_lengths[key]:
-                    bin_ends[key] = table_lengths[key]
-                    if not bin_warning:
-                        truncated_length = seconds_to_time(
-                            (bin_ends[key] - bin_starts[key]) / coordinates._frame_rate,
-                            False,
-                        )
-                        warning_message = (
-                            "\033[38;5;208m\n"
-                            "Warning! The chosen time range exceeds the signal length for at least one data set!\n"
-                            f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
-                            "\033[0m"
-                        )
-                        warnings.warn(warning_message)
-                        if table_lengths[key] - bin_size_int > 0:
-                            print(
-                                "\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
-                                    seconds_to_time(
-                                        (table_lengths[key] - bin_size_int)
-                                        / coordinates._frame_rate,
-                                        False,
-                                    ),
-                                    int(np.ceil(table_lengths[key] / bin_size_int)) - 2,
-                                    bin_size,
-                                )
-                            )
-                        bin_warning = True
-
-    return bin_size_int, bin_index_int, precomputed_bins, bin_starts, bin_ends
 
 
 def _check_enum_inputs(
@@ -3604,14 +3453,14 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if exp_condition_order is not None and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
+    if exp_condition_order is not None and not exp_condition_order == [None] and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
         if len(condition_value_options_list)>0:
             raise ValueError(
                 "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if condition_values is not None and not set(condition_values).issubset(set(condition_value_options_list)):
+    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(set(condition_value_options_list)):
         if len(condition_value_options_list)>0:
             raise ValueError(
                 "One or more condition values in \"condition_value(s)\" are not part of {}".format(str(condition_value_options_list)[1:-1])
@@ -3625,7 +3474,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if bodyparts is not None and not set(bodyparts).issubset(set(bodyparts_options_list)):
+    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(set(bodyparts_options_list)):
         raise ValueError(
             "One or more bodyparts in \"bodyparts\" are not part of: {}".format(str(bodyparts_options_list)[1:-1])
         )

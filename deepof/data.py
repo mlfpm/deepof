@@ -565,40 +565,18 @@ class Project:
         if verbose:
             print("Computing distances...")
 
-        if type(tab_dict[list(tab_dict.keys())[0]])==str:
-            first_tab=deepof.utils.load_dt(tab_dict[list(tab_dict.keys())[0]])
-        else:
-            first_tab=tab_dict[list(tab_dict.keys())[0]]
-
-        nodes = self.distances
-        if nodes == "all":
-            nodes = first_tab.columns.levels[0]
-
-        assert [
-            i in first_tab.columns.levels[0] for i in nodes
-        ], "Nodes should correspond to existent bodyparts"
-
         scales = self.scales[:, 2:]
 
         distance_dict = {}
         for i, (key, tab) in enumerate(tab_dict.items()):
-            if i==0:
-                tab = first_tab
-            elif type(tab)==str:
-                tab = deepof.utils.load_dt(tab)
 
-            distance_tab = deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
-            distance_tab = distance_tab.loc[
-                    :, [np.all([i in nodes for i in j]) for j in distance_tab.columns]
-                ]
-            if self.ego:
-                distance_tab = distance_tab.loc[
-                        :, [dist for dist in distance_tab.columns if self.ego in dist]
-                    ]
-            
-            # Restore original index
-            distance_tab.index = tab.index
+            #load active table
+            tab = deepof.utils.get_dt(tab_dict, key)
 
+            #get distances for this table
+            distance_tab=self.get_distances_tab(tab,scales[i, :])
+
+            #save disctances for active table
             distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
             distance_dict[key] = deepof.utils.save_dt(distance_tab,distance_path,self.run_numba)
 
@@ -606,6 +584,35 @@ class Project:
             del distance_tab
 
         return distance_dict
+    
+    def get_distances_tab(self, tab: pd.DataFrame, scale=None) -> dict:
+
+
+        if scale is None:
+            scale=[1,1]
+
+        nodes = self.distances
+        if nodes == "all":
+            nodes = tab.columns.levels[0]
+
+        assert [
+            i in tab.columns.levels[0] for i in nodes
+        ], "Nodes should correspond to existent bodyparts"
+
+        distance_tab = deepof.utils.bpart_distance(tab, scale[1], scale[0])
+        distance_tab = distance_tab.loc[
+                :, [np.all([i in nodes for i in j]) for j in distance_tab.columns]
+            ]
+        if self.ego:
+            distance_tab = distance_tab.loc[
+                    :, [dist for dist in distance_tab.columns if self.ego in dist]
+                ]
+        
+        # Restore original index
+        distance_tab.index = tab.index
+
+        return distance_tab
+
 
     def get_angles(self, tab_dict: dict, verbose: bool = True) -> dict:
         """Compute all the angles between adjacent bodypart trios per video and per frame in the data.
@@ -629,10 +636,10 @@ class Project:
 
         angle_dict = {}
         try:
-            for key, tab in tab_dict.items():
+            for key in tab_dict.keys():
 
-                if type(tab)==str:
-                    tab = deepof.utils.load_dt(tab)
+                #load table 
+                tab = deepof.utils.get_dt(tab_dict, key)
 
                 dats = []
                 for clique in bridges:
@@ -699,10 +706,10 @@ class Project:
         all_areas_dict = {}
 
         # iterate over all tables
-        for key, tab in tab_dict.items():
+        for key in tab_dict.keys():
 
-            if type(tab)==str:
-                tab = deepof.utils.load_dt(tab)
+            #load table 
+            tab = deepof.utils.get_dt(tab_dict, key)
 
             current_table = pd.DataFrame()
 
@@ -1043,7 +1050,7 @@ class Project:
             print("No new experiments to process. Exiting...")
             print("You may need to explicitely set \"video_path\" and \"table_path\" inputs")
 
-            return 
+            return previous_project
 
 
 class Coordinates:
@@ -1139,6 +1146,9 @@ class Coordinates:
         lens = len(self._videos)
         return "deepof analysis of {} video{}".format(lens, ("s" if lens > 1 else ""))
 
+    def get_table_keys(self):
+        return self._tables.keys()
+
     def get_coords(
         self,
         center: str = False,
@@ -1178,142 +1188,22 @@ class Coordinates:
             This is not supported byt he current version of deepof"""
             )
 
-        tabs = deepof.utils.deepcopy(self._tables)
-        coord_1, coord_2 = "x", "y"
-        scales = self._scales
-
         tab_dict={}
         z=0
-        for key, tab in tabs.items():
+        for key in self._tables.keys():
 
-            quality=self.get_quality().filter_videos([key])
-            #load table if not already loaded
-            if type(tab)==str:
-                tab = deepof.utils.load_dt(tab)
-                quality[key] = deepof.utils.load_dt(quality[key])
-
-            if z==0 and align:
-
-                assert any(
-                    center in bp for bp in tab.columns.levels[0]
-                ), "for align to run, center must be set to the name of a bodypart"
-                assert any(
-                    align in bp for bp in tab.columns.levels[0]
-                ), "align must be set to the name of a bodypart"
-
-            if polar:
-                coord_1, coord_2 = "rho", "phi"
-                scales = deepof.utils.bp2polar(scales).to_numpy()
-                tab = deepof.utils.tab2polar(tab)
-
-            if center == "arena":
-
-
-                tab.loc[:, (slice("x"), [coord_1])] = (
-                    tab.loc[:, (slice("x"), [coord_1])] - scales[z][0]
-                )
-
-                tab.loc[:, (slice("x"), [coord_2])] = (
-                    tab.loc[:, (slice("x"), [coord_2])] - scales[z][1]
-                )
-
-            elif isinstance(center, str) and center != "arena":
-
-                # Center each animal independently
-                animal_ids = self._animal_ids
-                if selected_id is not None:
-                    animal_ids = [selected_id]
-
-                for aid in animal_ids:
-                    # center on x / rho
-                    tab.update(
-                        tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
-                        .loc[:, (slice("x"), [coord_1])]
-                        .subtract(
-                            tab[aid + ("_" if aid != "" else "") + center][coord_1],
-                            axis=0,
-                        )
-                    )
-
-                    # center on y / phi
-                    tab.update(
-                        tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
-                        .loc[:, (slice("x"), [coord_2])]
-                        .subtract(
-                            tab[aid + ("_" if aid != "" else "") + center][coord_2],
-                            axis=0,
-                        )
-                    )
-
-            if align:
-
-                # noinspection PyUnboundLocalVariable
-                all_index = tab.index
-                all_columns = []
-                aligned_coordinates = None
-                # noinspection PyUnboundLocalVariable
-                for aid in animal_ids:
-                    # Bring forward the column to align
-                    columns = [
-                        i
-                        for i in tab.columns
-                        if not i[0].endswith(align) and i[0].startswith(aid)
-                    ]
-                    columns = [
-                        (
-                            aid + ("_" if aid != "" else "") + align,
-                            ("phi" if polar else "x"),
-                        ),
-                        (
-                            aid + ("_" if aid != "" else "") + align,
-                            ("rho" if polar else "y"),
-                        ),
-                    ] + columns
-
-                    partial_aligned = tab[columns]
-                    all_columns += columns
-
-                    if align_inplace and not polar:
-                        partial_aligned = deepof.utils.align_trajectories(
-                            np.array(partial_aligned),
-                            mode="all",
-                            run_numba=self._run_numba,
-                        )
-                        partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
-                        partial_aligned = pd.DataFrame(partial_aligned)
-                        aligned_coordinates = pd.concat(
-                            [aligned_coordinates, partial_aligned], axis=1
-                        )
-
-                aligned_coordinates.index = all_index
-                aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
-                tab = aligned_coordinates
-
-            if speed:
-                vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
-                tab = vel
-
-            # Id selected_id was specified, selects coordinates of only one animal for further processing
-            if selected_id is not None:
-                tab = tab.loc[
-                    :, deepof.utils.filter_columns(tab.columns, selected_id)
-                ]
-
-            table_dict={key:tab}
-            # Set table_dict to NaN if animals are missing
-            table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
-            tab = table_dict[key]
-
-            if propagate_annotations:
-                annotations = list(propagate_annotations.values())[0].columns
-
-                for ann in annotations:
-                    tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
-
-            if propagate_labels:
-                tab.loc[:, "pheno"] = np.repeat(
-                    self._exp_conditions[key][propagate_labels].values, tab.shape[0]
-                )
+            tab=self.get_coords_at_key(
+                key = key,
+                scale = self._scales[z], #only necessary, because scale is not a dictionary. 
+                center = center,
+                polar = polar,
+                speed = speed,
+                align = align,
+                align_inplace = align_inplace,
+                selected_id = selected_id,
+                propagate_labels = propagate_labels,
+                propagate_annotations = propagate_annotations,
+            )
             
             # save paths for modified tables
             table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
@@ -1337,14 +1227,185 @@ class Coordinates:
             propagate_labels=propagate_labels,
             propagate_annotations=propagate_annotations,
         )
+    
+    def get_coords_at_key(
+    self,
+    key: str,
+    scale: np.array,
+    quality: table_dict = None,
+    center: str = False,
+    polar: bool = False,
+    speed: int = 0,
+    align: str = False,
+    align_inplace: bool = True,
+    selected_id: str = None,
+    propagate_labels: bool = False,
+    propagate_annotations: Dict = False,
+) -> pd.DataFrame:
+        """Return a pandas dataFrame with the coordinates for the selected key as values.
 
+        Args:
+            key (str): key for requested distance
+            scale (np.array): scale of teh current arena.
+            quality: (table_dict): Quality information for current data Frame
+            center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            polar (bool) States whether the coordinates should be converted to polar values.
+            speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
+            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
+            align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
+            selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
+            propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
+            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
+            file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
+            
+        Returns:
+            pd.DataFrame: A data frame containing the coordinates for the selected key as values.
+
+        """
+
+        coord_1, coord_2 = "x", "y"
+
+        #load table if not already loaded
+        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._tables, key))
+        #to avoid reloading quality if quality is given
+        if quality is None:
+            quality=self.get_quality().filter_videos([key])
+            quality[key] = deepof.utils.get_dt(quality,key)
+
+        if align:
+
+            assert any(
+                center in bp for bp in tab.columns.levels[0]
+            ), "for align to run, center must be set to the name of a bodypart"
+            assert any(
+                align in bp for bp in tab.columns.levels[0]
+            ), "align must be set to the name of a bodypart"
+
+        if polar:
+            coord_1, coord_2 = "rho", "phi"
+            scale = deepof.utils.bp2polar(scale).to_numpy()
+            tab = deepof.utils.tab2polar(tab)
+
+        if center == "arena":
+
+
+            tab.loc[:, (slice("x"), [coord_1])] = (
+                tab.loc[:, (slice("x"), [coord_1])] - scale[0]
+            )
+
+            tab.loc[:, (slice("x"), [coord_2])] = (
+                tab.loc[:, (slice("x"), [coord_2])] - scale[1]
+            )
+
+        elif isinstance(center, str) and center != "arena":
+
+            # Center each animal independently
+            animal_ids = self._animal_ids
+            if selected_id is not None:
+                animal_ids = [selected_id]
+
+            for aid in animal_ids:
+                # center on x / rho
+                tab.update(
+                    tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
+                    .loc[:, (slice("x"), [coord_1])]
+                    .subtract(
+                        tab[aid + ("_" if aid != "" else "") + center][coord_1],
+                        axis=0,
+                    )
+                )
+
+                # center on y / phi
+                tab.update(
+                    tab.loc[:, [i for i in tab.columns if i[0].startswith(aid)]]
+                    .loc[:, (slice("x"), [coord_2])]
+                    .subtract(
+                        tab[aid + ("_" if aid != "" else "") + center][coord_2],
+                        axis=0,
+                    )
+                )
+
+        if align:
+
+            # noinspection PyUnboundLocalVariable
+            all_index = tab.index
+            all_columns = []
+            aligned_coordinates = None
+            # noinspection PyUnboundLocalVariable
+            for aid in animal_ids:
+                # Bring forward the column to align
+                columns = [
+                    i
+                    for i in tab.columns
+                    if not i[0].endswith(align) and i[0].startswith(aid)
+                ]
+                columns = [
+                    (
+                        aid + ("_" if aid != "" else "") + align,
+                        ("phi" if polar else "x"),
+                    ),
+                    (
+                        aid + ("_" if aid != "" else "") + align,
+                        ("rho" if polar else "y"),
+                    ),
+                ] + columns
+
+                partial_aligned = tab[columns]
+                all_columns += columns
+
+                if align_inplace and not polar:
+                    partial_aligned = deepof.utils.align_trajectories(
+                        np.array(partial_aligned),
+                        mode="all",
+                        run_numba=self._run_numba,
+                    )
+                    partial_aligned[np.abs(partial_aligned) < 1e-5] = 0.0
+                    partial_aligned = pd.DataFrame(partial_aligned)
+                    aligned_coordinates = pd.concat(
+                        [aligned_coordinates, partial_aligned], axis=1
+                    )
+
+            aligned_coordinates.index = all_index
+            aligned_coordinates.columns = pd.MultiIndex.from_tuples(all_columns)
+            tab = aligned_coordinates
+
+        if speed:
+            vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
+            tab = vel
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
+
+        table_dict={key:tab}
+        # Set table_dict to NaN if animals are missing
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+        tab = table_dict[key]
+
+        if propagate_annotations:
+            annotations = list(propagate_annotations.values())[0].columns
+
+            for ann in annotations:
+                tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
+
+        if propagate_labels:
+            tab.loc[:, "pheno"] = np.repeat(
+                self._exp_conditions[key][propagate_labels].values, tab.shape[0]
+            )
+
+        return tab
+    
+    def get_distances_header(self, copy_keys: bool = False):
+        return self._distances.copy_header(copy_keys=copy_keys)
+            
     def get_distances(
         self,
         speed: int = 0,
         selected_id: str = None,
         filter_on_graph: bool = True,
-        propagate_labels: bool = False,
-        propagate_annotations: Dict = False,
         file_name: str = 'got_distances',
         return_path: bool = False,
     ) -> table_dict:
@@ -1363,49 +1424,21 @@ class Coordinates:
             table_dict: A table_dict object with the distances between body parts animal as values.
 
         """
-        tabs = deepof.utils.deepcopy(self._distances)
 
         if self._distances is not None:
 
-            for key, tab in tabs.items():
+            #copy only the header info, not the tables
+            tabs = {}
 
-                quality=self.get_quality().filter_videos([key])
-                #load table if not already loaded
-                if type(tab)==str:
-                    tab = deepof.utils.load_dt(tab)
-                    quality[key] = deepof.utils.load_dt(quality[key])
+            for key in self._distances.keys():
 
-                if speed:
-                    tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
-
-                if selected_id is not None:
-                    tab = tab.loc[
-                        :, deepof.utils.filter_columns(tab.columns, selected_id)
-                    ]
-
-
-                table_dict={key:tab}
-                # Set table_dict to NaN if animals are missing
-                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
-                tab = table_dict[key]
-
-                if filter_on_graph:
-
-                    tab = tab.loc[
-                        :,
-                        list(
-                            set(
-                                [
-                                    tuple(sorted(e))
-                                    for e in deepof.utils.connect_mouse(
-                                        animal_ids=self._animal_ids,
-                                        graph_preset=self._bodypart_graph,
-                                    ).edges
-                                ]
-                            )
-                            & set(tab.columns)
-                        ),
-                    ]
+                #get distances as tab dataFrame  
+                tab=self.get_distances_at_key(
+                    key,
+                    speed=speed,
+                    selected_id=selected_id,
+                    filter_on_graph=filter_on_graph,
+                    )
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
@@ -1419,22 +1452,85 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
-                propagate_labels=propagate_labels,
-                propagate_annotations=propagate_annotations,
                 typ="dists",
             )
 
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )  # pragma: no cover
+    
+    def get_distances_at_key(
+        self,
+        key: str,
+        quality: table_dict = None,
+        speed: int = 0,
+        selected_id: str = None,
+        filter_on_graph: bool = True,
+    ) -> pd.DataFrame:
+        """Return a pd.DataFrame with the distances between body parts of one animal as values.
 
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+            filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
+
+        Returns:
+            table_dict: A pd.DataFrame with the distances between body parts of one animal as values.
+
+        """
+
+        #load table if not already loaded
+        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._distances, key))
+        #to avoid reloading quality if quality is given
+        if quality is None:
+            quality=self.get_quality().filter_videos([key])
+            quality[key] = deepof.utils.get_dt(quality,key)
+
+        if speed:
+            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
+
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
+
+
+        table_dict={key:tab}
+        # Set table_dict to NaN if animals are missing
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+        tab = table_dict[key]
+
+        if filter_on_graph:
+
+            tab = tab.loc[
+                :,
+                list(
+                    set(
+                        [
+                            tuple(sorted(e))
+                            for e in deepof.utils.connect_mouse(
+                                animal_ids=self._animal_ids,
+                                graph_preset=self._bodypart_graph,
+                            ).edges
+                        ]
+                    )
+                    & set(tab.columns)
+                ),
+            ]
+        
+        return tab
+
+
+    def get_angles_header(self, copy_keys: bool = False):
+        return self._angles.copy_header(copy_keys=copy_keys)
+    
     def get_angles(
         self,
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
-        propagate_labels: bool = False,
-        propagate_annotations: Dict = False,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -1453,34 +1549,19 @@ class Coordinates:
             table_dict: A table_dict object with the angles between body parts animal as values.
 
         """
-        tabs = deepof.utils.deepcopy(self._angles)
 
         if self._angles is not None:
 
-            for key, tab in tabs.items():
+            tabs = {}
 
-                quality=self.get_quality().filter_videos([key])
-                #load table if not already loaded
-                if type(tab)==str:
-                    tab = deepof.utils.load_dt(tab)
-                    quality[key] = deepof.utils.load_dt(quality[key])
+            for key in self._angles.keys():
 
-                if degrees:
-                    tab = np.degrees(tab) 
-
-                if speed:
-                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-                    tab = vel
-
-                if selected_id is not None:
-                    tab = tab.loc[
-                        :, deepof.utils.filter_columns(tab.columns, selected_id)
-                    ]
-
-                table_dict={key:tab}
-                # Set table_dict to NaN if animals are missing
-                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
-                tab = table_dict[key]
+                tab = self.get_angles_at_key(
+                    key=key, 
+                    degrees=degrees,
+                    speed=speed,
+                    selected_id=selected_id,
+                )
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
@@ -1494,15 +1575,65 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
-                propagate_labels=propagate_labels,
-                propagate_annotations=propagate_annotations,
                 typ="angles",
             )
 
         raise ValueError(
             "Angles not computed. Read the documentation for more details"
         )  # pragma: no cover
+    
+    def get_angles_at_key(
+    self,
+    key: str,
+    quality: table_dict = None,
+    degrees: bool = False,
+    speed: int = 0,
+    selected_id: str = None,
+    ) -> pd.DataFrame:
+        """Return a Dataframe with the angles between body parts for one animal as values.
 
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+
+        Returns:
+            table_dict: A pd.DataFrame with the angles between body parts of one animal as values.
+
+        """  
+
+        #load table if not already loaded
+        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._angles, key))
+        #to avoid reloading quality if quality is given
+        if quality is None:
+            quality=self.get_quality().filter_videos([key])
+            quality[key] = deepof.utils.get_dt(quality,key)
+
+        if degrees:
+            tab = np.degrees(tab) 
+
+        if speed:
+            vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+            tab = vel
+
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
+
+        table_dict={key:tab}
+        # Set table_dict to NaN if animals are missing
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+        tab = table_dict[key]
+
+        return tab
+
+
+    def get_areas_header(self, copy_keys: bool = False):
+        return self._areas.copy_header(copy_keys=copy_keys)
+    
     def get_areas(
             self, 
             speed: int = 0,
@@ -1521,46 +1652,18 @@ class Coordinates:
         Returns:
             table_dict: A table_dict object with the areas of the body parts animal as values.
         """
-        tabs = deepof.utils.deepcopy(self._areas)
 
         if self._areas is not None:
+            
+            tabs = {}
 
-            if selected_id == "all":
-                selected_ids = self._animal_ids
-            else:
-                selected_ids = [selected_id]
-         
-            for key, tab in tabs.items():
+            for key in self._areas.keys():
 
-                quality=self.get_quality().filter_videos([key])
-                #load table if not already loaded
-                if type(tab)==str:
-                    tab = deepof.utils.load_dt(tab)
-                    quality[key] = deepof.utils.load_dt(quality[key])
-
-                exp_table = pd.DataFrame()
-
-                for aid in selected_ids:
-
-                    if aid == "":
-                        aid = None
-
-                    # get the current table for the current animal
-                    current_table = tab.loc[
-                        :, deepof.utils.filter_columns(tab.columns, aid)
-                    ]
-                    exp_table = pd.concat([exp_table, current_table], axis=1)
-
-                tab = exp_table
-
-                if speed:
-                    vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-                    tabs[key] = vel
-
-                table_dict={key:tab}
-                # Set table_dict to NaN if animals are missing
-                table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
-                tab = table_dict[key]
+                tab = self.get_areas_at_key(
+                    key=key, 
+                    speed = speed,
+                    selected_id = selected_id,
+                )
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
@@ -1582,6 +1685,66 @@ class Coordinates:
         raise ValueError(
             "Areas not computed. Read the documentation for more details"
         )  # pragma: no cover
+    
+
+    def get_areas_at_key(
+        self,
+        key: str,
+        quality: table_dict = None,
+        speed: int = 0,
+        selected_id: str = "all",
+        ) -> table_dict:
+        """Return a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
+
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
+            file_name (str): Name of the file for saving
+            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
+
+        Returns:
+            table_dict: A table_dict object with the areas of the body parts animal as values.
+        """
+        
+        #load table if not already loaded
+        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._areas, key))
+        #to avoid reloading quality if quality is given
+        if quality is None:
+            quality=self.get_quality().filter_videos([key])
+            quality[key] = deepof.utils.get_dt(quality,key)
+
+        if selected_id == "all":
+            selected_ids = self._animal_ids
+        else:
+            selected_ids = [selected_id]
+
+        exp_table = pd.DataFrame()
+
+        for aid in selected_ids:
+
+            if aid == "":
+                aid = None
+
+            # get the current table for the current animal
+            current_table = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, aid)
+            ]
+            exp_table = pd.concat([exp_table, current_table], axis=1)
+
+        tab = exp_table
+
+        if speed:
+            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+
+        table_dict={key:tab}
+        # Set table_dict to NaN if animals are missing
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
+        tab = table_dict[key]
+    
+        return tab
+
 
     def get_videos(self, play: bool = False):
         """Returns the videos associated with the dataset as a list."""
@@ -1847,13 +2010,11 @@ class Coordinates:
             
             for k in range(0,len(to_preprocess)):
             
-                for key, tab in to_preprocess[k].items():
+                for key in to_preprocess[k].keys():
 
                     #load table if not already loaded
-                    table_path=''
-                    if type(tab)==str:
-                        table_path = tab
-                        tab = deepof.utils.load_dt(tab) 
+
+                    tab, table_path = deepof.utils.get_dt(to_preprocess[k], key, True) 
 
                     dataset = (
                         tab[:, :, ~feature_names.isin(edge_feature_names)][
@@ -1871,14 +2032,10 @@ class Coordinates:
         else:  # pragma: no cover
             to_preprocess = tab_dict #np.concatenate(list(tab_dict.values()))
 
-            for key, tab in to_preprocess.items():
+            for key in to_preprocess.keys():
 
-                table_path=''
-                #load table if not already loaded
-                if type(tab)==str:
-                    table_path = tab
-                    tab = deepof.utils.load_dt(tab) 
-                
+                tab, table_path = deepof.utils.get_dt(to_preprocess, key, True) 
+
                 tab = np.array(tab)
 
                 # Split node features (positions, speeds) from edge features (distances)
@@ -1962,7 +2119,7 @@ class Coordinates:
         if len(self._animal_ids) <= 1:
             features_dict = (
                 deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self, center=center, align=align, include_angles=False
+                    self, center=center, align=align, include_angles=False, return_path=self._run_numba
                 )
             )
         else:  # pragma: no cover
@@ -1973,6 +2130,8 @@ class Coordinates:
                     align=align,
                     animal_id=_id,
                     include_angles=False,
+                    file_name='kinematics_'+_id,
+                    return_path=self._run_numba
                 )
                 for _id in self._animal_ids
             }
@@ -1982,7 +2141,10 @@ class Coordinates:
 
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
-            tag_index = raw_coords[key].index
+            if isinstance(raw_coords[key], str):
+                tag_index = deepof.utils.load_dt_metainfo(raw_coords[key])['index_column']
+            else:
+                tag_index = raw_coords[key].index
             self._trained_model_path = resource_filename(__name__, "trained_models")
 
             supervised_tags = deepof.annotation_utils.supervised_tagging(
@@ -2005,13 +2167,31 @@ class Coordinates:
             )
 
             supervised_tags.index = tag_index
-            tag_dict[key] = supervised_tags
+
+            quality=self.get_quality().filter_videos([key])
+            quality[key] = deepof.utils.get_dt(quality,key)
+            table_dict={key:supervised_tags}
+            # Set table_dict to NaN if animals are missing
+            table_dict = deepof.utils.set_missing_animals(
+                self, 
+                table_dict, 
+                quality,
+                animal_ids=self._animal_ids + ["supervised"]
+                )
+            supervised_tags = table_dict[key]
+
+            # Add missing tags to all animals
+            presence_masks = deepof.utils.compute_animal_presence_mask(quality)   
+            for animal in self._animal_ids:
+                supervised_tags[
+                    "{}missing".format(("{}_".format(animal) if animal else ""))
+                ] = (1 - presence_masks[key][animal].values)
+
+            # save paths for modified tables
+            table_path = os.path.join(coords._table_path, key, key + '_' + "supervised_annotations")
+            tag_dict[key] = deepof.utils.save_dt(supervised_tags,table_path,self._run_numba) 
 
         del features_dict, dists, speeds, coords, raw_coords
-
-        if propagate_labels:  # pragma: no cover
-            for key, tab in tag_dict.items():
-                tab["pheno"] = self._exp_conditions[key]
 
         if video_output:  # pragma: no cover
 
@@ -2025,21 +2205,6 @@ class Coordinates:
                 params=params,
             )
 
-        # Set table_dict to NaN if animals are missing
-        tag_dict = deepof.utils.set_missing_animals(
-            self,
-            tag_dict,
-            self.get_quality(),
-            animal_ids=self._animal_ids + ["supervised"],
-        )
-
-        # Add missing tags to all animals
-        presence_masks = deepof.utils.compute_animal_presence_mask(self.get_quality())
-        for tag in tag_dict:
-            for animal in self._animal_ids:
-                tag_dict[tag][
-                    "{}missing".format(("{}_".format(animal) if animal else ""))
-                ] = (1 - presence_masks[tag][animal].values)
 
         return TableDict(
             tag_dict,
@@ -2237,6 +2402,29 @@ class TableDict(dict):
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
         self._table_path = table_path
+        self.active_table=(None,None,None)
+
+    def set_active_table(self, key: str):
+        """retrieves data table at key from this table dict
+        
+        Args:
+            key (str): key to dict entry
+        """
+
+        tab, path = deepof.utils.get_dt(self, key, True)
+        self.active_table=(key,tab,path)
+
+    def reset_active_table(self):
+        """saves current active table and resets it to None 
+        """
+        
+        deepof.utils.save_dt(
+            dt=self.active_table(1),
+            path=self.active_table(2)
+            )
+        
+        self.active_table=(None,None,None)
+
 
     def filter_videos(self, keys: list) -> table_dict:
         """Return a subset of the original table_dict object, containing only the specified keys.
@@ -2252,15 +2440,8 @@ class TableDict(dict):
         table = deepof.utils.deepcopy(self)
         assert np.all([k in table.keys() for k in keys]), "Invalid keys selected"
 
-        return TableDict(
-            {k: value for k, value in table.items() if k in keys},
-            self._type,
-            self._table_path,
-            connectivity=self._connectivity,
-            propagate_labels=self._propagate_labels,
-            propagate_annotations=self._propagate_annotations,
-            exp_conditions=self._exp_conditions,
-        )
+        return self.new_dict_same_header({k: value for k, value in table.items() if k in keys})
+
 
     def filter_condition(self, exp_filters: dict) -> table_dict:
         """Return a subset of the original table_dict object, containing only videos belonging to the specified experimental condition.
@@ -2295,6 +2476,84 @@ class TableDict(dict):
             )
 
         return table
+    
+    def filter_id(self, selected_id: str = None) -> table_dict:
+        """Filter a TableDict object to keep only those columns related to the selected id.
+
+        Leave labels untouched if present.
+
+        Args:
+            selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
+
+        Returns:
+            table_dict: Filtered TableDict object, keeping only the selected animal.
+        """
+        tabs = self.copy()
+        for key, val in tabs.items():
+
+            tabs[key] = deepof.utils.filter_animal_id_in_table(val, selected_id)
+
+        return self.new_dict_same_header(tabs)
+
+    
+    def filter_id_active(self, selected_id: str = None) -> pd.DataFrame:
+        """Filter the active table in a TableDict object to keep only those columns related to the selected id.
+
+        Leave labels untouched if present.
+
+        Args:
+            selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
+
+        Returns:
+            table_dict: Filtered TableDict object, keeping only the selected animal.
+        """
+
+        #get active table
+        val=self.active_table[1]
+            
+        #filter columns, only keep the ones having a specific animal id    
+        columns_to_keep = deepof.utils.filter_columns(val.columns, selected_id)
+        val = val.loc[
+            :, [bpa for bpa in val.columns if bpa in columns_to_keep]
+        ]
+
+        #update active table
+        self.active_table[1]=val
+
+
+    def new_dict_same_header(self, tabs: dict = None, only_keys: bool=False):
+        """Creates a new table dict based on a given dictionary and the existing header information.
+
+        Args:
+            tabs (dict): Dictionary of table entries 
+            only_keys (bool): Copy dictionary keys and create empty dictionary with same keys
+
+        Returns:
+            table_dict: New TableDict object, based on given tabs and existing header info.
+        """
+
+
+        #create empty dict with same keys
+        if tabs is None and only_keys:
+            tabs={key: None for key in self.keys()}
+        #create empty dict
+        elif tabs is None:
+            tabs={}
+
+        return TableDict(
+            tabs,
+            typ = self._type,
+            table_path = self._table_path,
+            arena = self._arena,
+            arena_dims = self._arena_dims,
+            animal_ids = self._animal_ids,
+            center = self._center,
+            connectivity = self._connectivity,
+            polar = self._polar,
+            exp_conditions=self._exp_conditions,
+            propagate_labels = self._propagate_labels,
+            propagate_annotations = self._propagate_annotations,
+        )
 
     def _prepare_projection(self) -> np.ndarray:
         """Return a numpy ndarray from the preprocessing of the table_dict object, ready for projection into a lower dimensional space."""
@@ -2402,34 +2661,6 @@ class TableDict(dict):
             n_components=n_components,
         )
 
-    def filter_id(self, selected_id: str = None) -> table_dict:
-        """Filter a TableDict object to keep only those columns related to the selected id.
-
-        Leave labels untouched if present.
-
-        Args:
-            selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
-
-        Returns:
-            table_dict: Filtered TableDict object, keeping only the selected animal.
-        """
-        tabs = self.copy()
-        for key, val in tabs.items():
-            columns_to_keep = deepof.utils.filter_columns(val.columns, selected_id)
-            tabs[key] = val.loc[
-                :, [bpa for bpa in val.columns if bpa in columns_to_keep]
-            ]
-
-        return TableDict(
-            tabs,
-            typ=self._type,
-            table_path=self._table_path,
-            connectivity=self._connectivity,
-            propagate_labels=self._propagate_labels,
-            propagate_annotations=self._propagate_annotations,
-            exp_conditions=self._exp_conditions,
-        )
-
     def merge(self, *args, ignore_index=False, file_name='merged', save_as_paths=False):
         """Take a number of table_dict objects and merges them to the current one.
 
@@ -2456,10 +2687,8 @@ class TableDict(dict):
             merged_tab = []
             for tabdict in args:
 
-                tab = tabdict[key]
-                #load table if not already loaded
-                if type(tab)==str:
-                    tab = deepof.utils.load_dt(tab)
+                #load table 
+                tab = deepof.utils.get_dt(tabdict, key)
 
                 merged_tab.append(tab)
 
@@ -2604,11 +2833,10 @@ class TableDict(dict):
         N_rows_table=int(N_rows_max/len(table_temp))
         sampled_tabs = []
 
-        for key, tab in table_temp.items():
+        for key in table_temp.keys():
 
             #load table if not already loaded
-            if type(tab)==str:
-                tab = deepof.utils.load_dt(tab)    
+            tab = deepof.utils.get_dt(table_temp, key)    
         
             if filter_low_variance:
 
@@ -2669,11 +2897,10 @@ class TableDict(dict):
                 global_scaler = pretrained_scaler
 
 
-        for key, tab in table_temp.items():
+        for key in table_temp.keys():
 
             #load table if not already loaded
-            if type(tab)==str:
-                tab = deepof.utils.load_dt(tab)   
+            tab = deepof.utils.get_dt(table_temp, key)   
                 
             if scale:
 

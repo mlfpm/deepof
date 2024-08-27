@@ -637,6 +637,8 @@ def frame_corners(w, h, corners: dict = {}):
 
 
 # noinspection PyDefaultArgument,PyProtectedMember
+#from memory_profiler import profile
+#@profile
 def supervised_tagging(
     coord_object: coordinates,
     raw_coords: table_dict,
@@ -697,13 +699,12 @@ def supervised_tagging(
     except IndexError:
         vid_name = tracks[vid_index]
 
-    raw_coords = raw_coords[vid_name].reset_index(drop=True)
-    coords = coords[vid_name].reset_index(drop=True)
-    dists = dists[vid_name].reset_index(drop=True)
-
-    # angs = angs[vid_name].reset_index(drop=True)
-    speeds = speeds[vid_name].reset_index(drop=True)
-    likelihoods = coord_object.get_quality()[vid_name].reset_index(drop=True)
+    #extract various data tables from their Table dicts
+    raw_coords = deepof.utils.get_dt(raw_coords,vid_name).reset_index(drop=True)
+    coords = deepof.utils.get_dt(coords,vid_name).reset_index(drop=True)
+    dists = deepof.utils.get_dt(dists,vid_name).reset_index(drop=True)
+    speeds = deepof.utils.get_dt(speeds,vid_name).reset_index(drop=True)
+    likelihoods = deepof.utils.get_dt(coord_object.get_quality(),vid_name).reset_index(drop=True)
     arena_abs = coord_object._scales[vid_index][-1]
     arena_rel = coord_object._scales[vid_index][-2]
 
@@ -858,6 +859,12 @@ def supervised_tagging(
                 pass
 
     for _id in animal_ids:
+        
+        if _id:
+            current_features=deepof.utils.get_dt(full_features[_id],vid_name) 
+        else:
+            current_features=deepof.utils.get_dt(full_features,vid_name)
+
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
             climb_wall(
                 arena_type,
@@ -886,7 +893,7 @@ def supervised_tagging(
 
         tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
             huddle(
-                (full_features[_id][vid_name] if _id else full_features[vid_name]),
+                current_features,
                 huddle_estimator=huddle_estimator,
                 animal_id=_id + undercond,
             )

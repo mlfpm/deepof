@@ -817,6 +817,8 @@ def align_deepof_kinematics_with_unsupervised_labels(
     include_angles: bool = True,
     include_areas: bool = True,
     animal_id: str = None,
+    file_name: str = 'kinematics',
+    return_path: bool = False,
 ):
     """Align kinematics with unsupervised labels.
 
@@ -834,6 +836,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
         include_angles (bool): Whether to include angles in the alignment.
         include_areas (bool): Whether to include areas in the alignment.
         animal_id (str): The animal ID to use, in case of multi-animal projects.
+        return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
     Returns:
         A dictionary of aligned kinematics, where the keys are the names of the experimental conditions, and the
@@ -841,95 +844,106 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
     """
     # Compute speeds and accelerations per bodypart
-    kinematic_features = defaultdict(pd.DataFrame)
+    table_keys=deepof_project.get_table_keys()
+    kinematic_features={}
 
-    for der in range(kin_derivative + 1):
+    for i, key in enumerate(table_keys):
 
-        try:
-            cur_kinematics = deepof_project.get_coords(
-                center=center, align=align, speed=der
-            )
-        except AssertionError:
+        #load current quality table for later
+        if any([include_distances, include_angles,include_areas]):
+            quality=deepof_project.get_quality().filter_videos([key])
+            #load table if not already loaded
+            quality[key] = deepof.utils.get_dt(quality,key)
 
-            try:
-                cur_kinematics = deepof_project.get_coords(
-                    center="Center", align="Spine_1"
-                )
-            except AssertionError:
-                cur_kinematics = deepof_project.get_coords(
-                    center="Center", align="Nose"
-                )
+        kin_features = pd.DataFrame()
 
-        # If specified, filter on specific animals
-        if animal_id is not None:
-            cur_kinematics = cur_kinematics.filter_id(animal_id)
+        for der in range(kin_derivative + 1):
 
-        if der == 0:
-            cur_kinematics = {key: pd.DataFrame() for key in cur_kinematics.keys()}
+            if der == 0:
+                cur_kin=pd.DataFrame()
 
-        if include_distances:
-            if der == 0 or include_feature_derivatives:
-                cur_distances = deepof_project.get_distances(speed=der)
-
-                # If specified, filter on specific animals
-                if animal_id is not None:
-                    cur_distances = cur_distances.filter_id(animal_id)
-
-                cur_kinematics = {
-                    key: pd.concat([kin, dist], axis=1)
-                    for (key, kin), dist in zip(
-                        cur_kinematics.items(), cur_distances.values()
-                    )
-                }
-
-        if include_angles:
-            if der == 0 or include_feature_derivatives:
-                cur_angles = deepof_project.get_angles(speed=der)
-
-                # If specified, filter on specific animals
-                if animal_id is not None:
-                    cur_angles = cur_angles.filter_id(animal_id)
-
-                cur_kinematics = {
-                    key: pd.concat([kin, angle], axis=1)
-                    for (key, kin), angle in zip(
-                        cur_kinematics.items(), cur_angles.values()
-                    )
-                }
-
-        if include_areas:
-            if der == 0 or include_feature_derivatives:
+            else:
+            
                 try:
-                    cur_areas = deepof_project.get_areas(
-                        speed=der, selected_id=animal_id
+                    cur_kin = deepof_project.get_coords_at_key(
+                        key=key, scale=deepof_project._scales[i], quality=quality, center=center, align=align, speed=der
                     )
+                except AssertionError:
 
-                    cur_kinematics = {
-                        key: pd.concat([kin, area], axis=1)
-                        for (key, kin), area in zip(
-                            cur_kinematics.items(), cur_areas.values()
+                    try:
+                        cur_kin = deepof_project.get_coords_at_key(
+                            key=key, scale=deepof_project._scales[i], quality=quality, center="Center", align="Spine_1"
                         )
-                    }
+                    except AssertionError:
+                        cur_kin = deepof_project.get_coords_at_key(
+                            key=key, scale=deepof_project._scales[i], quality=quality, center="Center", align="Nose"
+                        )
 
-                except ValueError:
-                    warnings.warn(
-                        "No areas found for animal ID {}. Skipping.".format(animal_id)
-                    )
 
-        # Add corresponding suffixes to most common moments
-        if der == 0:
-            suffix = "_raw"
-        elif der == 1:
-            suffix = "_speed"
-        elif der == 2:
-            suffix = "_acceleration"
-        else:
-            suffix = "_kinematics_{}".format(der)
+                # If specified, filter on specific animals
+                if der != 0 and animal_id is not None:
+                    cur_kin=deepof.utils.filter_animal_id_in_table(cur_kin,animal_id)
 
-        for key, kins in cur_kinematics.items():
-            kinematic_features[key] = pd.concat(
-                [kinematic_features[key], kins.add_suffix(suffix)], axis=1
-            )
+
+            if include_distances:
+                if der == 0 or include_feature_derivatives:
+                    cur_distances = deepof_project.get_distances_at_key(key=key, speed=der, quality=quality)
+
+                    # If specified, filter on specific animals
+                    if animal_id is not None:
+                        cur_distances = deepof.utils.filter_animal_id_in_table(cur_distances,animal_id)
+
+                    cur_kin = pd.concat([
+                        cur_kin, 
+                        cur_distances
+                        ], axis=1)
+                    
+
+            if include_angles:
+                if der == 0 or include_feature_derivatives:
+                    cur_angles = deepof_project.get_angles_at_key(key=key, speed=der, quality=quality)
+
+                    # If specified, filter on specific animals
+                    if animal_id is not None:
+                        cur_angles = deepof.utils.filter_animal_id_in_table(cur_angles,animal_id)
+
+                    cur_kin = pd.concat([
+                        cur_kin, 
+                        cur_angles
+                        ], axis=1)
+
+            if include_areas:
+                if der == 0 or include_feature_derivatives:
+                    try:
+                        cur_areas = deepof_project.get_areas_at_key(
+                            key=key, speed=der, selected_id=animal_id, quality=quality 
+                        )
+
+                        cur_kin = pd.concat([
+                            cur_kin, 
+                            cur_areas
+                        ], axis=1)
+
+                    except ValueError:
+                        warnings.warn(
+                            "No areas found for animal ID {}. Skipping.".format(animal_id)
+                        )
+
+            # Add corresponding suffixes to most common moments
+            if der == 0:
+                suffix = "_raw"
+            elif der == 1:
+                suffix = "_speed"
+            elif der == 2:
+                suffix = "_acceleration"
+            else:
+                suffix = "_kinematics_{}".format(der)
+
+            kin_features = pd.concat([kin_features, cur_kin.add_suffix(suffix)], axis=1)
+
+        # save paths for modified tables
+        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key, key + '_' + file_name)
+        kinematic_features[key] = deepof.utils.save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics
     return deepof.data.TableDict(kinematic_features, typ="annotations")

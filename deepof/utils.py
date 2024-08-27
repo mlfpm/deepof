@@ -1571,13 +1571,10 @@ def rupture_per_experiment(
 
     """    
     # Iterate over all experiments and populate them
-    for key, tab in to_rupture.items():
+    for key in to_rupture.keys():
             
         #load tab from disk if not already loaded
-        tab_path=None
-        if type(tab)==str:
-            tab_path = copy.deepcopy(tab)
-            tab = load_dt(tab)  
+        tab, tab_path = get_dt(to_rupture, key, True)  
 
         tab=np.array(tab)  
 
@@ -1798,6 +1795,28 @@ def remove_outliers(
     # )
 
     return interpolated_exp
+
+
+def filter_animal_id_in_table(table: pd.DataFrame, selected_id: str = None):
+    """Filter a DataFrame to keep only those columns related to the selected id.
+
+    Leave labels untouched if present.
+
+    Args:
+        table (pd.DataFrame): a dataFrame to be filtered
+        selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
+
+    Returns:
+        pd.DataFrame: Filtered dataFrame, keeping only the selected animal.
+    """
+
+    #filter columns, only keep the ones having a specific animal id    
+    columns_to_keep = filter_columns(table.columns, selected_id)
+    table = table.loc[
+        :, [bpa for bpa in table.columns if bpa in columns_to_keep]
+    ]
+
+    return table
 
 
 def filter_columns(columns: list, selected_id: str) -> list:
@@ -2750,6 +2769,30 @@ def get_total_Frames(video_paths: List[str]) -> int:
         current_video_cap.release()
     return total_frames
 
+
+def get_dt(tab_dict: [table_dict, dict], key: str, return_path: bool = False):
+    """retrieves data table from table dict 
+    (I use this a lot, so it gets its own function)
+    
+    Args:
+        tab_dict ([table_dict, dict]): Table Dict or dictionary with data tables (or paths)
+        key (str): key to dict entry
+         
+    Returns:
+        Data table after laoding
+        Path to data table (if data table is not in RAM) 
+    """
+    raw_data = tab_dict[key]
+    path=''
+    if isinstance(raw_data, str):
+        path = raw_data
+        raw_data = load_dt(raw_data)
+    
+    if return_path:
+        return raw_data, path
+    return raw_data
+
+
 def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
     """Saves a given data frame fast and efficient using parquet
 
@@ -2813,6 +2856,7 @@ def load_dt(path: str):
                 ast.literal_eval(item)
                 if type(item) == str
                 and item.startswith("(")
+                and item.endswith(")")
                 else item 
                 for item 
                 in tab.columns
@@ -2825,7 +2869,7 @@ def load_dt(path: str):
     
     return tab
 
-def load_dt_metainfo(path: str):
+def load_dt_metainfo(path: str, load_index=True):
     """Loads the columns of a given data frame
 
     Args:
@@ -2853,13 +2897,16 @@ def load_dt_metainfo(path: str):
             in columns
             ]
         
-        index_column = pq.read_table(path, columns=['__index_level_0__'])
+        if load_index:
+            index_column = pq.read_table(path, columns=['__index_level_0__'])
+            meta_info['index_column'] = pd.Index(index_column[0][:])
+            meta_info['start_time'] = str(index_column[0][0])
+            meta_info['end_time'] = str(index_column[0][-1])
         
         meta_info['columns'] = columns
         meta_info['num_cols'] = info_meta.num_columns
         meta_info['num_rows'] = info_meta.num_rows
-        meta_info['start_time'] = str(index_column[0][0])
-        meta_info['end_time'] = str(index_column[0][-1])
+
 
         
         return meta_info
