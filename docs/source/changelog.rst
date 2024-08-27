@@ -1,6 +1,37 @@
 Changelog
 =========
 
+[0.7.1] - 2024-08-27
+====================
+
+Updates
+-------
+- New plot function plot_behavior_trends for plotting of behavioral data for different time bins with polar and line plot options.
+- New polar_depiction option for plot_enrichment.
+
+Bug Fixes
+---------
+- Fixed a bug when extending projects using deepof.data.Coordinates.extend
+- Fixed OS compatibility bugs reported in Google colab tutorials.
+
+Known Issues
+------------
+
+- Due to a bug the time binning does ignore user bin inputs in this version. This will be fixed in 0.7.2.
+
+Compatibility
+-------------
+- Full backwards compatibility with published version 0.7.0.
+
+Additional Information
+----------------------
+- Release Date: 2024-08-21
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
 [0.7.0] - 2024-08-01
 ====================
 
