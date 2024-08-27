@@ -40,6 +40,7 @@ from deepof.visuals_utils import (
     calculate_average_arena,
     seconds_to_time,
     time_to_seconds,
+    _preprocess_time_bins
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -291,6 +292,7 @@ def plot_heatmaps(
 
     coords = coordinates.get_coords(center=center, align=align)
 
+    #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
         coords = coords.filter_videos(
             [
@@ -299,6 +301,7 @@ def plot_heatmaps(
                 if v[exp_condition].values.astype(str) == condition_value
             ]
         )
+
     # preprocess information given for time binning
     bin_size_int, bin_index_int, _, bin_starts, bin_ends = _preprocess_time_bins(
         coordinates, bin_size, bin_index
@@ -308,8 +311,8 @@ def plot_heatmaps(
     if bin_starts is not None and bin_ends is not None:
         # cut down coords to desired range
         coords = {
-            key: val.iloc[bin_starts[key] : np.minimum(val.shape[0], bin_ends[key])]
-            for key, val in coords.items()
+            key: coords[key].iloc[bin_starts[key] : np.minimum(coords[key].shape[0], bin_ends[key])]
+            for key in coords.keys()
         }
 
     elif bin_size_int is not None and bin_index_int is not None:
@@ -331,9 +334,7 @@ def plot_heatmaps(
     # Add experimental conditions to title, if provided
     title_suffix = experiment_id
     if coordinates.get_exp_conditions is not None and exp_condition is None:
-        title_suffix += (
-            " - " + coordinates.get_exp_conditions[list(coords.keys())[experiment_id]]
-        )
+        title_suffix += f" - all"
 
     elif exp_condition is not None:
         title_suffix += f" - {condition_value}"
@@ -360,10 +361,12 @@ def plot_heatmaps(
         ax=ax,
         **kwargs,
     )
-
+    
     if display_arena:
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, i)
+
+    plt.gca().invert_yaxis()
 
     if show:
         plt.show()
@@ -773,6 +776,10 @@ def plot_enrichment(
     else:
         y_axis_label = "time on cluster in frames"
 
+    
+    # More inits
+    all_exp_conditions = np.unique(enrichment["exp condition"])
+    num_exp_conds = len(all_exp_conditions)
     # Additional plot modifications for polar depiction
     if polar_depiction:
 
@@ -795,6 +802,7 @@ def plot_enrichment(
         # Get x labels from cluster names
         unique_indices = np.unique(enrichment["cluster"], return_index=True)
         x_bin_labels = enrichment["cluster"].values[np.sort(unique_indices[1])]
+        num_bins = len(x_bin_labels)
         # Get means and std for error
         rich_bin_means = (
             enrichment.groupby(["cluster", "exp condition"])
@@ -806,10 +814,6 @@ def plot_enrichment(
             .std(numeric_only=True)
             .reset_index()
         )
-        # More inits
-        all_exp_conditions = np.unique(rich_bin_means["exp condition"])
-        num_bins = len(x_bin_labels)
-        num_exp_conds = len(all_exp_conditions)
 
         # Define the angles and mid_angles (angle in the middle of two angles) for each bin
         angles = np.linspace(0, 2 * np.pi, num_bins, endpoint=False)
@@ -845,7 +849,7 @@ def plot_enrichment(
                 [mean_values[all_exp_conditions[k]][key] for key in x_bin_labels]
                 + [
                     mean_values[all_exp_conditions[k]][x_bin_labels[0]]
-                ]  # Add first value to teh end of the list
+                ]  # Add first value to the end of the list
             )
             plot_errs[all_exp_conditions[k]] = np.array(
                 [err_values[all_exp_conditions[k]][key] for key in x_bin_labels]
@@ -903,11 +907,13 @@ def plot_enrichment(
 
     else:
         # Plot a barchart grouped per experimental conditions
+        np.random.seed(42) #to ensure the outlier points are always jittered te same (relevant for automatic testing)
         sns.barplot(
             data=enrichment,
             x="cluster",
             y="time on cluster",
             hue="exp condition",
+            hue_order=all_exp_conditions,
             ax=ax,
         )
         sns.stripplot(
@@ -915,10 +921,12 @@ def plot_enrichment(
             x="cluster",
             y="time on cluster",
             hue="exp condition",
+            hue_order=all_exp_conditions,
             color="black",
             ax=ax,
             dodge=True,
         )
+        np.random.seed(None)
 
         ax.set_ylabel(y_axis_label)
     handles, labels = ax.get_legend_handles_labels()
@@ -998,7 +1006,7 @@ def plot_enrichment(
         # Get overall max value in plot
         max_value = np.max([np.max(arr) for arr in plot_means.values()])
         # Customize y-axis ticks
-        max_tick = np.ceil(np.log10(max_value)) + 0.5
+        max_tick = np.ceil(np.max([np.log10(max_value),0])) + 0.5
         y_ticks = np.logspace(0, max_tick, num=int(max_tick * 2) + 1)
         ax.set_yticks(y_ticks)
         ax.set_rlabel_position(0)  # Set y-axis to top
@@ -1365,6 +1373,7 @@ def plot_stationary_entropy(
         by=ungrouped_entropy_scores.columns[2], inplace=True
     )
     # Draw violin/strip plots with full-video entropy
+    np.random.seed(42)
     sns.violinplot(
         data=ungrouped_entropy_scores,
         y="exp condition",
@@ -1379,6 +1388,7 @@ def plot_stationary_entropy(
         ax=ax,
         color="black",
     )
+    np.random.seed(None)
     plt.ylabel("experimental condition")
 
     if add_stats:
@@ -1575,7 +1585,7 @@ def plot_normative_log_likelihood(
             "themselves, and a barplot depicting the normative likelihood per condition. Instead of"
             "a single ax, pass a list with two."
         )
-
+    np.random.seed(42)
     sns.boxplot(
         data=embedding_dataset.sort_values(
             "experimental condition",
@@ -1598,6 +1608,7 @@ def plot_normative_log_likelihood(
         color="black",
         ax=ax2,
     )
+    np.random.seed(None)
 
     ax2.set_xlabel("")
     ax2.set_ylabel("centered normative log likelihood")
@@ -2532,10 +2543,12 @@ def plot_cluster_detection_performance(
         xticklabels = [str(column) for column in dataset.columns]
 
         # both throw iteritems deprecation warning
+        np.random.seed(42)
         sns.barplot(
             data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3], ax=ax
         )
         sns.stripplot(data=dataset, color="black", ax=ax)
+        np.random.seed(None)
 
         ax.axhline(1 / n_clusters, linestyle="--", color="black")
         ax.set_ylim(0, 1)
@@ -3418,168 +3431,6 @@ def annotate_video(
     return True
 
 
-def _preprocess_time_bins(
-    coordinates: coordinates,
-    bin_size: Union[int, str],
-    bin_index: Union[int, str],
-    precomputed_bins: np.ndarray = None,
-    experiment_id: str = None,
-):
-    """Return a heatmap of the movement of a specific bodypart in the arena.
-
-    If more than one bodypart is passed, it returns one subplot for each.
-
-    Args:
-        coordinates (coordinates): deepOF project where the data is stored.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        experiment_id (str): id of the experiment of time bins should
-
-    Returns:
-        bin_size_int (int): preprocessed bin size for time filtering
-        bin_index_int (int): preprocessed bin index for time filtering
-        bin_starts (dict): dictionary of start position for each bin in each condition
-        bin_ends (dict): dictionary of end position for each bin in each condition
-        precomputed_bins (np.ndarray): precomputed time bins as alternative to bin_index_int and bin_size_int
-        error (boolean): True if unusable bins were selected
-    """
-
-    # warn in case of conflicting inputs
-    if precomputed_bins is not None and any(
-        [bin_index is not None, bin_size is not None]
-    ):
-        warning_message = (
-            "\033[38;5;208m\n"
-            "Warning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!"
-            "\033[0m"
-        )
-        warnings.warn(warning_message)
-    # init outputs
-    bin_size_int = None
-    bin_index_int = None
-    bin_starts = None
-    bin_ends = None
-
-    # skip preprocessing if exact bins are already provided by the user
-    if precomputed_bins is not None:
-        # get start and end times for each table
-        start_times = coordinates.get_start_times()
-        table_lengths = coordinates.get_table_lengths()
-        # if a specific experiment is given, calculate time bin info only for this experiment
-        if experiment_id is not None:
-            start_times = {experiment_id: start_times[experiment_id]}
-            table_lengths = {experiment_id: table_lengths[experiment_id]}
-
-        pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,9})?$"
-        # Case 1: Integer bins are only adjusted using the frame rate
-        if type(bin_size) is int and type(bin_index) is int:
-
-            bin_size_int = int(np.round(bin_size * coordinates._frame_rate))
-            bin_index_int = bin_index
-            bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index)
-            bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index + 1))
-
-        # Case 2: Bins given as valid time ranges are used to fill precomputed_bins
-        # to reflect the time ranges given
-        elif (
-            type(bin_size) is str
-            and type(bin_index) is str
-            and re.match(pattern, bin_size) is not None
-            and re.match(pattern, bin_index) is not None
-        ):
-
-            # set starts and ends for all coord items
-            bin_starts = {key: 0 for key in table_lengths}
-            bin_ends = {key: 0 for key in table_lengths}
-
-            # precumputed bins is based on the longest table
-            key_to_longest = max(table_lengths.items(), key=lambda x: x[1])[0]
-            precomputed_bins = np.full(table_lengths[key_to_longest], False, dtype=bool)
-
-            # calculate bin size as int
-            bin_size_int = int(
-                np.round(time_to_seconds(bin_size) * coordinates._frame_rate)
-            )
-
-            # find start and end positions with sampling rate
-            for key in table_lengths:
-                start_time = time_to_seconds(start_times[key])
-                bin_index_time = time_to_seconds(bin_index)
-                bin_starts[key] = int(
-                    np.round((start_time + bin_index_time) * coordinates._frame_rate)
-                )
-                bin_ends[key] = bin_size_int + bin_starts[key]
-
-            precomputed_bins[
-                bin_starts[key_to_longest] : (bin_ends[key_to_longest])
-            ] = True
-        # Case 3: If nonsensical input was given, return error and default bins
-        elif bin_size is not None:
-            # plot short default bin, if user entered bins incorrectly
-
-            warning_message = (
-                "\033[38;5;208m\n"
-                "Warning! bin_index or bin_size were given in an incorrect format!\n"
-                "Please use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\n"
-                "Proceed to plot default binning (bin_index = 0, bin_size = 60)!"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
-
-            bin_size_int = int(np.round(60 * coordinates._frame_rate))
-            bin_index_int = 0
-            bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index_int)
-            bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index_int + 1))
-
-        # Validity checks and warnings for created bins
-        if bin_size is not None and bin_index is not None:
-            # warning messages in case of weird indexing
-            bin_warning = False
-            for key in table_lengths:
-                if bin_size_int == 0:
-                    raise ValueError("Please make sure bin_size is > 0")
-                elif bin_starts[key] > table_lengths[key]:
-                    raise ValueError(
-                        "Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}".format(
-                            seconds_to_time(
-                                table_lengths[key] / coordinates._frame_rate, False
-                            ),
-                            int(np.ceil(table_lengths[key] / bin_size_int)),
-                            bin_size,
-                        )
-                    )
-                elif bin_ends[key] > table_lengths[key]:
-                    bin_ends[key] = table_lengths[key]
-                    if not bin_warning:
-                        truncated_length = seconds_to_time(
-                            (bin_ends[key] - bin_starts[key]) / coordinates._frame_rate,
-                            False,
-                        )
-                        warning_message = (
-                            "\033[38;5;208m\n"
-                            "Warning! The chosen time range exceeds the signal length for at least one data set!\n"
-                            f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
-                            "\033[0m"
-                        )
-                        warnings.warn(warning_message)
-                        if table_lengths[key] - bin_size_int > 0:
-                            print(
-                                "\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
-                                    seconds_to_time(
-                                        (table_lengths[key] - bin_size_int)
-                                        / coordinates._frame_rate,
-                                        False,
-                                    ),
-                                    int(np.ceil(table_lengths[key] / bin_size_int)) - 2,
-                                    bin_size,
-                                )
-                            )
-                        bin_warning = True
-
-    return bin_size_int, bin_index_int, precomputed_bins, bin_starts, bin_ends
-
-
 def _check_enum_inputs(
     coordinates: coordinates,
     origin: object = None,
@@ -3683,7 +3534,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if exp_condition_order is not None and not set(
+    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
         condition_value_options_list
     ).issubset(set(condition_value_options_list)):
         if len(condition_value_options_list) > 0:
@@ -3694,7 +3545,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if condition_values is not None and not set(condition_values).issubset(
+    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
         set(condition_value_options_list)
     ):
         if len(condition_value_options_list) > 0:
@@ -3717,7 +3568,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if bodyparts is not None and not set(bodyparts).issubset(
+    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
         set(bodyparts_options_list)
     ):
         raise ValueError(
