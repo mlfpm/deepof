@@ -3,44 +3,44 @@
 # encoding: utf-8
 # module deepof
 
-from collections import defaultdict
-from collections.abc import Sequence
-from itertools import product, combinations, chain
-from matplotlib.animation import FuncAnimation, FFMpegWriter
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-from matplotlib.patches import Ellipse, Patch
-from matplotlib.projections.polar import PolarAxes
-from scipy.cluster.hierarchy import linkage, dendrogram
-from scipy.signal import savgol_filter
-from scipy.interpolate import interp1d
-from sklearn.metrics import confusion_matrix
-from statannotations.Annotator import Annotator
-from typing import Tuple, Any, List, NewType, Union
-from natsort import os_sorted
 import calendar
 import copy
+import os
+import re
+import time
+import warnings
+from collections import defaultdict
+from collections.abc import Sequence
+from itertools import chain, combinations, product
+from typing import Any, List, NewType, Tuple, Union
+
 import cv2
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import os
 import pandas as pd
-import re
 import seaborn as sns
 import shap
 import tensorflow as tf
-import time
-import warnings
-from deepof.utils import suppress_warning
-
+from matplotlib.animation import FFMpegWriter, FuncAnimation
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+from matplotlib.patches import Ellipse, Patch
+from matplotlib.projections.polar import PolarAxes
+from natsort import os_sorted
+from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.interpolate import interp1d
+from scipy.signal import savgol_filter
+from sklearn.metrics import confusion_matrix
+from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
-import deepof.utils
+from deepof.utils import _suppress_warning
 from deepof.visuals_utils import (
-    time_to_seconds,
-    seconds_to_time,
     calculate_average_arena,
+    seconds_to_time,
+    time_to_seconds,
+    _preprocess_time_bins
     _preprocess_time_bins,
 )
 
@@ -133,14 +133,16 @@ def heatmap(
     If more than one bodypart is passed, it returns one subplot for each.
 
     Args:
-        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1)
-        xlim (float): limits of the x-axis
-        ylim (float): limits of the y-axis
-        title (str): title of the figure
-        mask (np.ndarray): mask to apply to the heatmap across time
+        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1).
+        bodyparts (list): list of body parts to plot.
+        xlim (float): limits of the x-axis.
+        ylim (float): limits of the y-axis.
+        title (str): title of the figure.
+        mask (np.ndarray): mask to apply to the heatmap across time.
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
@@ -274,6 +276,7 @@ def plot_heatmaps(
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
@@ -292,6 +295,7 @@ def plot_heatmaps(
 
     coords = coordinates.get_coords(center=center, align=align, return_path=False)
 
+    #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
         coords = coords.filter_videos(
             [
@@ -300,6 +304,7 @@ def plot_heatmaps(
                 if v[exp_condition].values.astype(str) == condition_value
             ]
         )
+
     # preprocess information given for time binning
     e_id=None
     if not experiment_id=="average":
@@ -316,9 +321,7 @@ def plot_heatmaps(
     # Add experimental conditions to title, if provided
     title_suffix = experiment_id
     if coordinates.get_exp_conditions is not None and exp_condition is None:
-        title_suffix += (
-            " - " + coordinates.get_exp_conditions[list(coords.keys())[experiment_id]]
-        )
+        title_suffix += f" - all"
 
     elif exp_condition is not None:
         title_suffix += f" - {condition_value}"
@@ -370,10 +373,12 @@ def plot_heatmaps(
         ax=ax,
         **kwargs,
     )
-
+    
     if display_arena:
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
+
+    plt.gca().invert_yaxis()
 
     if show:
         plt.show()
@@ -408,6 +413,7 @@ def plot_gantt(
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         behaviors_to_plot (list): list of behaviors to plot. If None, all behaviors are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -548,7 +554,6 @@ def plot_gantt(
         )
         rows += 1
 
-
     # Iterate over additional checkpoints and plot
     if additional_checkpoints is not None:
         for checkpoint in range(additional_checkpoints.shape[0]):
@@ -593,7 +598,7 @@ def plot_gantt(
         )
 
     # set y-ticks
-    #set y-ticks
+    # set y-ticks
     plt.yticks(
         np.array(range(gantt.shape[0])) + 0.5,
         # Concatenate cluster IDs and checkpoint names if they exist
@@ -685,7 +690,7 @@ def plot_enrichment(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
-    """          
+    """
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -734,7 +739,7 @@ def plot_enrichment(
                 key: val.loc[:, [col for col in val.columns if "speed" in col]]
                 for key, val in supervised_annotations.items()
             }
-    
+
     # Preprocess information given for time binning
     bin_index_int = None
     bin_size_int = None
@@ -773,103 +778,158 @@ def plot_enrichment(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
-    
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label="average speed in pixel / s"
+        y_axis_label = "average speed in pixel / s"
     elif normalize:
-        y_axis_label="time on cluster in %"
-        enrichment['time on cluster']=enrichment['time on cluster']*100
+        y_axis_label = "time on cluster in %"
+        enrichment["time on cluster"] = enrichment["time on cluster"] * 100
     elif coordinates._frame_rate is not None:
-        y_axis_label="time on cluster in s"
-        enrichment['time on cluster']=enrichment['time on cluster']/coordinates._frame_rate
+        y_axis_label = "time on cluster in s"
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"] / coordinates._frame_rate
+        )
     else:
-        y_axis_label="time on cluster in frames"
+        y_axis_label = "time on cluster in frames"
 
+    
+    # More inits
+    all_exp_conditions = np.unique(enrichment["exp condition"])
+    num_exp_conds = len(all_exp_conditions)
     # Additional plot modifications for polar depiction
     if polar_depiction:
-        
-        # Yes, all of this is necessary to switch out the input axes object with a polar axis without actually deleting 
-        # the axis as it is later used outside of the function in the tutorial. Low hanging fruit my ass. 
+
+        # Yes, all of this is necessary to switch out the input axes object with a polar axis without actually deleting
+        # the axis as it is later used outside of the function in the tutorial. Low hanging fruit my ass.
         fig = ax.figure
-        position = ax.get_position()        
+        position = ax.get_position()
         # Remove the existing axis
-        fig.delaxes(ax)        
+        fig.delaxes(ax)
         # Create a new polar axis
-        new_ax = fig.add_axes(position, projection='polar')        
+        new_ax = fig.add_axes(position, projection="polar")
         # Update the original ax reference to point to the new axis
         ax.__dict__.clear()
         ax.__dict__.update(new_ax.__dict__)
-        ax.__class__ = new_ax.__class__        
+        ax.__class__ = new_ax.__class__
         # Replace the new_ax with ax in the figure's axes list
-        fig.axes[fig.axes.index(new_ax)] = ax        
+        fig.axes[fig.axes.index(new_ax)] = ax
         del new_ax
 
         # Get x labels from cluster names
-        unique_indices=np.unique(enrichment['cluster'],return_index=True)
-        x_bin_labels=enrichment['cluster'].values[np.sort(unique_indices[1])]
-        # Get means and std for error
-        rich_bin_means = enrichment.groupby(['cluster', 'exp condition']).mean(numeric_only=True).reset_index()
-        rich_bin_err = enrichment.groupby(['cluster', 'exp condition']).std(numeric_only=True).reset_index()
-        # More inits
-        all_exp_conditions = np.unique(rich_bin_means['exp condition'])
+        unique_indices = np.unique(enrichment["cluster"], return_index=True)
+        x_bin_labels = enrichment["cluster"].values[np.sort(unique_indices[1])]
         num_bins = len(x_bin_labels)
-        num_exp_conds=len(all_exp_conditions)
+        # Get means and std for error
+        rich_bin_means = (
+            enrichment.groupby(["cluster", "exp condition"])
+            .mean(numeric_only=True)
+            .reset_index()
+        )
+        rich_bin_err = (
+            enrichment.groupby(["cluster", "exp condition"])
+            .std(numeric_only=True)
+            .reset_index()
+        )
 
         # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-        angles = np.linspace(0, 2 * np.pi, num_bins, endpoint=False)  
+        angles = np.linspace(0, 2 * np.pi, num_bins, endpoint=False)
         # Ensure that no angle exceeds 2 pi
-        angles = np.mod(angles, 2*np.pi)
-        mid_angles = np.mod(angles + np.diff(np.concatenate((angles, [angles[0] + 2 * np.pi]))) / 2, 2 * np.pi)
+        angles = np.mod(angles, 2 * np.pi)
+        mid_angles = np.mod(
+            angles + np.diff(np.concatenate((angles, [angles[0] + 2 * np.pi]))) / 2,
+            2 * np.pi,
+        )
         # add first value to end of array for full closed circle plot
-        angles=np.concatenate([angles, [angles[0]]])
-        mid_angles=np.concatenate([mid_angles, [mid_angles[0]]])
+        angles = np.concatenate([angles, [angles[0]]])
+        mid_angles = np.concatenate([mid_angles, [mid_angles[0]]])
 
         # Collect means and errors for all experiment conditions
-        mean_values, err_values, plot_means, plot_errs= {},{},{},{}
+        mean_values, err_values, plot_means, plot_errs = {}, {}, {}, {}
         for k in range(num_exp_conds):
             # Get dictionaries of means and errors for all experiment conditions containing array of all cluster values
-            m_slice = rich_bin_means[rich_bin_means['exp condition'] == all_exp_conditions[k]][['cluster', 'time on cluster']]
-            mean_values[all_exp_conditions[k]] = m_slice.set_index('cluster')['time on cluster'].to_dict()
-            s_slice = rich_bin_err[rich_bin_err['exp condition'] == all_exp_conditions[k]][['cluster', 'time on cluster']]
-            err_values[all_exp_conditions[k]] = s_slice.set_index('cluster')['time on cluster'].to_dict()
-            
+            m_slice = rich_bin_means[
+                rich_bin_means["exp condition"] == all_exp_conditions[k]
+            ][["cluster", "time on cluster"]]
+            mean_values[all_exp_conditions[k]] = m_slice.set_index("cluster")[
+                "time on cluster"
+            ].to_dict()
+            s_slice = rich_bin_err[
+                rich_bin_err["exp condition"] == all_exp_conditions[k]
+            ][["cluster", "time on cluster"]]
+            err_values[all_exp_conditions[k]] = s_slice.set_index("cluster")[
+                "time on cluster"
+            ].to_dict()
+
             # Get extended version of these dictionaries for circular plot
-            plot_means[all_exp_conditions[k]]=np.array(
-                [mean_values[all_exp_conditions[k]][key]
-                for key 
-                in x_bin_labels] + 
-                [mean_values[all_exp_conditions[k]][x_bin_labels[0]]] # Add first value to teh end of the list
-                )
-            plot_errs[all_exp_conditions[k]]=np.array([err_values[all_exp_conditions[k]][key] for key in x_bin_labels] + [err_values[all_exp_conditions[k]][x_bin_labels[0]]])
+            plot_means[all_exp_conditions[k]] = np.array(
+                [mean_values[all_exp_conditions[k]][key] for key in x_bin_labels]
+                + [
+                    mean_values[all_exp_conditions[k]][x_bin_labels[0]]
+                ]  # Add first value to the end of the list
+            )
+            plot_errs[all_exp_conditions[k]] = np.array(
+                [err_values[all_exp_conditions[k]][key] for key in x_bin_labels]
+                + [err_values[all_exp_conditions[k]][x_bin_labels[0]]]
+            )
 
         # Plot means as lines and extract color of these lines
-        colors={}
-        for k in plot_means:              
-            plot_handle=ax.plot(mid_angles, plot_means[k], linewidth=3, label=f'{k}', alpha=0.8)
-            colors[k]=plot_handle[0].get_color()
-        
+        colors = {}
+        for k in plot_means:
+            plot_handle = ax.plot(
+                mid_angles, plot_means[k], linewidth=3, label=f"{k}", alpha=0.8
+            )
+            colors[k] = plot_handle[0].get_color()
+
         # Plot markers for each group
-        marker_handles=[]
-        for k in plot_means:  
-            marker_handles.append(ax.plot(mid_angles, plot_means[k], marker='o', linestyle='', color=colors[k], linewidth=2))  
+        marker_handles = []
+        for k in plot_means:
+            marker_handles.append(
+                ax.plot(
+                    mid_angles,
+                    plot_means[k],
+                    marker="o",
+                    linestyle="",
+                    color=colors[k],
+                    linewidth=2,
+                )
+            )
 
         # Plot the error as lines above and below the mean values
-        for k in plot_means:  
-            ax.plot(mid_angles, plot_means[k] + plot_errs[k], linestyle='', color=colors[k], alpha=0.8)
-            ax.plot(mid_angles, np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k])*0.1), linestyle='', color=colors[k], alpha=0.8)
+        for k in plot_means:
+            ax.plot(
+                mid_angles,
+                plot_means[k] + plot_errs[k],
+                linestyle="",
+                color=colors[k],
+                alpha=0.8,
+            )
+            ax.plot(
+                mid_angles,
+                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
+                linestyle="",
+                color=colors[k],
+                alpha=0.8,
+            )
 
         # Shade Error
-        for k in plot_means: 
-            ax.fill_between(mid_angles, plot_means[k] + plot_errs[k], np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k])*0.1), color=colors[k], alpha=0.15)
+        for k in plot_means:
+            ax.fill_between(
+                mid_angles,
+                plot_means[k] + plot_errs[k],
+                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
+                color=colors[k],
+                alpha=0.15,
+            )
 
-    else:   
+    else:
         # Plot a barchart grouped per experimental conditions
+        np.random.seed(42) #to ensure the outlier points are always jittered te same (relevant for automatic testing)
         sns.barplot(
             data=enrichment,
             x="cluster",
             y="time on cluster",
             hue="exp condition",
+            hue_order=all_exp_conditions,
             ax=ax,
         )
         sns.stripplot(
@@ -877,10 +937,12 @@ def plot_enrichment(
             x="cluster",
             y="time on cluster",
             hue="exp condition",
+            hue_order=all_exp_conditions,
             color="black",
             ax=ax,
             dodge=True,
         )
+        np.random.seed(None)
 
         ax.set_ylabel(y_axis_label)
     handles, labels = ax.get_legend_handles_labels()
@@ -936,70 +998,96 @@ def plot_enrichment(
             verbose=verbose,
         )
         # Automatic annotiation to plots does not work with polar plots
-        test_dict={}
+        test_dict = {}
         if polar_depiction:
-            anni=annotator.apply_test()
+            anni = annotator.apply_test()
             # Create dictionary containing test results
             for annotation in anni.annotations:
-                test_dict[annotation.structs[0]['group'][0]]=annotation.text
+                test_dict[annotation.structs[0]["group"][0]] = annotation.text
         # Just annotate values for non-polar plot
         else:
             annotator.apply_and_annotate()
 
-    # Adjustments for the polar plot    
+    # Adjustments for the polar plot
     if polar_depiction:
         # Set the the 0 angle to be at the top
-        ax.set_theta_zero_location('N')
+        ax.set_theta_zero_location("N")
         ax.set_theta_direction(-1)  # Change to clockwise
 
         # Set custom ticks and hide labels for x axes
         ax.set_xticks(angles[0:-1])
         ax.set_xticklabels([])
-        ax.set_rscale('log') # Rescale to log for better visualization
+        ax.set_rscale("log")  # Rescale to log for better visualization
 
-        # Get overall max value in plot 
+        # Get overall max value in plot
         max_value = np.max([np.max(arr) for arr in plot_means.values()])
-        # Customize y-axis ticks 
-        max_tick=np.ceil(np.log10(max_value))+0.5
-        y_ticks = np.logspace(0, max_tick, num=int(max_tick*2)+1)  
+        # Customize y-axis ticks
+        max_tick = np.ceil(np.max([np.log10(max_value),0])) + 0.5
+        y_ticks = np.logspace(0, max_tick, num=int(max_tick * 2) + 1)
         ax.set_yticks(y_ticks)
-        ax.set_rlabel_position(0) # Set y-axis to top
+        ax.set_rlabel_position(0)  # Set y-axis to top
 
         # Add labels manually at good positions
-        z=0
+        z = 0
         for midangle, label in zip(mid_angles[0:-1], x_bin_labels):
-            
+
             # Use different offset for every second x-axis label to avoid overlaps
-            if np.mod(z,2)==0:
-                offset=1.5
+            if np.mod(z, 2) == 0:
+                offset = 1.5
             else:
-                offset=3.162
+                offset = 3.162
             # Add x-axis labels (cluster names)
-            ax.text(midangle, ax.get_yticks()[-1]*offset, label, 
-                ha='center', va='center', fontsize='x-small',rotation=-np.flip(midangle*180/np.pi))
+            ax.text(
+                midangle,
+                ax.get_yticks()[-1] * offset,
+                label,
+                ha="center",
+                va="center",
+                fontsize="x-small",
+                rotation=-np.flip(midangle * 180 / np.pi),
+            )
             # Add stats annotations
             if add_stats:
-                ax.text(midangle, np.sqrt(ax.get_yticks()[-1]*ax.get_yticks()[-2]), test_dict[label], 
-                    ha='center', va='center', fontsize='x-small',rotation=-np.flip(midangle*180/np.pi))
-            z+=1
+                ax.text(
+                    midangle,
+                    np.sqrt(ax.get_yticks()[-1] * ax.get_yticks()[-2]),
+                    test_dict[label],
+                    ha="center",
+                    va="center",
+                    fontsize="x-small",
+                    rotation=-np.flip(midangle * 180 / np.pi),
+                )
+            z += 1
         # Set R limits ( / Y limits)
-        title=""
-        lower_lim=ax.get_ylim()[0]
+        title = ""
+        lower_lim = ax.get_ylim()[0]
         ax.set_rlim(lower_lim, ax.get_yticks()[-1])
 
     else:
-        #set x-ticks    
+        # set x-ticks
         if ax:
-            bbox = ax.get_window_extent().transformed(plt.gcf().dpi_scale_trans.inverted())
-            X_size=(bbox.width)
-            N_X_ticks=len(ax.xaxis.get_ticklabels())
-            ax.set_xticks(ax.get_xticks(),ax.get_xticklabels(),rotation=int(np.max([np.min([90.0,(N_X_ticks/X_size-1)*30]),0.0])))
+            bbox = ax.get_window_extent().transformed(
+                plt.gcf().dpi_scale_trans.inverted()
+            )
+            X_size = bbox.width
+            N_X_ticks = len(ax.xaxis.get_ticklabels())
+            ax.set_xticks(
+                ax.get_xticks(),
+                ax.get_xticklabels(),
+                rotation=int(
+                    np.max([np.min([90.0, (N_X_ticks / X_size - 1) * 30]), 0.0])
+                ),
+            )
         else:
-            X_size=plt.gcf().get_size_inches()[1]
-            N_X_ticks=len(plt.xticks()[0])
-            plt.xticks(rotation=int(np.max([np.min([90.0,(N_X_ticks/X_size-1)*30]),0.0])))
+            X_size = plt.gcf().get_size_inches()[1]
+            N_X_ticks = len(plt.xticks()[0])
+            plt.xticks(
+                rotation=int(
+                    np.max([np.min([90.0, (N_X_ticks / X_size - 1) * 30]), 0.0])
+                )
+            )
         title = "deepOF - cluster enrichment"
-        
+
     if save:
         plt.savefig(
             os.path.join(
@@ -1057,6 +1145,7 @@ def plot_transitions(
 
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
 
@@ -1300,6 +1389,7 @@ def plot_stationary_entropy(
         by=ungrouped_entropy_scores.columns[2], inplace=True
     )
     # Draw violin/strip plots with full-video entropy
+    np.random.seed(42)
     sns.violinplot(
         data=ungrouped_entropy_scores,
         y="exp condition",
@@ -1314,6 +1404,7 @@ def plot_stationary_entropy(
         ax=ax,
         color="black",
     )
+    np.random.seed(None)
     plt.ylabel("experimental condition")
 
     if add_stats:
@@ -1475,7 +1566,7 @@ def plot_normative_log_likelihood(
     Returns:
         embedding_dataset (pd.DataFrame): embedding data frame with added normative scores per sample
 
-    """    
+    """
     # Fit normative model to animals belonging to the control cohort
     norm_density = deepof.post_hoc.fit_normative_global_model(
         embedding_dataset.loc[
@@ -1510,7 +1601,7 @@ def plot_normative_log_likelihood(
             "themselves, and a barplot depicting the normative likelihood per condition. Instead of"
             "a single ax, pass a list with two."
         )
-
+    np.random.seed(42)
     sns.boxplot(
         data=embedding_dataset.sort_values(
             "experimental condition",
@@ -1533,6 +1624,7 @@ def plot_normative_log_likelihood(
         color="black",
         ax=ax2,
     )
+    np.random.seed(None)
 
     ax2.set_xlabel("")
     ax2.set_ylabel("centered normative log likelihood")
@@ -1683,7 +1775,7 @@ def plot_embeddings(
         bin_index_int,
         precomputed_bins,
     )
-    show = True  
+    show = True
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
@@ -1871,7 +1963,6 @@ def plot_embeddings(
                 "\033[0m"  # Reset text color
             )
             warnings.warn(warning_message)
-
 
     if not aggregate_experiments:
         if ax is None:
@@ -2368,7 +2459,7 @@ def animate_skeleton(
     return animation.to_html5_video()
 
 
-@suppress_warning(
+@_suppress_warning(
     [
         "iteritems is deprecated and will be removed in a future version. Use .items instead."
     ]
@@ -2465,13 +2556,15 @@ def plot_cluster_detection_performance(
         dataset = pd.DataFrame(dataset)
 
         ax.set_title("Supervised cluster mapping performance")
-        xticklabels=[str(column) for column in dataset.columns]
+        xticklabels = [str(column) for column in dataset.columns]
 
         # both throw iteritems deprecation warning
+        np.random.seed(42)
         sns.barplot(
             data=dataset, ci=95, color=sns.color_palette("Blues").as_hex()[-3], ax=ax
         )
         sns.stripplot(data=dataset, color="black", ax=ax)
+        np.random.seed(None)
 
         ax.axhline(1 / n_clusters, linestyle="--", color="black")
         ax.set_ylim(0, 1)
@@ -2506,7 +2599,7 @@ def plot_cluster_detection_performance(
         plt.show()
 
 
-@suppress_warning(
+@_suppress_warning(
     [
         "No data for colormapping provided via 'c'. Parameters 'vmin', 'vmax' will be ignored"
     ]
@@ -2613,7 +2706,6 @@ def output_cluster_video(
             out.write(res_frame)
             i += 1
 
-            
         except IndexError:
             ret = False
             i += 1
@@ -3373,7 +3465,8 @@ def _check_enum_inputs(
     visualization: str = None,
     normative_model: str = None,
     aggregate_experiments: str = None,
-    colour_by: str = None):
+    colour_by: str = None,
+):
     """
     Checks and validates enum-like input parameters for the different plot functions.
 
@@ -3386,37 +3479,45 @@ def _check_enum_inputs(
     experiment_id (str): data set name of the animal to plot.
     bodyparts (list): list of body parts to plot.
     visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
-    normative_model (str): Name of the cohort to use as controls. 
+    normative_model (str): Name of the cohort to use as controls.
     aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
     colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
-        
-    """
-    #activate warnings (again, because just putting it at the beginning of the skript
-    #appears to yield inconsitent results)
-    warnings.simplefilter('always', UserWarning)
 
-    #Generate lists of possible options for all enum-likes (solution will be improved in the future)
-    if origin=="plot_heatmaps":
-        experiment_id_options_list=["average"]+os_sorted(list(coordinates._tables.keys()))
+    """
+    # activate warnings (again, because just putting it at the beginning of the skript
+    # appears to yield inconsitent results)
+    warnings.simplefilter("always", UserWarning)
+
+    # Generate lists of possible options for all enum-likes (solution will be improved in the future)
+    if origin == "plot_heatmaps":
+        experiment_id_options_list = ["average"] + os_sorted(
+            list(coordinates._tables.keys())
+        )
     else:
-        experiment_id_options_list=os_sorted(list(coordinates._tables.keys()))
+        experiment_id_options_list = os_sorted(list(coordinates._tables.keys()))
 
     if coordinates.get_exp_conditions is not None:
         exp_condition_options_list = np.unique(
             np.concatenate(
-                [condition.columns.values[:] for condition in coordinates.get_exp_conditions.values()]
-                )
+                [
+                    condition.columns.values[:]
+                    for condition in coordinates.get_exp_conditions.values()
+                ]
             )
+        )
     else:
         exp_condition_options_list = []
     if exp_condition is not None and exp_condition in exp_condition_options_list:
-        condition_value_options_list=np.unique(
+        condition_value_options_list = np.unique(
             np.concatenate(
-                [condition[exp_condition].values.astype(str) for condition in coordinates.get_exp_conditions.values()]
-                )
+                [
+                    condition[exp_condition].values.astype(str)
+                    for condition in coordinates.get_exp_conditions.values()
+                ]
             )
+        )
     else:
-        condition_value_options_list=[]
+        condition_value_options_list = []
 
     #get lists of all body parts     
     bodyparts_options_list = np.unique(
@@ -3430,74 +3531,111 @@ def _check_enum_inputs(
             ]
         )
     )
-    bodyparts_options_list=[item for item in bodyparts_options_list if item not in coordinates._excluded]
-    animal_id_options_list=coordinates._animal_ids
-    #fixed option lists
-    center_options_list=["arena"]
-    if origin=="plot_transitions":
-        visualization_options_list=["networks","heatmaps"]
+    bodyparts_options_list = [
+        item for item in bodyparts_options_list if item not in coordinates._excluded
+    ]
+    animal_id_options_list = coordinates._animal_ids
+    # fixed option lists
+    center_options_list = ["arena"]
+    if origin == "plot_transitions":
+        visualization_options_list = ["networks", "heatmaps"]
     else:
-        visualization_options_list=["confusion_matrix","balanced_accuracy"]
-    aggregate_experiments_options_list=["time on cluster", "mean", "median"]
-    colour_by_options_list=["cluster", "exp_condition", "exp_id"]
+        visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
+    aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
+    colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
 
-    #check if given values are valid. Throw exception and suggest correct values if not
+    # check if given values are valid. Throw exception and suggest correct values if not
     if experiment_id is not None and experiment_id not in experiment_id_options_list:
         raise ValueError(
-            "\"experiment_id\" needs to be one of the following: {} ... ".format(str(experiment_id_options_list[0:4])[1:-1])
+            '"experiment_id" needs to be one of the following: {} ... '.format(
+                str(experiment_id_options_list[0:4])[1:-1]
+            )
         )
     if exp_condition is not None and exp_condition not in exp_condition_options_list:
-        if len(exp_condition_options_list)>0:
+        if len(exp_condition_options_list) > 0:
             raise ValueError(
-                "\"exp_condition\" needs to be one of the following: {}".format(str(exp_condition_options_list)[1:-1])
+                '"exp_condition" needs to be one of the following: {}'.format(
+                    str(exp_condition_options_list)[1:-1]
+                )
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if exp_condition_order is not None and not exp_condition_order == [None] and not set(condition_value_options_list).issubset(set(condition_value_options_list)):
-        if len(condition_value_options_list)>0:
+    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
+        condition_value_options_list
+    ).issubset(set(condition_value_options_list)):
+        if len(condition_value_options_list) > 0:
             raise ValueError(
-                "One or more conditions in \"exp_condition_order\" are not part of: {}".format(str(condition_value_options_list)[1:-1])
+                'One or more conditions in "exp_condition_order" are not part of: {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(set(condition_value_options_list)):
-        if len(condition_value_options_list)>0:
+    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
+        set(condition_value_options_list)
+    ):
+        if len(condition_value_options_list) > 0:
             raise ValueError(
-                "One or more condition values in \"condition_value(s)\" are not part of {}".format(str(condition_value_options_list)[1:-1])
+                'One or more condition values in "condition_value(s)" are not part of {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if normative_model is not None and normative_model not in condition_value_options_list:
-        if len(condition_value_options_list)>0:
+    if (
+        normative_model is not None
+        and normative_model not in condition_value_options_list
+    ):
+        if len(condition_value_options_list) > 0:
             raise ValueError(
-                "\"normative_model\" needs to be one of the following: {}".format(str(condition_value_options_list)[1:-1])
+                '"normative_model" needs to be one of the following: {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(set(bodyparts_options_list)):
+    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
+        set(bodyparts_options_list)
+    ):
         raise ValueError(
-            "One or more bodyparts in \"bodyparts\" are not part of: {}".format(str(bodyparts_options_list)[1:-1])
+            'One or more bodyparts in "bodyparts" are not part of: {}'.format(
+                str(bodyparts_options_list)[1:-1]
+            )
         )
-    if animal_id is not None and animal_id not in animal_id_options_list:   
+    if animal_id is not None and animal_id not in animal_id_options_list:
         raise ValueError(
-            "\"animal_id\" needs to be one of the following: {}".format(str(animal_id_options_list))
-        )    
-    if center is not None and center not in center_options_list:   
-        raise ValueError(
-            "For input \"center\" currently only {} is supported".format(str(center_options_list))
+            '"animal_id" needs to be one of the following: {}'.format(
+                str(animal_id_options_list)
+            )
         )
-    if visualization is not None and visualization not in visualization_options_list:   
+    if center is not None and center not in center_options_list:
         raise ValueError(
-            "\"visualization\" needs to be one of the following: {}".format(str(visualization_options_list))
-        ) 
-    if aggregate_experiments is not None and aggregate_experiments not in aggregate_experiments_options_list:   
-        raise ValueError(
-            "\"aggregate_experiments\" needs to be one of the following: {}".format(str(aggregate_experiments_options_list))
-        ) 
-    if colour_by is not None and colour_by not in colour_by_options_list:   
-        raise ValueError(
-            "\"colour_by\" needs to be one of the following: {}".format(str(colour_by_options_list))
+            'For input "center" currently only {} is supported'.format(
+                str(center_options_list)
+            )
         )
+    if visualization is not None and visualization not in visualization_options_list:
+        raise ValueError(
+            '"visualization" needs to be one of the following: {}'.format(
+                str(visualization_options_list)
+            )
+        )
+    if (
+        aggregate_experiments is not None
+        and aggregate_experiments not in aggregate_experiments_options_list
+    ):
+        raise ValueError(
+            '"aggregate_experiments" needs to be one of the following: {}'.format(
+                str(aggregate_experiments_options_list)
+            )
+        )
+    if colour_by is not None and colour_by not in colour_by_options_list:
+        raise ValueError(
+            '"colour_by" needs to be one of the following: {}'.format(
+                str(colour_by_options_list)
+            )
+        )
+
 
 def plot_behavior_trends(
     coordinates: coordinates,
@@ -3510,14 +3648,15 @@ def plot_behavior_trends(
     exp_condition: str = None,
     condition_values: list = None,
     behavior_to_plot: str = None,
-    normalize: bool = False, 
-    N_time_bins: int=24, 
-    custom_time_bins: List[List[Union[int,str]]] = None,
+    normalize: bool = False,
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
     hide_time_bins: List[bool] = None,
     add_stats: str = "Mann-Whitney",
-    error_bars: str = "sem", 
+    error_bars: str = "sem",
     ax: Any = None,
-    save: bool = False):
+    save: bool = False,
+):
     """
     Creates a polar plot or histogram of behavioral data over time.
 
@@ -3525,7 +3664,7 @@ def plot_behavior_trends(
     coordinates (coordinates): deepOF project containing the stored data.
     embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
     soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-    breaks (table_dict): table dict with changepoint detection breaks per experiment.    
+    breaks (table_dict): table dict with changepoint detection breaks per experiment.
     supervised_annotations (table_dict): Table dict with supervised annotations per video.
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
@@ -3545,64 +3684,82 @@ def plot_behavior_trends(
         coordinates,
         exp_condition=exp_condition,
         condition_values=condition_values,
-        )
-    
+    )
+
     #####
     # Set defaults based on inputs
     #####
 
     # Init exp_condition if not given
     if not exp_condition:
-        exp_condition = coordinates.get_exp_conditions[next(iter(coordinates.get_exp_conditions))].columns[0]
+        exp_condition = coordinates.get_exp_conditions[
+            next(iter(coordinates.get_exp_conditions))
+        ].columns[0]
 
     # Init condition_values if not given
     if not condition_values:
-        condition_values =np.unique([ 
-            str(val.loc[:, exp_condition].values[0])
-            for key, val in coordinates.get_exp_conditions.items()
-        ])
+        condition_values = np.unique(
+            [
+                str(val.loc[:, exp_condition].values[0])
+                for key, val in coordinates.get_exp_conditions.items()
+            ]
+        )
         if len(condition_values) > 2:
-            condition_values=condition_values[0:2]
+            condition_values = condition_values[0:2]
             warning_message = (
-                "\033[38;5;208m\n"  
+                "\033[38;5;208m\n"
                 "Warning! No exp conditions were chosen for comparison and the experiment contains more than two conditions!\n"
                 f"Therefore, the following conditions were set to be compared automatically: {condition_values}"
-                "\033[0m" 
+                "\033[0m"
             )
-            warnings.warn(warning_message) 
+            warnings.warn(warning_message)
 
     # Init plot type based on inputs
-    if any([embedding is None, soft_counts is None, breaks is None]) and supervised_annotations is not None:
+    if (
+        any([embedding is None, soft_counts is None, breaks is None])
+        and supervised_annotations is not None
+    ):
         plot_type = "supervised"
-        L_shortest=min(len(supervised_annotations[key]) for key in supervised_annotations.keys())
-    elif embedding is not None and soft_counts is not None and breaks is not None and supervised_annotations is None:
+        L_shortest = min(
+            len(supervised_annotations[key]) for key in supervised_annotations.keys()
+        )
+    elif (
+        embedding is not None
+        and soft_counts is not None
+        and breaks is not None
+        and supervised_annotations is None
+    ):
         plot_type = "unsupervised"
-        L_shortest=min(len(soft_counts[key]) for key in soft_counts.keys())
+        L_shortest = min(len(soft_counts[key]) for key in soft_counts.keys())
     else:
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
     # Init bin ranges if not given
-    if not custom_time_bins:      
-        custom_time_bins = deepof.visuals_utils.create_bin_pairs(L_shortest, N_time_bins)
-    
+    if not custom_time_bins:
+        custom_time_bins = deepof.visuals_utils.create_bin_pairs(
+            L_shortest, N_time_bins
+        )
+
     # Init hidden bins if not given
     if not hide_time_bins:
-        hide_time_bins=[False]*len(custom_time_bins)
+        hide_time_bins = [False] * len(custom_time_bins)
     elif not len(hide_time_bins) == len(custom_time_bins):
         raise ValueError(
-            f"The variables \"hide_time_bins\" and \"custom_time_bins\" need to have the same length!"
+            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
         )
-    
+
     # Set behavior ids
     if plot_type == "unsupervised":
         hard_counts = soft_counts[next(iter(soft_counts))].argmax(axis=1)
-        behavior_ids = [f"Cluster {str(k)}" for k in range(0,hard_counts.max() + 1)]
+        behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
             col
-            for col in supervised_annotations[next(iter(supervised_annotations))].columns
+            for col in supervised_annotations[
+                next(iter(supervised_annotations))
+            ].columns
         ]
 
     #####
@@ -3616,42 +3773,52 @@ def plot_behavior_trends(
         )
 
     # Check custom_time_bin validity
-    if (len(custom_time_bins)>3 or #list has at least 4 bins (less lead to failing of the interpol. function later)
-        all(isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins)): # List has shape Nx2
-       
-        # Convert time string elements to integers
-        custom_time_bins=[
-            [int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
-            if type(sublist[k])==str
-            else sublist[k] 
-            for k 
-            in range(len(sublist))] 
-            for sublist in custom_time_bins
-            ]
+    if len(
+        custom_time_bins
+    ) > 3 or all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+        isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
+    ):  # List has shape Nx2
 
-        # Further checks 
-        if (not all(all(isinstance(x, int) and x >= 0 for x in sublist) for sublist in custom_time_bins) or # Lists consist of positive integers
-            not all(sublist[0] < sublist[1] for sublist in custom_time_bins)): # List elements increase
+        # Convert time string elements to integers
+        custom_time_bins = [
+            [
+                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                if type(sublist[k]) == str
+                else sublist[k]
+                for k in range(len(sublist))
+            ]
+            for sublist in custom_time_bins
+        ]
+
+        # Further checks
+        if not all(
+            all(isinstance(x, int) and x >= 0 for x in sublist)
+            for sublist in custom_time_bins
+        ) or not all(  # Lists consist of positive integers
+            sublist[0] < sublist[1] for sublist in custom_time_bins
+        ):  # List elements increase
             raise ValueError(
-            f"Each element of \"custom_time_bins\" needs to contain either two integers > 0 and int2 > int1\n"
-              "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
+                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
+                "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
             )
         elif np.max(custom_time_bins) >= L_shortest:
             raise ValueError(
-            f"\"custom_time_bins\" contains at least one element that exceeds the length of your shortest data set!"
+                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
             )
         # Warn in case of overlapping elements
-        elif not (list(chain(*custom_time_bins))== sorted(list(chain(*custom_time_bins)))):
+        elif not (
+            list(chain(*custom_time_bins)) == sorted(list(chain(*custom_time_bins)))
+        ):
             warning_message = (
-                    "\033[38;5;208m\n"  
-                    "Warning! Your \"custom_time_bins\" list contains overlapping elements!\n"
-                    f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
-                    "\033[0m" 
-                )
-            warnings.warn(warning_message) 
+                "\033[38;5;208m\n"
+                'Warning! Your "custom_time_bins" list contains overlapping elements!\n'
+                f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
     else:
         raise ValueError(
-        f"\"custom_time_bins\" needs to be a list of at least 4 elments with each element being a list!"
+            f'"custom_time_bins" needs to be a list of at least 4 elments with each element being a list!'
         )
 
     #####
@@ -3661,91 +3828,152 @@ def plot_behavior_trends(
     # Initialize table
     columns = ["time_bin", "exp_condition", behavior_to_plot]
     df = pd.DataFrame(columns=columns)
-    z=0
+    z = 0
 
     # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
-    for bin_start,bin_end in custom_time_bins:
-        
+    for bin_start, bin_end in custom_time_bins:
+
         # Create precomputed boolean snippet for time bin extraction
-        precomputed=np.array([False] *L_shortest)
-        precomputed[bin_start:bin_end]=True
+        precomputed = np.array([False] * L_shortest)
+        precomputed[bin_start:bin_end] = True
 
         # Extract time bin from data based on type of input
         if plot_type == "unsupervised":
-            _, data_snippet, _, _=deepof.post_hoc.select_time_bin(embedding=embedding, soft_counts=soft_counts, breaks=breaks, precomputed=precomputed)
-            index_dict_fn = lambda x: x[:, int(re.search(r'\d+', behavior_to_plot).group())] 
+            _, data_snippet, _, _ = deepof.post_hoc.select_time_bin(
+                embedding=embedding,
+                soft_counts=soft_counts,
+                breaks=breaks,
+                precomputed=precomputed,
+            )
+            index_dict_fn = lambda x: x[
+                :, int(re.search(r"\d+", behavior_to_plot).group())
+            ]
         elif plot_type == "supervised":
-            _, _, _, data_snippet=deepof.post_hoc.select_time_bin(supervised_annotations=supervised_annotations,precomputed=precomputed)
-            index_dict_fn = lambda x: x[behavior_to_plot] # Specialized index functions to handle differing data_snippet formatting
+            _, _, _, data_snippet = deepof.post_hoc.select_time_bin(
+                supervised_annotations=supervised_annotations, precomputed=precomputed
+            )
+            index_dict_fn = lambda x: x[
+                behavior_to_plot
+            ]  # Specialized index functions to handle differing data_snippet formatting
 
         # Iterate over all samples in the current snippet
         for key in data_snippet.keys():
-            behavior_timebin=np.sum(index_dict_fn(data_snippet[key]))
+            behavior_timebin = np.sum(index_dict_fn(data_snippet[key]))
             # Normalize if required
-            if normalize or behavior_to_plot=="speed": 
-                behavior_timebin=behavior_timebin/len(index_dict_fn(data_snippet[key]))
-            
+            if normalize or behavior_to_plot == "speed":
+                behavior_timebin = behavior_timebin / len(
+                    index_dict_fn(data_snippet[key])
+                )
+
             # Collect data in datatable
             cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
-            new_row = pd.DataFrame([{"time_bin": z, "exp_condition": str(cond), behavior_to_plot: behavior_timebin}])
+            new_row = pd.DataFrame(
+                [
+                    {
+                        "time_bin": z,
+                        "exp_condition": str(cond),
+                        behavior_to_plot: behavior_timebin,
+                    }
+                ]
+            )
             df = pd.concat([df, new_row], ignore_index=True)
-        z+=1
+        z += 1
 
     # Calculate mean values and errors accross samples
-    time_bin_means = df.groupby(['time_bin', 'exp_condition']).mean(numeric_only=True).reset_index()
-    if error_bars=="sem":
-        time_bin_err = df.groupby(['time_bin', 'exp_condition']).sem(numeric_only=True).reset_index()
+    time_bin_means = (
+        df.groupby(["time_bin", "exp_condition"]).mean(numeric_only=True).reset_index()
+    )
+    if error_bars == "sem":
+        time_bin_err = (
+            df.groupby(["time_bin", "exp_condition"])
+            .sem(numeric_only=True)
+            .reset_index()
+        )
     else:
-        time_bin_err = df.groupby(['time_bin', 'exp_condition']).std(numeric_only=True).reset_index()
+        time_bin_err = (
+            df.groupby(["time_bin", "exp_condition"])
+            .std(numeric_only=True)
+            .reset_index()
+        )
 
     # Estimate effect sizes based on cohens d
-    hourly_effect_sizes_df = pd.DataFrame(columns=['time_bin', 'Absolute_Cohens_d', 'Effect_Size_Category'])
-    for k in range(0,len(custom_time_bins)):
-        # Extract arrays for both exp conditions and time bins 
-        array_a=df.loc[(df['exp_condition'] == condition_values[0]) & (df['time_bin'] == k), behavior_to_plot].values
-        array_b=df.loc[(df['exp_condition'] == condition_values[1]) & (df['time_bin'] == k), behavior_to_plot].values
-        d = abs(deepof.visuals_utils.cohend(array_a, array_b)) # Calc d
-        d_effect_size=deepof.visuals_utils.cohend_effect_size(d) # Est. effect size
+    hourly_effect_sizes_df = pd.DataFrame(
+        columns=["time_bin", "Absolute_Cohens_d", "Effect_Size_Category"]
+    )
+    for k in range(0, len(custom_time_bins)):
+        # Extract arrays for both exp conditions and time bins
+        array_a = df.loc[
+            (df["exp_condition"] == condition_values[0]) & (df["time_bin"] == k),
+            behavior_to_plot,
+        ].values
+        array_b = df.loc[
+            (df["exp_condition"] == condition_values[1]) & (df["time_bin"] == k),
+            behavior_to_plot,
+        ].values
+        d = abs(deepof.visuals_utils.cohend(array_a, array_b))  # Calc d
+        d_effect_size = deepof.visuals_utils.cohend_effect_size(d)  # Est. effect size
         # Collect data
-        new_row = pd.DataFrame([{"time_bin": k, "Absolute_Cohens_d": d, "Effect_Size_Category": d_effect_size}])
-        hourly_effect_sizes_df = pd.concat([hourly_effect_sizes_df, new_row], ignore_index=True)
+        new_row = pd.DataFrame(
+            [
+                {
+                    "time_bin": k,
+                    "Absolute_Cohens_d": d,
+                    "Effect_Size_Category": d_effect_size,
+                }
+            ]
+        )
+        hourly_effect_sizes_df = pd.concat(
+            [hourly_effect_sizes_df, new_row], ignore_index=True
+        )
 
     # Extract mean and error values for chosen behavior
-    mean_values = [time_bin_means[time_bin_means['exp_condition'] == condition_values[0]][behavior_to_plot].values,
-                time_bin_means[time_bin_means['exp_condition'] == condition_values[1]][behavior_to_plot].values]
-    error_values = [time_bin_err[time_bin_err['exp_condition'] == condition_values[0]][behavior_to_plot].values,
-                time_bin_err[time_bin_err['exp_condition'] == condition_values[1]][behavior_to_plot].values]
+    mean_values = [
+        time_bin_means[time_bin_means["exp_condition"] == condition_values[0]][
+            behavior_to_plot
+        ].values,
+        time_bin_means[time_bin_means["exp_condition"] == condition_values[1]][
+            behavior_to_plot
+        ].values,
+    ]
+    error_values = [
+        time_bin_err[time_bin_err["exp_condition"] == condition_values[0]][
+            behavior_to_plot
+        ].values,
+        time_bin_err[time_bin_err["exp_condition"] == condition_values[1]][
+            behavior_to_plot
+        ].values,
+    ]
 
     #####
     # Handle present or absent axes of different types
     #####
 
-    show=False
-    # Update active axes, if axes are given  
+    show = False
+    # Update active axes, if axes are given
     if ax and polar_depiction:
-        # Switch out the input axes object with a polar axis 
+        # Switch out the input axes object with a polar axis
         fig = ax.figure
-        position = ax.get_position()        
-        fig.delaxes(ax)        
-        new_ax = fig.add_axes(position, projection='polar')        
+        position = ax.get_position()
+        fig.delaxes(ax)
+        new_ax = fig.add_axes(position, projection="polar")
         # Update the original ax reference to point to the new axis
         ax.__dict__.clear()
         ax.__dict__.update(new_ax.__dict__)
-        ax.__class__ = new_ax.__class__        
+        ax.__class__ = new_ax.__class__
         # Replace the new_ax with ax in the figure's axes list
-        fig.axes[fig.axes.index(new_ax)] = ax        
+        fig.axes[fig.axes.index(new_ax)] = ax
         del new_ax
 
     elif ax and not polar_depiction:
         plt.sca(ax)
 
     elif polar_depiction:
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
-        show=True
+        fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(8, 8))
+        show = True
 
     else:
         fig, ax = plt.subplots(figsize=(12, 4))
-        show=True
+        show = True
 
     #####
     # Stats
@@ -3753,11 +3981,13 @@ def plot_behavior_trends(
 
     # Get stats annotations if required
     if add_stats:
-        
+
         # Initialize a set to keep track of seen pairs
-        pairs = df.groupby('time_bin').apply(lambda x: list(dict.fromkeys(zip(x['time_bin'], x['exp_condition']))))
+        pairs = df.groupby("time_bin").apply(
+            lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
+        )
         # Exclude hidden bins and convert to list
-        pairs=pairs[np.invert(hide_time_bins)].tolist()
+        pairs = pairs[np.invert(hide_time_bins)].tolist()
         # Do actual testing with annotator package
         annotator = Annotator(
             ax,
@@ -3777,93 +4007,123 @@ def plot_behavior_trends(
         )
         # Automatic annotiation to plots does not work with polar plots
         # Hence test results get extracted manually and collected in a dict
-        test_dict={}
-        anni=annotator.apply_test()
+        test_dict = {}
+        anni = annotator.apply_test()
         for annotation in anni.annotations:
-            test_dict[annotation.structs[0]['group'][0]]=annotation.text
+            test_dict[annotation.structs[0]["group"][0]] = annotation.text
 
     #####
     # Line plot
     #####
 
-    sns.set_style('whitegrid')
-    num_bins=len(custom_time_bins)
+    sns.set_style("whitegrid")
+    num_bins = len(custom_time_bins)
 
     # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-    lengths=[sublist[1]-sublist[0] for sublist in custom_time_bins]
+    lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
     cumsum_lengths = np.cumsum([0] + lengths)
-    angles = (cumsum_lengths[:-1] / cumsum_lengths[-1] * 2 * np.pi)
+    angles = cumsum_lengths[:-1] / cumsum_lengths[-1] * 2 * np.pi
     rotation = angles[0]
     # Ensure that no angle exceeds 2 pi
     angles = np.mod(angles + rotation, 2 * np.pi)
-    mid_angles = np.mod(angles + 
-                        np.diff(
-                        np.concatenate(
-                        (angles, [angles[0] + 2 * np.pi]))
-                        ) / 2, 2 * np.pi)
+    mid_angles = np.mod(
+        angles + np.diff(np.concatenate((angles, [angles[0] + 2 * np.pi]))) / 2,
+        2 * np.pi,
+    )
 
-    # Define colors for each group 
-    colors = ['#1f77b4', '#ff7f0e']
+    # Define colors for each group
+    colors = ["#1f77b4", "#ff7f0e"]
 
     # Init boolean mask to hide data segments based on hide_time_bins input
-    mask = np.full(((len(mid_angles)-1)*10-len(mid_angles)+2), False, dtype=bool)
+    mask = np.full(
+        ((len(mid_angles) - 1) * 10 - len(mid_angles) + 2), False, dtype=bool
+    )
     smooth_mean_angles = np.linspace(
-        mid_angles[0],
-        mid_angles[-1],
-        (len(mid_angles)-1)*10-len(mid_angles)+2
-        )
-    int_pos = np.argmin(
-        np.abs(
-        smooth_mean_angles[:, np.newaxis] - mid_angles
-        ), 
-        axis=0)
+        mid_angles[0], mid_angles[-1], (len(mid_angles) - 1) * 10 - len(mid_angles) + 2
+    )
+    int_pos = np.argmin(np.abs(smooth_mean_angles[:, np.newaxis] - mid_angles), axis=0)
     # Iterate over all bins
     for i in range(0, len(hide_time_bins)):
         if hide_time_bins[i]:
-            if i<len(hide_time_bins)-1:
-                mask[int_pos[i]:int_pos[i+1]-1]=True
-            if i>0:
-                mask[int_pos[i-1]+1:int_pos[i]]=True
-    
-    # Plot the mean value lines for each group 
-    for i in range(2):  
+            if i < len(hide_time_bins) - 1:
+                mask[int_pos[i] : int_pos[i + 1] - 1] = True
+            if i > 0:
+                mask[int_pos[i - 1] + 1 : int_pos[i]] = True
+
+    # Plot the mean value lines for each group
+    for i in range(2):
         # Interpolate the data to create a smooth line
-        interp_func = interp1d(mid_angles, mean_values[i], kind='cubic')
+        interp_func = interp1d(mid_angles, mean_values[i], kind="cubic")
         smooth_mean_values = interp_func(smooth_mean_angles)
-        masked_angles=np.ma.masked_array(smooth_mean_angles, mask) #mask lines
-        masked_values=np.ma.masked_array(smooth_mean_values, mask)
-        ax.plot(masked_angles, masked_values, linewidth=3, label=f'{[condition_values[0],condition_values[1]][i]}', color=colors[i], linestyle='-', alpha=0.8)
+        masked_angles = np.ma.masked_array(smooth_mean_angles, mask)  # mask lines
+        masked_values = np.ma.masked_array(smooth_mean_values, mask)
+        ax.plot(
+            masked_angles,
+            masked_values,
+            linewidth=3,
+            label=f"{[condition_values[0],condition_values[1]][i]}",
+            color=colors[i],
+            linestyle="-",
+            alpha=0.8,
+        )
 
     # Plot markers for each group
-    marker_handles=[0,0]
-    for i in range(2): 
-        masked_mid_angles=np.ma.masked_array(mid_angles,hide_time_bins)
-        masked_mean_values=np.ma.masked_array(mean_values[i],hide_time_bins)
-        marker_handles[i]=ax.plot(masked_mid_angles, masked_mean_values, marker='o', linestyle='', color=ax.lines[i].get_color(), linewidth=2)  # Use the same color as the line
+    marker_handles = [0, 0]
+    for i in range(2):
+        masked_mid_angles = np.ma.masked_array(mid_angles, hide_time_bins)
+        masked_mean_values = np.ma.masked_array(mean_values[i], hide_time_bins)
+        marker_handles[i] = ax.plot(
+            masked_mid_angles,
+            masked_mean_values,
+            marker="o",
+            linestyle="",
+            color=ax.lines[i].get_color(),
+            linewidth=2,
+        )  # Use the same color as the line
 
     # Interpolate error bars
     smooth_err_values = []
     for i in range(2):
-        interp_sem_func = interp1d(mid_angles, error_values[i], kind='cubic')
-        smooth_err_values.append(interp_sem_func(mid_angles))  # Use the original angles array
+        interp_sem_func = interp1d(mid_angles, error_values[i], kind="cubic")
+        smooth_err_values.append(
+            interp_sem_func(mid_angles)
+        )  # Use the original angles array
 
     # Plot the error as lines above and below the mean values
-    for i in range(2):  
-        ax.plot(masked_mid_angles, mean_values[i] + smooth_err_values[i], linestyle='', color=colors[i], alpha=0.8)
-        ax.plot(masked_mid_angles, mean_values[i] - smooth_err_values[i], linestyle='', color=colors[i], alpha=0.8)
+    for i in range(2):
+        ax.plot(
+            masked_mid_angles,
+            mean_values[i] + smooth_err_values[i],
+            linestyle="",
+            color=colors[i],
+            alpha=0.8,
+        )
+        ax.plot(
+            masked_mid_angles,
+            mean_values[i] - smooth_err_values[i],
+            linestyle="",
+            color=colors[i],
+            alpha=0.8,
+        )
 
     # Shade error
-    for i in range(2):  
-        ax.fill_between(masked_mid_angles, mean_values[i] + smooth_err_values[i], mean_values[i] - smooth_err_values[i], color=colors[i], alpha=0.15)
+    for i in range(2):
+        ax.fill_between(
+            masked_mid_angles,
+            mean_values[i] + smooth_err_values[i],
+            mean_values[i] - smooth_err_values[i],
+            color=colors[i],
+            alpha=0.15,
+        )
 
-    # Set custom ticks and labels for the y axes 
-    ax.set_title(f'DeepOF - {behavior_to_plot}', fontsize=18, y=1.15)
+    # Set custom ticks and labels for the y axes
+    ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18, y=1.15)
     max_value = np.max(mean_values)
-    y_ticks = np.arange(0, max_value*1.5, max_value*1.5/6) 
+    y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
     ax.set_yticks(y_ticks)
 
     # Set custom xticklabels
-    xticklabels = [str(i) for i in range(1, num_bins+1)]
+    xticklabels = [str(i) for i in range(1, num_bins + 1)]
 
     # Special modifications for the polar plot
     if polar_depiction:
@@ -3872,20 +4132,21 @@ def plot_behavior_trends(
         ax.set_xticks(angles)
         ax.set_xticklabels([])
         # Set the direction of angle 0 and labels to the top
-        ax.set_theta_zero_location('N')
+        ax.set_theta_zero_location("N")
         ax.set_rlabel_position(0)
         # Set the direction to clockwise
-        ax.set_theta_direction(-1) 
+        ax.set_theta_direction(-1)
         # Start position of histograms on y axis
-        top = max_value*1.5 #change inside circle size
+        top = max_value * 1.5  # change inside circle size
 
         # Add legend of first part of plot
-        legend_1 = ax.legend(handles=[marker_handles[0][0],marker_handles[1][0]],
-            labels=[condition_values[0],condition_values[1]],
+        legend_1 = ax.legend(
+            handles=[marker_handles[0][0], marker_handles[1][0]],
+            labels=[condition_values[0], condition_values[1]],
             fontsize=12,
-            loc='upper right',
-            bbox_to_anchor=(1.0, 1.1)
-            )
+            loc="upper right",
+            bbox_to_anchor=(1.0, 1.1),
+        )
     else:
         # Set xticks to mid_angles and display labels
         ax.set_xticks(mid_angles)
@@ -3894,12 +4155,13 @@ def plot_behavior_trends(
         top = ax.get_ylim()[0]
 
         # Add legend
-        legend_1 = ax.legend(handles=[marker_handles[0][0],marker_handles[1][0]],
-              labels=[condition_values[0],condition_values[1]],
-              fontsize=12,
-              loc='upper right',
-              )
-        
+        legend_1 = ax.legend(
+            handles=[marker_handles[0][0], marker_handles[1][0]],
+            labels=[condition_values[0], condition_values[1]],
+            fontsize=12,
+            loc="upper right",
+        )
+
     ax.add_artist(legend_1)
 
     #####
@@ -3908,76 +4170,109 @@ def plot_behavior_trends(
 
     # Some inits
     ax.grid(True)
-    values = hourly_effect_sizes_df["Effect_Size_Category"]*max_value*0.1
+    values = hourly_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
     num_bins = len(values)
     # Calculate widths of histogram bars
-    widths = lengths / np.sum(lengths)*(2*np.pi)
+    widths = lengths / np.sum(lengths) * (2 * np.pi)
 
     # Set colors
-    cmap = ['#9370DB', '#6A5ACD','#4B0082'] # 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
-    colors = [cmap[val] for val in hourly_effect_sizes_df["Effect_Size_Category"].astype(int).values-1]
+    cmap = [
+        "#9370DB",
+        "#6A5ACD",
+        "#4B0082",
+    ]  # 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
+    colors = [
+        cmap[val]
+        for val in hourly_effect_sizes_df["Effect_Size_Category"].astype(int).values - 1
+    ]
     for k in range(0, len(colors)):
         if hide_time_bins[k]:
-            colors[k]='#C0C0C0'
-            values[k]=1*max_value*0.1
+            colors[k] = "#C0C0C0"
+            values[k] = 1 * max_value * 0.1
 
     # Plot histogram if required
-    stat_text_col='k'  
+    stat_text_col = "k"
     if show_histogram:
         bars = ax.bar(mid_angles, values, width=widths, bottom=top)
         # Change color of text of stat annotations for better contrast
-        stat_text_col='#FFFF00'
+        stat_text_col = "#FFFF00"
 
         # Use custom colors and opacity
         for color, bar in zip(colors, bars):
             bar.set_facecolor(color)
             bar.set_alpha(0.8)
-            
-        #create legend for hist with color patches
-        bar_handles=[0,0,0]
+
+        # create legend for hist with color patches
+        bar_handles = [0, 0, 0]
         legend_labels = ["large", "medium", "small"]
         legend_colors = cmap[::-1]
         for i, label in enumerate(legend_labels):
-            bar_handles[i]= Patch(color=legend_colors[i], label=label)
+            bar_handles[i] = Patch(color=legend_colors[i], label=label)
 
     # Special modifications for the polar plot
     if polar_depiction:
 
         # Add xticklabels manually for each circle segment in the middle between ticks
         for midangle, label in zip(mid_angles, xticklabels):
-            ax.text(midangle, ax.get_rmax()*1.05, label, 
-                    ha='center', va='center')
+            ax.text(midangle, ax.get_rmax() * 1.05, label, ha="center", va="center")
 
         # Add stat annotations as text in plot
         if add_stats:
-            z=0
+            z = 0
             # Add annotation for each circle segment
-            for label in test_dict:       
-                ax.text(mid_angles[int(label)]+0.02, ax.get_yticks()[-1]+(ax.get_yticks()[-1]-ax.get_yticks()[-2])*1.166, test_dict[label], 
-                    ha='center', va='center', fontsize='small', color=stat_text_col, rotation=-np.flip(mid_angles[int(label)]*180/np.pi))
-                z+=1
+            for label in test_dict:
+                ax.text(
+                    mid_angles[int(label)] + 0.02,
+                    ax.get_yticks()[-1]
+                    + (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 1.166,
+                    test_dict[label],
+                    ha="center",
+                    va="center",
+                    fontsize="small",
+                    color=stat_text_col,
+                    rotation=-np.flip(mid_angles[int(label)] * 180 / np.pi),
+                )
+                z += 1
         # Update limits
-        lower_lim=ax.get_ylim()[0]
+        lower_lim = ax.get_ylim()[0]
         ax.set_rlim(lower_lim, ax.get_rmax())
 
         # Only show histogram legend if required
         if show_histogram:
-            legend_2=ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="upper left", bbox_to_anchor=(0.0, 1.1), fontsize=8)
+            legend_2 = ax.legend(
+                handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
+                title="Effect Size",
+                loc="upper left",
+                bbox_to_anchor=(0.0, 1.1),
+                fontsize=8,
+            )
             ax.add_artist(legend_2)
     else:
 
         # Add stat annotations as text in plot
         if add_stats:
-            z=0
+            z = 0
             # Add annotation for each plot segment
-            for label in test_dict:    
-                ax.text(mid_angles[int(label)], (ax.get_yticks()[-1]-ax.get_yticks()[-2])*0.166, test_dict[label], 
-                    ha='center', va='center', color=stat_text_col, fontsize='small')
-                z+=1
-        
+            for label in test_dict:
+                ax.text(
+                    mid_angles[int(label)],
+                    (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 0.166,
+                    test_dict[label],
+                    ha="center",
+                    va="center",
+                    color=stat_text_col,
+                    fontsize="small",
+                )
+                z += 1
+
         # Only show histogram legend if required
         if show_histogram:
-            ax.legend(handles=[bar_handles[0],bar_handles[1],bar_handles[2]], title="Effect Size", loc="upper left", fontsize=8)#, bbox_to_anchor=(1.3, 0.65), fontsize=8)
+            ax.legend(
+                handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
+                title="Effect Size",
+                loc="upper left",
+                fontsize=8,
+            )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
 
     # If no axes are given, show plot
     if show:

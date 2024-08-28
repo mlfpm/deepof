@@ -22,7 +22,6 @@
       compute_transition_matrix_per_condition
       condition_distance_binning
       enrichment_across_conditions
-      explain_clusters
       fit_normative_global_model
       get_aggregated_embedding
       get_time_on_cluster

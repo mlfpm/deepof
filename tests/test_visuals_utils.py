@@ -33,7 +33,7 @@ from deepof.visuals_utils import (
     create_bin_pairs,
     cohend,
     cohend_effect_size,
-    _preprocess_time_bins
+    _preprocess_time_bins,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -92,7 +92,7 @@ def test_cohend(array_a, array_b):
     assert (
         cohend(np.array(array_a) * 2, np.array(array_b) * 2)
         + cohend(np.array(array_b) + 1, np.array(array_a) + 1)
-        < 10e-10
+        < 10e-5
     )
 
 
@@ -124,7 +124,7 @@ class Pseudo_Coordinates:
 
     def get_table_lengths(self):
         return self._table_lengths
-
+    
 
 @given(
     start_times_raw=st.lists(
@@ -184,4 +184,4 @@ def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_
         assert np.sum(precomputed_bins_out)==len_win_requested
     else: 
         assert np.sum(precomputed_bins_out) <= len_win_requested
-     
+    

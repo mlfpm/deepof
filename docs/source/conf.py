@@ -6,12 +6,13 @@
 
 # -- Path setup --------------------------------------------------------------
 
+import re
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import sys
-import re
 
 sys.path.insert(0, "../../deepof")
 sys.path.insert(0, "../../")
@@ -25,7 +26,7 @@ copyright = "2024, Lucas Miranda"
 author = "Lucas Miranda"
 
 # The full version, including alpha/beta/rc tags
-release = "0.7.0"
+release = "0.7.2"
 
 
 # -- General configuration ---------------------------------------------------

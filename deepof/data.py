@@ -14,40 +14,39 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # module deepof
 
 
+import copy
+import os
+import pickle
+import re
+import shutil
+import warnings
 from collections import defaultdict
 from difflib import get_close_matches
-from pkg_resources import resource_filename
 from shutil import rmtree
+from time import time
+from typing import Any, Dict, List, NewType, Tuple, Union
+
+import networkx as nx
+import numpy as np
+import pandas as pd
+import pims
+import umap
+from natsort import os_sorted
+from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import (
-    MinMaxScaler,
-    StandardScaler,
-    RobustScaler,
     LabelEncoder,
+    MinMaxScaler,
+    RobustScaler,
+    StandardScaler,
 )
-from time import time
 from tqdm import tqdm
-from typing import NewType, Union
-from typing import Dict, List, Tuple, Any
-import copy
-import networkx as nx
-import numpy as np
-import os
-import pandas as pd
-import pickle
-import pims
-import re
-import shutil
-import umap
-import warnings
-from natsort import os_sorted
 
+import deepof.annotation_utils
 import deepof.model_utils
 import deepof.models
-import deepof.annotation_utils
 import deepof.utils
-from deepof.utils import suppress_warning
 import deepof.visuals
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -184,8 +183,6 @@ class Project:
         assert len(self.videos) == len(
             self.tables
         ), "Unequal number of videos and tables. Please check your file structure"
-
-
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -400,14 +397,19 @@ class Project:
 
                 pbar.set_postfix(step="Updating bodypart graphs")
 
-                #reinstate "vanilla" bodyparts without animal ids in case animal ids were already fused with the bp list
-                reinstated_bodyparts=list(set([
-                    bp 
-                    if bp[0:len(aid)+1] not in [aid + "_" for aid in self.animal_ids] 
-                    else bp[len(aid)+1:] 
-                    for aid in self.animal_ids 
+        # reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
+        reinstated_bodyparts = list(
+            set(
+                [
+                    bp
+                    if bp[0 : len(aid) + 1]
+                    not in [aid + "_" for aid in self.animal_ids]
+                    else bp[len(aid) + 1 :]
+                    for aid in self.animal_ids
                     for bp in self.exclude_bodyparts
-                    ]))
+                ]
+            )
+        )
 
                 # Update body part connectivity graph, taking detected or specified body parts into account
                 model_dict = {
@@ -422,13 +424,11 @@ class Project:
                     aid: model_dict[aid + self.model] for aid in self.animal_ids
                 }
 
-                # Remove specified body parts from the mice graph
-                if len(self.animal_ids) > 1 and reinstated_bodyparts != ['']:
-                    self.exclude_bodyparts = [
-                        aid + "_" + bp
-                        for aid in self.animal_ids
-                        for bp in reinstated_bodyparts
-                    ]
+        # Remove specified body parts from the mice graph
+        if len(self.animal_ids) > 1 and reinstated_bodyparts != [""]:
+            self.exclude_bodyparts = [
+                aid + "_" + bp for aid in self.animal_ids for bp in reinstated_bodyparts
+            ]
 
                 # Pass a time-based index, if specified in init
                 if self.frame_rate is not None:
@@ -818,11 +818,8 @@ class Project:
 
         # load video info
         self.frame_rate = float(
-                pims.ImageIOReader(
-                    os.path.join(self.video_path, self.videos[0])
-                ).frame_rate
-            )
-        
+            pims.ImageIOReader(os.path.join(self.video_path, self.videos[0])).frame_rate
+        )
 
         # load table info
         tables, quality = self.preprocess_tables(verbose)
@@ -936,15 +933,14 @@ class Project:
 
         Args:
             project_to_extend (coordinates): Coordinates object to extend with the current dataset.
-            video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
-            table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
-            verbose (bool): If True, prints progress. Defaults to True.
-            debug (bool): If True, saves arena detection images to disk. Defaults to False.
-            test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
+            video_path (str): Path to the videos. If not specified, defaults to the project path.
+            table_path (str): Path to the tracks. If not specified, defaults to the project path.
+            verbose (bool): Prints progress if True. Defaults to True.
+            debug (bool): Saves arena detection images to disk if True. Defaults to False.
+            test (bool): Runs the project in test mode if True. Defaults to False.
 
         Returns:
-            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
-
+            coordinates: Deepof.Coordinates object containing the trajectories of all body parts.
         """
 
         if not video_path:
@@ -962,19 +958,22 @@ class Project:
         "need to have the same project paths and names! Table- and video paths can differ.\n"
         "This is because Videos and Tables from the \"new\" project will get copied into the \"old\" one.")
 
-        self.videos = os_sorted(
-            [
-                vid
-                for vid in os.listdir(video_path)
-                if vid.endswith(self.video_format) and not vid.startswith(".")
-            ]
+        def get_new_files(dir_path, file_format, existing_files):
+            return os_sorted(
+                [
+                    file
+                    for file in os.listdir(dir_path)
+                    if file.endswith(file_format)
+                    and not file.startswith(".")
+                    and file not in existing_files
+                ]
+            )
+
+        self.videos = get_new_files(
+            video_path, self.video_format, previous_project._videos
         )
-        self.tables = os_sorted(
-            [
-                tab
-                for tab in os.listdir(table_path)
-                if tab.endswith(self.table_format) and not tab.startswith(".")
-            ]
+        self.tables = get_new_files(
+            table_path, self.table_format, previous_project._table_paths
         )
 
         # Keep only those videos and tables that were not in the original dataset
@@ -1044,11 +1043,10 @@ class Project:
                 _to_extend=previous_project,
             )    
 
-            return extended_coords
+        return self.create(
+            verbose, force=False, debug=debug, test=test, _to_extend=previous_project
+        )
 
-        else:
-            print("No new experiments to process. Exiting...")
-            print("You may need to explicitely set \"video_path\" and \"table_path\" inputs")
 
             return previous_project
 
@@ -1752,7 +1750,7 @@ class Coordinates:
             raise NotImplementedError
 
         return self._videos
-    
+
     def get_start_times(self):
         """Returns the start time for each table"""
         start_times = {}
@@ -1803,7 +1801,7 @@ class Coordinates:
             for exp_id in exp_conditions.iloc[:, 0]
         }
         self._exp_conditions = exp_conditions
-        
+
         # Save loaded conditions within project
         self.save(timestamp=False)
 
@@ -1893,7 +1891,7 @@ class Coordinates:
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    @deepof.utils.suppress_warning(
+    @deepof.utils._suppress_warning(
         warn_messages=[
             "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
         ]

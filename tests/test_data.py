@@ -9,14 +9,13 @@ Testing module for deepof.preprocess
 """
 
 import os
+import random
+import string
 from shutil import rmtree
 
 import numpy as np
 import pandas as pd
-import random
-import string
-from hypothesis import given
-from hypothesis import settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import deepof.data
@@ -89,12 +88,12 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
 
 def test_project_extend():
 
-    video_init=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        )
-    table_init=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        )
+    video_init = os.path.join(
+        ".", "tests", "test_examples", "test_single_topview", "Videos"
+    )
+    table_init = os.path.join(
+        ".", "tests", "test_examples", "test_single_topview", "Tables"
+    )
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=video_init,
@@ -108,11 +107,11 @@ def test_project_extend():
     )
 
     video_extend = os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "Videos"
-        )
+        ".", "tests", "test_examples", "test_multi_topview", "Videos"
+    )
     table_extend = os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "Tables"
-        )
+        ".", "tests", "test_examples", "test_multi_topview", "Tables"
+    )
     ext_prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=video_extend,
@@ -137,10 +136,10 @@ def test_project_extend():
     prun.create(test=True, force=True)
     ext_prun.extend(prun_path, video_path=video_extend, table_path=table_extend)
 
-    #ensure that new project has all four datasets from both sources
-    assert len(ext_prun.tables)==4
-    assert len(ext_prun.videos)==4
-    assert len(ext_prun.arena_params)==4
+    # ensure that new project has all four datasets from both sources
+    assert len(ext_prun.tables) == 4
+    assert len(ext_prun.videos) == 4
+    assert len(ext_prun.arena_params) == 4
 
     rmtree(prun_path)
 

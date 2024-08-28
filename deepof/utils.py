@@ -3,35 +3,26 @@
 # module deepof
 
 """Functions and general utilities for the deepof package."""
-from collections import OrderedDict
+import argparse
 import copy
+import math
+import multiprocessing
+import os
+import warnings
+from collections import OrderedDict
 from copy import deepcopy
 from difflib import get_close_matches
 from itertools import combinations, product
-from joblib import Parallel, delayed
 from math import atan2, dist
-from scipy.signal import savgol_filter
-from scipy.spatial.distance import cdist
-from segment_anything import sam_model_registry, SamPredictor
-from shapely.geometry import Polygon
-from sklearn import mixture
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-from tqdm import tqdm
-from typing import Tuple, Any, List, Union, NewType
-import argparse
+from typing import Any, List, NewType, Tuple, Union
+
 import ast
 import cv2
 import h5py
-import math
 import matplotlib.pyplot as plt
-import multiprocessing
 import networkx as nx
-import numpy as np
 import numba as nb
-import os
+import numpy as np
 import pandas as pd
 import pickle
 import pyarrow.parquet as pq
@@ -40,9 +31,17 @@ import requests
 import ruptures as rpt
 import sleap_io as sio
 import torch
-import warnings
-
-
+from joblib import Parallel, delayed
+from scipy.signal import savgol_filter
+from scipy.spatial.distance import cdist
+from segment_anything import SamPredictor, sam_model_registry
+from shapely.geometry import Polygon
+from sklearn import mixture
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.impute import IterativeImputer
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from tqdm import tqdm
 
 import deepof.data
 
@@ -52,7 +51,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 # DEFINE WARNINGS FUNCTION
-def suppress_warning(warn_messages):
+def _suppress_warning(warn_messages):
     def somedec_outer(fn):
         def somedec_inner(*args, **kwargs):
             # Some warnings do not get filtered when record is not True
@@ -69,8 +68,9 @@ def suppress_warning(warn_messages):
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
+
 @nb.njit
-def rts_smoother_numba(measurements, F, H, Q, R): # pragma: no cover
+def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
@@ -287,7 +287,7 @@ class MouseTrackingImputer:
             " Please check if you provided the correct animal_ids as input for the Project."
         )
 
-    @suppress_warning(
+    @_suppress_warning(
         ["A value is trying to be set on a copy of a slice from a DataFrame"]
     )
     def fit_transform(self, data, key):
@@ -383,7 +383,7 @@ class MouseTrackingImputer:
 
         return smoothed_data
 
-    @suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
+    @_suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
     def _iterative_imputation(elf, data):
         """
         Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer
@@ -1031,7 +1031,6 @@ def align_trajectories(
                 data[frame].reshape([-1, 2], order="C"), angles[frame]
             ).reshape(data.shape[1:], order="C")
 
-
     if mode == "all" or mode == "none":
         aligned_trajs = aligned_trajs.reshape(dshape, order="C")
 
@@ -1370,20 +1369,20 @@ def kleinberg_core_numba(
 ) -> np.array:  # pragma: no cover
     """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
-    The algorithm models activity bursts in a time series as an
-    infinite hidden Markov model.
+        The algorithm models activity bursts in a time series as an
+        infinite hidden Markov model.
 
-    Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
-    and rewritten for compatibility with numba.
+        Taken from pybursts (https://github.com/romain-fontugne/pybursts/blob/master/pybursts/pybursts.py)
+        and rewritten for compatibility with numba.
 
-    Args:
-        gaps (np.array): an array of gap sizes between time offsets (numeric)
-        s (float): the base of the exponential distribution that is used for modeling the event frequencies
-        gamma (float): coefficient for the transition costs between states
-        n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
-        k: maximum burst level / number of hidden states
-        batch_size (int): Batch size for input processing
-:+
+        Args:
+            gaps (np.array): an array of gap sizes between time offsets (numeric)
+            s (float): the base of the exponential distribution that is used for modeling the event frequencies
+            gamma (float): coefficient for the transition costs between states
+            n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+            k: maximum burst level / number of hidden states
+            batch_size (int): Batch size for input processing
+    :+
     """
     g_hat = T / n
     gamma_log_n = gamma * math.log(n)
@@ -2125,7 +2124,7 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
-@suppress_warning(warn_messages=["All-NaN slice encountered"])
+@_suppress_warning(warn_messages=["All-NaN slice encountered"])
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,
@@ -2297,8 +2296,6 @@ def automatically_recognize_arena(
         )
 
     return arena, h, w
-
-
 
 
 def retrieve_corners_from_image(
@@ -2759,6 +2756,7 @@ def cluster_transition_matrix(
         return trans_normed, autocorr
 
     return trans_normed
+
 
 def get_total_Frames(video_paths: List[str]) -> int:
 

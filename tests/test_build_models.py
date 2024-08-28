@@ -8,11 +8,10 @@ Testing module for deepof.models
 
 """
 
-from hypothesis import given
-from hypothesis import settings
-from hypothesis import strategies as st
 import networkx as nx
 import numpy as np
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import deepof.model_utils
 import deepof.models
