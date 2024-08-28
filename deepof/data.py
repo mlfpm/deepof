@@ -397,19 +397,19 @@ class Project:
 
                 pbar.set_postfix(step="Updating bodypart graphs")
 
-        # reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
-        reinstated_bodyparts = list(
-            set(
-                [
-                    bp
-                    if bp[0 : len(aid) + 1]
-                    not in [aid + "_" for aid in self.animal_ids]
-                    else bp[len(aid) + 1 :]
-                    for aid in self.animal_ids
-                    for bp in self.exclude_bodyparts
-                ]
-            )
-        )
+                # reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
+                reinstated_bodyparts = list(
+                    set(
+                        [
+                            bp
+                            if bp[0 : len(aid) + 1]
+                            not in [aid + "_" for aid in self.animal_ids]
+                            else bp[len(aid) + 1 :]
+                            for aid in self.animal_ids
+                            for bp in self.exclude_bodyparts
+                        ]
+                    )
+                )
 
                 # Update body part connectivity graph, taking detected or specified body parts into account
                 model_dict = {
@@ -424,11 +424,11 @@ class Project:
                     aid: model_dict[aid + self.model] for aid in self.animal_ids
                 }
 
-        # Remove specified body parts from the mice graph
-        if len(self.animal_ids) > 1 and reinstated_bodyparts != [""]:
-            self.exclude_bodyparts = [
-                aid + "_" + bp for aid in self.animal_ids for bp in reinstated_bodyparts
-            ]
+                # Remove specified body parts from the mice graph
+                if len(self.animal_ids) > 1 and reinstated_bodyparts != [""]:
+                    self.exclude_bodyparts = [
+                        aid + "_" + bp for aid in self.animal_ids for bp in reinstated_bodyparts
+                    ]
 
                 # Pass a time-based index, if specified in init
                 if self.frame_rate is not None:
@@ -1043,10 +1043,11 @@ class Project:
                 _to_extend=previous_project,
             )    
 
-        return self.create(
-            verbose, force=False, debug=debug, test=test, _to_extend=previous_project
-        )
+            return self.create(
+                verbose, force=False, debug=debug, test=test, _to_extend=previous_project
+            )
 
+        else:
 
             return previous_project
 

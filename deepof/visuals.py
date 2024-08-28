@@ -40,7 +40,6 @@ from deepof.visuals_utils import (
     calculate_average_arena,
     seconds_to_time,
     time_to_seconds,
-    _preprocess_time_bins
     _preprocess_time_bins,
 )
 
