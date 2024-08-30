@@ -1545,7 +1545,7 @@ def rolling_window(
 
 
 def rupture_per_experiment(
-    to_rupture: table_dict,
+    to_window: table_dict,
     window_size: int,
     window_step: int,
     save_as_paths: bool = False,
@@ -1570,10 +1570,11 @@ def rupture_per_experiment(
 
     """    
     # Iterate over all experiments and populate them
-    for key in to_rupture.keys():
+    out_len=0
+    for key in to_window.keys():
             
         #load tab from disk if not already loaded
-        tab, tab_path = get_dt(to_rupture, key, True)  
+        tab, tab_path = get_dt(to_window, key, True)  
 
         tab=np.array(tab)  
 
@@ -1582,8 +1583,8 @@ def rupture_per_experiment(
             window_size,
             window_step,
         )
-
-        to_rupture[key] = save_dt(tab,tab_path,save_as_paths)
+        out_len=out_len+tab.shape[0]
+        to_window[key] = save_dt(tab,tab_path,save_as_paths)
 
     # pragma: no cover
     # To concatenate the current ruptures with the ones obtained
@@ -1592,8 +1593,8 @@ def rupture_per_experiment(
 
     # Once that's taken care of, concatenate ruptures alongside axis 0
 
-
-    return to_rupture
+    output_shape=(out_len,tab.shape[1],tab.shape[2])
+    return to_window, output_shape
 
 
 def smooth_mult_trajectory(
@@ -2768,27 +2769,42 @@ def get_total_Frames(video_paths: List[str]) -> int:
     return total_frames
 
 
-def get_dt(tab_dict: [table_dict, dict], key: str, return_path: bool = False):
+def get_dt(tab_dict: [table_dict, dict], key: str, return_path: bool = False, only_metainfo: bool = False, load_index: bool = False):
     """retrieves data table from table dict 
     (I use this a lot, so it gets its own function)
     
     Args:
         tab_dict ([table_dict, dict]): Table Dict or dictionary with data tables (or paths)
         key (str): key to dict entry
+        return_path (bool): Additionally return the path to the saving location of the table
+        only_metainfo (bool): Return only meta info like numbers of rows and columns without loading the full table
+        load_index (bool): Return index data additionally to meta_info
          
     Returns:
-        Data table after laoding
-        Path to data table (if data table is not in RAM) 
+        Data table after loading
+        Path to data table (if requested) 
     """
-    raw_data = tab_dict[key]
+
+    if tab_dict is None:
+        return None
+    
+    raw_data = tab_dict.get(key)
     path=''
+
+    #extract data if dictionary entry is a string
     if isinstance(raw_data, str):
         path = raw_data
-        raw_data = load_dt(raw_data)
+
+        if only_metainfo:
+            raw_data = load_dt_metainfo(raw_data,load_index)
+        else:
+            raw_data = load_dt(raw_data)
     
-    if return_path:
-        return raw_data, path
-    return raw_data
+    #extract metainfo if dictionary entry is a data frame
+    elif isinstance(raw_data, pd.DataFrame) and only_metainfo:
+        raw_data = get_metainfo_from_loaded_dt(raw_data,load_index)
+    
+    return (raw_data, path) if return_path else raw_data
 
 
 def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
@@ -2806,7 +2822,10 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
     if path is None:
         #skip saving
         return dt
-    elif isinstance(dt, np.ndarray) or (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)):
+    
+    path = os.path.splitext(path)[0]
+    
+    if isinstance(dt, np.ndarray) or (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)): 
         path = path + '.pkl'
         with open(path, 'wb') as file:
             pickle.dump(dt, file)    
@@ -2868,46 +2887,71 @@ def load_dt(path: str):
     return tab
 
 def load_dt_metainfo(path: str, load_index=True):
-    """Loads the columns of a given data frame
+    """Loads the columns of data frame given as path
 
     Args:
         path (str): path to file
+        load_index (bool): Also load index column and extract some additional information
 
     Returns:
-        List of columns
+        Dictionary of columns
     """
 
-    if path is not None:
+    if path is None:
+        return None
 
-        meta_info={}
+    meta_info={}
 
-        #read columns from metadata
-        info_meta = pq.read_metadata(path)
-        columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
+    #read columns from metadata
+    info_meta = pq.read_metadata(path)
+    columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
 
-        #adjust columns
-        columns=[
-            ast.literal_eval(item)
-            if type(item) == str
-            and item.startswith("(")
-            else item 
-            for item 
-            in columns
-            ]
+    #adjust columns
+    columns=[
+        ast.literal_eval(item)
+        if type(item) == str
+        and item.startswith("(")
+        else item 
+        for item 
+        in columns
+        ]
+    
+    if load_index:
+        index_column = pq.read_table(path, columns=['__index_level_0__'])
+        meta_info['index_column'] = pd.Index(index_column[0][:])
+        meta_info['start_time'] = str(index_column[0][0])
+        meta_info['end_time'] = str(index_column[0][-1])
+    
+    meta_info['columns'] = columns
+    meta_info['num_cols'] = info_meta.num_columns
+    meta_info['num_rows'] = info_meta.num_rows
         
-        if load_index:
-            index_column = pq.read_table(path, columns=['__index_level_0__'])
-            meta_info['index_column'] = pd.Index(index_column[0][:])
-            meta_info['start_time'] = str(index_column[0][0])
-            meta_info['end_time'] = str(index_column[0][-1])
-        
-        meta_info['columns'] = columns
-        meta_info['num_cols'] = info_meta.num_columns
-        meta_info['num_rows'] = info_meta.num_rows
+    return meta_info
 
+    
+def get_metainfo_from_loaded_dt(table: pd.DataFrame, load_index=True):
+    """Extracts the columns of a given data frame
 
-        
-        return meta_info
-    else:
+    Args:
+        table (pd.DataFrame): dataFrame to extract meta info from
+        load_index (bool): Also load index column and extract some additional information
+
+    Returns:
+        Dictionary of columns
+    """
+
+    if table is None:
         return None
     
+    meta_info={}
+
+    if load_index:
+        meta_info['index_column'] = table.index
+        meta_info['start_time'] = table.index[0]
+        meta_info['end_time'] = table.index[-1]
+    
+    meta_info['columns'] = list(table.columns)
+    meta_info['num_cols'] = len(meta_info['columns'])
+    meta_info['num_rows'] = table.shape[0]
+
+    return meta_info

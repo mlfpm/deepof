@@ -334,7 +334,7 @@ def _preprocess_time_bins(
             precomputed_bins[
                 bin_starts[key_to_longest] : (bin_ends[key_to_longest])
             ] = True
-        # Case 3: If nonsensical input was given, return error and default bins
+        # Case 3: If nonsensical input was given, return warning and default bins
         elif bin_size is not None:
             # plot short default bin, if user entered bins incorrectly
 

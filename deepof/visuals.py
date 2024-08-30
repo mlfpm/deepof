@@ -36,6 +36,7 @@ from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
 from deepof.utils import _suppress_warning
+import deepof.utils
 from deepof.visuals_utils import (
     calculate_average_arena,
     seconds_to_time,
@@ -726,18 +727,6 @@ def plot_enrichment(
     if exp_condition_order is None:
         exp_condition_order = np.unique(list(exp_conditions.values())).astype(str)
 
-    # Specific case
-    if supervised_annotations is not None:
-        if not plot_speed:
-            supervised_annotations = {
-                key: val.loc[:, [col for col in val.columns if "speed" not in col]]
-                for key, val in supervised_annotations.items()
-            }
-        else:
-            supervised_annotations = {
-                key: val.loc[:, [col for col in val.columns if "speed" in col]]
-                for key, val in supervised_annotations.items()
-            }
 
     # Preprocess information given for time binning
     bin_index_int = None
@@ -759,17 +748,17 @@ def plot_enrichment(
         precomputed=precomputed_bins,
         normalize=normalize,
     )
-
+    #extract unique behavior names
+    indices=np.unique(enrichment["cluster"], return_index=True)[1]
+    behavior_names = [enrichment["cluster"][idx] for idx in sorted(indices)]
     # Sort experiment conditions
     enrichment["exp condition"] = pd.Categorical(
         enrichment["exp condition"], exp_condition_order
     )
     if supervised_annotations is not None and not plot_speed:
         # this assumes that all entries in supervised_annotations always have the same keys
-        first_key = next(iter(supervised_annotations))
-        cluster_categories = supervised_annotations[first_key].columns
         enrichment["cluster"] = pd.Categorical(
-            enrichment["cluster"], categories=cluster_categories
+            enrichment["cluster"], categories=behavior_names
         )
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
     enrichment["cluster"] = enrichment["cluster"].astype(str)
@@ -954,11 +943,7 @@ def plot_enrichment(
         pairs = list(
             product(
                 set(
-                    np.concatenate(list(soft_counts.values()))
-                    .argmax(axis=1)
-                    .astype(str)
-                    if supervised_annotations is None
-                    else list(supervised_annotations.values())[0].columns
+                    behavior_names,
                 ),
                 set(exp_conditions.values()),
             )
@@ -1452,9 +1437,6 @@ def _filter_embeddings(
     breaks,
     supervised_annotations,
     exp_condition,
-    bin_size,
-    bin_index,
-    precomputed_bins,
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
     # Get experimental conditions per video
@@ -1485,59 +1467,29 @@ def _filter_embeddings(
             for i in list(supervised_annotations.keys())
         ]
 
-    # Restrict embeddings, soft_counts and breaks to the selected time bin
-    if precomputed_bins is not None:
-        if embeddings is not None:
-            embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
-                embeddings,
-                soft_counts,
-                breaks,
-                precomputed=precomputed_bins,
-            )
-        elif supervised_annotations is not None:
-            _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations,
-                precomputed=precomputed_bins,
-            )
-    elif bin_size is not None:
-        if embeddings is not None:
-            embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
-                embeddings,
-                soft_counts,
-                breaks,
-                bin_size=bin_size,
-                bin_index=bin_index,
-            )
-        elif supervised_annotations is not None:
-            _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations,
-                bin_size=bin_size,
-                bin_index=bin_index,
-            )
-
-        # Keep only those experiments for which we have an experimental condition assigned
-        if embeddings is not None:
-            embeddings = {
-                key: val
-                for key, val in embeddings.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-            soft_counts = {
-                key: val
-                for key, val in soft_counts.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-            breaks = {
-                key: val
-                for key, val in breaks.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-        elif supervised_annotations is not None:
-            supervised_annotations = {
-                key: val
-                for key, val in supervised_annotations.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
+    # Keep only those experiments for which we have an experimental condition assigned
+    if embeddings is not None:
+        embeddings = {
+            key: val
+            for key, val in embeddings.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+        soft_counts = {
+            key: val
+            for key, val in soft_counts.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+        breaks = {
+            key: val
+            for key, val in breaks.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+    elif supervised_annotations is not None:
+        supervised_annotations = {
+            key: val
+            for key, val in supervised_annotations.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
 
     return embeddings, soft_counts, breaks, supervised_annotations, concat_hue
 
@@ -1748,13 +1700,43 @@ def plot_embeddings(
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
+    keys=[]
+    max_bin_size=10000000 #pot. introduce coordinates.get_global_maximum_rows()
+    if supervised_annotations is not None:
+        keys=supervised_annotations.keys()
+        max_bin_size=max_bin_size/len(supervised_annotations)
+    elif embeddings is not None:
+        keys=embeddings.keys()
+        max_bin_size=max_bin_size/len(embeddings)
+    else:
+        raise ValueError(
+            "This function needs either supervised or unsupervised annotations as inputs!"
+        )
+      
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
+    bin_info = None
+    _, _, _, bin_starts, bin_ends = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins
     )
+    #going to be removed later when _preprocess_time_bins are replaced
+    if bin_starts is not None:
+        bin_info = {}
+        for key in keys:
+            bin_info[key] = {
+                'start': bin_starts[key],
+                'end': bin_ends[key]
+            }
+    #set bin starts and ends to table lengths if none are given
+    if bin_info is None:
+        bin_info={}
+        for key in keys:
+            bin_info[key]={}
+            bin_info[key]['start']=0
+            if supervised_annotations is not None:
+                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']-1]))
+            else:
+                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows']-1]))
 
     # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
     (
@@ -1770,57 +1752,67 @@ def plot_embeddings(
         copy.deepcopy(breaks),
         copy.deepcopy(supervised_annotations),
         exp_condition,
-        bin_size_int,
-        bin_index_int,
-        precomputed_bins,
     )
     show = True
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
 
-        if samples is not None:
+        samples_dict={}
 
-            # make sure that not more samples are drawn than are available
-            shortest = samples
-            for key in emb_to_plot.keys():
-                if emb_to_plot[key].shape[0] < shortest:
-                    shortest = emb_to_plot[key].shape[0]
-            if samples > shortest:
-                samples = shortest
-                print(
-                    "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
-                        samples
-                    )
+        #set samples to a maximum of 100k
+        if samples is None:
+            samples=max_bin_size
+
+        # make sure that not more samples are drawn than are available
+        shortest = samples
+        for key in bin_info.keys():
+
+            num_rows=bin_info[key]['end']-bin_info[key]['start']+1
+
+            if num_rows < shortest:
+                shortest = num_rows
+        if samples > shortest:
+            samples = shortest
+            print(
+                "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
+                    samples
                 )
+            )
 
-            # Sample per animal, to avoid alignment issues
-            for key in emb_to_plot.keys():
+        # Sample per animal, to avoid alignment issues
+        for key in emb_to_plot.keys():
 
-                sample_ids = np.random.choice(
-                    range(emb_to_plot[key].shape[0]), samples, replace=False
-                )
-                emb_to_plot[key] = emb_to_plot[key][sample_ids]
-                counts_to_plot[key] = counts_to_plot[key][sample_ids]
-                breaks_to_plot[key] = breaks_to_plot[key][sample_ids]
+            sample_ids = np.random.choice(
+                range(emb_to_plot[key].shape[0]), samples, replace=False
+            )
+            samples_dict[key] = sample_ids
+                
 
         # Concatenate experiments and align experimental conditions
-        concat_embeddings = np.concatenate(list(emb_to_plot.values()), 0)
-
-        # Concatenate breaks
-        concat_breaks = tf.concat(list(breaks_to_plot.values()), 0)
+        concat_embeddings = np.concatenate(
+            [deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']] 
+                for key in emb_to_plot],
+            axis=0
+        )
 
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
-            np.concatenate(list(counts_to_plot.values()), 0), axis=1
+            np.concatenate(
+                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']] 
+                for key in counts_to_plot], 
+                axis=0
+            ), 
+            axis=1
         )
 
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
-            [np.max(val, axis=1) for val in counts_to_plot.values()]
+            [
+                np.max(deepof.utils.get_dt(counts_to_plot[key])[bin_info[key]['start']:bin_info[key]['end']], axis=1)
+                for key in counts_to_plot
+            ]
         )
-
-        break_lens = tf.stack([len(i) for i in list(breaks_to_plot.values())], 0)
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
@@ -1836,11 +1828,10 @@ def plot_embeddings(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(emb_to_plot))), break_lens),
-                "breaks": concat_breaks,
+                "exp_id": np.repeat(list(range(len(emb_to_plot)))),
                 "confidence": confidence,
                 "cluster": cluster_assignments,
-                "experimental condition": np.repeat(concat_hue, break_lens),
+                "experimental condition": np.repeat(concat_hue),
             }
         )
 
@@ -1863,17 +1854,17 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, breaks_to_plot, reduce_dim=True
+                counts_to_plot, breaks_to_plot, reduce_dim=True, bin_info=bin_info
             )
 
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info 
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions

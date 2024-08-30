@@ -1219,14 +1219,17 @@ def embedding_model_fitting(
 
         # Load data
         try:
-            X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
+            processed_train, processed_validation= preprocessed_object
+            #X_train, a_train, X_val, a_val = preprocessed_object
         except ValueError:
-            X_train, y_train, X_val, y_val = preprocessed_object
+            X_train, X_val, = preprocessed_object
             a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
 
         # Make sure that batch_size is not larger than training set
-        if batch_size > preprocessed_object[0].shape[0]:
-            batch_size = preprocessed_object[0].shape[0]
+        first_key=list(preprocessed_object[0].keys())[0]
+        num_rows=deepof.utils.get_dt(processed_train,first_key)[0].shape[0]
+        if batch_size > num_rows:
+            batch_size = num_rows
 
         # Set options for tf.data.Datasets
         options = tf.data.Options()

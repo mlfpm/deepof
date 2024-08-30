@@ -216,6 +216,7 @@ def get_time_on_cluster(
     breaks: table_dict,
     normalize: bool = True,
     reduce_dim: bool = False,
+    bin_info: dict = None,
 ):
     """Compute how much each animal spends on each cluster.
 
@@ -226,27 +227,29 @@ def get_time_on_cluster(
         breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         normalize (bool): Whether to normalize the time by the total number of frames in each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
-
+        bin_info(dict): A dictionary containing start and end positions of all sections for given embeddings
+ 
     Returns:
         A dataframe with the time spent on each cluster for each experiment.
 
     """
-    # Reduce soft counts to hard assignments per video
-    hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
+    hard_count_counters={}
+    for key in soft_counts.keys():
+        #Detrmine most likely bin for each frame (N x n_bins) -> (N x 1)
+        hard_counts = np.argmax(deepof.utils.get_dt(soft_counts,key), axis=1)
 
-    # Repeat cluster assignments using the break values
-    hard_count_counters = {
-        key: Counter(np.repeat(value, breaks[key]))
-        for key, value in hard_counts.items()
-    }
+        #cut out requested range
+        if bin_info is not None:
+            hard_counts=hard_counts[bin_info[key]['start']:bin_info[key]['end']]
+        
+        #create dictionary with number of bin_occurences per bin
+        hard_count_counters[key] = Counter(hard_counts)
 
-    if normalize:
-        # Normalize the above counters to total length of cluster assignments (sum of all counters)
-        hard_count_counters = {
-            key: {k: v / sum(list(counter.values())) for k, v in counter.items()}
-            for key, counter in hard_count_counters.items()
-        }
-
+        if normalize:
+            hard_count_counters[key]={
+                k: v / sum(list(hard_count_counters[key].values())) for k, v in hard_count_counters[key].items()
+                }
+            
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
     counter_df = counter_df[sorted(counter_df.columns)]
@@ -265,7 +268,7 @@ def get_time_on_cluster(
 
 
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean"
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: dict = None
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -275,31 +278,38 @@ def get_aggregated_embedding(
         embedding (np.ndarray): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
+        bin_info(dict): A dictionary containing start and end positions of all sections for given embeddings
 
     Returns:
         A dataframe with the aggregated embeddings for each experiment.
 
     """
+    
     # aggregate the provided embeddings and cast to a dataframe
-    if agg == "mean":
-        embedding = pd.DataFrame(
-            {key: np.nanmean(value, axis=0) for key, value in embedding.items()}
-        ).T
-    elif agg == "median":
-        embedding = pd.DataFrame(
-            {key: np.nanmedian(value, axis=0) for key, value in embedding.items()}
-        ).T
+    agg_embedding={}
+    for key in embedding.keys():
+        current_embedding=deepof.utils.get_dt(embedding,key)
+        #cut out section, if required
+        if bin_info is not None:
+            current_embedding=current_embedding[bin_info[key]['start']:bin_info[key]['end']]
+        if agg == "mean":
+            agg_embedding[key]=np.nanmean(current_embedding, axis=0)
+        elif agg == "median":
+            agg_embedding[key]=np.nanmedian(current_embedding, axis=0)
+    
+    agg_embedding=pd.DataFrame(agg_embedding).T
 
+    
     if reduce_dim:
         agg_pipeline = Pipeline(
             [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
 
-        embedding = pd.DataFrame(
-            agg_pipeline.fit_transform(embedding), index=embedding.index
+        agg_embedding = pd.DataFrame(
+            agg_pipeline.fit_transform(agg_embedding), index=agg_embedding.index
         )
 
-    return embedding
+    return agg_embedding
 
 
 def select_time_bin(
@@ -615,48 +625,78 @@ def enrichment_across_conditions(
 
     """
 
-    # Select time bin and filter all relevant objects based on chosen type of binning
-    if precomputed is not None:  # pragma: no cover
-        embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding=embedding,
-            soft_counts=soft_counts,
-            breaks=breaks,
-            supervised_annotations=supervised_annotations,
-            precomputed=precomputed,
-        )
-
-    elif bin_size is not None and bin_index is not None:
-        embedding, soft_counts, breaks, supervised_annotations = select_time_bin(
-            embedding=embedding,
-            soft_counts=soft_counts,
-            breaks=breaks,
-            supervised_annotations=supervised_annotations,
-            bin_size=bin_size,
-            bin_index=bin_index,
-        )
-
     if supervised_annotations is None:
-
-        assert list(embedding.values())[0].shape[0] > 0
-
-        # Extract time on cluster for all videos and add experimental information
-        counter_df = get_time_on_cluster(
-            soft_counts, breaks, normalize=normalize, reduce_dim=False
-        )
+        keys = soft_counts.keys()
     else:
-        # Extract time on each behaviour for all videos and add experimental information,
-        # normalize to total experiment time if normalization is requested
-        if normalize or plot_speed:
-            counter_df = pd.DataFrame(
-                {
-                    key: np.sum(val) / len(val)
-                    for key, val in supervised_annotations.items()
-                }
-            ).T
+        keys = supervised_annotations.keys()
+
+    current_eb = None
+    current_sc = None
+    current_break = None
+    current_sa = None
+
+    counter_df = pd.DataFrame()
+    for key in keys:
+
+        #get only single supervised_annotation with loaded data
+        if supervised_annotations is None:
+            current_eb={key: deepof.utils.get_dt(embedding, key)}
+            current_sc={key: deepof.utils.get_dt(soft_counts, key)}
+            current_break={key: deepof.utils.get_dt(breaks, key)}
         else:
-            counter_df = pd.DataFrame(
-                {key: np.sum(val) for key, val in supervised_annotations.items()}
-            ).T
+            current_sa={key: deepof.utils.get_dt(supervised_annotations, key)}
+
+
+
+        # Select time bin and filter all relevant objects based on chosen type of binning
+        if precomputed is not None:  # pragma: no cover
+            current_eb, current_sc, current_break, current_sa = select_time_bin(
+                embedding=current_eb,
+                soft_counts=current_sc,
+                breaks=current_break,
+                supervised_annotations=current_sa,
+                precomputed=precomputed,
+            )
+
+        elif bin_size is not None and bin_index is not None:
+            current_eb, current_sc, current_break, current_sa = select_time_bin(
+                embedding=current_eb,
+                soft_counts=current_sc,
+                breaks=current_break,
+                supervised_annotations=current_sa,
+                bin_size=bin_size,
+                bin_index=bin_index,
+            )
+
+        if current_sa is None:
+
+            assert list(current_eb.values())[0].shape[0] > 0
+
+            # Extract time on cluster for all videos and add experimental information
+            counter_df[key] = get_time_on_cluster(
+                current_sc, current_break, normalize=normalize, reduce_dim=False
+            )
+        else:
+            
+            #only keep speed column or only drop speed column
+            if plot_speed:
+                selected_columns = [col for col in current_sa[key].columns if "speed" in col]
+            else:
+                selected_columns = [col for col in current_sa[key].columns if "speed" not in col]
+
+            table = current_sa[key][selected_columns]
+
+            # Extract time on each behaviour for all videos and add experimental information,
+            # normalize to total experiment time if normalization is requested
+            if normalize or plot_speed:
+                counter_df[key] = (
+                    np.sum(table) 
+                / len(table)
+                )       
+            else:
+                counter_df[key] = np.sum(table)
+            
+    counter_df = pd.DataFrame(counter_df).T
 
     counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
 

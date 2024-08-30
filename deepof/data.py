@@ -2002,13 +2002,15 @@ class Coordinates:
 
         # Create graph datasets
         if preprocess:
-            to_preprocess, global_scaler = tab_dict.preprocess(
+            to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 **kwargs,
                 save_as_paths=self._run_numba
                 )
             
+            shapes=[]
             for k in range(0,len(to_preprocess)):
             
+                num_rows=0
                 for key in to_preprocess[k].keys():
 
                     #load table if not already loaded
@@ -2023,14 +2025,20 @@ class Coordinates:
                             :, :, edge_sorting_indices
                         ],
                     )
+                    num_rows=num_rows+tab.shape[0]
+                
 
                     # save paths for modified tables
                     to_preprocess[k][key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
-
+                #collect shapes
+                shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+            shapes=tuple(shapes)
 
         else:  # pragma: no cover
             to_preprocess = tab_dict #np.concatenate(list(tab_dict.values()))
 
+            shapes=[]
+            num_rows=0
             for key in to_preprocess.keys():
 
                 tab, table_path = deepof.utils.get_dt(to_preprocess, key, True) 
@@ -2049,13 +2057,20 @@ class Coordinates:
                         ],
                     ),
                 )
+                num_rows=num_rows+dataset.shape[0]
+
 
                 # save paths for modified tables
-                to_preprocess[key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
+                to_preprocess[key] = deepof.utils.save_dt(dataset,table_path,self._run_numba)
+
+
+            shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+            shapes=tuple(shapes)
 
         try:
             return (
                 to_preprocess,
+                shapes,
                 nx.adjacency_matrix(graph).todense(),
                 tab_dict,
                 global_scaler,
@@ -2064,8 +2079,8 @@ class Coordinates:
             return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
-    #from memory_profiler import profile
-    #@profile
+    from memory_profiler import profile
+    @profile
     def supervised_annotation(
         self,
         params: Dict = {},
@@ -2790,7 +2805,7 @@ class TableDict(dict):
         precomputed_breaks: dict = None,
         N_rows_max: int = 6000000,
         file_name = 'preprocessed',
-        save_as_paths = False,
+        save_as_paths = None,
     ) -> np.ndarray:
         """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
@@ -2814,14 +2829,20 @@ class TableDict(dict):
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
 
         Returns:
-            X_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features) generated from all training videos.
-            y_train (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels) generated from all training videos. Note that no labels are use by default in the fully unsupervised pipeline (in which case this is an empty array).
-            X_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, features) generated from all test videos (0 by default).
-            y_test (np.ndarray): 3D dataset with shape (instances, sliding_window_size, labels) generated from all test videos. Note that no labels are use by default in the fully unsupervised pipeline (in which case this is an empty array).
+            X_train (np.ndarray): Table dict with 3D datasets with shape (instances, sliding_window_size, features) generated from all training videos.
+            X_test (np.ndarray): Table dict with 3D datasets 3D dataset with shape (instances, sliding_window_size, features) generated from all test videos (0 by default).
         """
         # Create a temporary copy of the current TableDict object,
         # to avoid modifying it in place
         table_temp = copy.deepcopy(self)
+
+        #save outputs as paths if first table is larger than a threshold
+        if save_as_paths is None:
+            save_as_paths=False
+            first_key=table_temp.keys()[0]
+            num_rows=deepof.utils.get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
+            if num_rows>N_rows_max/len(table_temp):
+                save_as_paths=True
 
         assert handle_ids in [
             "concat",
@@ -2969,8 +2990,8 @@ class TableDict(dict):
             print("Breaking time series...")
 
         # Apply rupture method to each train experiment independently
-        X_train = deepof.utils.rupture_per_experiment(
-            to_rupture=X_train,
+        X_train, train_shape = deepof.utils.rupture_per_experiment(
+            to_window=X_train,
             window_size=window_size,
             window_step=window_step,
             save_as_paths=save_as_paths,
@@ -2980,8 +3001,8 @@ class TableDict(dict):
         if test_videos and len(test_index) > 0:
 
             # Apply rupture method to each test experiment independently
-            X_test = deepof.utils.rupture_per_experiment(
-                to_rupture=X_test,
+            X_test, test_shape = deepof.utils.rupture_per_experiment(
+                to_window=X_test,
                 window_size=window_size,
                 window_step=window_step,
                 save_as_paths=save_as_paths,
@@ -3009,7 +3030,7 @@ class TableDict(dict):
         if verbose:
             print("Done!")
 
-        return (X_train, X_test), global_scaler
+        return (X_train, X_test), (train_shape, test_shape), global_scaler
 
 
 if __name__ == "__main__":
