@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.7.1-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.7.2-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/

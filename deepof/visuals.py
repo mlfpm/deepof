@@ -65,6 +65,7 @@ def plot_arena(
         color (str): color of the displayed arena.
         ax (Any): axes where to plot the arena.
         i (Union[int, str]): index of the animal to plot.
+
     """
     if isinstance(i, np.int64):
         arena = coordinates._arena_params[i]
@@ -145,6 +146,7 @@ def heatmap(
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
+
     """
     # noinspection PyTypeChecker
     if ax is None:
@@ -277,8 +279,8 @@ def plot_heatmaps(
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
-    """
 
+    """
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -405,7 +407,6 @@ def plot_gantt(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
-
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -1132,7 +1133,6 @@ def plot_transitions(
         kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
-
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -2007,6 +2007,7 @@ def _scatter_embeddings(
 
     Returns:
         projection_scatter (plt.figure): figure with the specified characteristics
+
     """
     if ax is None:
         fig, ax = plt.subplots(1, 1, dpi=dpi)
@@ -3450,17 +3451,17 @@ def _check_enum_inputs(
     Checks and validates enum-like input parameters for the different plot functions.
 
     Args:
-    coordinates (coordinates): deepof Coordinates object.
-    center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
-    exp_condition (str): Experimental condition to plot.
-    exp_condition_order (list): Order in which to plot experimental conditions.
-    condition_values (list): Experimental condition value to plot.
-    experiment_id (str): data set name of the animal to plot.
-    bodyparts (list): list of body parts to plot.
-    visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
-    normative_model (str): Name of the cohort to use as controls.
-    aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
-    colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
+        coordinates (coordinates): deepof Coordinates object.
+        center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
+        exp_condition (str): Experimental condition to plot.
+        exp_condition_order (list): Order in which to plot experimental conditions.
+        condition_values (list): Experimental condition value to plot.
+        experiment_id (str): data set name of the animal to plot.
+        bodyparts (list): list of body parts to plot.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        normative_model (str): Name of the cohort to use as controls.
+        aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
+        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
 
     """
     # activate warnings (again, because just putting it at the beginning of the skript
@@ -3635,24 +3636,24 @@ def plot_behavior_trends(
     Creates a polar plot or histogram of behavioral data over time.
 
     Args:
-    coordinates (coordinates): deepOF project containing the stored data.
-    embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
-    soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-    breaks (table_dict): table dict with changepoint detection breaks per experiment.
-    supervised_annotations (table_dict): Table dict with supervised annotations per video.
-    polar_depiction (bool): if True, display as polar plot. Defaults to True.
-    show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
-    exp_condition (str): Experimental condition to compare.
-    condition_values (list): List of two strings containing the condition values to compare.
-    behavior_to_plot (str): Behavior to compare for selected condition.
-    normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
-    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
-    add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
-    ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
-    save (bool): If True, saves the plot to a file. Defaults to False.
-    """
+        coordinates (coordinates): deepOF project containing the stored data.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        breaks (table_dict): table dict with changepoint detection breaks per experiment.
+        supervised_annotations (table_dict): Table dict with supervised annotations per video.
+        polar_depiction (bool): if True, display as polar plot. Defaults to True.
+        show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (list): List of two strings containing the condition values to compare.
+        behavior_to_plot (str): Behavior to compare for selected condition.
+        normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
+        save (bool): If True, saves the plot to a file. Defaults to False.
 
+    """
     # Initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
