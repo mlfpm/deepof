@@ -193,7 +193,7 @@ def climb_wall(
     elif arena_type.startswith("polygon"):
 
         # intermediary for testing, will be replaced with length-based condition
-        if run_numba:
+        if run_numba: # pragma: no cover
 
             # extract outer arena polygon coordinates
             xp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
@@ -281,7 +281,7 @@ def sniff_object(
         elif arena_type.startswith("polygon"):
 
             # intermediary for testing, will be replaced with length-based condition
-            if run_numba:
+            if run_numba: # pragma: no cover
 
                 # extract outer arena polygon coordinates
                 xp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
