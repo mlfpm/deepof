@@ -3769,7 +3769,7 @@ def plot_behavior_trends(
             all(isinstance(x, int) and x >= 0 for x in sublist)
             for sublist in custom_time_bins
         ) or not all(  # Lists consist of positive integers
-            sublist[0] < sublist[1] for sublist in custom_time_bins
+            sublist[0] <= sublist[1] for sublist in custom_time_bins
         ):  # List elements increase
             raise ValueError(
                 f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
@@ -3809,7 +3809,7 @@ def plot_behavior_trends(
 
         # Create precomputed boolean snippet for time bin extraction
         precomputed = np.array([False] * L_shortest)
-        precomputed[bin_start:bin_end] = True
+        precomputed[bin_start:bin_end+1] = True
 
         # Extract time bin from data based on type of input
         if plot_type == "unsupervised":
@@ -3840,7 +3840,7 @@ def plot_behavior_trends(
                 )
 
             # Collect data in datatable
-            cond = coordinates.get_exp_conditions[key][exp_condition][0]
+            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
             new_row = pd.DataFrame(
                 [
                     {
@@ -3994,7 +3994,7 @@ def plot_behavior_trends(
     num_bins = len(custom_time_bins)
 
     # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-    lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
+    lengths = [sublist[1] - sublist[0] + 1 for sublist in custom_time_bins]
     cumsum_lengths = np.cumsum([0] + lengths)
     angles = cumsum_lengths[:-1] / cumsum_lengths[-1] * 2 * np.pi
     rotation = angles[0]
@@ -4248,10 +4248,6 @@ def plot_behavior_trends(
                 fontsize=8,
             )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
 
-    # If no axes are given, show plot
-    if show:
-        plt.show()
-
     # Save plot if required
     if save:
         plt.savefig(
@@ -4268,3 +4264,7 @@ def plot_behavior_trends(
                 ),
             )
         )
+
+    # If no axes are given, show plot
+    if show:
+        plt.show()
