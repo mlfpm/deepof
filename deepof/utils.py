@@ -1969,6 +1969,7 @@ def get_arenas(
                     arena,
                     i,
                     videos,
+                    test=test,
                 )
 
                 if arena_corners is None:
@@ -2019,15 +2020,14 @@ def get_arenas(
         arena_reference = None
         if arena == "polygonal-autodetect":  # pragma: no cover
 
-            if test:
-                arena_reference = np.zeros((4, 2))
-            else:
-                arena_reference = extract_polygonal_arena_coordinates(
-                    os.path.join(project_path, project_name, "Videos", videos[0]),
-                    arena,
-                    0,
-                    [videos[0]],
-                )[0]
+
+            arena_reference = extract_polygonal_arena_coordinates(
+                os.path.join(project_path, project_name, "Videos", videos[0]),
+                arena,
+                0,
+                [videos[0]],
+                test=test,
+            )[0]
 
         # Load SAM
         segmentation_model = load_segmentation_model(segmentation_model_path)
@@ -2319,7 +2319,7 @@ def automatically_recognize_arena(
 
 
 def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, test: bool = False
 ):  # pragma: no cover
     """Open a window and waits for the user to click on all corners of the polygonal arena.
 
@@ -2330,12 +2330,19 @@ def retrieve_corners_from_image(
         arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
         cur_vid (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
+        test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
+
 
     Returns:
         corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
 
     """
     corners = []
+
+    #early return of set of square corners
+    if test:
+        return [(111, 49), (541, 31), (553, 438), (126, 452)]
+
 
     def click_on_corners(event, x, y, flags, param):
         # Callback function to store the coordinates of the clicked points
@@ -2437,7 +2444,7 @@ def retrieve_corners_from_image(
 
 
 def extract_polygonal_arena_coordinates(
-    video_path: str, arena_type: str, video_index: int, videos: list
+    video_path: str, arena_type: str, video_index: int, videos: list, test: bool = False,
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
 
@@ -2446,6 +2453,7 @@ def extract_polygonal_arena_coordinates(
         arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
         video_index (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
+        test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
     Returns:
         np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
@@ -2468,6 +2476,7 @@ def extract_polygonal_arena_coordinates(
         arena_type,
         video_index,
         videos,
+        test=test,
     )
     return arena_corners, numpy_im.shape[0], numpy_im.shape[1]
 

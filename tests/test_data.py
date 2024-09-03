@@ -32,7 +32,7 @@ import deepof.utils
         st.just("slp"),
     ),
     arena_detection=st.one_of(
-        st.just("circular-autodetect"), st.just("polygonal-autodetect")
+        st.just("circular-autodetect"), st.just("polygonal-autodetect"),
     ),
     custom_bodyparts=st.booleans(),
 )
@@ -325,32 +325,39 @@ def test_run(nodes, ego, use_numba):
 
 @settings(max_examples=2, deadline=None)
 @given(
+    arena_detection=st.one_of(
+        st.just("circular-autodetect"), st.just("polygonal-autodetect"),
+    ),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
-def test_get_supervised_annotation(use_numba):
+def test_get_supervised_annotation(use_numba,arena_detection):
 
     fast_implementations_threshold = 100000
     if use_numba:
         fast_implementations_threshold = 10
+    if arena_detection=="circular-autodetect":
+        test_project="test_single_topview"
+    else:
+        test_project="test_square_arena_topview"
 
     prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", test_project),
         video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
+            ".", "tests", "test_examples", test_project, "Videos"
         ),
         table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
+            ".", "tests", "test_examples", test_project, "Tables"
         ),
-        arena="circular-autodetect",
+        arena=arena_detection,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
-    ).create(force=True)
+    ).create(force=True, test=True)
     rmtree(
         os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+            ".", "tests", "test_examples", test_project, "deepof_project"
         )
     )
 
