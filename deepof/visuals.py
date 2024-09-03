@@ -3950,6 +3950,9 @@ def plot_behavior_trends(
         fig, ax = plt.subplots(figsize=(12, 4))
         show = True
 
+    #activate grid
+    ax.grid(True)
+
     #####
     # Stats
     #####
@@ -4144,7 +4147,6 @@ def plot_behavior_trends(
     #####
 
     # Some inits
-    ax.grid(True)
     values = hourly_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
     num_bins = len(values)
     # Calculate widths of histogram bars
