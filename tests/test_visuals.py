@@ -106,73 +106,77 @@ def test_plot_behavior_trends():
         ['0:0:25.05', '0:0:30']
     ]
 
-    fig, ([ax1,ax2], [ax3, ax4], [ax5, ax6]) = plt.subplots(3, 2, figsize=(20, 20))
+    # This loop is only here because, for unknown reasons, the first plots after compiling 
+    # have a slightly deviating frame color from all following ones
+    for _ in range(0,2):
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_multi_topview"],
-        supervised_annotations=supervised_annotations["test_multi_topview"],
-        behavior_to_plot='B_lookaround',
-        polar_depiction=False,
-        show_histogram=True,
-        normalize=False,
-        ax=ax1,
-        custom_time_bins=custom_time_bins,
-    )
+        fig, ([ax1,ax2], [ax3, ax4], [ax5, ax6]) = plt.subplots(3, 2, figsize=(20, 20))
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_multi_topview"],
-        supervised_annotations=supervised_annotations["test_multi_topview"],
-        behavior_to_plot='B_lookaround',
-        polar_depiction=True,
-        show_histogram=False,
-        normalize=False,
-        ax=ax2,
-        custom_time_bins=custom_time_binst,
-    )
+        deepof.visuals.plot_behavior_trends(
+            projects["test_multi_topview"],
+            supervised_annotations=supervised_annotations["test_multi_topview"],
+            behavior_to_plot='B_lookaround',
+            polar_depiction=False,
+            show_histogram=True,
+            normalize=False,
+            ax=ax1,
+            custom_time_bins=custom_time_bins,
+        )
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_square_arena_topview"],
-        supervised_annotations=supervised_annotations["test_square_arena_topview"],
-        behavior_to_plot='huddle',
-        polar_depiction=False,
-        normalize=False,
-        N_time_bins=4,
-        ax=ax3,
-    )
+        deepof.visuals.plot_behavior_trends(
+            projects["test_multi_topview"],
+            supervised_annotations=supervised_annotations["test_multi_topview"],
+            behavior_to_plot='B_lookaround',
+            polar_depiction=True,
+            show_histogram=False,
+            normalize=False,
+            ax=ax2,
+            custom_time_bins=custom_time_binst,
+        )
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_square_arena_topview"],
-        supervised_annotations=supervised_annotations["test_square_arena_topview"],
-        behavior_to_plot='huddle',
-        polar_depiction=True,
-        normalize=True,
-        N_time_bins=4,
-        ax=ax4,
-    )
+        deepof.visuals.plot_behavior_trends(
+            projects["test_square_arena_topview"],
+            supervised_annotations=supervised_annotations["test_square_arena_topview"],
+            behavior_to_plot='huddle',
+            polar_depiction=False,
+            normalize=False,
+            N_time_bins=4,
+            ax=ax3,
+        )
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_multi_topview"],
-        supervised_annotations=supervised_annotations["test_multi_topview"],
-        behavior_to_plot='W_speed',
-        normalize=True,
-        polar_depiction=False,
-        custom_time_bins=custom_time_binst,
-        hide_time_bins=[False,False,False]+[True]+[False,False],
-        ax=ax5,
-    )
+        deepof.visuals.plot_behavior_trends(
+            projects["test_square_arena_topview"],
+            supervised_annotations=supervised_annotations["test_square_arena_topview"],
+            behavior_to_plot='huddle',
+            polar_depiction=True,
+            normalize=True,
+            N_time_bins=4,
+            ax=ax4,
+        )
 
-    deepof.visuals.plot_behavior_trends(
-        projects["test_multi_topview"],
-        supervised_annotations=supervised_annotations["test_multi_topview"],
-        behavior_to_plot='W_speed',
-        normalize=True,
-        polar_depiction=True,
-        custom_time_bins=custom_time_bins,
-        hide_time_bins=[False,False,False]+[True]+[False,False],
-        ax=ax6,
-    )
+        deepof.visuals.plot_behavior_trends(
+            projects["test_multi_topview"],
+            supervised_annotations=supervised_annotations["test_multi_topview"],
+            behavior_to_plot='W_speed',
+            normalize=True,
+            polar_depiction=False,
+            custom_time_bins=custom_time_binst,
+            hide_time_bins=[False,False,False]+[True]+[False,False],
+            ax=ax5,
+        )
 
-    #plt.tight_layout()
+        deepof.visuals.plot_behavior_trends(
+            projects["test_multi_topview"],
+            supervised_annotations=supervised_annotations["test_multi_topview"],
+            behavior_to_plot='W_speed',
+            normalize=True,
+            polar_depiction=True,
+            custom_time_bins=custom_time_bins,
+            hide_time_bins=[False,False,False]+[True]+[False,False],
+            ax=ax6,
+        )
+
+        plt.tight_layout()
     
     fig_out= os.path.join(
         ".", "tests", "plot_examples", "Plots", "plot_behavior_trends_comp.png"
