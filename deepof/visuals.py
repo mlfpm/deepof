@@ -3841,7 +3841,7 @@ def plot_behavior_trends(
                 )
 
             # Collect data in datatable
-            cond = coordinates.get_exp_conditions[key][exp_condition][0]
+            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
             new_row = pd.DataFrame(
                 [
                     {
