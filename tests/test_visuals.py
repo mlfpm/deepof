@@ -10,13 +10,16 @@ Testing module for deepof.visuals
 
 import os
 import pickle
+import seaborn as sns
 from shutil import rmtree
 import numpy as np
 import pandas as pd
 import deepof.data
 import deepof.utils
 from matplotlib import pyplot as plt
+from matplotlib import patches
 from PIL import Image
+
 
 
 import deepof.data
@@ -51,7 +54,7 @@ for test_project in test_projects:
         arena_detection="circular-autodetect"
         animal_ids=["B","W"]
     else:
-        arena_detection="polygonal-autodetect"
+        arena_detection="polygonal-manual"
         animal_ids=None
 
     prun = deepof.data.Project(
@@ -145,10 +148,14 @@ class plot_info:
             if not (hasattr(histograms, '__self__') and histograms.__self__ is not None): #check if method:
                 plot_info[f'axes_{k}']['histograms'] = []
                 for hist in histograms:
-                    height = hist.get_height()
-                    x = hist.get_x()
-                    width = hist.get_width()
-                    plot_info[f'axes_{k}']['histograms'].append({'x': x, 'height': height, 'width': width})
+                    if isinstance(hist,patches.Rectangle):
+                        height = hist.get_height()
+                        x = hist.get_x()
+                        width = hist.get_width()
+                        plot_info[f'axes_{k}']['histograms'].append({'x': x, 'height': height, 'width': width})
+                    elif isinstance(hist,patches.Patch):
+                        vertices = hist.get_verts()
+                        plot_info[f'axes_{k}']['histograms'].append({'vertices': vertices})
 
             #extract significance data
             first_annot=True
@@ -196,7 +203,7 @@ class plot_info:
         """
 
         if dict1.keys() != dict2.keys():
-            return False
+            return (False, path)
         
         for key in dict1.keys():
             path_new=path+'['+key+']'
@@ -218,7 +225,7 @@ class plot_info:
         """
 
         if len(list1) != len(list2):
-            return False
+            return (False, path)
         
         for k in range(0,len(list1)):
             path_new=path+'['+str(k)+']'
@@ -256,7 +263,7 @@ class plot_info:
                 and not all(value1.mask==value2.mask)):
                 return (False,path)
                 
-            if not all(np.array(value1)==np.array(value2)):
+            if not (np.array(value1)==np.array(value2)).all():
                 return (False,path)   
                 
         else:
@@ -272,7 +279,9 @@ class plot_info:
 ###############################################
 
 
-def test_plot_gantt():
+def test_plot_gantt(update=False):
+
+    _init_plot_environment(default=True)
 
     fig_ref=os.path.join(
         ".", "tests", "plot_examples", "Plots", "plot_gantt.pkl"
@@ -354,22 +363,12 @@ def test_plot_gantt():
 
     plt.tight_layout()
     
-    fig_out= os.path.join(
-        ".", "tests", "plot_examples", "Plots", "plot_gantt_comp.png"
-    )
-
-    plt_info_ref=plot_info()
-    plt_info_ref.load(fig_ref)
-    plt_info=plot_info()
-    plt_info.store(plt)
-
-    out = plt_info.compare(plt_info_ref)
-    print(out[1])
-
-    assert out[0]
+    _compare_plots(plt=plt, fig_ref=fig_ref, ignore=[''], update=update)
 
 
-def test_plot_enrichment():
+def test_plot_enrichment(update=False):
+
+    _init_plot_environment(default=True)
 
     fig_ref=os.path.join(
         ".", "tests", "plot_examples", "Plots", "plot_enrichment.pkl"
@@ -470,24 +469,149 @@ def test_plot_enrichment():
 
     plt.tight_layout()
     
+    ignore=['[axes_0][lines]','[axes_1][lines]','[axes_2][lines]','[axes_3][lines]'] 
+    _compare_plots(plt=plt, fig_ref=fig_ref, ignore=ignore, update=update)
 
-    fig_out= os.path.join(
-        ".", "tests", "plot_examples", "Plots", "plot_enrichment_comp.png"
+
+def test_plot_embeddings(update=False):
+
+    _init_plot_environment(default=True)
+
+    fig_ref=os.path.join(
+        ".", "tests", "plot_examples", "Plots", "plot_embeddings.pkl"
+    ) 
+
+
+    fig, ([ax1,ax2], [ax3, ax4]) = plt.subplots(2, 2, figsize=(20, 20))
+
+    deepof.visuals.plot_embeddings(
+        projects["test_multi_topview"],
+        supervised_annotations=supervised_annotations["test_multi_topview"],
+        aggregate_experiments="mean",
+        bin_size=20,
+        bin_index=0,
+        add_stats = "Mann-Whitney",
+        verbose = False,
+        exp_condition = 'Cond',
+        ax = ax1
     )
 
-    plt_info_ref=plot_info()
-    plt_info_ref.load(fig_ref)
-    plt_info=plot_info()
-    plt_info.store(plt)
-    #will ignore variation line and significance comparison lines for bar plots (but not presnce / absence of '*', 'ns' and the like)
-    plt_info.ignore=['[axes_0][lines]','[axes_1][lines]','[axes_2][lines]','[axes_3][lines]'] 
+    deepof.visuals.plot_embeddings(
+        projects["test_multi_topview"],
+        supervised_annotations=supervised_annotations["test_multi_topview"],
+        aggregate_experiments="median",
+        bin_size="0:0:20",
+        bin_index="0:0:0",
+        add_stats = "Mann-Whitney",
+        verbose = False,
+        exp_condition = 'Cond',
+        ax = ax2
+    )
+    deepof.visuals.plot_embeddings(
+        projects["test_multi_topview"],
+        supervised_annotations=supervised_annotations["test_multi_topview"],
+        aggregate_experiments="mean",
+        normative_model = 'even',
+        add_stats = "Mann-Whitney",
+        verbose = False,
+        exp_condition = 'Cond',
+        ax = [ax3, ax4],
+    )  
 
-    out = plt_info.compare(plt_info_ref)
-    print(out[1])
-    assert out[0]
+    plt.tight_layout()
+
+    _compare_plots(plt=plt, fig_ref=fig_ref, ignore=[''], update=update)
 
 
-def test_plot_behavior_trends():
+def test_plot_heatmaps(update=False):
+
+    _init_plot_environment(default=True)
+
+    fig_ref=os.path.join(
+        ".", "tests", "plot_examples", "Plots", "plot_heatmaps.pkl"
+    ) 
+
+
+    fig, ([ax1,ax2], [ax3, ax4], [ax5, ax6]) = plt.subplots(3, 2, figsize=(20, 20))
+
+    deepof.visuals.plot_heatmaps(
+        projects["test_multi_topview"],
+        "B_Nose",
+        center="arena",
+        exp_condition="Cond",
+        condition_value='odd',
+        bin_size=20,
+        bin_index=0,
+        display_arena=True,
+        experiment_id="test",
+        show=False,
+        ax = ax1
+    )
+    deepof.visuals.plot_heatmaps(
+        projects["test_multi_topview"],
+        "B_Nose",
+        center="arena",
+        exp_condition="Cond",
+        condition_value='odd',
+        bin_size="0:0:20",
+        bin_index="0:0:0",
+        display_arena=True,
+        experiment_id="test",
+        show=False,
+        ax = ax2
+    )
+
+    deepof.visuals.plot_heatmaps(
+        projects["test_multi_topview"],
+        "W_Nose",
+        center="arena",
+        exp_condition="Cond",
+        condition_value='even',
+        display_arena=False,
+        show=False,
+        ax = ax3
+    )
+    deepof.visuals.plot_heatmaps(
+        projects["test_square_arena_topview"],
+        "Spine_2",
+        center="arena",
+        bin_size=20,
+        bin_index=0,
+        display_arena=True,
+        experiment_id="test3",
+        show=False,
+        ax = ax4,
+    ) 
+    deepof.visuals.plot_heatmaps(
+        projects["test_square_arena_topview"],
+        "Nose",
+        center="arena",
+        display_arena=True,
+        show=False,
+        ax = ax5,
+    ) 
+    deepof.visuals.plot_heatmaps(
+        projects["test_square_arena_topview"],
+        "Nose",
+        center="arena",
+        bin_size=10,
+        bin_index=0,
+        display_arena=True,
+        experiment_id="test",
+        show=False,
+        ax = ax6,
+    ) 
+
+
+    plt.tight_layout()
+
+    
+    _compare_plots(plt=plt, fig_ref=fig_ref, ignore=[''], update=update)
+
+
+def test_plot_behavior_trends(update=False):
+
+    _init_plot_environment(default=True)
 
     fig_ref=os.path.join(
         ".", "tests", "plot_examples", "Plots", "plot_behavior_trends.pkl"
@@ -571,19 +695,9 @@ def test_plot_behavior_trends():
     )
 
     plt.tight_layout()
-    
-    fig_out= os.path.join(
-        ".", "tests", "plot_examples", "Plots", "plot_behavior_trends_comp.png"
-    )
 
-    plt_info_ref=plot_info()
-    plt_info_ref.load(fig_ref)
-    plt_info=plot_info()
-    plt_info.store(plt)
+    _compare_plots(plt=plt, fig_ref=fig_ref, ignore=[''], update=update)
 
-    out = plt_info.compare(plt_info_ref)
-    print(out[1])
-    assert out[0]
 
 
 ###############################################
@@ -598,3 +712,67 @@ def cleanup():
                 ".", "tests", "plot_examples", test_projects[k], "deepof_project"
             )
         )
+
+###############################################
+#  Helper functions (to avoid redunant code)  #
+###############################################
+
+def _compare_plots(plt=None, fig_ref='', ignore=[''], update=False):
+
+    #just do nothing when this function is called by automaized testing
+    if plt is None:
+        return None
+
+    fig_out= fig_ref.rsplit(".pkl", 1)[0] + ".png"
+    fig_comp = fig_ref.rsplit(".pkl", 1)[0] + "_comp.png"
+
+    if update:
+        plt.savefig(fig_out)
+        plt_info_ref=plot_info()
+        plt_info_ref.store(plt)
+        plt_info_ref.save(fig_ref)
+    else:
+        #plt.savefig(fig_comp)
+        plt_info_ref=plot_info()
+        plt_info_ref.load(fig_ref)
+        plt_info=plot_info()
+        plt_info.store(plt)
+        #will ignore variation line and significance comparison lines for bar plots (but not presnce / absence of '*', 'ns' and the like)
+        plt_info.ignore=ignore
+
+        out = plt_info.compare(plt_info_ref)
+        print(out[1])
+        assert out[0]
+
+
+def _init_plot_environment(default=False):
+    """
+    Sets global parameters for Matplotlib and Seaborn to ensure consistent plotting aesthetics.
+    """
+
+    if not default:
+        return None
+
+    # Set default figure size
+    plt.rcParams['figure.figsize'] = (20, 20)
+    
+    # Set font sizes
+    plt.rcParams['font.size'] = 12
+    plt.rcParams['axes.titlesize'] = 14
+    plt.rcParams['axes.labelsize'] = 12
+    plt.rcParams['xtick.labelsize'] = 10
+    plt.rcParams['ytick.labelsize'] = 10
+    
+    # Set line width
+    plt.rcParams['lines.linewidth'] = 2
+    
+    # Set grid style
+    plt.rcParams['axes.grid'] = True
+    plt.rcParams['grid.alpha'] = 0.5  # Set grid transparency
+    
+    # Set Seaborn style
+    sns.set_style("whitegrid")
+    
+    # Set Seaborn color palette
+    sns.set_palette("deep")
+    

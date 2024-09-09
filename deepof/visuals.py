@@ -281,6 +281,9 @@ def plot_heatmaps(
         heatmaps (plt.figure): figure with the specified characteristics
 
     """
+    # unifying bodyparts input
+    if isinstance(bodyparts,str):
+        bodyparts=[bodyparts]
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -3439,7 +3442,7 @@ def _check_enum_inputs(
     exp_condition: str = None,
     exp_condition_order: list = None,
     condition_values: list = None,
-    bodyparts: list = None,
+    bodyparts: Union[str, list] = None,
     animal_id: str = None,
     center: str = None,
     visualization: str = None,
@@ -3457,7 +3460,7 @@ def _check_enum_inputs(
         exp_condition_order (list): Order in which to plot experimental conditions.
         condition_values (list): Experimental condition value to plot.
         experiment_id (str): data set name of the animal to plot.
-        bodyparts (list): list of body parts to plot.
+        bodyparts (Union[str, list]): list of body parts to plot.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         normative_model (str): Name of the cohort to use as controls.
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
@@ -3498,6 +3501,8 @@ def _check_enum_inputs(
         )
     else:
         condition_value_options_list = []
+    if bodyparts is not None and isinstance(bodyparts,str):
+        bodyparts=[bodyparts]
     bodyparts_options_list = np.unique(
         np.concatenate(
             [
