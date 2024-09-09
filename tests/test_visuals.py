@@ -182,8 +182,8 @@ class plot_info:
             value2 (any): second thing
         """
 
-        
-        return self._deep_dict_compare(self.plot_info, plt_obj2.plot_info, path='')
+        path=''
+        return self._deep_dict_compare(self.plot_info, plt_obj2.plot_info, path=path)
 
     
     def _deep_dict_compare(self, dict1, dict2, path):
@@ -202,9 +202,10 @@ class plot_info:
             path_new=path+'['+key+']'
             if not (path_new in self.ignore):
                 value1, value2 = dict1[key], dict2[key]
-                if not self._deep_compare(value1,value2, path_new):
-                    return False
-        return True
+                out = self._deep_compare(value1,value2, path_new)
+                if not out[0]:
+                    return out
+        return (True, '')
 
 
     def _deep_list_compare(self, list1,list2, path):
@@ -223,9 +224,10 @@ class plot_info:
             path_new=path+'['+str(k)+']'
             if not (path_new in self.ignore):
                 value1, value2 = list1[k], list2[k]
-                if not self._deep_compare(value1,value2, path_new):
-                    return False
-        return True        
+                out = self._deep_compare(value1,value2, path_new)
+                if not out[0]:
+                    return out
+        return (True, '')        
 
     def _deep_compare(self,value1,value2,path):
         """part of recursive object comparison. Goes deeper if the value is a dict or list, otherwise compares entry
@@ -237,30 +239,32 @@ class plot_info:
         """
 
         if isinstance(value1, dict) and isinstance(value2, dict):
-            if not self._deep_dict_compare(value1, value2, path):
-                return False
+            out = self._deep_dict_compare(value1, value2, path)
+            if not out[0]:
+                return out
                 
         elif isinstance(value1, list) and isinstance(value2, list):
-            if not self._deep_list_compare(value1, value2, path):
-                return False
+            out = self._deep_list_compare(value1, value2, path)
+            if not out[0]:
+                return out
                 
         elif isinstance(value1, np.ndarray) and isinstance(value2, np.ndarray):
             if value1.shape !=value2.shape:
-                return False
+                return (False,path)
             
             if (hasattr(value1,'mask') and hasattr(value2,'mask')
                 and not all(value1.mask==value2.mask)):
-                return False
+                return (False,path)
                 
             if not all(np.array(value1)==np.array(value2)):
-                return False   
+                return (False,path)   
                 
         else:
             if value1 != value2:
-                return False
+                return (False,path)
 
         
-        return True 
+        return (True,'') 
   
 
 ###############################################
@@ -359,7 +363,10 @@ def test_plot_gantt():
     plt_info=plot_info()
     plt_info.store(plt)
 
-    assert plt_info.compare(plt_info_ref)
+    out = plt_info.compare(plt_info_ref)
+    print(out[1])
+
+    assert out[0]
 
 
 def test_plot_enrichment():
@@ -475,7 +482,9 @@ def test_plot_enrichment():
     #will ignore variation line and significance comparison lines for bar plots (but not presnce / absence of '*', 'ns' and the like)
     plt_info.ignore=['[axes_0][lines]','[axes_1][lines]','[axes_2][lines]','[axes_3][lines]'] 
 
-    assert plt_info.compare(plt_info_ref)
+    out = plt_info.compare(plt_info_ref)
+    print(out[1])
+    assert out[0]
 
 
 def test_plot_behavior_trends():
@@ -572,7 +581,9 @@ def test_plot_behavior_trends():
     plt_info=plot_info()
     plt_info.store(plt)
 
-    assert plt_info.compare(plt_info_ref)
+    out = plt_info.compare(plt_info_ref)
+    print(out[1])
+    assert out[0]
 
 
 ###############################################
