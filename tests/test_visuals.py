@@ -18,6 +18,7 @@ import deepof.data
 import deepof.utils
 from matplotlib import pyplot as plt
 from matplotlib import patches
+from matplotlib import use as use_backend
 from PIL import Image
 
 
@@ -263,11 +264,19 @@ class plot_info:
                 and not all(value1.mask==value2.mask)):
                 return (False,path)
                 
-            if not (np.array(value1)==np.array(value2)).all():
-                return (False,path)   
+            if (np.abs(np.array(value1)-np.array(value2)) > 0.01).any():
+                return (False,path)  
+
+        elif isinstance(value1, str) and isinstance(value2, str):
+            if value1 != value2:
+                return (False,path)
+            
+        elif isinstance(value1, tuple) and isinstance(value2, tuple):
+            if (np.abs(np.array(value1)-np.array(value2)) > 0.01).any():
+                return (False,path)
                 
         else:
-            if value1 != value2:
+            if np.abs(value1-value2) > 0.01:
                 return (False,path)
 
         
@@ -732,7 +741,7 @@ def _compare_plots(plt=None, fig_ref='', ignore=[''], update=False):
         plt_info_ref.store(plt)
         plt_info_ref.save(fig_ref)
     else:
-        #plt.savefig(fig_comp)
+        plt.savefig(fig_comp)
         plt_info_ref=plot_info()
         plt_info_ref.load(fig_ref)
         plt_info=plot_info()
@@ -752,6 +761,8 @@ def _init_plot_environment(default=False):
 
     if not default:
         return None
+
+    use_backend('Agg')
 
     # Set default figure size
     plt.rcParams['figure.figsize'] = (20, 20)
