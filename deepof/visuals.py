@@ -1434,7 +1434,6 @@ def _filter_embeddings(
     coordinates,
     embeddings,
     soft_counts,
-    breaks,
     supervised_annotations,
     exp_condition,
 ):
@@ -1442,7 +1441,7 @@ def _filter_embeddings(
     # Get experimental conditions per video
     if embeddings is None and supervised_annotations is None:
         raise ValueError(
-            "Either embeddings, soft_counts, and breaks or supervised_annotations must be provided."
+            "Either embeddings and soft_counts or supervised_annotations must be provided."
         )
 
     try:
@@ -1454,7 +1453,6 @@ def _filter_embeddings(
             for i in list(embeddings.keys())
         ]
         soft_counts = soft_counts.filter_videos(embeddings.keys())
-        breaks = breaks.filter_videos(embeddings.keys())
 
     except AttributeError:
         if exp_condition is None:
@@ -1479,11 +1477,6 @@ def _filter_embeddings(
             for key, val in soft_counts.items()
             if key in coordinates.get_exp_conditions.keys()
         }
-        breaks = {
-            key: val
-            for key, val in breaks.items()
-            if key in coordinates.get_exp_conditions.keys()
-        }
     elif supervised_annotations is not None:
         supervised_annotations = {
             key: val
@@ -1491,7 +1484,7 @@ def _filter_embeddings(
             if key in coordinates.get_exp_conditions.keys()
         }
 
-    return embeddings, soft_counts, breaks, supervised_annotations, concat_hue
+    return embeddings, soft_counts, supervised_annotations, concat_hue
 
 
 def plot_normative_log_likelihood(
@@ -1736,20 +1729,18 @@ def plot_embeddings(
             if supervised_annotations is not None:
                 bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']-1]))
             else:
-                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows']-1]))
+                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(embeddings,key).shape[0]-1]))
 
     # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
     (
         emb_to_plot,
         counts_to_plot,
-        breaks_to_plot,
         sup_annots_to_plot,
         concat_hue,
     ) = _filter_embeddings(
         coordinates,
         copy.deepcopy(embeddings),
         copy.deepcopy(soft_counts),
-        copy.deepcopy(breaks),
         copy.deepcopy(supervised_annotations),
         exp_condition,
     )
@@ -1762,7 +1753,7 @@ def plot_embeddings(
 
         #set samples to a maximum of 100k
         if samples is None:
-            samples=max_bin_size
+            samples=int(max_bin_size)
 
         # make sure that not more samples are drawn than are available
         shortest = samples
@@ -1783,15 +1774,20 @@ def plot_embeddings(
         # Sample per animal, to avoid alignment issues
         for key in emb_to_plot.keys():
 
+            #get correct section of current embedding 
+            current_emb=deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']]
+
             sample_ids = np.random.choice(
-                range(emb_to_plot[key].shape[0]), samples, replace=False
+                range(current_emb.shape[0]), samples, replace=False
             )
             samples_dict[key] = sample_ids
-                
+            #reduced section is kept in memory
+            emb_to_plot[key] = current_emb[sample_ids]
+               
 
         # Concatenate experiments and align experimental conditions
         concat_embeddings = np.concatenate(
-            [deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']] 
+            [deepof.utils.get_dt(emb_to_plot,key) 
                 for key in emb_to_plot],
             axis=0
         )
@@ -1799,7 +1795,7 @@ def plot_embeddings(
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
             np.concatenate(
-                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']] 
+                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']][samples_dict[key]]
                 for key in counts_to_plot], 
                 axis=0
             ), 
@@ -1809,7 +1805,7 @@ def plot_embeddings(
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
             [
-                np.max(deepof.utils.get_dt(counts_to_plot[key])[bin_info[key]['start']:bin_info[key]['end']], axis=1)
+                np.max(deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']][samples_dict[key]], axis=1)
                 for key in counts_to_plot
             ]
         )
@@ -1824,14 +1820,19 @@ def plot_embeddings(
         # Generate unifier dataset using the reduced embeddings, experimental conditions
         # and the corresponding break lengths and cluster assignments
 
+        
+        lens = np.zeros(len(emb_to_plot), dtype=int)
+        for i, key in enumerate(emb_to_plot.keys()):
+            lens[i] = len(emb_to_plot[key])
+
         embedding_dataset = pd.DataFrame(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(emb_to_plot)))),
+                "exp_id": np.repeat(list(range(len(emb_to_plot))), lens),
                 "confidence": confidence,
                 "cluster": cluster_assignments,
-                "experimental condition": np.repeat(concat_hue),
+                "experimental condition": np.repeat(concat_hue, lens),
             }
         )
 
@@ -1854,7 +1855,7 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, breaks_to_plot, reduce_dim=True, bin_info=bin_info
+                counts_to_plot, reduce_dim=True, bin_info=bin_info
             )
 
         else:
@@ -1911,11 +1912,7 @@ def plot_embeddings(
         y="{}-2".format("PCA" if aggregate_experiments else "UMAP"),
         ax=ax,
         hue=hue,
-        size=(
-            "breaks"
-            if show_break_size_as_radius and not aggregate_experiments
-            else None
-        ),
+        size=None,
         s=(50 if not aggregate_experiments else 100),
         edgecolor="black",
         palette=(
@@ -4264,10 +4261,6 @@ def plot_behavior_trends(
                 fontsize=8,
             )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
 
-    # If no axes are given, show plot
-    if show:
-        plt.show()
-
     # Save plot if required
     if save:
         plt.savefig(
@@ -4284,3 +4277,7 @@ def plot_behavior_trends(
                 ),
             )
         )
+
+    # If no axes are given, show plot
+    if show:
+        plt.show()

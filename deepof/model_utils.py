@@ -1131,6 +1131,45 @@ def log_hyperparameters():
     return logparams, metrics
 
 
+def sample_windows_from_data(preprocessed_data: table_dict, N_windows_tab: int):
+    """sample set of windows from processed data to not break memory.
+
+    Args:
+        preprocessed_data (tableDict): table dictionary containing one or two sets of preprocessed data for each recording
+        N_windows_tab (int): maximum number of windows to include from each recording
+
+    Returns:
+        X_data (np.array): Main dataset
+        a_data (np.array): Edges dataset
+
+    """
+
+    X_data, a_data = [],[]
+    for key in preprocessed_data.keys():
+
+        #load table tuple
+        tab_tuple=deepof.utils.get_dt(preprocessed_data, key)
+
+        #determine last possible start position based on number 
+        # of windows being extracted from this table
+        start_max=tab_tuple[0].shape[0]-N_windows_tab
+
+        #get first window (0 if table length is below N_windows_tab)
+        start=np.random.randint(low=0, high=np.max([1,start_max+1]))
+
+        #collect data
+        X_data.append(tab_tuple[0][start:start+N_windows_tab,:,:])
+
+        if len(tab_tuple)>1:
+            a_data.append(tab_tuple[1][start:start+N_windows_tab,:,:])
+        else:
+            a_data.append(np.zeros(X_data[-1].shape))
+
+    X_data=np.concatenate(X_data, axis=0)
+    a_data=np.concatenate(a_data, axis=0)
+
+    return X_data, a_data
+
 def embedding_model_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     adjacency_matrix: np.ndarray,
@@ -1217,19 +1256,20 @@ def embedding_model_fitting(
 
     with tf.device("CPU"):
 
+        N_windows_max=10000000
+
         # Load data
-        try:
-            processed_train, processed_validation= preprocessed_object
-            #X_train, a_train, X_val, a_val = preprocessed_object
-        except ValueError:
-            X_train, X_val, = preprocessed_object
-            a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
+        preprocessed_train, preprocessed_validation= preprocessed_object
+
+        # Sample up to N_windows_max windows from processed_train and processed_validation
+        N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
+        
+        X_train, a_train = sample_windows_from_data(preprocessed_train, N_windows_tab)
+        X_val, a_val = sample_windows_from_data(preprocessed_validation, N_windows_tab)
 
         # Make sure that batch_size is not larger than training set
-        first_key=list(preprocessed_object[0].keys())[0]
-        num_rows=deepof.utils.get_dt(processed_train,first_key)[0].shape[0]
-        if batch_size > num_rows:
-            batch_size = num_rows
+        if batch_size > X_train.shape[0]:
+            batch_size = X_train.shape[0]
 
         # Set options for tf.data.Datasets
         options = tf.data.Options()
@@ -1293,7 +1333,7 @@ def embedding_model_fitting(
                 edge_feature_shape=a_train.shape,
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(a_train) < 10e-10),
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
                 encoder_type=encoder_type,
@@ -1310,7 +1350,7 @@ def embedding_model_fitting(
                 adjacency_matrix=adjacency_matrix,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(a_train) < 10e-10),
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
                 montecarlo_kl=100,
@@ -1326,7 +1366,7 @@ def embedding_model_fitting(
                 edge_feature_shape=a_train.shape,
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(a_train) < 10e-10),
                 encoder_type=encoder_type,
                 temperature=temperature,
                 similarity_function=contrastive_similarity_function,
@@ -1491,6 +1531,11 @@ def embedding_per_video(
     embeddings = {}
     soft_counts = {}
     breaks = {}
+    #interim
+    file_name='unsup'
+    embeddings2 = {}
+    soft_counts2 = {}
+
 
     graph, contrastive = False, False
     try:
@@ -1504,7 +1549,7 @@ def embedding_per_video(
     for key in tqdm.tqdm(to_preprocess.keys()):
 
         if graph:
-            processed_exp, _, _, _ = coordinates.get_graph_dataset(
+            processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
                 precomputed_tab_dict=to_preprocess.filter_videos([key]),
                 preprocess=True,
@@ -1517,7 +1562,7 @@ def embedding_per_video(
 
         else:
 
-            processed_exp, _ = to_preprocess.filter_videos([key]).preprocess(
+            processed_exp, _, _ = to_preprocess.filter_videos([key]).preprocess(
                 scale=scale,
                 window_size=window_size,
                 window_step=1,
@@ -1525,16 +1570,27 @@ def embedding_per_video(
                 pretrained_scaler=global_scaler,
             )
 
-        embeddings[key] = model.encoder([processed_exp[0], processed_exp[1]]).numpy()
+        tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
+
+        emb = model.encoder([tab_tuple[0], tab_tuple[1]]).numpy()
+        embeddings[key] = emb
         if ruptures:
-            breaks[key] = (~np.all(processed_exp[0] == 0, axis=2)).sum(axis=1)
+            breaks[key] = (~np.all(tab_tuple[0] == 0, axis=2)).sum(axis=1)
         else:
             breaks[key] = np.ones(embeddings[key].shape[0]).astype(int)
 
         if not contrastive:
-            soft_counts[key] = model.grouper(
-                [processed_exp[0], processed_exp[1]]
+            sc = model.grouper(
+                [tab_tuple[0], tab_tuple[1]]
             ).numpy()
+            soft_counts[key] = sc
+            # save paths for modified tables
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
+            soft_counts2[key] = deepof.utils.save_dt(sc,table_path,coordinates._run_numba)
+
+        # save paths for modified tables
+        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
+        embeddings2[key] = deepof.utils.save_dt(emb,table_path,coordinates._run_numba) 
 
     if contrastive:
         soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
@@ -1553,6 +1609,16 @@ def embedding_per_video(
         deepof.data.TableDict(
             breaks,
             typ="unsupervised_breaks",
+            exp_conditions=coordinates.get_exp_conditions,
+        ),
+        deepof.data.TableDict(
+            embeddings2,
+            typ="unsupervised_embedding",
+            exp_conditions=coordinates.get_exp_conditions,
+        ),
+        deepof.data.TableDict(
+            soft_counts2,
+            typ="unsupervised_counts",
             exp_conditions=coordinates.get_exp_conditions,
         ),
     )

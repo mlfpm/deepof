@@ -2031,7 +2031,10 @@ class Coordinates:
                     # save paths for modified tables
                     to_preprocess[k][key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
                 #collect shapes
-                shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+                if len(to_preprocess[k].keys())>0:
+                    shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+                else:
+                    shapes=(0,)
             shapes=tuple(shapes)
 
         else:  # pragma: no cover
@@ -2766,7 +2769,7 @@ class TableDict(dict):
         test_keys = keys[test_indices]
         train_keys = np.delete(keys, test_indices)
 
-        X_test = np.array([])
+        X_test = TableDict({},current_table_dict._type)
         if test_videos > 0:
             try:
                 X_test = current_table_dict.filter_videos(test_keys)   
@@ -2839,7 +2842,7 @@ class TableDict(dict):
         #save outputs as paths if first table is larger than a threshold
         if save_as_paths is None:
             save_as_paths=False
-            first_key=table_temp.keys()[0]
+            first_key=list(table_temp.keys())[0]
             num_rows=deepof.utils.get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
             if num_rows>N_rows_max/len(table_temp):
                 save_as_paths=True
@@ -2967,11 +2970,11 @@ class TableDict(dict):
                         )
                     ] = np.nan
 
-                    tab_interpol = (
-                        pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
-                        .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                        .interpolate(limit_direction="both")
-                    )
+                tab_interpol = (
+                    pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
+                    .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                    .interpolate(limit_direction="both")
+                )
 
                 tab = tab_interpol
 
@@ -2997,7 +3000,7 @@ class TableDict(dict):
             save_as_paths=save_as_paths,
         )
 
-
+        
         if test_videos and len(test_index) > 0:
 
             # Apply rupture method to each test experiment independently
@@ -3007,6 +3010,8 @@ class TableDict(dict):
                 window_step=window_step,
                 save_as_paths=save_as_paths,
             )
+        else:
+            test_shape = (0,)
 
             #if shuffle:
             #    shuffle_test = np.random.choice(

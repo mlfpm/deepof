@@ -213,18 +213,16 @@ def recluster(
 
 def get_time_on_cluster(
     soft_counts: table_dict,
-    breaks: table_dict,
     normalize: bool = True,
     reduce_dim: bool = False,
     bin_info: dict = None,
 ):
     """Compute how much each animal spends on each cluster.
 
-    Requires a set of cluster assignments and their corresponding breaks.
+    Requires a set of cluster assignments.
 
     Args:
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         normalize (bool): Whether to normalize the time by the total number of frames in each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         bin_info(dict): A dictionary containing start and end positions of all sections for given embeddings
@@ -517,7 +515,7 @@ def separation_between_conditions(
     # Aggregate embeddings and add experimental conditions
     if agg == "time_on_cluster":
         aggregated_embeddings = get_time_on_cluster(
-            cur_soft_counts, cur_breaks, reduce_dim=True
+            cur_soft_counts, reduce_dim=True
         )
     elif agg in ["mean", "median"]:
         aggregated_embeddings = get_aggregated_embedding(
@@ -674,7 +672,7 @@ def enrichment_across_conditions(
 
             # Extract time on cluster for all videos and add experimental information
             counter_df[key] = get_time_on_cluster(
-                current_sc, current_break, normalize=normalize, reduce_dim=False
+                current_sc, normalize=normalize, reduce_dim=False
             )
         else:
             
