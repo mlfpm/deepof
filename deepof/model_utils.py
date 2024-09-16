@@ -1131,45 +1131,6 @@ def log_hyperparameters():
     return logparams, metrics
 
 
-def sample_windows_from_data(preprocessed_data: table_dict, N_windows_tab: int):
-    """sample set of windows from processed data to not break memory.
-
-    Args:
-        preprocessed_data (tableDict): table dictionary containing one or two sets of preprocessed data for each recording
-        N_windows_tab (int): maximum number of windows to include from each recording
-
-    Returns:
-        X_data (np.array): Main dataset
-        a_data (np.array): Edges dataset
-
-    """
-
-    X_data, a_data = [],[]
-    for key in preprocessed_data.keys():
-
-        #load table tuple
-        tab_tuple=deepof.utils.get_dt(preprocessed_data, key)
-
-        #determine last possible start position based on number 
-        # of windows being extracted from this table
-        start_max=tab_tuple[0].shape[0]-N_windows_tab
-
-        #get first window (0 if table length is below N_windows_tab)
-        start=np.random.randint(low=0, high=np.max([1,start_max+1]))
-
-        #collect data
-        X_data.append(tab_tuple[0][start:start+N_windows_tab,:,:])
-
-        if len(tab_tuple)>1:
-            a_data.append(tab_tuple[1][start:start+N_windows_tab,:,:])
-        else:
-            a_data.append(np.zeros(X_data[-1].shape))
-
-    X_data=np.concatenate(X_data, axis=0)
-    a_data=np.concatenate(a_data, axis=0)
-
-    return X_data, a_data
-
 def embedding_model_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     adjacency_matrix: np.ndarray,
@@ -1264,8 +1225,8 @@ def embedding_model_fitting(
         # Sample up to N_windows_max windows from processed_train and processed_validation
         N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
         
-        X_train, a_train = sample_windows_from_data(preprocessed_train, N_windows_tab)
-        X_val, a_val = sample_windows_from_data(preprocessed_validation, N_windows_tab)
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab, return_tests=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab, return_tests=True)
 
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:

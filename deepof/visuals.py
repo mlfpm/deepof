@@ -309,7 +309,7 @@ def plot_heatmaps(
     e_id=None
     if not experiment_id=="average":
         e_id=experiment_id
-    bin_size_int, bin_index_int, _, bin_starts, bin_ends = _preprocess_time_bins(
+    bin_size_int, bin_index_int, _, bin_starts, bin_ends, _ = _preprocess_time_bins(
         coordinates, bin_size, bin_index, experiment_id=e_id
     )
 
@@ -444,7 +444,7 @@ def plot_gantt(
         )
 
     # preprocess information given for time binning
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
+    bin_size_int, bin_index_int, precomputed_bins, _, _, _ = _preprocess_time_bins(
         coordinates, bin_size, bin_index, experiment_id=experiment_id
     )
 
@@ -461,7 +461,7 @@ def plot_gantt(
 
     # set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = soft_counts[experiment_id].argmax(axis=1)
+        hard_counts = deepof.utils.get_dt(soft_counts,experiment_id).argmax(axis=1)
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
@@ -729,23 +729,24 @@ def plot_enrichment(
 
 
     # Preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+    table_lengths={}
+    for key in coordinates.get_exp_conditions.keys():
+        if supervised_annotations is not None:
+            table_lengths[key]=int(deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'])
+        else:
+            table_lengths[key]=int(deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows'])
+
+    _, _, _, _, _, bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, table_lengths=table_lengths
     )
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
-        embedding=embeddings,
         soft_counts=soft_counts,
-        breaks=breaks,
         supervised_annotations=supervised_annotations,
         exp_conditions=exp_conditions,
         plot_speed=plot_speed,
-        bin_size=(bin_size_int if bin_size is not None else None),
-        bin_index=bin_index_int,
-        precomputed=precomputed_bins,
+        bin_info = bin_info,
         normalize=normalize,
     )
     #extract unique behavior names
@@ -1153,10 +1154,13 @@ def plot_transitions(
     }
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+
+    table_lengths={}
+    for key in coordinates.get_exp_conditions.keys():
+        table_lengths[key]=int(deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows'])
+
+    bin_size_int, bin_index_int, precomputed_bins, _, _, bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, table_lengths=table_lengths,
     )
 
     grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
@@ -1166,6 +1170,7 @@ def plot_transitions(
         exp_conditions,
         bin_size=(bin_size_int if bin_size is not None else None),
         bin_index=bin_index_int,
+        bin_info=bin_info,
         precomputed=precomputed_bins,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
@@ -1329,18 +1334,14 @@ def plot_stationary_entropy(
     breaks = breaks.filter_videos(embeddings.keys())
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+    table_lengths={}
+    for key in coordinates.get_exp_conditions.keys():
+        table_lengths[key]=int(deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows'])
+    _, _, _, _, _, bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, table_lengths=table_lengths
     )
 
-    if (
-        precomputed_bins is not None
-        and np.sum(precomputed_bins) < 2
-        or bin_size_int is not None
-        and bin_size_int < 2
-    ):
+    if (any([np.sum(bin_info[key]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
 
     # Get ungrouped entropy scores for the full videos
@@ -1349,9 +1350,7 @@ def plot_stationary_entropy(
         soft_counts,
         breaks,
         exp_conditions,
-        bin_size=(bin_size_int if bin_size is not None else None),
-        bin_index=bin_index_int,
-        precomputed=precomputed_bins,
+        bin_info=bin_info,
         aggregate=False,
         normalize=True,
     )
@@ -1708,28 +1707,18 @@ def plot_embeddings(
       
 
     # preprocess information given for time binning
-    bin_info = None
-    _, _, _, bin_starts, bin_ends = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+    table_lengths={}
+    for key in keys:
+        if supervised_annotations is not None:
+            table_lengths[key]=int(np.min([max_bin_size,deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']]))
+        else:
+            table_lengths[key]=int(np.min([max_bin_size,deepof.utils.get_dt(embeddings,key,only_metainfo=True)['num_rows']]))
+
+    _, _, _, _, _, bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, table_lengths=table_lengths
     )
-    #going to be removed later when _preprocess_time_bins are replaced
-    if bin_starts is not None:
-        bin_info = {}
-        for key in keys:
-            bin_info[key] = {
-                'start': bin_starts[key],
-                'end': bin_ends[key]
-            }
     #set bin starts and ends to table lengths if none are given
-    if bin_info is None:
-        bin_info={}
-        for key in keys:
-            bin_info[key]={}
-            bin_info[key]['start']=0
-            if supervised_annotations is not None:
-                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']-1]))
-            else:
-                bin_info[key]['end']=int(np.min([max_bin_size,deepof.utils.get_dt(embeddings,key).shape[0]-1]))
+
 
     # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
     (
@@ -1759,7 +1748,7 @@ def plot_embeddings(
         shortest = samples
         for key in bin_info.keys():
 
-            num_rows=bin_info[key]['end']-bin_info[key]['start']+1
+            num_rows=np.sum(bin_info[key])
 
             if num_rows < shortest:
                 shortest = num_rows
@@ -1775,7 +1764,7 @@ def plot_embeddings(
         for key in emb_to_plot.keys():
 
             #get correct section of current embedding 
-            current_emb=deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']]
+            current_emb=deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]]
 
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
@@ -1795,7 +1784,7 @@ def plot_embeddings(
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
             np.concatenate(
-                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']][samples_dict[key]]
+                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
                 for key in counts_to_plot], 
                 axis=0
             ), 
@@ -1805,7 +1794,7 @@ def plot_embeddings(
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
             [
-                np.max(deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]['start']:bin_info[key]['end']][samples_dict[key]], axis=1)
+                np.max(deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
                 for key in counts_to_plot
             ]
         )
@@ -3033,6 +3022,8 @@ def plot_distance_between_conditions(
         exp_condition=exp_condition,
     )
 
+    min_len=np.min([deepof.utils.get_dt(soft_counts, key, only_metainfo=True)['num_rows'] for key in soft_counts.keys()])
+
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
         embedding,
@@ -3043,7 +3034,7 @@ def plot_distance_between_conditions(
             for key, val in coordinates.get_exp_conditions.items()
         },
         int(np.round(10 * coordinates._frame_rate)),
-        np.min([val.shape[0] for val in soft_counts.values()]),
+        min_len,
         int(np.round(coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         metric=distance_metric,
@@ -3062,7 +3053,7 @@ def plot_distance_between_conditions(
             for key, val in coordinates.get_exp_conditions.items()
         },
         int(np.round(10 * coordinates._frame_rate)),
-        np.min([val.shape[0] for val in soft_counts.values()]),
+        min_len,
         int(np.round(optimal_bin * coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         scan_mode="per-bin",
@@ -3076,7 +3067,7 @@ def plot_distance_between_conditions(
             exp_condition: distance_array,
             "Time": np.linspace(
                 10,
-                np.min([val.shape[0] for val in soft_counts.values()]),
+                min_len,
                 len(distance_array),
             )
             / coordinates._frame_rate,
@@ -3094,7 +3085,7 @@ def plot_distance_between_conditions(
                 [
                     optimal_bin * np.arange(1, len(distance_per_bin)),
                     [
-                        np.min([val.shape[0] for val in soft_counts.values()])
+                        min_len
                         / coordinates._frame_rate
                     ],
                 ]

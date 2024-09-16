@@ -2769,7 +2769,14 @@ def get_total_Frames(video_paths: List[str]) -> int:
     return total_frames
 
 
-def get_dt(tab_dict: [table_dict, dict], key: str, return_path: bool = False, only_metainfo: bool = False, load_index: bool = False):
+def get_dt(
+        tab_dict: [table_dict, dict],
+        key: str,
+        return_path: bool = False,
+        only_metainfo: bool = False,
+        load_index: bool = False,
+        load_range: np.ndarray = None,
+        ):
     """retrieves data table from table dict 
     (I use this a lot, so it gets its own function)
     
@@ -2791,19 +2798,29 @@ def get_dt(tab_dict: [table_dict, dict], key: str, return_path: bool = False, on
     raw_data = tab_dict.get(key)
     path=''
 
-    #extract data if dictionary entry is a string
+    # Extract data if dictionary entry is a string
     if isinstance(raw_data, str):
         path = raw_data
 
         if only_metainfo:
             raw_data = load_dt_metainfo(raw_data,load_index)
         else:
-            raw_data = load_dt(raw_data)
+            raw_data = load_dt(raw_data, load_range)
     
-    #extract metainfo if dictionary entry is a data frame
-    elif isinstance(raw_data, pd.DataFrame) and only_metainfo:
+    # Extract metainfo if dictionary entry is a data frame
+    elif (isinstance(raw_data, pd.DataFrame) or isinstance(raw_data, np.ndarray)) and only_metainfo:
         raw_data = get_metainfo_from_loaded_dt(raw_data,load_index)
-    
+
+    # Cut data into shape if it is already loaded but a load range was given
+    elif (isinstance(raw_data, pd.DataFrame) or isinstance(raw_data, np.ndarray)) and load_range is not None:
+        if load_range.dtype == np.bool:
+            raw_data = raw_data[load_range]
+        else:
+            raw_data = raw_data[load_range[0]:load_range[1]]   
+
+    # Invisible "else" case: if none of the above, do nothig, since this means 
+    # raw_data is the full table in memory and hence already loaded 
+      
     return (raw_data, path) if return_path else raw_data
 
 
@@ -2825,10 +2842,16 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
     
     path = os.path.splitext(path)[0]
     
-    if isinstance(dt, np.ndarray) or (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)): 
+    if isinstance(dt, np.ndarray): 
+        path = path + '.npy'
+        with open(path, 'wb') as file:
+            np.lib.format.write_array(file, dt)
+
+    elif (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)):
         path = path + '.pkl'
         with open(path, 'wb') as file:
             pickle.dump(dt, file)    
+    
     elif isinstance(dt, pd.DataFrame) and len(dt.columns)>0:
         #convert column headers to str as parquet cannot save non-str column headers
         columns_in = copy.deepcopy(dt.columns)
@@ -2849,7 +2872,7 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
         return dt
 
 
-def load_dt(path: str):
+def load_dt(path: str, load_range: np.ndarray = None):
     """Saves a given data frame fast and efficient using parquet
 
     Args:
@@ -2859,12 +2882,34 @@ def load_dt(path: str):
         Data table after laoding
     """
 
-    if path is not None and path.endswith('.pkl'):
+    if path is None:
+        return None
+
+    if path.endswith('.npy') and load_range is not None:
+        # Load pointer
+        mmap_array = np.load(path, mmap_mode='r')
+        # Get specific range
+        if load_range.dtype == np.bool:
+            tab = mmap_array[load_range]
+        else:
+            tab = mmap_array[load_range[0]:load_range[1]] 
+
+    elif load_range is not None:
+        raise NotImplementedError(
+            "range loading is currently only possible with numpy arrays"
+        )
+
+    elif path.endswith('.npy'):
+        with open(path, 'rb') as file:
+            # Load the array using pickle
+            tab = np.lib.format.read_array(file)
+
+    elif path.endswith('.pkl'):
         with open(path, 'rb') as file:
             # Load the array using pickle
             tab = pickle.load(file)
 
-    elif path is not None and path.endswith('.pqt'):
+    elif path.endswith('.pqt'):
         tab = pd.read_parquet(path, engine='pyarrow')
 
         #restore tuple columns
@@ -2899,37 +2944,51 @@ def load_dt_metainfo(path: str, load_index=True):
 
     if path is None:
         return None
-
-    meta_info={}
-
-    #read columns from metadata
-    info_meta = pq.read_metadata(path)
-    columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
-
-    #adjust columns
-    columns=[
-        ast.literal_eval(item)
-        if type(item) == str
-        and item.startswith("(")
-        else item 
-        for item 
-        in columns
-        ]
     
-    if load_index:
-        index_column = pq.read_table(path, columns=['__index_level_0__'])
-        meta_info['index_column'] = pd.Index(index_column[0][:])
-        meta_info['start_time'] = str(index_column[0][0])
-        meta_info['end_time'] = str(index_column[0][-1])
-    
-    meta_info['columns'] = columns
-    meta_info['num_cols'] = info_meta.num_columns
-    meta_info['num_rows'] = info_meta.num_rows
+    meta_info=_init_metainfo()
+
+    if path.endswith('.npy'):
+        with open(path, 'rb') as file:
+            version = np.lib.format.read_magic(file)
+            shape, _, _ = np.lib.format._read_array_header(file, version)
+
+            meta_info['shape'] = shape
+            if len (shape)==2:
+                meta_info['num_rows'] = shape[0]
+                meta_info['num_cols'] = shape[1]
+
+    elif path.endswith('.pqt'):
+
+        #read columns from metadata
+        info_meta = pq.read_metadata(path)
+        columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
+
+        #adjust columns
+        columns=[
+            ast.literal_eval(item)
+            if type(item) == str
+            and item.startswith("(")
+            and item.endswith(")")
+            else item 
+            for item 
+            in columns
+            ]
+        
+        if load_index:
+            index_column = pq.read_table(path, columns=['__index_level_0__'])
+            meta_info['index_column'] = pd.Index(index_column[0][:])
+            meta_info['start_time'] = str(index_column[0][0])
+            meta_info['end_time'] = str(index_column[0][-1])
+        
+        meta_info['columns'] = columns
+        meta_info['num_cols'] = info_meta.num_columns
+        meta_info['num_rows'] = info_meta.num_rows
+        meta_info['shape'] = (info_meta.num_rows, info_meta.num_columns)
         
     return meta_info
 
     
-def get_metainfo_from_loaded_dt(table: pd.DataFrame, load_index=True):
+def get_metainfo_from_loaded_dt(table: Union[np.ndarray,pd.DataFrame], load_index=True):
     """Extracts the columns of a given data frame
 
     Args:
@@ -2943,15 +3002,39 @@ def get_metainfo_from_loaded_dt(table: pd.DataFrame, load_index=True):
     if table is None:
         return None
     
+    meta_info=_init_metainfo()
+
+    if isinstance(table, np.ndarray):
+
+        meta_info['shape'] = table.shape
+        if len(table.shape)==2:
+            meta_info['num_rows'] = table.shape[0]
+            meta_info['num_cols'] = table.shape[1]
+
+    elif isinstance(table, pd.DataFrame):
+
+        if load_index:
+            meta_info['index_column'] = table.index
+            meta_info['start_time'] = table.index[0]
+            meta_info['end_time'] = table.index[-1]
+        
+        meta_info['columns'] = list(table.columns)
+        meta_info['num_cols'] = len(meta_info['columns'])
+        meta_info['num_rows'] = table.shape[0]
+        meta_info['shape'] = (table.shape[0], len(meta_info['columns']))
+
+
+    return meta_info
+
+def _init_metainfo():
     meta_info={}
 
-    if load_index:
-        meta_info['index_column'] = table.index
-        meta_info['start_time'] = table.index[0]
-        meta_info['end_time'] = table.index[-1]
-    
-    meta_info['columns'] = list(table.columns)
-    meta_info['num_cols'] = len(meta_info['columns'])
-    meta_info['num_rows'] = table.shape[0]
+    meta_info['index_column'] = None
+    meta_info['start_time'] = None
+    meta_info['end_time'] = None
+    meta_info['columns'] = None
+    meta_info['num_cols'] = None
+    meta_info['num_rows'] = None
+    meta_info['shape'] = None
 
     return meta_info

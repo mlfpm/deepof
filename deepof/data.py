@@ -2082,8 +2082,8 @@ class Coordinates:
             return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
-    from memory_profiler import profile
-    @profile
+    #from memory_profiler import profile
+    #@profile
     def supervised_annotation(
         self,
         params: Dict = {},
@@ -2368,6 +2368,7 @@ class Coordinates:
         return trained_models
 
 
+
 class TableDict(dict):
     """Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
 
@@ -2388,6 +2389,7 @@ class TableDict(dict):
         exp_conditions: dict = None,
         propagate_labels: bool = False,
         propagate_annotations: Union[Dict, bool] = False,
+        shapes: Dict = {},
     ):
         """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
 
@@ -2405,6 +2407,7 @@ class TableDict(dict):
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the transformed dataset.
             propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations of the individual experiments are propagated to the dataset.
+            shapes (Dict): Dictionary containing the shapes of all stored tables
 
         """
         super().__init__(tabs)
@@ -2419,28 +2422,7 @@ class TableDict(dict):
         self._propagate_labels = propagate_labels
         self._propagate_annotations = propagate_annotations
         self._table_path = table_path
-        self.active_table=(None,None,None)
-
-    def set_active_table(self, key: str):
-        """retrieves data table at key from this table dict
-        
-        Args:
-            key (str): key to dict entry
-        """
-
-        tab, path = deepof.utils.get_dt(self, key, True)
-        self.active_table=(key,tab,path)
-
-    def reset_active_table(self):
-        """saves current active table and resets it to None 
-        """
-        
-        deepof.utils.save_dt(
-            dt=self.active_table(1),
-            path=self.active_table(2)
-            )
-        
-        self.active_table=(None,None,None)
+        self._shapes = shapes
 
 
     def filter_videos(self, keys: list) -> table_dict:
@@ -2513,31 +2495,6 @@ class TableDict(dict):
         return self.new_dict_same_header(tabs)
 
     
-    def filter_id_active(self, selected_id: str = None) -> pd.DataFrame:
-        """Filter the active table in a TableDict object to keep only those columns related to the selected id.
-
-        Leave labels untouched if present.
-
-        Args:
-            selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
-
-        Returns:
-            table_dict: Filtered TableDict object, keeping only the selected animal.
-        """
-
-        #get active table
-        val=self.active_table[1]
-            
-        #filter columns, only keep the ones having a specific animal id    
-        columns_to_keep = deepof.utils.filter_columns(val.columns, selected_id)
-        val = val.loc[
-            :, [bpa for bpa in val.columns if bpa in columns_to_keep]
-        ]
-
-        #update active table
-        self.active_table[1]=val
-
-
     def new_dict_same_header(self, tabs: dict = None, only_keys: bool=False):
         """Creates a new table dict based on a given dictionary and the existing header information.
 
@@ -2899,7 +2856,6 @@ class TableDict(dict):
             table_path = os.path.join(self._table_path, key, key + '_' + file_name)
             table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
 
-            del current_tab
 
         if scale:    
         
@@ -2982,7 +2938,6 @@ class TableDict(dict):
                 table_path = os.path.join(self._table_path, key, key + '_' + file_name)
                 table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
 
-            del current_tab
 
         # Split videos and generate training and test sets
         X_train, X_test, test_index = self.get_training_set(
@@ -3036,6 +2991,98 @@ class TableDict(dict):
             print("Done!")
 
         return (X_train, X_test), (train_shape, test_shape), global_scaler
+
+
+    def sample_windows_from_data(self, sampled_indices: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
+        """
+        Sample a set of windows / rows from all entries of table dict to avoid breaking memory.
+
+        Args:
+            N_windows_tab (int): Maximum number of windows / rows to include from each recording
+            return_edges (bool): Return second sampled set corresponding to edges [only relevant for internal use] (default: False)
+            no_nans (bool): only sample windows / rows that do not contain Nans. Notice: Turning on this option will result in the sampled windows not being completely successive anyomre (default: False)
+
+        Returns:
+            X_data (np.array): Main dataset
+            a_data (np.array): Edges dataset (if return_edges is True)
+        """
+        X_data, a_data = [], []
+        use_input_samples=False
+        if len(sampled_indices) > 0 and self.keys() == sampled_indices.keys():
+            use_input_samples=True 
+
+        for key in self.keys():
+            # Load table tuple
+            tab_tuple = deepof.utils.get_dt(self, key)
+
+            # Check if only one dataset or two (e.g., training and testing data) was given
+            if isinstance(tab_tuple, tuple):
+                tab = tab_tuple[0]
+            else:
+                tab = tab_tuple
+
+            #Quick block to process if input samples are given
+            if use_input_samples:
+                if isinstance(tab, np.ndarray):
+                    X_data.append(tab[sampled_indices[key]])
+                    if return_edges and isinstance(tab_tuple, tuple):
+                        a_data.append(tab_tuple[1][sampled_indices[key]])
+                    elif return_edges:
+                        a_frame = np.zeros(X_data[-1].shape)
+                        a_data.append(a_frame)
+
+                elif isinstance(tab, pd.DataFrame):
+                    X_data.append(tab.iloc[sampled_indices[key]])
+                    if return_edges and isinstance(tab_tuple, tuple):
+                        a_data.append(tab_tuple[1].iloc[sampled_indices[key]])
+                    elif return_edges:
+                        a_frame = np.zeros(X_data[-1].shape)
+                        a_frame = pd.DataFrame(a_frame)
+                        a_data.append(a_frame)
+
+                continue
+
+            if no_nans and isinstance(tab, np.ndarray):
+                possible_idcs = ~np.isnan(tab).any(axis=tuple(range(1,tab.ndim)))
+                tab=tab[possible_idcs]
+            elif no_nans and isinstance(tab, pd.DataFrame):
+                possible_idcs = ~np.isnan(tab).any(axis=1)
+                tab=tab[possible_idcs]
+
+            # Determine last possible start position based on the number of windows being extracted
+            start_max = tab.shape[0] - N_windows_tab
+
+            # Get first window (0 if table length is below N_windows_tab)
+            start = np.random.randint(low=0, high=np.max([1, start_max + 1]))
+
+            # Collect data
+            if isinstance(tab, np.ndarray):
+                X_data.append(tab[start:start + N_windows_tab, :])
+            elif isinstance(tab, pd.DataFrame):
+                X_data.append(tab.iloc[start:start + N_windows_tab, :])
+
+            #collect idcs 
+            sampled_indices[key]=np.where(possible_idcs)[0][start:start + N_windows_tab]
+
+            # Handle test dataset, if existent
+            if return_edges and isinstance(tab_tuple, tuple):
+                if isinstance(tab_tuple[1], np.ndarray):
+                    a_data.append(tab_tuple[1][start:start + N_windows_tab, :])
+                elif isinstance(tab_tuple[1], pd.DataFrame):
+                    a_data.append(tab_tuple[1].iloc[start:start + N_windows_tab, :])
+            elif return_edges:
+                a_frame = np.zeros(X_data[-1].shape)
+                if isinstance(tab, pd.DataFrame):
+                    a_frame = pd.DataFrame(a_frame)
+                a_data.append(a_frame)
+
+        X_data = np.concatenate(X_data, axis=0)
+
+        if return_edges:
+            a_data = np.concatenate(a_data, axis=0)
+            return X_data, a_data, sampled_indices
+        else:
+            return X_data, sampled_indices
 
 
 if __name__ == "__main__":

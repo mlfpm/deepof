@@ -4,9 +4,10 @@
 # module deepof
 
 
-from typing import Any, List, NewType, Tuple, Union
+import copy
 import numpy as np
 import re
+from typing import Any, List, NewType, Tuple, Union
 import warnings
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -238,6 +239,7 @@ def _preprocess_time_bins(
     bin_size: Union[int, str],
     bin_index: Union[int, str],
     precomputed_bins: np.ndarray = None,
+    table_lengths: dict = None,
     experiment_id: str = None,
 ):
     """Return a heatmap of the movement of a specific bodypart in the arena.
@@ -275,13 +277,15 @@ def _preprocess_time_bins(
     bin_index_int = None
     bin_starts = None
     bin_ends = None
+    bin_info = {}
     #dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
     warn_start_time = {}
-
+    
 
     # get start and end times for each table
     start_times = coordinates.get_start_times()
-    table_lengths = coordinates.get_table_lengths()
+    if table_lengths is None:
+        table_lengths = coordinates.get_table_lengths()
     # if a specific experiment is given, calculate time bin info only for this experiment
     if experiment_id is not None:
         start_times = {experiment_id: start_times[experiment_id]}
@@ -292,13 +296,10 @@ def _preprocess_time_bins(
     # Case 1: Precomputed bins were given
     if precomputed_bins is not None:
         
-        bin_size_int = None
-        bin_index_int = None
-        bin_starts = dict.fromkeys(table_lengths, np.where(precomputed_bins)[0][0])
-        bin_ends = dict.fromkeys(table_lengths, np.where(precomputed_bins)[0][-1]+1)
-        for key in bin_ends:
-            bin_ends[key]=np.min([bin_ends[key],table_lengths[key]])
-            bin_starts[key]=np.min([bin_starts[key],bin_ends[key]])
+        for key in table_lengths.keys():
+            arr=np.full(table_lengths[key], False, dtype=bool)
+            arr[:len(precomputed_bins)] = precomputed_bins[:table_lengths[key]]
+            bin_info[key] = arr
 
     # Case 2: Integer bins are only adjusted using the frame rate
     elif type(bin_size) is int and type(bin_index) is int:
@@ -365,6 +366,18 @@ def _preprocess_time_bins(
         bin_index_int = 0
         bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index_int)
         bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index_int + 1))
+    # Case 5: No bins are given, so bins are set to the signal length
+    elif precomputed_bins is None and bin_size is None and bin_index is None:
+        bin_starts = dict.fromkeys(table_lengths, 0)
+        bin_ends = copy.deepcopy(table_lengths)
+
+
+    #create bin_info combined output
+    if precomputed_bins is None:
+        for key in table_lengths.keys():
+            arr=np.full(table_lengths[key], False, dtype=bool)
+            arr[bin_starts[key]:bin_ends[key]]=True
+            bin_info[key] = arr
 
     # Validity checks and warnings for created bins
     if bin_size is not None and bin_index is not None:
@@ -422,4 +435,4 @@ def _preprocess_time_bins(
                     warnings.warn(warning_message)
                     bin_warning = True
 
-    return bin_size_int, bin_index_int, precomputed_bins, bin_starts, bin_ends
+    return bin_size_int, bin_index_int, precomputed_bins, bin_starts, bin_ends, bin_info

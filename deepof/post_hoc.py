@@ -232,15 +232,21 @@ def get_time_on_cluster(
 
     """
     hard_count_counters={}
-    for key in soft_counts.keys():
-        #Detrmine most likely bin for each frame (N x n_bins) -> (N x 1)
-        hard_counts = np.argmax(deepof.utils.get_dt(soft_counts,key), axis=1)
+    arr_range=None
+    if isinstance(bin_info, np.ndarray):
+        arr_range = bin_info 
 
-        #cut out requested range
-        if bin_info is not None:
-            hard_counts=hard_counts[bin_info[key]['start']:bin_info[key]['end']]
+    for key in soft_counts.keys():
         
-        #create dictionary with number of bin_occurences per bin
+        # Update range (if range can differ between samples)
+        if isinstance(bin_info, dict):
+            arr_range = np.array(bin_info[key],dtype=bool)
+
+        # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
+        # Load full dataset (arr_range==None) or section
+        hard_counts = np.argmax(deepof.utils.get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        
+        # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
 
         if normalize:
@@ -283,13 +289,21 @@ def get_aggregated_embedding(
 
     """
     
-    # aggregate the provided embeddings and cast to a dataframe
+    # Aggregate the provided embeddings and cast to a dataframe
     agg_embedding={}
+    arr_range=None
+    if isinstance(bin_info, np.ndarray):
+        arr_range = bin_info 
+
     for key in embedding.keys():
-        current_embedding=deepof.utils.get_dt(embedding,key)
-        #cut out section, if required
-        if bin_info is not None:
-            current_embedding=current_embedding[bin_info[key]['start']:bin_info[key]['end']]
+        
+        # Update range (if range can differ between samples)
+        if isinstance(bin_info, dict):
+            arr_range = np.array(bin_info[key],dtype=bool)
+
+        # Load full dataset (arr_range==None) or section
+        current_embedding=deepof.utils.get_dt(embedding,key,load_range=arr_range)
+
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
         elif agg == "median":
@@ -445,32 +459,24 @@ def condition_distance_binning(
 
         if scan_mode == "per-bin":
 
-            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
-                embedding, soft_counts, breaks, bin_size=step_bin, bin_index=bin_index
-            )
+            bin_info=np.array([bin_index*step_bin,(bin_index+1)*step_bin-1])
 
         elif scan_mode == "growing_window":
-            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
-                embedding, soft_counts, breaks, bin_size=bin_index, bin_index=0
-            )
+            bin_info=np.array([0,bin_index])
 
         else:
             assert precomputed_bins is not None, (
                 "For precomputed binning, provide a numpy array with bin IDs under "
                 "the precomputed_bins parameter"
             )
-
-            cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
-                embedding,
-                soft_counts,
-                breaks,
-                precomputed=(precomputed_bins == bin_index),
-            )
+            
+            bin_info=precomputed_bins 
 
         return separation_between_conditions(
-            cur_embedding,
-            cur_soft_counts,
-            cur_breaks,
+            embedding,
+            soft_counts,
+            breaks,
+            bin_info,
             exp_conditions,
             agg,
             metric=metric,
@@ -494,6 +500,7 @@ def separation_between_conditions(
     cur_embedding: table_dict,
     cur_soft_counts: table_dict,
     cur_breaks: table_dict,
+    bin_info: Union[dict,np.ndarray],
     exp_conditions: dict,
     agg: str,
     metric: str,
@@ -515,11 +522,11 @@ def separation_between_conditions(
     # Aggregate embeddings and add experimental conditions
     if agg == "time_on_cluster":
         aggregated_embeddings = get_time_on_cluster(
-            cur_soft_counts, reduce_dim=True
+            cur_soft_counts, reduce_dim=True, bin_info=bin_info,
         )
     elif agg in ["mean", "median"]:
         aggregated_embeddings = get_aggregated_embedding(
-            cur_embedding, agg=agg, reduce_dim=True
+            cur_embedding, agg=agg, reduce_dim=True, bin_info=bin_info,
         )
 
     if metric == "auc":
@@ -594,15 +601,11 @@ def fit_normative_global_model(global_normal_embeddings: pd.DataFrame):
 
 
 def enrichment_across_conditions(
-    embedding: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     exp_conditions: dict = None,
     plot_speed: bool = False,
-    bin_size: int = None,
-    bin_index: int = None,
-    precomputed: np.ndarray = None,
+    bin_info: dict = None,
     normalize: bool = False,
 ):
     """Compute the population of each cluster across conditions.
@@ -628,61 +631,32 @@ def enrichment_across_conditions(
     else:
         keys = supervised_annotations.keys()
 
-    current_eb = None
-    current_sc = None
-    current_break = None
-    current_sa = None
 
     counter_df = pd.DataFrame()
-    for key in keys:
-
-        #get only single supervised_annotation with loaded data
-        if supervised_annotations is None:
-            current_eb={key: deepof.utils.get_dt(embedding, key)}
-            current_sc={key: deepof.utils.get_dt(soft_counts, key)}
-            current_break={key: deepof.utils.get_dt(breaks, key)}
-        else:
-            current_sa={key: deepof.utils.get_dt(supervised_annotations, key)}
 
 
+    if supervised_annotations is None:
 
-        # Select time bin and filter all relevant objects based on chosen type of binning
-        if precomputed is not None:  # pragma: no cover
-            current_eb, current_sc, current_break, current_sa = select_time_bin(
-                embedding=current_eb,
-                soft_counts=current_sc,
-                breaks=current_break,
-                supervised_annotations=current_sa,
-                precomputed=precomputed,
-            )
+        #assert list(current_eb.values())[0].shape[0] > 0
 
-        elif bin_size is not None and bin_index is not None:
-            current_eb, current_sc, current_break, current_sa = select_time_bin(
-                embedding=current_eb,
-                soft_counts=current_sc,
-                breaks=current_break,
-                supervised_annotations=current_sa,
-                bin_size=bin_size,
-                bin_index=bin_index,
-            )
+        # Extract time on cluster for all videos and add experimental information
+        counter_df = get_time_on_cluster(
+            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info,
+        )
+    else:
+        
+        for key in supervised_annotations.keys():
+        
+            #load and cut current data set
+            current_sa=deepof.utils.get_dt(supervised_annotations,key)[bin_info[key]]
 
-        if current_sa is None:
-
-            assert list(current_eb.values())[0].shape[0] > 0
-
-            # Extract time on cluster for all videos and add experimental information
-            counter_df[key] = get_time_on_cluster(
-                current_sc, normalize=normalize, reduce_dim=False
-            )
-        else:
-            
             #only keep speed column or only drop speed column
             if plot_speed:
-                selected_columns = [col for col in current_sa[key].columns if "speed" in col]
+                selected_columns = [col for col in current_sa.columns if "speed" in col]
             else:
-                selected_columns = [col for col in current_sa[key].columns if "speed" not in col]
+                selected_columns = [col for col in current_sa.columns if "speed" not in col]
 
-            table = current_sa[key][selected_columns]
+            table = current_sa[selected_columns]
 
             # Extract time on each behaviour for all videos and add experimental information,
             # normalize to total experiment time if normalization is requested
@@ -694,7 +668,7 @@ def enrichment_across_conditions(
             else:
                 counter_df[key] = np.sum(table)
             
-    counter_df = pd.DataFrame(counter_df).T
+        counter_df = pd.DataFrame(counter_df).T
 
     counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
 
@@ -732,6 +706,7 @@ def compute_transition_matrix_per_condition(
     silence_diagonal: bool = False,
     bin_size: int = None,
     bin_index: int = None,
+    bin_info: dict = None,
     precomputed: np.ndarray = None,
     aggregate: str = True,
     normalize: str = True,
@@ -756,49 +731,43 @@ def compute_transition_matrix_per_condition(
         conditions, and the values are the transition matrices for each condition.
 
     """
-    # Filter data to get desired subset
-    if (bin_size is not None and bin_index is not None) or precomputed is not None:
-        embedding, soft_counts, breaks, _ = select_time_bin(
-            embedding,
-            soft_counts,
-            breaks,
-            bin_size=bin_size,
-            bin_index=bin_index,
-            precomputed=precomputed,
-        )
+    
+    n_states = deepof.utils.get_dt(soft_counts, list(soft_counts.keys())[0], only_metainfo=True)["num_cols"]
 
-    # Get hard counts per video
-    hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
-
-    # Get transition counts per video
-    n_states = list(soft_counts.values())[0].shape[1]
-    transitions = {
-        key: get_transitions(value, n_states) for key, value in hard_counts.items()
-    }
-
-    if silence_diagonal:
-        for key, val in transitions.items():
-            np.fill_diagonal(val, 0)
-            transitions[key] = val
-
-    # Aggregate based on experimental condition if specified
-    if aggregate:
-        transitions_per_condition = {}
+    transitions_dict = {}
+    if aggregate: 
         for exp_cond in set(exp_conditions.values()):
-            transitions_per_condition[exp_cond] = np.zeros([n_states, n_states])
-            for exp in transitions:
-                if exp_conditions[exp] == exp_cond:
-                    transitions_per_condition[exp_cond] += transitions[exp]
-        transitions = transitions_per_condition
+            transitions_dict[exp_cond] = np.zeros([n_states, n_states])
+
+    for key in soft_counts.keys():
+
+        #load requested range from current soft counts
+        current_sc = deepof.utils.get_dt(soft_counts, key, load_range=bin_info[key])
+
+        # Get hard counts per video
+        hard_counts = np.argmax(current_sc, axis=1)
+
+        # Get transition counts per video
+        transitions=get_transitions(hard_counts, n_states)
+
+        if silence_diagonal:
+            np.fill_diagonal(transitions, 0)
+
+        # Aggregate based on experimental condition if specified
+        if aggregate:
+            exp_cond=exp_conditions[key]
+            transitions_dict[exp_cond] += transitions
+        else:
+            transitions_dict[key] = transitions
 
     # Normalize rows if specified
     if normalize:
-        transitions = {
+        transitions_dict = {
             key: np.nan_to_num(value / value.sum(axis=1)[:, np.newaxis])
-            for key, value in transitions.items()
-        }
+            for key, value in transitions_dict.items()
+        } 
 
-    return transitions
+    return transitions_dict
 
 
 def compute_steady_state(
@@ -990,7 +959,11 @@ def align_deepof_kinematics_with_unsupervised_labels(
         kinematic_features[key] = deepof.utils.save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics
-    return deepof.data.TableDict(kinematic_features, typ="annotations")
+    return deepof.data.TableDict(
+        kinematic_features, 
+        table_path=os.path.join(deepof_project._project_path, deepof_project._project_name, "Tables"), 
+        typ="annotations"
+        )
 
 
 def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list):
@@ -1059,11 +1032,9 @@ def annotate_time_chunks(
         A dataframe of kinematic features, of shape chunks by features.
 
     """
-    # Convert soft_counts to hard labels
-    hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
-    hard_counts = pd.Series(
-        np.concatenate([value for value in hard_counts.values()], axis=0)
-    )
+
+    #name for intermediate saving 
+    file_name='annot_time_chunks'
 
     # Extract (annotated) kinematic features
     comprehensive_features = align_deepof_kinematics_with_unsupervised_labels(
@@ -1077,9 +1048,14 @@ def annotate_time_chunks(
 
     # Merge supervised labels if provided
     if supervised_annotations is not None:
-        comprehensive_features = comprehensive_features.merge(supervised_annotations)
+        comprehensive_features = comprehensive_features.merge(
+            supervised_annotations, 
+            save_as_paths=deepof_project._run_numba, 
+            file_name=file_name,
+            )
 
-    feature_names = list(list(comprehensive_features.values())[0].columns)
+    first_key = list(comprehensive_features.keys())[0]
+    feature_names = deepof.utils.get_dt(comprehensive_features, first_key, only_metainfo=True)['columns']
 
     # Align with breaks per video, by taking averages on the corresponding windows, and concatenate videos
     comprehensive_features = comprehensive_features.preprocess(
@@ -1096,71 +1072,89 @@ def annotate_time_chunks(
         interpolate_normalized=False,
         automatic_changepoints=False,
         precomputed_breaks=breaks,
+        save_as_paths=deepof_project._run_numba,
+        file_name=file_name,
     )[0][0]
 
+    # Load sampled features and remove chunks with missing values
+    # use up to 200% of requested samples to factor in data reduction by filtering downstream
+    N_windows_tab = int(samples*2/len(comprehensive_features))
+    sampled_features, sampled_idcs_dict=comprehensive_features.sample_windows_from_data(N_windows_tab=N_windows_tab, no_nans=True)
+
     # Remove chunks with missing values
-    possible_idcs = ~np.isnan(comprehensive_features).any(axis=-1).any(axis=-1)
-    comprehensive_features = comprehensive_features[possible_idcs]
+    #possible_idcs = ~np.isnan(comprehensive_features).any(axis=-1).any(axis=-1)
+    #comprehensive_features = comprehensive_features[possible_idcs]
 
-    def sample_from_breaks(breaks, idcs):
+    def sample_from_breaks(sampled_idcs_dict, idcs):
 
-        # Sample from breaks, keeping each animal's identity
+        # Sample from idcs_dict, keeping each animal's identity
         cumulative_breaks = 0
-        subset_breaks = {}
-        for key in breaks.keys():
-            subset_breaks[key] = breaks[key][
+        subset_idcs_dict = {}
+        for key in sampled_idcs_dict.keys():
+            subset_idcs_dict[key] = sampled_idcs_dict[key][
                 idcs[
                     (idcs >= cumulative_breaks)
-                    & (idcs < cumulative_breaks + breaks[key].shape[0])
+                    & (idcs < cumulative_breaks + sampled_idcs_dict[key].shape[0])
                 ]
                 - cumulative_breaks
             ]
-            cumulative_breaks += breaks[key].shape[0]
+            cumulative_breaks += sampled_idcs_dict[key].shape[0]
 
-        return subset_breaks
+        return subset_idcs_dict
 
-    # Filter instances with less confidence that specified
-    qual_filter = (
-        np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
-        > min_confidence
-    )[possible_idcs]
-    comprehensive_features = comprehensive_features[qual_filter]
-    hard_counts = hard_counts[possible_idcs][qual_filter].reset_index(drop=True)
-    breaks = sample_from_breaks(breaks, np.where(qual_filter)[0])
+    # Convert soft_counts to hard labels
+    #hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
+    #hard_counts = pd.Series(
+    #    np.concatenate([value for value in hard_counts.values()], axis=0)
+    #)
+
+    # Filter instances with less confidence than specified
+    sampled_soft_counts, _=soft_counts.sample_windows_from_data(sampled_indices=sampled_idcs_dict)
+    sampled_hard_counts=pd.Series(np.argmax(sampled_soft_counts, axis=1))
+
+    qual_filter = (sampled_soft_counts.max(axis=1) > min_confidence)
+
+    #qual_filter = (
+    #    np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
+    #    > min_confidence
+    #)[possible_idcs]
+    sampled_features = sampled_features[qual_filter]
+    hard_counts = sampled_hard_counts[qual_filter].reset_index(drop=True)
+    sampled_idcs_dict = sample_from_breaks(sampled_idcs_dict, np.where(qual_filter)[0])
 
     # Sample X and y matrices to increase computational efficiency
     if samples is not None:
-        samples = np.minimum(samples, comprehensive_features.shape[0])
+        samples = np.minimum(samples, sampled_features.shape[0])
 
         random_idcs = np.random.choice(
-            range(comprehensive_features.shape[0]), samples, replace=False
+            range(sampled_features.shape[0]), samples, replace=False
         )
 
-        comprehensive_features = comprehensive_features[random_idcs]
+        sampled_features = sampled_features[random_idcs]
         hard_counts = hard_counts[random_idcs]
-        breaks = sample_from_breaks(breaks, random_idcs)
+        sampled_idcs_dict = sample_from_breaks(sampled_idcs_dict, random_idcs)
 
     # Aggregate summary statistics per chunk, by either taking the average or running seglearn
     if aggregate == "mean":
-        comprehensive_features[comprehensive_features.sum(axis=2) == 0] = np.nan
-        comprehensive_features = np.nanmean(comprehensive_features, axis=1)
-        comprehensive_features = pd.DataFrame(
-            comprehensive_features, columns=feature_names
+        sampled_features[sampled_features.sum(axis=2) == 0] = np.nan
+        sampled_features = np.nanmean(sampled_features, axis=1)
+        sampled_features = pd.DataFrame(
+            sampled_features, columns=feature_names
         )
 
     elif aggregate == "seglearn":
 
         # Extract all relevant features for each cluster
-        comprehensive_features = chunk_summary_statistics(
-            comprehensive_features, feature_names
+        sampled_features = chunk_summary_statistics(
+            sampled_features, feature_names
         )
 
-    return comprehensive_features, hard_counts, breaks
+    return sampled_features, hard_counts, sampled_idcs_dict
 
 
 def chunk_cv_splitter(
     chunk_stats: pd.DataFrame,
-    breaks: dict,
+    sampled_idcs_dict: dict,
     n_folds: int = None,
 ):
     """Split a dataset into training and testing sets, grouped by video.
@@ -1180,10 +1174,10 @@ def chunk_cv_splitter(
 
     """
     # Extract number of experiments/folds
-    n_experiments = len(breaks)
+    n_experiments = len(sampled_idcs_dict)
 
     # Create a cross-validation loop, with one fold per video
-    fold_lengths = np.array([len(value) for value in breaks.values()])
+    fold_lengths = np.array([len(value) for value in sampled_idcs_dict.values()])
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
@@ -1197,7 +1191,7 @@ def chunk_cv_splitter(
 def train_supervised_cluster_detectors(
     chunk_stats: pd.DataFrame,
     hard_counts: np.ndarray,
-    sampled_breaks: dict,
+    sampled_idcs_dict: dict,
     n_folds: int = None,
     verbose: int = 1,
 ):  # pragma: no cover
@@ -1216,7 +1210,7 @@ def train_supervised_cluster_detectors(
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
 
     """
-    groups = chunk_cv_splitter(chunk_stats, sampled_breaks, n_folds=n_folds)
+    groups = chunk_cv_splitter(chunk_stats, sampled_idcs_dict, n_folds=n_folds)
 
     # Cross-validate GBM training across videos
     cluster_clf = Pipeline(
