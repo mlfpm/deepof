@@ -240,7 +240,7 @@ def get_time_on_cluster(
         
         # Update range (if range can differ between samples)
         if isinstance(bin_info, dict):
-            arr_range = np.array(bin_info[key],dtype=bool)
+            arr_range = bin_info[key]
 
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
@@ -299,7 +299,7 @@ def get_aggregated_embedding(
         
         # Update range (if range can differ between samples)
         if isinstance(bin_info, dict):
-            arr_range = np.array(bin_info[key],dtype=bool)
+            arr_range = bin_info[key]
 
         # Load full dataset (arr_range==None) or section
         current_embedding=deepof.utils.get_dt(embedding,key,load_range=arr_range)
@@ -648,7 +648,7 @@ def enrichment_across_conditions(
         for key in supervised_annotations.keys():
         
             #load and cut current data set
-            current_sa=deepof.utils.get_dt(supervised_annotations,key)[bin_info[key]]
+            current_sa=deepof.utils.get_dt(supervised_annotations,key).iloc[bin_info[key]]
 
             #only keep speed column or only drop speed column
             if plot_speed:
@@ -699,15 +699,10 @@ def get_transitions(state_sequence: list, n_states: int):
 
 
 def compute_transition_matrix_per_condition(
-    embedding: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict,
     exp_conditions: dict,
     silence_diagonal: bool = False,
-    bin_size: int = None,
-    bin_index: int = None,
     bin_info: dict = None,
-    precomputed: np.ndarray = None,
     aggregate: str = True,
     normalize: str = True,
 ):

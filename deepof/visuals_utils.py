@@ -9,6 +9,7 @@ import numpy as np
 import re
 from typing import Any, List, NewType, Tuple, Union
 import warnings
+from deepof.utils import get_dt
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -239,7 +240,8 @@ def _preprocess_time_bins(
     bin_size: Union[int, str],
     bin_index: Union[int, str],
     precomputed_bins: np.ndarray = None,
-    table_lengths: dict = None,
+    tab_dict_for_binning: table_dict = None,
+    max_bin_size: int = None,
     experiment_id: str = None,
 ):
     """Return a heatmap of the movement of a specific bodypart in the arena.
@@ -251,6 +253,8 @@ def _preprocess_time_bins(
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        tab_dict_for_binning (table_dict): table_dict that will be used as reference for maximum allowed table lengths. if None, basic table lengths from coordinates are used. 
+        max_bin_size (int): Maximum size that is accepted for any bins
         experiment_id (str): id of the experiment of time bins should
 
     Returns:
@@ -279,55 +283,70 @@ def _preprocess_time_bins(
     bin_ends = None
     bin_info = {}
     #dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
-    warn_start_time = {}
-    
+  
 
     # get start and end times for each table
     start_times = coordinates.get_start_times()
-    if table_lengths is None:
+    table_lengths = {}
+    if tab_dict_for_binning is None:
         table_lengths = coordinates.get_table_lengths()
+    else:
+        for key in tab_dict_for_binning.keys():
+            table_lengths[key]=int(get_dt(tab_dict_for_binning,key,only_metainfo=True)['num_rows'])
+
+    #init specific warnings
+    warn_start_time = {}
+    start_too_late_flag = dict.fromkeys(table_lengths,False)
+    end_too_late_flag = dict.fromkeys(table_lengths,False)
+
+    #truncate table_lengths to maximum, if given   
+    if max_bin_size is not None:
+        for key in table_lengths.keys():
+            if table_lengths[key] > max_bin_size:
+                table_lengths[key] = max_bin_size
+
     # if a specific experiment is given, calculate time bin info only for this experiment
     if experiment_id is not None:
         start_times = {experiment_id: start_times[experiment_id]}
         table_lengths = {experiment_id: table_lengths[experiment_id]}
 
     pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,12})?$"
-    
+
+
     # Case 1: Precomputed bins were given
     if precomputed_bins is not None:
         
         for key in table_lengths.keys():
-            arr=np.full(table_lengths[key], False, dtype=bool)
-            arr[:len(precomputed_bins)] = precomputed_bins[:table_lengths[key]]
-            bin_info[key] = arr
+            arr=np.full(table_lengths[key], False, dtype=bool)                     # Create max len boolean array
+            arr[:len(precomputed_bins)] = precomputed_bins[:table_lengths[key]]    # Fill array to max with precomputed bins
+            bin_info[key] = np.where(arr)[0]                                       # Extract position info of True entries
 
-    # Case 2: Integer bins are only adjusted using the frame rate
+            if len(precomputed_bins) > len(arr):
+                end_too_late_flag[key]=True
+
+
+    # Case 2: Integer bins were given
     elif type(bin_size) is int and type(bin_index) is int:
 
-        bin_size_int = int(np.round(bin_size * coordinates._frame_rate))
-        bin_index_int = bin_index
-        bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index)
-        bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index + 1))
-        for key in bin_ends:
-            bin_ends[key]=np.min([bin_ends[key],table_lengths[key]])
-            bin_starts[key]=np.min([bin_starts[key],bin_ends[key]])
+        bin_size_int = int(np.round(bin_size * coordinates._frame_rate))           # Get integer bin size based on frame rate
+        for key in table_lengths.keys():
+            bin_start = np.min([table_lengths[key],bin_size_int * bin_index])      # Get start and end positions that cannot exceed the table lengths
+            bin_end = np.min([table_lengths[key],bin_size_int * (bin_index + 1)])
+            bin_info[key] = np.arange(bin_start,bin_end,1)                         # Get range between starts and ends
 
-    # Case 3: Bins given as valid time ranges are used to fill precomputed_bins
-    # to reflect the time ranges given
+            if bin_size_int * bin_index > table_lengths[key]:
+                start_too_late_flag[key]=True
+            if bin_size_int * (bin_index + 1) > table_lengths[key]:
+                end_too_late_flag[key]=True
+
+
+    # Case 3: Bins given as valid time-string ranges 
     elif (
         type(bin_size) is str
         and type(bin_index) is str
         and re.match(pattern, bin_size) is not None
         and re.match(pattern, bin_index) is not None
     ):
-
-        # set starts and ends for all coord items
-        bin_starts = {key: 0 for key in table_lengths}
-        bin_ends = {key: 0 for key in table_lengths}
-
-        # precumputed bins is based on the longest table
-        key_to_longest = max(table_lengths.items(), key=lambda x: x[1])[0]
-        precomputed_bins = np.full(table_lengths[key_to_longest], False, dtype=bool)
 
         # calculate bin size as int
         bin_size_int = int(
@@ -336,19 +355,26 @@ def _preprocess_time_bins(
 
         # find start and end positions with sampling rate
         for key in table_lengths:
-            start_time = time_to_seconds(start_times[key])
-            bin_index_time = time_to_seconds(bin_index)
-            start_time_adjusted=int(
+            start_time = time_to_seconds(start_times[key])                         # Get start of time vector for specific experiment 
+            bin_index_time = time_to_seconds(bin_index)                            # Convert time string to float representing seconds
+            start_time_adjusted=int(                                               # Get True start sample number
                 np.round((bin_index_time - start_time) * coordinates._frame_rate)
             )
-            bin_starts[key] = np.max([0,start_time_adjusted])
-            bin_ends[key] = np.max([0,bin_size_int + start_time_adjusted])
-            if start_time_adjusted < 0:
-                warn_start_time[key]=seconds_to_time(bin_ends[key]-bin_starts[key])
+            bin_start = np.max([0,start_time_adjusted])                           # Ensure that samples stay within possible range  
+            if bin_start > table_lengths[key]:
+                start_too_late_flag[key]=True
+            bin_start = np.min([table_lengths[key],bin_start])                         
+            bin_end = np.max([0,bin_size_int + start_time_adjusted])
+            if bin_end > table_lengths[key]:
+                end_too_late_flag[key]=True
+            bin_end = np.min([table_lengths[key],bin_end])
+            bin_info[key] = np.arange(bin_start,bin_end,1) 
 
-        precomputed_bins[
-            bin_starts[key_to_longest] : (bin_ends[key_to_longest])
-        ] = True
+            if start_time_adjusted < 0:                                            # Warn user, if the start-time entered by the user is
+                warn_start_time[key]=seconds_to_time(bin_end-bin_start)            # less than the table start time
+
+
+
     # Case 4: If nonsensical input was given, return warning and default bins
     elif bin_size is not None:
         # plot short default bin, if user entered bins incorrectly
@@ -362,22 +388,14 @@ def _preprocess_time_bins(
         )
         warnings.warn(warning_message)
 
-        bin_size_int = int(np.round(60 * coordinates._frame_rate))
-        bin_index_int = 0
-        bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index_int)
-        bin_ends = dict.fromkeys(table_lengths, bin_size_int * (bin_index_int + 1))
+        bin_info = dict.fromkeys(table_lengths,np.arrange(0, int(np.round(60 * coordinates._frame_rate)),1)) 
+
     # Case 5: No bins are given, so bins are set to the signal length
     elif precomputed_bins is None and bin_size is None and bin_index is None:
-        bin_starts = dict.fromkeys(table_lengths, 0)
-        bin_ends = copy.deepcopy(table_lengths)
 
-
-    #create bin_info combined output
-    if precomputed_bins is None:
         for key in table_lengths.keys():
-            arr=np.full(table_lengths[key], False, dtype=bool)
-            arr[bin_starts[key]:bin_ends[key]]=True
-            bin_info[key] = arr
+            bin_info[key] = np.arange(0,table_lengths[key],1)
+
 
     # Validity checks and warnings for created bins
     if bin_size is not None and bin_index is not None:
@@ -395,9 +413,10 @@ def _preprocess_time_bins(
         for key in table_lengths:
             if bin_size_int == 0:
                 raise ValueError("Please make sure bin_size is > 0")
-            elif bin_starts[key] > table_lengths[key]:
+            elif start_too_late_flag[key]:
                 raise ValueError(
-                    "Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}".format(
+                    "[Error in {}]: Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}".format(
+                        key,
                         seconds_to_time(
                             table_lengths[key] / coordinates._frame_rate, False
                         ),
@@ -405,18 +424,17 @@ def _preprocess_time_bins(
                         bin_size,
                     )
                 )
-            elif bin_ends[key] > table_lengths[key]:
-                bin_ends[key] = table_lengths[key]
+            elif end_too_late_flag[key]:
                 if not bin_warning:
                     truncated_length = seconds_to_time(
-                        (bin_ends[key] - bin_starts[key]) / coordinates._frame_rate,
+                        (len(bin_info[key])) / coordinates._frame_rate,
                         False,
                     )
                     warning_message = (
                         "\033[38;5;208m\n"
-                        "Warning! The chosen time range exceeds the signal length for at least one data set!\n"
+                        "[Warning for {}]: The chosen time range exceeds the signal length for at least one data set!\n"
                         f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
-                        "\033[0m"
+                        "\033[0m".format(key)
                     )
                     if table_lengths[key] - bin_size_int > 0:
                         warning_message= (warning_message +
@@ -435,4 +453,4 @@ def _preprocess_time_bins(
                     warnings.warn(warning_message)
                     bin_warning = True
 
-    return bin_size_int, bin_index_int, precomputed_bins, bin_starts, bin_ends, bin_info
+    return bin_info

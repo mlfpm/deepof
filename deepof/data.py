@@ -1745,12 +1745,16 @@ class Coordinates:
         return tab
 
 
-    def get_videos(self, play: bool = False):
+    def get_videos(self, full_paths: bool = False, play: bool = False):
         """Returns the videos associated with the dataset as a list."""
         if play:  # pragma: no cover
-            raise NotImplementedError
+            raise NotImplementedError  
+        if full_paths:
+            out=[os.path.join(self._video_path, video) for video in self._videos]
+        else:
+            out=self._videos
 
-        return self._videos
+        return out
 
     def get_start_times(self):
         """Returns the start time for each table"""
@@ -2115,98 +2119,124 @@ class Coordinates:
         if not (hasattr(self, "_run_numba")):
             raise ValueError(
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
-            This is not supported byt he current version of deepof"""
+            This is not supported by the current version of deepof"""
             )
+    
+        N_preprocessing_steps=4+len(self._animal_ids)
+        N_processing_steps=len(self._tables.keys())
+        
+        with tqdm(total=N_preprocessing_steps, desc="data preprocessing    ", unit="step") as pbar:
 
-        tag_dict = {}
-        params = deepof.annotation_utils.get_hparameters(params)
-        raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._run_numba)
+            pbar.set_postfix(step="get tables")
 
-        try:
-            coords = self.get_coords(center=center, align=align, return_path=self._run_numba)
-        except AssertionError:
+            tag_dict = {}
+            params = deepof.annotation_utils.get_hparameters(params)
+
+
+            #get all kinds of tables
+            raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._run_numba)
+            pbar.update() 
 
             try:
-                coords = self.get_coords(center="Center", align="Spine_1", return_path=self._run_numba)
+                coords = self.get_coords(center=center, align=align, return_path=self._run_numba)
             except AssertionError:
-                coords = self.get_coords(center="Center", align="Nose", return_path=self._run_numba)
 
-        dists = self.get_distances(return_path=self._run_numba)
-        speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._run_numba)
-        if len(self._animal_ids) <= 1:
-            features_dict = (
-                deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                    self, center=center, align=align, include_angles=False, return_path=self._run_numba
+                try:
+                    coords = self.get_coords(center="Center", align="Spine_1", return_path=self._run_numba)
+                except AssertionError:
+                    coords = self.get_coords(center="Center", align="Nose", return_path=self._run_numba)
+            pbar.update() 
+
+            dists = self.get_distances(return_path=self._run_numba)
+            pbar.update() 
+            speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._run_numba)
+            pbar.update() 
+
+
+            #get kinematics
+            pbar.set_postfix(step="get kinematics")
+            if len(self._animal_ids) <= 1:
+                features_dict = (
+                    deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
+                        self, center=center, align=align, include_angles=False, return_path=self._run_numba
+                    )
                 )
-            )
-        else:  # pragma: no cover
-            features_dict = {
-                _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
+                pbar.update() 
+            else:  # pragma: no cover
+                features_dict={}
+                for _id in self._animal_ids:
+                    features_dict[_id]=deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
+                        self,
+                        center=center,
+                        align=align,
+                        animal_id=_id,
+                        include_angles=False,
+                        file_name='kinematics_'+_id,
+                        return_path=self._run_numba
+                    )
+                    pbar.update() 
+
+        with tqdm(total=N_processing_steps, desc="supervised annotations", unit="table") as pbar:
+            # noinspection PyTypeChecker
+            for key in self._tables.keys():
+                               
+                pbar.set_postfix(step="supervised tagging")
+
+                # Remove indices and add at the very end, to avoid conflicts if
+                # frame_rate is specified in project
+                if isinstance(raw_coords[key], str):
+                    tag_index = deepof.utils.load_dt_metainfo(raw_coords[key])['index_column']
+                else:
+                    tag_index = raw_coords[key].index
+                self._trained_model_path = resource_filename(__name__, "trained_models")
+
+                supervised_tags = deepof.annotation_utils.supervised_tagging(
                     self,
+                    raw_coords=raw_coords,
+                    coords=coords,
+                    dists=dists,
+                    full_features=features_dict,
+                    speeds=speeds,
+                    video=get_close_matches(
+                        key,
+                        [vid for vid in self._videos if vid.startswith(key)],
+                        cutoff=0.1,
+                        n=1,
+                    )[0],
+                    trained_model_path=self._trained_model_path,
                     center=center,
-                    align=align,
-                    animal_id=_id,
-                    include_angles=False,
-                    file_name='kinematics_'+_id,
-                    return_path=self._run_numba
+                    params=params,
+                    run_numba=self._run_numba,
                 )
-                for _id in self._animal_ids
-            }
 
-        # noinspection PyTypeChecker
-        for key in tqdm(self._tables.keys()):
+                supervised_tags.index = tag_index
 
-            # Remove indices and add at the very end, to avoid conflicts if
-            # frame_rate is specified in project
-            if isinstance(raw_coords[key], str):
-                tag_index = deepof.utils.load_dt_metainfo(raw_coords[key])['index_column']
-            else:
-                tag_index = raw_coords[key].index
-            self._trained_model_path = resource_filename(__name__, "trained_models")
+                pbar.set_postfix(step="post processing")
 
-            supervised_tags = deepof.annotation_utils.supervised_tagging(
-                self,
-                raw_coords=raw_coords,
-                coords=coords,
-                dists=dists,
-                full_features=features_dict,
-                speeds=speeds,
-                video=get_close_matches(
-                    key,
-                    [vid for vid in self._videos if vid.startswith(key)],
-                    cutoff=0.1,
-                    n=1,
-                )[0],
-                trained_model_path=self._trained_model_path,
-                center=center,
-                params=params,
-                run_numba=self._run_numba,
-            )
+                quality=self.get_quality().filter_videos([key])
+                quality[key] = deepof.utils.get_dt(quality,key)
+                table_dict={key:supervised_tags}
+                # Set table_dict to NaN if animals are missing
+                table_dict = deepof.utils.set_missing_animals(
+                    self, 
+                    table_dict, 
+                    quality,
+                    animal_ids=self._animal_ids + ["supervised"]
+                    )
+                supervised_tags = table_dict[key]
 
-            supervised_tags.index = tag_index
+                # Add missing tags to all animals
+                presence_masks = deepof.utils.compute_animal_presence_mask(quality)   
+                for animal in self._animal_ids:
+                    supervised_tags[
+                        "{}missing".format(("{}_".format(animal) if animal else ""))
+                    ] = (1 - presence_masks[key][animal].values)
 
-            quality=self.get_quality().filter_videos([key])
-            quality[key] = deepof.utils.get_dt(quality,key)
-            table_dict={key:supervised_tags}
-            # Set table_dict to NaN if animals are missing
-            table_dict = deepof.utils.set_missing_animals(
-                self, 
-                table_dict, 
-                quality,
-                animal_ids=self._animal_ids + ["supervised"]
-                )
-            supervised_tags = table_dict[key]
+                # save paths for modified tables
+                table_path = os.path.join(coords._table_path, key, key + '_' + "supervised_annotations")
+                tag_dict[key] = deepof.utils.save_dt(supervised_tags,table_path,self._run_numba) 
 
-            # Add missing tags to all animals
-            presence_masks = deepof.utils.compute_animal_presence_mask(quality)   
-            for animal in self._animal_ids:
-                supervised_tags[
-                    "{}missing".format(("{}_".format(animal) if animal else ""))
-                ] = (1 - presence_masks[key][animal].values)
-
-            # save paths for modified tables
-            table_path = os.path.join(coords._table_path, key, key + '_' + "supervised_annotations")
-            tag_dict[key] = deepof.utils.save_dt(supervised_tags,table_path,self._run_numba) 
+                pbar.update() 
 
         del features_dict, dists, speeds, coords, raw_coords
 

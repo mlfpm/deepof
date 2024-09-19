@@ -2893,8 +2893,12 @@ def load_dt(path: str, load_range: np.ndarray = None):
             tab = mmap_array[load_range]
         else:
             tab = mmap_array[load_range[0]:load_range[1]] 
-
+    elif path.endswith('.pqt') and load_range is not None:
+        #this obviously still loads the whole table and is only an intermediary solution
+        tab=pd.read_parquet(path, engine='pyarrow').iloc[load_range]   
+    
     elif load_range is not None:
+
         raise NotImplementedError(
             "range loading is currently only possible with numpy arrays"
         )
@@ -2904,30 +2908,32 @@ def load_dt(path: str, load_range: np.ndarray = None):
             # Load the array using pickle
             tab = np.lib.format.read_array(file)
 
+    elif path.endswith('.pqt'):
+        tab = pd.read_parquet(path, engine='pyarrow')
+
     elif path.endswith('.pkl'):
         with open(path, 'rb') as file:
             # Load the array using pickle
             tab = pickle.load(file)
 
-    elif path.endswith('.pqt'):
-        tab = pd.read_parquet(path, engine='pyarrow')
-
-        #restore tuple columns
-        if not isinstance(tab.columns, pd.MultiIndex): # and not isinstance(tab.columns, pd.Index):
-            cols_lit=[
-                ast.literal_eval(item)
-                if type(item) == str
-                and item.startswith("(")
-                and item.endswith(")")
-                else item 
-                for item 
-                in tab.columns
-                ]
-            
-            tab.columns=pd.Index(cols_lit)
-
     else:
         tab = None
+
+    #restore tuple columns
+    if hasattr(tab, 'columns') and not isinstance(tab.columns, pd.MultiIndex): # and not isinstance(tab.columns, pd.Index):
+        cols_lit=[
+            ast.literal_eval(item)
+            if type(item) == str
+            and item.startswith("(")
+            and item.endswith(")")
+            else item 
+            for item 
+            in tab.columns
+            ]
+        
+        tab.columns=pd.Index(cols_lit)
+
+
     
     return tab
 

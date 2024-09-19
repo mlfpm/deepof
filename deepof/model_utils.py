@@ -1225,8 +1225,8 @@ def embedding_model_fitting(
         # Sample up to N_windows_max windows from processed_train and processed_validation
         N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
         
-        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab, return_tests=True)
-        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab, return_tests=True)
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_tests=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_tests=True)
 
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:
@@ -1494,8 +1494,6 @@ def embedding_per_video(
     breaks = {}
     #interim
     file_name='unsup'
-    embeddings2 = {}
-    soft_counts2 = {}
 
 
     graph, contrastive = False, False
@@ -1534,24 +1532,22 @@ def embedding_per_video(
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
 
         emb = model.encoder([tab_tuple[0], tab_tuple[1]]).numpy()
-        embeddings[key] = emb
         if ruptures:
             breaks[key] = (~np.all(tab_tuple[0] == 0, axis=2)).sum(axis=1)
         else:
-            breaks[key] = np.ones(embeddings[key].shape[0]).astype(int)
+            breaks[key] = np.ones(emb.shape[0]).astype(int)
 
         if not contrastive:
             sc = model.grouper(
                 [tab_tuple[0], tab_tuple[1]]
             ).numpy()
-            soft_counts[key] = sc
             # save paths for modified tables
             table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
-            soft_counts2[key] = deepof.utils.save_dt(sc,table_path,coordinates._run_numba)
+            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._run_numba)
 
         # save paths for modified tables
         table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
-        embeddings2[key] = deepof.utils.save_dt(emb,table_path,coordinates._run_numba) 
+        embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._run_numba) 
 
     if contrastive:
         soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
@@ -1570,16 +1566,6 @@ def embedding_per_video(
         deepof.data.TableDict(
             breaks,
             typ="unsupervised_breaks",
-            exp_conditions=coordinates.get_exp_conditions,
-        ),
-        deepof.data.TableDict(
-            embeddings2,
-            typ="unsupervised_embedding",
-            exp_conditions=coordinates.get_exp_conditions,
-        ),
-        deepof.data.TableDict(
-            soft_counts2,
-            typ="unsupervised_counts",
             exp_conditions=coordinates.get_exp_conditions,
         ),
     )
