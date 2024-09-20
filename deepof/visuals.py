@@ -2198,9 +2198,7 @@ def animate_skeleton(
         cur_soft_counts=None
 
     #for legacy reasons scales is not a dictionary which complicates things
-    if experiment_id in list(coordinates._tables.keys()):
-        scale_index=list(coordinates._tables.keys()).index(experiment_id)
-    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[scale_index], key=experiment_id)
+    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
 
     # Sort column index to allow for multiindex slicing
     coords = coords.sort_index(ascending=True, inplace=False, axis=1)

@@ -704,8 +704,8 @@ def supervised_tagging(
     dists = deepof.utils.get_dt(dists,vid_name).reset_index(drop=True)
     speeds = deepof.utils.get_dt(speeds,vid_name).reset_index(drop=True)
     likelihoods = deepof.utils.get_dt(coord_object.get_quality(),vid_name).reset_index(drop=True)
-    arena_abs = coord_object._scales[vid_index][-1]
-    arena_rel = coord_object._scales[vid_index][-2]
+    arena_abs = coord_object._scales[vid_name][-1]
+    arena_rel = coord_object._scales[vid_name][-2]
 
     # Dictionary with motives per frame
     tag_dict = {}

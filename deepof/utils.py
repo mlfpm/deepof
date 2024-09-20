@@ -172,7 +172,8 @@ def enforce_skeleton_constraints_numba(
     n_frames, _, _ = data.shape
     for frame in range(n_frames):
 
-        if np.all(original_pos[frame, :, 0]):
+        if np.all(original_pos[frame, 
+                                0]):
             continue  # Skip this frame
 
         for (part1, part2, dist) in skeleton_constraints:
@@ -1920,17 +1921,17 @@ def get_arenas(
         project_path (str): Path to project.
         project_name (str): Name of project.
         segmentation_model_path (str): Path to segmentation model used for automatic arena detection.
-        videos (list): List of videos to extract arena parameters from. Defaults to None (all videos are used).
+        videos (dict): Dictionary of videos to extract arena parameters from. Defaults to None (all videos are used).
         debug (bool): If True, a frame per video with the detected arena is saved. Defaults to False.
         test (bool): If True, the function is run in test mode. Defaults to False.
 
     Returns:
-        arena_params (list): List of arena parameters.
+        arena_params (dict): Dictionary of arena parameters.
 
     """
-    scales = []
-    arena_params = []
-    video_resolution = []
+    scales = {}
+    arena_params = {}
+    video_resolution = {}
 
     def get_first_length(arena_corners):
         return math.dist(arena_corners[0], arena_corners[1])
@@ -1938,57 +1939,58 @@ def get_arenas(
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
         propagate_last = False
-        for i, video_name in enumerate(videos):
-
-            if not propagate_last:
-                arena_corners, h, w = extract_polygonal_arena_coordinates(
-                    os.path.join(video_path, video_name),
-                    arena,
-                    i,
-                    videos,
-                )
-
-                if arena_corners is None:
-                    propagate_last = True
-
-                else:
-                    cur_scales = [
-                        *np.mean(arena_corners, axis=0).astype(int),
-                        get_first_length(arena_corners),
-                        arena_dims,
-                    ]
-
-            if propagate_last:
-                cur_arena_params = arena_params[-1]
-                cur_scales = scales[-1]
-            else:
-                cur_arena_params = arena_corners
-
-            if arena == "circular-manual":
+        with tqdm(total=len(videos), desc="Detecting arenas", unit="arena") as pbar:
+            for vid_idx, key in enumerate(videos.keys()):
 
                 if not propagate_last:
-                    cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
-
-                scales.append(
-                    list(
-                        np.array(
-                            [
-                                cur_arena_params[0][0],
-                                cur_arena_params[0][1],
-                                np.mean(
-                                    [cur_arena_params[1][0], cur_arena_params[1][1]]
-                                )
-                                * 2,
-                            ]
-                        )
+                    arena_corners, h, w = extract_polygonal_arena_coordinates(
+                        os.path.join(video_path, videos[key]),
+                        arena,
+                        vid_idx,
+                        videos,
                     )
-                    + [arena_dims]
-                )
-            else:
-                scales.append(cur_scales)
 
-            arena_params.append(cur_arena_params)
-            video_resolution.append((h, w))
+                    if arena_corners is None:
+                        propagate_last = True
+
+                    else:
+                        cur_scales = [
+                            *np.mean(arena_corners, axis=0).astype(int),
+                            get_first_length(arena_corners),
+                            arena_dims,
+                        ]
+
+                if propagate_last:  
+                    cur_arena_params = arena_params[list(arena_params.keys())[-1]]
+                    cur_scales = scales[list(scales.keys())[-1]]
+                else:
+                    cur_arena_params = arena_corners
+
+                if arena == "circular-manual":
+
+                    if not propagate_last:
+                        cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
+
+                    scales[key]=list(
+                            np.array(
+                                [
+                                    cur_arena_params[0][0],
+                                    cur_arena_params[0][1],
+                                    np.mean(
+                                        [cur_arena_params[1][0], cur_arena_params[1][1]]
+                                    )
+                                    * 2,
+                                ]
+                            )
+                        ) + [arena_dims]
+                        
+
+                else:
+                    scales[key]=cur_scales
+
+                arena_params[key]=cur_arena_params
+                video_resolution[key]=(h, w)
+                pbar.update()
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
 
@@ -1999,65 +2001,63 @@ def get_arenas(
             if test:
                 arena_reference = np.zeros((4, 2))
             else:
+                first_key=list(videos.keys())[0]
                 arena_reference = extract_polygonal_arena_coordinates(
-                    os.path.join(video_path, videos[0]),
+                    os.path.join(video_path, videos[first_key]),
                     arena,
                     0,
-                    [videos[0]],
+                    [videos[first_key]],
                 )[0]
 
-        # Load SAM
-        segmentation_model = load_segmentation_model(segmentation_model_path)
-
-        for vid_index, _ in enumerate(videos):
-            arena_parameters, h, w = automatically_recognize_arena(
-                coordinates=coordinates,
-                tables=tables,
-                videos=videos,
-                vid_index=vid_index,
-                path=video_path,
-                arena_type=arena,
-                arena_reference=arena_reference,
-                segmentation_model=segmentation_model,
-                debug=debug,
-            )
-
-            if "polygonal" in arena:
-
-                closest_side_points = closest_side(
-                    simplify_polygon(arena_parameters), arena_reference[:2]
+        # Load SAM                             
+        with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
+            segmentation_model = load_segmentation_model(segmentation_model_path)        
+            for key in videos.keys():
+                arena_parameters, h, w = automatically_recognize_arena(
+                    coordinates=coordinates,
+                    tables=tables,
+                    videos=videos,
+                    vid_key=key,
+                    path=video_path,
+                    arena_type=arena,
+                    arena_reference=arena_reference,
+                    segmentation_model=segmentation_model,
+                    debug=debug,
                 )
 
-                scales.append(
-                    [
-                        *np.mean(arena_parameters, axis=0).astype(int),
-                        dist(*closest_side_points),
-                        arena_dims,
-                    ]
-                )
+                if "polygonal" in arena:
 
-            elif "circular" in arena:
-                # scales contains the coordinates of the center of the arena,
-                # the absolute diameter measured from the video in pixels, and
-                # the provided diameter in mm (1 -default- equals not provided)
-                scales.append(
-                    list(
-                        np.array(
-                            [
-                                arena_parameters[0][0],
-                                arena_parameters[0][1],
-                                np.mean(
-                                    [arena_parameters[1][0], arena_parameters[1][1]]
-                                )
-                                * 2,
-                            ]
-                        )
+                    closest_side_points = closest_side(
+                        simplify_polygon(arena_parameters), arena_reference[:2]
                     )
-                    + [arena_dims]
-                )
 
-            arena_params.append(arena_parameters)
-            video_resolution.append((h, w))
+                    scales[key]=[
+                            *np.mean(arena_parameters, axis=0).astype(int),
+                            dist(*closest_side_points),
+                            arena_dims,
+                        ]
+                    
+
+                elif "circular" in arena:
+                    # scales contains the coordinates of the center of the arena,
+                    # the absolute diameter measured from the video in pixels, and
+                    # the provided diameter in mm (1 -default- equals not provided)
+                    scales[key]=list(
+                            np.array(
+                                [
+                                    arena_parameters[0][0],
+                                    arena_parameters[0][1],
+                                    np.mean(
+                                        [arena_parameters[1][0], arena_parameters[1][1]]
+                                    )
+                                    * 2,
+                                ]
+                            )
+                        )+ [arena_dims]
+                            
+                arena_params[key]=arena_parameters
+                video_resolution[key]=(h, w)
+                pbar.update()
 
     elif not arena:
         return None, None, None
@@ -2067,7 +2067,7 @@ def get_arenas(
             "arenas must be set to one of: 'polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect'"
         )
 
-    return np.array(scales), arena_params, video_resolution
+    return scales, arena_params, video_resolution
 
 
 def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
@@ -2129,8 +2129,8 @@ def closest_side(polygon: list, reference_side: list):
 def automatically_recognize_arena(
     coordinates: coordinates,
     tables: table_dict,
-    videos: list,
-    vid_index: int,
+    videos: dict,
+    vid_key: str,
     path: str = ".",
     arena_type: str = "circular-autodetect",
     arena_reference: list = None,
@@ -2160,20 +2160,20 @@ def automatically_recognize_arena(
 
     """
     # create video capture object and read frame info
-    current_video_cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    current_video_cap = cv2.VideoCapture(os.path.join(path, videos[vid_key]))
     h = int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
     # Select the corresponding tracklets
     current_tab = tables[
         get_close_matches(
-            videos[vid_index].split(".")[0],
+            videos[vid_key].split(".")[0],
             [
                 vid
                 for vid in tables.keys()
                 if (
-                    vid.startswith(videos[vid_index].split(".")[0])
-                    or videos[vid_index].startswith(vid)
+                    vid.startswith(videos[vid_key].split(".")[0])
+                    or videos[vid_key].startswith(vid)
                 )
             ],
             cutoff=0.01,
@@ -2291,7 +2291,7 @@ def automatically_recognize_arena(
                 coordinates.project_path,
                 coordinates.project_name,
                 "Arena_detection",
-                f"{videos[vid_index][:-4]}_arena_detection.png",
+                f"{videos[vid_key][:-4]}_arena_detection.png",
             ),
             frame_with_arena,
         )
@@ -2759,10 +2759,10 @@ def cluster_transition_matrix(
     return trans_normed
 
 
-def get_total_Frames(video_paths: List[str]) -> int:
+def get_total_Frames(video_paths: dict) -> int:
 
     total_frames = 0
-    for video_path in video_paths:
+    for _, video_path in video_paths.items():
         current_video_cap = cv2.VideoCapture(video_path)
         total_frames += int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         current_video_cap.release()

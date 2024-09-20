@@ -381,7 +381,7 @@ def test_recognize_arena_and_subfunctions(indexes, detection_mode):
         coordinates=prun,
         videos=videos,
         tables=tables,
-        vid_index=vid_index,
+        vid_key=vid_index,
         path=path,
         segmentation_model=deepof.utils.load_segmentation_model(None),
         arena_type="circular-autodetect",

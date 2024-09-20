@@ -81,6 +81,31 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
             """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
         )
+    # Compatibility fixes
+    if isinstance(coordinates._tables, List):
+        tables={}
+        videos={}
+        scales={}
+        arena_params={}
+        video_resolution={}
+
+        for i, tab in enumerate(coordinates._tables):
+            # Remove the DLC suffix from the table name
+            try:
+                tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
+            except IndexError:
+                tab_name = tab.split(".")[0]
+            tables[tab_name]=coordinates._tables[i]
+            videos[tab_name]=coordinates._videos[i]
+            scales[tab_name]=coordinates._scales[i,:]
+            arena_params[tab_name]=coordinates._arena_params[i]
+            video_resolution[tab_name]=coordinates._video_resolution[i]
+        coordinates._tables=tables
+        coordinates._videos=videos
+        coordinates._scales=scales
+        coordinates._arena_params=arena_params
+        coordinates._video_resolution=video_resolution
+
 
     return coordinates
 
@@ -166,23 +191,35 @@ class Project:
                 )
             ][0]
             self.table_format = ex.split(".")[-1]
-        self.videos = os_sorted(
+        video_list = os_sorted(
             [
                 vid
                 for vid in os.listdir(self.video_path)
                 if vid.endswith(video_format) and not vid.startswith(".")
             ]
         )
-        self.tables = os_sorted(
+        table_list = os_sorted(
             [
                 tab
                 for tab in os.listdir(self.source_table_path)
                 if tab.endswith(self.table_format) and not tab.startswith(".")
             ]
         )
-        assert len(self.videos) == len(
-            self.tables
+        assert len(video_list) == len(
+            table_list
         ), "Unequal number of videos and tables. Please check your file structure"
+
+        #turn tables and videos into dictionaries with same keys
+        self.tables={}
+        self.videos={}
+        for i, tab in enumerate(table_list):
+            # Remove the DLC suffix from the table name
+            try:
+                tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
+            except IndexError:
+                tab_name = tab.split(".")[0]
+            self.tables[tab_name]=table_list[i]
+            self.videos[tab_name]=video_list[i]
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -191,7 +228,7 @@ class Project:
 
         # check if fast_implementations_threshold is reached
         self.run_numba = False
-        video_paths = [os.path.join(video_path, video) for video in self.videos]
+        video_paths = {key: os.path.join(video_path, video) for key, video in self.videos.items()}
         total_frames = deepof.utils.get_total_Frames(video_paths)
         if total_frames > fast_implementations_threshold:
             self.run_numba = True
@@ -312,8 +349,8 @@ class Project:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
 
         """
-        if verbose:
-            print("Detecting arena...")
+        #if verbose:
+        #    print("Detecting arena...")
 
         return deepof.utils.get_arenas(
             self,
@@ -353,23 +390,18 @@ class Project:
         total_tables = len(self.tables)
 
         with tqdm(total=total_tables, desc="Preprocessing tables", unit="table") as pbar:
-            for tab in self.tables:
+            for key in self.tables.keys():
                                
                 pbar.set_postfix(step="Loading trajectories")
 
                 loaded_tab = deepof.utils.load_table(
-                    tab,
+                    self.tables[key],
                     self.source_table_path,
                     self.table_format,
                     self.rename_bodyparts,
                     self.animal_ids,
                 )
 
-                # Remove the DLC suffix from the table name
-                try:
-                    tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
-                except IndexError:
-                    tab_name = tab.split(".")[0]
 
                 # Check if the files come from a multi-animal DLC project
                 if "individuals" in loaded_tab.index:
@@ -453,7 +485,7 @@ class Project:
                 lik = loaded_tab.xs("likelihood", level="coords", axis=1, drop_level=True)
 
                 loaded_tab = pd.concat([x, y], axis=1).sort_index(axis=1)
-                likely_dict = {tab_name : lik.fillna(0.0)}
+                likely_dict = {key : lik.fillna(0.0)}
 
                 likely_dict = TableDict(likely_dict, 
                                         typ="quality", 
@@ -487,7 +519,7 @@ class Project:
                     )
                     loaded_tab = temp.sort_index(axis=1)
                 
-                table_dict={tab_name:loaded_tab}
+                table_dict={key:loaded_tab}
 
                 if self.remove_outliers:
 
@@ -522,17 +554,17 @@ class Project:
                 pbar.set_postfix(step="Saving data")
 
                 #create folder for current data set
-                directory = os.path.join(self.project_path, self.project_name, 'Tables', tab_name)
+                directory = os.path.join(self.project_path, self.project_name, 'Tables', key)
                 if not os.path.exists(directory):
                     os.makedirs(directory)
                 # save paths for tables
-                quality_path = os.path.join(directory, tab_name + '_likelyhood')
-                table_path = os.path.join(directory, tab_name)
-                lik_dict[tab_name] = deepof.utils.save_dt(likely_dict[tab_name],quality_path,self.run_numba)
-                tab_dict[tab_name] = deepof.utils.save_dt(table_dict[tab_name],table_path,self.run_numba)
+                quality_path = os.path.join(directory, key + '_likelyhood')
+                table_path = os.path.join(directory, key)
+                lik_dict[key] = deepof.utils.save_dt(likely_dict[key],quality_path,self.run_numba)
+                tab_dict[key] = deepof.utils.save_dt(table_dict[key],table_path,self.run_numba)
 
                 #cleanup
-                del table_dict[tab_name]
+                del table_dict[key]
                 del loaded_tab
                 del likely_dict
 
@@ -562,26 +594,27 @@ class Project:
             dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
 
         """
-        if verbose:
-            print("Computing distances...")
+        #if verbose:
+        #    print("Computing distances...")
 
-        scales = self.scales[:, 2:]
 
-        distance_dict = {}
-        for i, (key, tab) in enumerate(tab_dict.items()):
+        distance_dict = {}                  
+        with tqdm(total=len(tab_dict), desc="Computing distances ", unit="table") as pbar:
+            for i, (key, tab) in enumerate(tab_dict.items()):
 
-            #load active table
-            tab = deepof.utils.get_dt(tab_dict, key)
+                #load active table
+                tab = deepof.utils.get_dt(tab_dict, key)
 
-            #get distances for this table
-            distance_tab=self.get_distances_tab(tab,scales[i, :])
+                #get distances for this table
+                distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
 
-            #save disctances for active table
-            distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
-            distance_dict[key] = deepof.utils.save_dt(distance_tab,distance_path,self.run_numba)
+                #save disctances for active table
+                distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
+                distance_dict[key] = deepof.utils.save_dt(distance_tab,distance_path,self.run_numba)
 
-            #clean up
-            del distance_tab
+                #clean up
+                del distance_tab
+                pbar.update()
 
         return distance_dict
     
@@ -625,8 +658,8 @@ class Project:
             dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
 
         """
-        if verbose:
-            print("Computing angles...")
+        #if verbose:
+        #    print("Computing angles...")
 
         # Add all three-element connected sequences on each mouse
         bridges = []
@@ -635,31 +668,33 @@ class Project:
         bridges = [i for i in bridges if len(i) == 3]
 
         angle_dict = {}
-        try:
-            for key in tab_dict.keys():
+        try:                                        
+            with tqdm(total=len(tab_dict), desc="Computing angles    ", unit="table") as pbar:
+                for key in tab_dict.keys():
 
-                #load table 
-                tab = deepof.utils.get_dt(tab_dict, key)
+                    #load table 
+                    tab = deepof.utils.get_dt(tab_dict, key)
 
-                dats = []
-                for clique in bridges:
-                    dat = pd.DataFrame(
-                        deepof.utils.angle(
-                            np.array(tab[clique]).reshape([3, tab.shape[0], 2])
-                        ).T
-                    )
+                    dats = []
+                    for clique in bridges:
+                        dat = pd.DataFrame(
+                            deepof.utils.angle(
+                                np.array(tab[clique]).reshape([3, tab.shape[0], 2])
+                            ).T
+                        )
 
-                    dat.columns = [tuple(clique)]
-                    dats.append(dat)
+                        dat.columns = [tuple(clique)]
+                        dats.append(dat)
 
-                dats = pd.concat(dats, axis=1)
+                    dats = pd.concat(dats, axis=1)
 
-                # Restore original index
-                dats.index = tab.index
+                    # Restore original index
+                    dats.index = tab.index
 
-                # get path for saving
-                angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
-                angle_dict[key] = deepof.utils.save_dt(dats,angle_path,self.run_numba)
+                    # get path for saving
+                    angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
+                    angle_dict[key] = deepof.utils.save_dt(dats,angle_path,self.run_numba)
+                    pbar.update()
 
 
         except KeyError:
@@ -700,86 +735,88 @@ class Project:
             ],
         }
 
-        if verbose:
-            print("Computing areas...")
+        #if verbose:
+        #    print("Computing areas...")
 
         all_areas_dict = {}
 
         # iterate over all tables
-        for key in tab_dict.keys():
+        with tqdm(total=len(tab_dict), desc="Computing areas    ", unit="table") as pbar:
+            for key in tab_dict.keys():
 
-            #load table 
-            tab = deepof.utils.get_dt(tab_dict, key)
+                #load table 
+                tab = deepof.utils.get_dt(tab_dict, key)
 
-            current_table = pd.DataFrame()
+                current_table = pd.DataFrame()
 
-            # iterate over all animals in each table
-            for animal_id in self.animal_ids:
+                # iterate over all animals in each table
+                for animal_id in self.animal_ids:
 
-                if animal_id == "":
-                    animal_id = None
+                    if animal_id == "":
+                        animal_id = None
 
-                # get the current table for the current animal
-                current_animal_table = tab.loc[
-                    :, deepof.utils.filter_columns(tab.columns, animal_id)
-                ]
-
-                # iterate over all types of areas to calculate list of polygon areas for each type of area
-                areas_animal_dict = {}
-                for bp_pattern_key, bp_pattern in body_part_patterns.items():
-
-                    try:
-
-                        # in case of multiple animals, add animal identifier to area keys
-                        if animal_id is not None:
-                            bp_pattern = [
-                                "_".join([animal_id, body_part])
-                                for body_part in bp_pattern
-                            ]
-
-                        # create list of keys containing all table columns relevant for the current area
-                        bp_x_keys = [(body_part, "x") for body_part in bp_pattern]
-                        bp_y_keys = [(body_part, "y") for body_part in bp_pattern]
-
-                        # create a 3D numpy array [NFrames, NPoints, NDis]
-                        x = current_animal_table[bp_x_keys].to_numpy()
-                        y = current_animal_table[bp_y_keys].to_numpy()
-                        y = y[:, :, np.newaxis]
-                        polygon_xy_stack = np.dstack((x, y))
-
-                        # dictionary of area lists (each list has dimensions [NFrames]),
-                        # use faster calculation for large datasets
-                        if self.run_numba:
-                            areas_animal_dict[
-                                bp_pattern_key
-                            ] = deepof.utils.compute_areas_numba(polygon_xy_stack)
-                        else:
-                            areas_animal_dict[
-                                bp_pattern_key
-                            ] = deepof.utils.compute_areas(polygon_xy_stack)
-
-                    except KeyError:
-                        continue
-
-                # change dictionary to table and check size
-                areas_table = pd.DataFrame(
-                    areas_animal_dict, index=current_animal_table.index
-                )
-                if animal_id is not None:
-                    areas_table.columns = [
-                        "_".join([animal_id, col]) for col in areas_table.columns
+                    # get the current table for the current animal
+                    current_animal_table = tab.loc[
+                        :, deepof.utils.filter_columns(tab.columns, animal_id)
                     ]
 
-                if areas_table.shape[1] != 4:
-                    warnings.warn(
-                        "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
+                    # iterate over all types of areas to calculate list of polygon areas for each type of area
+                    areas_animal_dict = {}
+                    for bp_pattern_key, bp_pattern in body_part_patterns.items():
+
+                        try:
+
+                            # in case of multiple animals, add animal identifier to area keys
+                            if animal_id is not None:
+                                bp_pattern = [
+                                    "_".join([animal_id, body_part])
+                                    for body_part in bp_pattern
+                                ]
+
+                            # create list of keys containing all table columns relevant for the current area
+                            bp_x_keys = [(body_part, "x") for body_part in bp_pattern]
+                            bp_y_keys = [(body_part, "y") for body_part in bp_pattern]
+
+                            # create a 3D numpy array [NFrames, NPoints, NDis]
+                            x = current_animal_table[bp_x_keys].to_numpy()
+                            y = current_animal_table[bp_y_keys].to_numpy()
+                            y = y[:, :, np.newaxis]
+                            polygon_xy_stack = np.dstack((x, y))
+
+                            # dictionary of area lists (each list has dimensions [NFrames]),
+                            # use faster calculation for large datasets
+                            if self.run_numba:
+                                areas_animal_dict[
+                                    bp_pattern_key
+                                ] = deepof.utils.compute_areas_numba(polygon_xy_stack)
+                            else:
+                                areas_animal_dict[
+                                    bp_pattern_key
+                                ] = deepof.utils.compute_areas(polygon_xy_stack)
+
+                        except KeyError:
+                            continue
+
+                    # change dictionary to table and check size
+                    areas_table = pd.DataFrame(
+                        areas_animal_dict, index=current_animal_table.index
                     )
+                    if animal_id is not None:
+                        areas_table.columns = [
+                            "_".join([animal_id, col]) for col in areas_table.columns
+                        ]
 
-                # collect area tables for all animals
-                current_table = pd.concat([current_table, areas_table], axis=1)
+                    if areas_table.shape[1] != 4:
+                        warnings.warn(
+                            "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
+                        )
 
-            area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
-            all_areas_dict[key] = deepof.utils.save_dt(current_table,area_path,self.run_numba)
+                    # collect area tables for all animals
+                    current_table = pd.concat([current_table, areas_table], axis=1)
+
+                area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
+                all_areas_dict[key] = deepof.utils.save_dt(current_table,area_path,self.run_numba)
+                pbar.update()
 
 
         return all_areas_dict
@@ -817,8 +854,9 @@ class Project:
             self.set_up_project_directory(debug=debug)
 
         # load video info
+        first_key=list(self.videos.keys())[0]
         self.frame_rate = float(
-            pims.ImageIOReader(os.path.join(self.video_path, self.videos[0])).frame_rate
+            pims.ImageIOReader(os.path.join(self.video_path, self.videos[first_key])).frame_rate
         )
 
         # load table info
@@ -858,10 +896,10 @@ class Project:
             quality = TableDict({**_to_extend._quality, **quality}, typ="quality")
 
             # Merge metadata
-            self.tables = _to_extend._table_paths + self.tables
-            self.videos = _to_extend._videos + self.videos
-            self.arena_params = _to_extend._arena_params + self.arena_params
-            self.scales = np.vstack([_to_extend._scales, self.scales])
+            self.tables = _to_extend._table_paths.update(self.tables)
+            self.videos = _to_extend._videos.update(self.videos)
+            self.arena_params = _to_extend._arena_params.update(self.arena_params)
+            self.scales = _to_extend._scales.update(self.scales)
 
             # Optional
             try:
@@ -958,31 +996,13 @@ class Project:
         "need to have the same project paths and names! Table- and video paths can differ.\n"
         "This is because Videos and Tables from the \"new\" project will get copied into the \"old\" one.")
 
-        def get_new_files(dir_path, file_format, existing_files):
-            return os_sorted(
-                [
-                    file
-                    for file in os.listdir(dir_path)
-                    if file.endswith(file_format)
-                    and not file.startswith(".")
-                    and file not in existing_files
-                ]
-            )
-
-        self.videos = get_new_files(
-            video_path, self.video_format, previous_project._videos
-        )
-        self.tables = get_new_files(
-            table_path, self.table_format, previous_project._table_paths
-        )
-
+        
+        #get keys that are in new project but not in old one
+        new_keys=list(set(self.videos.keys()) - set(previous_project._videos.keys()))
         # Keep only those videos and tables that were not in the original dataset
-        self.videos = [
-            vid for vid in self.videos if vid not in previous_project._videos
-        ]
-        self.tables = [
-            tab for tab in self.tables if tab not in previous_project._table_paths
-        ]
+        self.videos={key:self.videos[key] for key in new_keys}
+        self.tables={key:self.tables[key] for key in new_keys}
+
 
         if verbose:
             print(f"Processing data from {len(self.videos)} experiments...")
@@ -1034,15 +1054,7 @@ class Project:
             if verbose:
                 print(f"Evaluate new data...")
 
-            # Use the same directory as the original project
-            extended_coords = self.create(
-                verbose,
-                force=False,
-                debug=debug,
-                test=test,
-                _to_extend=previous_project,
-            )    
-
+            # Use the same directory as the original project 
             return self.create(
                 verbose, force=False, debug=debug, test=test, _to_extend=previous_project
             )
@@ -1064,16 +1076,16 @@ class Coordinates:
         bodypart_graph: str,
         path: str,
         quality: dict,
-        scales: np.ndarray,
+        scales: dict,
         frame_rate: float,
-        arena_params: List,
+        arena_params: dict,
         tables: dict,
         source_table_path: str,
         table_paths: List,
         trained_model_path: str,
         videos: List,
         video_path: str,
-        video_resolution: List,
+        video_resolution: dict,
         angles: dict = None,
         animal_ids: List = tuple([""]),
         areas: dict = None,
@@ -1093,14 +1105,14 @@ class Coordinates:
             bodypart_graph (nx.Graph): Graph containing the body part connectivity. See deepof.data.Project for more information.
             path (str): Path to the folder containing the results of the experiment.
             quality (dict): Dictionary containing the quality of the experiment. See deepof.data.Project for more information.
-            scales (np.ndarray): Scales used for the experiment. See deepof.data.Project for more information.
+            scales (dict): Scales used for the experiment. See deepof.data.Project for more information.
             frame_rate (float): frame rate of the processed videos.
-            arena_params (List): List containing the parameters of the arena. See deepof.data.Project for more information.
+            arena_params (dict): Dictionary containing the parameters of the arena. See deepof.data.Project for more information.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
             videos (List): List containing the videos used for the experiment. See deepof.data.Project for more information.
-            video_resolution (List): List containing the automatically detected resolution of the videos used for the experiment.
+            video_resolution (dict): Dictionary containing the automatically detected resolution of the videos used for the experiment.
             angles (dict): Dictionary containing the angles of the experiment. See deepof.data.Project for more information.
             animal_ids (List): List containing the animal IDs of the experiment. See deepof.data.Project for more information.
             areas (dict): dictionary with areas to compute. By default, it includes head, torso, and back.
@@ -1188,12 +1200,11 @@ class Coordinates:
             )
 
         tab_dict={}
-        z=0
         for key in self._tables.keys():
 
             tab=self.get_coords_at_key(
                 key = key,
-                scale = self._scales[z], #only necessary, because scale is not a dictionary. 
+                scale = self._scales[key], 
                 center = center,
                 polar = polar,
                 speed = speed,
@@ -1210,7 +1221,6 @@ class Coordinates:
 
             #cleanup
             del tab
-            z+=1
 
         return TableDict(
             tab_dict,
@@ -1750,7 +1760,7 @@ class Coordinates:
         if play:  # pragma: no cover
             raise NotImplementedError  
         if full_paths:
-            out=[os.path.join(self._video_path, video) for video in self._videos]
+            out={key: os.path.join(self._video_path, video) for video, key in self._videos.items()}
         else:
             out=self._videos
 
@@ -1824,34 +1834,30 @@ class Coordinates:
     @property
     def get_arenas(self):
         """Retrieve all available information associated with the arena."""
-        return self._arena, [self._arena_dims], self._scales
+        return self._arena, self._arena_dims, self._scales
 
     def edit_arenas(
-        self, videos: list = None, arena_type: str = None, verbose: bool = True
+        self, video_keys: list = None, arena_type: str = None, verbose: bool = True
     ):  # pragma: no cover
         """Tag the arena in the videos.
 
         Args:
-            videos (list): A list of videos to reannotate. If None, all videos are loaded.
+            video_keys (list): A list of keys for videos to reannotate. If None, all videos are loaded.
             arena_type (str): The type of arena to use. Must be one of "polygonal-manual", "circular-manual", or "circular-autodetect". If None (default), the arena type specified when creating the project is used.
             verbose (bool): Whether to print the progress of the annotation.
 
         """
-        if videos is None:
-            videos = self._videos
+        if video_keys is None:
+            video_keys = self._videos
         if arena_type is None:
             arena_type = self._arena
 
-        videos_renamed, vid_idcs = [], []
-        for vid_idx, vid_in in enumerate(self._videos):
-            for vid_out in videos:
-                if vid_out in vid_in:
-                    videos_renamed.append(vid_in)
-                    vid_idcs.append(vid_idx)
+        #create dictionary based on entered keys if keys actually exist in videos
+        videos_to_update={key: self._videos[key] for key in video_keys if key in self._videos.keys()}
 
         if verbose:
             print(
-                "Editing {} arena{}".format(len(videos), "s" if len(videos) > 1 else "")
+                "Editing {} arena{}".format(len(video_keys), "s" if len(video_keys) > 1 else "")
             )
 
         edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
@@ -1863,18 +1869,18 @@ class Coordinates:
             project_name=self._project_name,
             segmentation_model_path=None,
             video_path=self._video_path,
-            videos=videos_renamed,
+            videos=videos_to_update,
         )
+
+        # update the scales and arena parameters
+        for key in video_keys:
+            self._scales[key] = edited_scales[key]
+            self._arena_params[key] = edited_arena_params[key]
+
+        self.save(timestamp=False)
 
         if verbose:
             print("Done!")
-
-        # update the scales and arena parameters
-        for vid_idx, vid in enumerate(videos):
-            self._scales[vid_idcs[vid_idx]] = edited_scales[vid_idx]
-            self._arena_params[vid_idcs[vid_idx]] = edited_arena_params[vid_idx]
-
-        self.save(timestamp=False)
 
     def save(self, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.
