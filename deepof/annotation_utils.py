@@ -645,7 +645,7 @@ def supervised_tagging(
     dists: table_dict,
     speeds: table_dict,
     full_features: dict,
-    video: str,
+    key: str,
     trained_model_path: str = None,
     center: str = "Center",
     params: dict = {},
@@ -662,7 +662,7 @@ def supervised_tagging(
         dists (deepof.data.table_dict): table_dict with already processed distances
         speeds (deepof.data.table_dict): table_dict with already processed speeds
         full_features (dict): dictionary with
-        video (str): string name of the experiment to tag
+        key (str): key to the experiment to tag and current set of objects (videos, tables, distances etc.)
         trained_model_path (str): path indicating where all pretrained models are located
         center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
@@ -684,28 +684,20 @@ def supervised_tagging(
         huddle_estimator = pickle.load(est)
 
     # Extract useful information from coordinates object
-    tracks = list(coord_object._tables.keys())
-    vid_index = coord_object._videos.index(video)
-
-    arena_params = coord_object._arena_params[vid_index]
+    arena_params = coord_object._arena_params[key]
     arena_type = coord_object._arena
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
-    try:
-        vid_name = re.findall("(.*?)DLC", tracks[vid_index])[0]
-    except IndexError:
-        vid_name = tracks[vid_index]
-
     #extract various data tables from their Table dicts
-    raw_coords = deepof.utils.get_dt(raw_coords,vid_name).reset_index(drop=True)
-    coords = deepof.utils.get_dt(coords,vid_name).reset_index(drop=True)
-    dists = deepof.utils.get_dt(dists,vid_name).reset_index(drop=True)
-    speeds = deepof.utils.get_dt(speeds,vid_name).reset_index(drop=True)
-    likelihoods = deepof.utils.get_dt(coord_object.get_quality(),vid_name).reset_index(drop=True)
-    arena_abs = coord_object._scales[vid_name][-1]
-    arena_rel = coord_object._scales[vid_name][-2]
+    raw_coords = deepof.utils.get_dt(raw_coords,key).reset_index(drop=True)
+    coords = deepof.utils.get_dt(coords,key).reset_index(drop=True)
+    dists = deepof.utils.get_dt(dists,key).reset_index(drop=True)
+    speeds = deepof.utils.get_dt(speeds,key).reset_index(drop=True)
+    likelihoods = deepof.utils.get_dt(coord_object.get_quality(),key).reset_index(drop=True)
+    arena_abs = coord_object._scales[key][-1]
+    arena_rel = coord_object._scales[key][-2]
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -860,9 +852,9 @@ def supervised_tagging(
     for _id in animal_ids:
         
         if _id:
-            current_features=deepof.utils.get_dt(full_features[_id],vid_name) 
+            current_features=deepof.utils.get_dt(full_features[_id],key) 
         else:
-            current_features=deepof.utils.get_dt(full_features,vid_name)
+            current_features=deepof.utils.get_dt(full_features,key)
 
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
             climb_wall(
@@ -935,12 +927,12 @@ def tagged_video_output(
         params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
     """
 
-    def output_video(idx):
+    def output_video(key):
         """Output a single annotated video. Enclosed in a function to enable parallelization."""
         deepof.visuals.annotate_video(
             coordinates,
-            tag_dict=tag_dict[idx],
-            vid_index=list(coordinates._tables.keys()).index(idx),
+            tag_dict=tag_dict[key],
+            vid_key=key,
             debug=debug,
             frame_limit=frame_limit,
             params=params,

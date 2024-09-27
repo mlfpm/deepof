@@ -119,7 +119,7 @@ def test_climb_wall(center, axes, angle, tol):
             video_format=".mp4",
             table_format=".h5",
         )
-        .create(force=True)
+        .create(force=True, test=True)
         .get_coords()
     )
     rmtree(
@@ -169,12 +169,7 @@ def test_single_animal_traits(animal_id):
         video_format=".mp4",
         table_format=".h5",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
-        )
-    )
+    ).create(force=True, test=True)
 
     features = {
         _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -194,8 +189,14 @@ def test_single_animal_traits(animal_id):
         huddle_clf = pickle.load(handle)
 
     huddling = deepof.annotation_utils.huddle(
-        features, huddle_estimator=huddle_clf
+        features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
     ).astype(int)
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
+        )
+    )
 
     assert huddling.dtype == int
     assert np.array(huddling).shape[0] == pos_dframe.shape[0]
@@ -323,12 +324,13 @@ def test_rule_based_tagging(multi_animal, video_output):
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(force=True)
-    rmtree(os.path.join(path, "deepof_project"))
+    ).create(force=True, test=True)
 
     hardcoded_tags = prun.supervised_annotation(
         video_output=video_output, frame_limit=50, debug=True
     )
+
+    rmtree(os.path.join(path, "deepof_project"))
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
     assert list(hardcoded_tags.values())[0].shape[1] == (22 if multi_animal else 6)

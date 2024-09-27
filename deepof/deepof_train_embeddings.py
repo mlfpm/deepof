@@ -375,8 +375,8 @@ if __name__ == "__main__":
             run=run,
         )
 
-        # Get embeddings, soft_counts, and breaks per video
-        embeddings, soft_counts, breaks = deepof.model_utils.embedding_per_video(
+        # Get embeddings and soft_counts per video
+        embeddings, soft_counts = deepof.model_utils.embedding_per_video(
             coordinates=my_deepof_project,
             to_preprocess=to_preprocess,
             model=trained_model,
@@ -405,7 +405,6 @@ if __name__ == "__main__":
                 [
                     deep_encodings_per_video,
                     deep_assignments_per_video,
-                    deep_breaks_per_video,
                 ],
                 x,
                 protocol=pickle.HIGHEST_PROTOCOL,

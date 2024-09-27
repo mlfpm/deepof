@@ -202,6 +202,7 @@ def recluster(
             for i, key in enumerate(embeddings.keys())
         },
         typ="unsupervised_counts",
+        table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables"),
         exp_conditions=coordinates.get_exp_conditions,
     )
 
@@ -324,106 +325,9 @@ def get_aggregated_embedding(
     return agg_embedding
 
 
-def select_time_bin(
-    embedding: table_dict = None,
-    soft_counts: table_dict = None,
-    breaks: table_dict = None,
-    supervised_annotations: table_dict = None,
-    bin_size: int = 0,
-    bin_index: int = 0,
-    precomputed: np.ndarray = None,
-):
-    """Select a time bin and filters all relevant objects (embeddings, soft_counts, breaks, and supervised annotations).
-
-    Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
-        soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
-        supervised_annotations (TableDict): table dict with supervised annotations per animal experiment across time.
-        bin_size (int): The size of the time bin to select.
-        bin_index (int): The index of the time bin to select.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
-
-    Returns:
-        A tuple of the filtered embeddings, soft counts, and breaks.
-
-    """
-    # If precomputed, filter each experiment using the provided boolean array
-    supervised_annotations_out = None
-    if supervised_annotations is None:
-
-        if precomputed is not None:  # pragma: no cover
-            breaks_mask_dict = {}
-
-            for key in breaks.keys():
-                if embedding[key].shape[0] > len(precomputed):
-                    breaks_mask_dict[key] = np.concatenate(
-                        [
-                            precomputed,
-                            [False] * (embedding[key].shape[0] - len(precomputed)),
-                        ]
-                    ).astype(bool)
-
-                else:
-                    breaks_mask_dict[key] = precomputed[: embedding[key].shape[0]]
-
-        else:
-            # Get cumulative length of each video using breaks, and mask the cumsum dictionary,
-            # to check whether a certain instance falls into the desired bin
-            breaks_mask_dict = {
-                key: (np.cumsum(value) >= bin_size * bin_index)
-                & (np.cumsum(value) <= bin_size * (bin_index + 1))
-                for key, value in breaks.items()
-            }
-
-        # Filter embedding, soft_counts and breaks using the above masks
-        embedding = {
-            key: value[breaks_mask_dict[key]] for key, value in embedding.items()
-        }
-        soft_counts = {
-            key: value[breaks_mask_dict[key]] for key, value in soft_counts.items()
-        }
-        breaks = {key: value[breaks_mask_dict[key]] for key, value in breaks.items()}
-
-    else:
-        supervised_annotations_out = {}
-        if precomputed is not None:  # pragma: no cover
-            for key, val in supervised_annotations.items():
-                if supervised_annotations[key].shape[0] > len(precomputed):
-                    supervised_annotations_out[key] = val.iloc[
-                        np.concatenate(
-                            [
-                                precomputed,
-                                [False]
-                                * (
-                                    supervised_annotations[key].shape[0]
-                                    - len(precomputed)
-                                ),
-                            ]
-                        ).astype(bool)
-                    ]
-                else:
-                    supervised_annotations_out[key] = val.iloc[
-                        precomputed[: supervised_annotations[key].shape[0]]
-                    ]
-
-        else:
-
-            supervised_annotations_out = {
-                key: val.iloc[
-                    bin_size
-                    * bin_index : np.minimum(val.shape[0], bin_size * (bin_index + 1))
-                ]
-                for key, val in supervised_annotations.items()
-            }
-
-    return embedding, soft_counts, breaks, supervised_annotations_out
-
-
 def condition_distance_binning(
     embedding: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict,
     exp_conditions: dict,
     start_bin: int = None,
     end_bin: int = None,
@@ -439,7 +343,6 @@ def condition_distance_binning(
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         start_bin (int): The index of the first bin to compute the distance for.
         end_bin (int): The index of the last bin to compute the distance for.
@@ -475,7 +378,6 @@ def condition_distance_binning(
         return separation_between_conditions(
             embedding,
             soft_counts,
-            breaks,
             bin_info,
             exp_conditions,
             agg,
@@ -483,7 +385,7 @@ def condition_distance_binning(
         )
 
     if scan_mode == "per-bin":
-        bin_range = range(end_bin // step_bin + 1)
+        bin_range = range(end_bin // step_bin)
     elif scan_mode == "growing_window":
         bin_range = range(start_bin, end_bin, step_bin)
     else:
@@ -499,7 +401,6 @@ def condition_distance_binning(
 def separation_between_conditions(
     cur_embedding: table_dict,
     cur_soft_counts: table_dict,
-    cur_breaks: table_dict,
     bin_info: Union[dict,np.ndarray],
     exp_conditions: dict,
     agg: str,
@@ -510,7 +411,6 @@ def separation_between_conditions(
     Args:
         cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         cur_soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        cur_breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         agg (str): The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
         metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
@@ -613,7 +513,6 @@ def enrichment_across_conditions(
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental
         supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
@@ -711,7 +610,6 @@ def compute_transition_matrix_per_condition(
     Args:
         embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
-        breaks (TableDict): A dictionary of breaks, where the keys are the names of the experimental conditions, and the values are the breaks for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
@@ -956,8 +854,8 @@ def align_deepof_kinematics_with_unsupervised_labels(
     # Return aligned kinematics
     return deepof.data.TableDict(
         kinematic_features, 
+        typ="annotations",
         table_path=os.path.join(deepof_project._project_path, deepof_project._project_name, "Tables"), 
-        typ="annotations"
         )
 
 
@@ -990,7 +888,6 @@ def chunk_summary_statistics(chunked_dataset: np.ndarray, body_part_names: list)
 def annotate_time_chunks(
     deepof_project: coordinates,
     soft_counts: table_dict,
-    breaks: table_dict,
     supervised_annotations: table_dict = None,
     window_size: int = None,
     window_step: int = 1,
@@ -1010,7 +907,6 @@ def annotate_time_chunks(
     Args:
         deepof_project (coordinates): Project object.
         soft_counts (table_dict): matrix with soft cluster assignments produced by the unsupervised pipeline.
-        breaks (table_dict): the breaks for each condition.
         supervised_annotations (table_dict): set of supervised annotations produced by the supervised pipeline withing deepof.
         window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False, specifies the size of the sliding window to pass through the data to generate training instances. None defaults to video frame-rate.
         window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
@@ -1044,19 +940,18 @@ def annotate_time_chunks(
     # Merge supervised labels if provided
     if supervised_annotations is not None:
         comprehensive_features = comprehensive_features.merge(
-            supervised_annotations, 
+            supervised_annotations,
             save_as_paths=deepof_project._run_numba, 
             file_name=file_name,
-            )
+)
 
     first_key = list(comprehensive_features.keys())[0]
     feature_names = deepof.utils.get_dt(comprehensive_features, first_key, only_metainfo=True)['columns']
 
-    # Align with breaks per video, by taking averages on the corresponding windows, and concatenate videos
+    # Do some preprocessing and convert to numpy matrices 
     comprehensive_features = comprehensive_features.preprocess(
         scale=False,
         test_videos=0,
-        shuffle=False,
         window_size=(
             window_size
             if window_size is not None
@@ -1065,8 +960,6 @@ def annotate_time_chunks(
         window_step=window_step,
         filter_low_variance=False,
         interpolate_normalized=False,
-        automatic_changepoints=False,
-        precomputed_breaks=breaks,
         save_as_paths=deepof_project._run_numba,
         file_name=file_name,
     )[0][0]
@@ -1074,48 +967,39 @@ def annotate_time_chunks(
     # Load sampled features and remove chunks with missing values
     # use up to 200% of requested samples to factor in data reduction by filtering downstream
     N_windows_tab = int(samples*2/len(comprehensive_features))
-    sampled_features, sampled_idcs_dict=comprehensive_features.sample_windows_from_data(N_windows_tab=N_windows_tab, no_nans=True)
+    sampled_features, sampled_idcs_dict=comprehensive_features.sample_windows_from_data(
+        sampled_indices={}, 
+        N_windows_tab=N_windows_tab, 
+        no_nans=True
+        )
 
-    # Remove chunks with missing values
-    #possible_idcs = ~np.isnan(comprehensive_features).any(axis=-1).any(axis=-1)
-    #comprehensive_features = comprehensive_features[possible_idcs]
 
-    def sample_from_breaks(sampled_idcs_dict, idcs):
+    def sample_from_idcs(sampled_idcs_dict, idcs):
 
         # Sample from idcs_dict, keeping each animal's identity
-        cumulative_breaks = 0
+        cumulative_idcs = 0
         subset_idcs_dict = {}
         for key in sampled_idcs_dict.keys():
             subset_idcs_dict[key] = sampled_idcs_dict[key][
                 idcs[
-                    (idcs >= cumulative_breaks)
-                    & (idcs < cumulative_breaks + sampled_idcs_dict[key].shape[0])
+                    (idcs >= cumulative_idcs)
+                    & (idcs < cumulative_idcs + sampled_idcs_dict[key].shape[0])
                 ]
-                - cumulative_breaks
+                - cumulative_idcs
             ]
-            cumulative_breaks += sampled_idcs_dict[key].shape[0]
+            cumulative_idcs += sampled_idcs_dict[key].shape[0]
 
         return subset_idcs_dict
 
-    # Convert soft_counts to hard labels
-    #hard_counts = {key: np.argmax(value, axis=1) for key, value in soft_counts.items()}
-    #hard_counts = pd.Series(
-    #    np.concatenate([value for value in hard_counts.values()], axis=0)
-    #)
 
     # Filter instances with less confidence than specified
     sampled_soft_counts, _=soft_counts.sample_windows_from_data(sampled_indices=sampled_idcs_dict)
     sampled_hard_counts=pd.Series(np.argmax(sampled_soft_counts, axis=1))
 
     qual_filter = (sampled_soft_counts.max(axis=1) > min_confidence)
-
-    #qual_filter = (
-    #    np.concatenate([soft for soft in soft_counts.values()]).max(axis=1)
-    #    > min_confidence
-    #)[possible_idcs]
     sampled_features = sampled_features[qual_filter]
     hard_counts = sampled_hard_counts[qual_filter].reset_index(drop=True)
-    sampled_idcs_dict = sample_from_breaks(sampled_idcs_dict, np.where(qual_filter)[0])
+    sampled_idcs_dict = sample_from_idcs(sampled_idcs_dict, np.where(qual_filter)[0])
 
     # Sample X and y matrices to increase computational efficiency
     if samples is not None:
@@ -1127,7 +1011,7 @@ def annotate_time_chunks(
 
         sampled_features = sampled_features[random_idcs]
         hard_counts = hard_counts[random_idcs]
-        sampled_idcs_dict = sample_from_breaks(sampled_idcs_dict, random_idcs)
+        sampled_idcs_dict = sample_from_idcs(sampled_idcs_dict, random_idcs)
 
     # Aggregate summary statistics per chunk, by either taking the average or running seglearn
     if aggregate == "mean":
@@ -1161,7 +1045,6 @@ def chunk_cv_splitter(
 
     Args:
         chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
-        breaks (dict): dictionary containing ruptures per video.
         n_folds (int): number of cross-validation folds to compute.
 
     Returns:
@@ -1195,7 +1078,7 @@ def train_supervised_cluster_detectors(
     Args:
         chunk_stats (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
-        sampled_breaks (dict): sequence length of each chunk per experiment.
+        sampled_idcs_dict (dict): indices of sampled samples of the experiment.
         n_folds (int): number of folds for cross validation. If None (default) leave-one-experiment-out CV is used.
         verbose (int): verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).
 

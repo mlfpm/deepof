@@ -110,46 +110,6 @@ def test_get_aggregated_embedding(reduce_dim, agg):
     assert aggregated_embeddings.shape[0] == len(embedding)
 
 
-@given(
-    bin_size=st.integers(min_value=15, max_value=20),
-    bin_index=st.integers(min_value=0, max_value=1),
-    supervised=st.booleans(),
-)
-def test_select_time_bin(bin_size, bin_index, supervised):
-
-    # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
-    if supervised:
-        embedding = {i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}
-
-    # Define a test matrix of soft counts
-    soft_counts = {}
-    for i in range(10):
-        counts = np.random.normal(size=(100, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-
-    # Create a dictionary of breaks, whose sums add up to the number of chunks
-    breaks = {i: np.array([10] * 100) for i in range(10)}
-
-    embedding, soft_counts, breaks, supervised_annots = deepof.post_hoc.select_time_bin(
-        embedding=(embedding if not supervised else None),
-        soft_counts=(soft_counts if not supervised else None),
-        breaks=(breaks if not supervised else None),
-        supervised_annotations=(None if not supervised else embedding),
-        bin_size=bin_size,
-        bin_index=bin_index,
-    )
-
-    # Assert that all returned objects are binned
-    if not supervised:
-        assert list(embedding.values())[0].shape[0] > 0
-        assert list(soft_counts.values())[0].shape[0] > 0
-        assert list(breaks.values())[0].shape[0] > 0
-
-    else:
-        assert list(supervised_annots.values())[0].shape[0] > 0
-
-
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     scan_mode=st.sampled_from(["growing-window", "per-bin"]),

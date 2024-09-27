@@ -187,7 +187,7 @@ def test_project_filters():
         video_scale=380,
         video_format=".mp4",
         table_format=".h5",
-    ).create(force=True)
+    ).create(force=True, test=True)
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
@@ -231,7 +231,7 @@ def test_get_distances(nodes, ego):
         video_format=".mp4",
         table_format=".h5",
     )
-    prun.create(force=True)
+    prun.create(force=True, test=True)
 
     tables, _ = prun.preprocess_tables(verbose=True)
     prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
@@ -313,7 +313,7 @@ def test_run(nodes, ego, use_numba):
 
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.create(force=True)
+    prun = prun.create(force=True, test=True)
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
@@ -347,7 +347,7 @@ def test_get_supervised_annotation(use_numba):
         video_format=".mp4",
         table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
-    ).create(force=True)
+    ).create(force=True, test=True)
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
@@ -414,7 +414,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         prun.distances = nodes
         prun.ego = ego
 
-    prun = prun.create(force=True)
+    prun = prun.create(force=True, test=True)
     rmtree(
         os.path.join(
             ".",
@@ -533,7 +533,7 @@ def test_get_graph_dataset(mode, sampler, random_id):
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
-    ).create(force=True)
+    ).create(force=True, test=True)
     rmtree(
         os.path.join(
             ".",

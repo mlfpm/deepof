@@ -27,7 +27,7 @@ def time_to_seconds(time_string: str) -> float:
         seconds (float): time in seconds
     """
     seconds = None
-    if re.match(r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,9})?$", time_string) is not None:
+    if re.match(r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?$", time_string) is not None:
         time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
         seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
 
@@ -60,14 +60,14 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
 
 
 def calculate_average_arena(
-    all_vertices: List[List[Tuple[float, float]]], num_points: int = 10000
+    all_vertices: dict[List[Tuple[float, float]]], num_points: int = 10000
 ) -> np.array:
     """
     Calculates the average arena based on a list of polynomial vertices
     lists representing arenas. Polynomial vertices can have different lengths and start at different positions
 
     Args:
-        vertices (list): A list of 2D tuples representing the vertices of the arenas.
+        vertices (dict[List[Tuple[float, float]]]): A dictionary of lists of 2D tuples representing the vertices of the arenas.
         num_points (int): number of points in the averaged arena.
 
     Returns:
@@ -75,7 +75,7 @@ def calculate_average_arena(
     """
 
     # ensure that enough points are available for interpolation
-    max_length = max(len(lst) for lst in all_vertices) + 1
+    max_length = max(len(lst) for lst in all_vertices.values()) + 1
     assert (
         num_points > max_length
     ), "The num_points variable needs to be larger than the longest list of vertices!"
@@ -85,9 +85,9 @@ def calculate_average_arena(
     avg_points.fill(0.0)
 
     # iterate over all arenas
-    for i in range(len(all_vertices)):
+    for key in all_vertices.keys():
         # calculate relative segment lengths between vertices
-        vertices = np.stack(all_vertices[i]).astype(float)
+        vertices = np.stack(all_vertices[key]).astype(float)
         vertices = np.insert(vertices, 0, vertices[-1, :]).reshape(
             -1, 2
         )  # close polynomial
@@ -241,8 +241,9 @@ def _preprocess_time_bins(
     bin_index: Union[int, str],
     precomputed_bins: np.ndarray = None,
     tab_dict_for_binning: table_dict = None,
-    max_bin_size: int = None,
     experiment_id: str = None,
+    samples_max: str = 10000,
+    down_sample: bool = True,
 ):
     """Return a heatmap of the movement of a specific bodypart in the arena.
 
@@ -256,14 +257,11 @@ def _preprocess_time_bins(
         tab_dict_for_binning (table_dict): table_dict that will be used as reference for maximum allowed table lengths. if None, basic table lengths from coordinates are used. 
         max_bin_size (int): Maximum size that is accepted for any bins
         experiment_id (str): id of the experiment of time bins should
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        down_sample (bool): Use downsampling to get samples_max samples (if True). Uses cutting until sample of number samples_max if False.
 
     Returns:
-        bin_size_int (int): preprocessed bin size for time filtering
-        bin_index_int (int): preprocessed bin index for time filtering
-        bin_starts (dict): dictionary of start position for each bin in each condition
-        bin_ends (dict): dictionary of end position for each bin in each condition
-        precomputed_bins (np.ndarray): precomputed time bins as alternative to bin_index_int and bin_size_int
-        error (boolean): True if unusable bins were selected
+        bin_info (dict): dictionary containing indices to plot for all experiments
     """
 
     # warn in case of conflicting inputs
@@ -278,9 +276,6 @@ def _preprocess_time_bins(
         warnings.warn(warning_message)
     # init outputs
     bin_size_int = None
-    bin_index_int = None
-    bin_starts = None
-    bin_ends = None
     bin_info = {}
     #dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
   
@@ -299,18 +294,12 @@ def _preprocess_time_bins(
     start_too_late_flag = dict.fromkeys(table_lengths,False)
     end_too_late_flag = dict.fromkeys(table_lengths,False)
 
-    #truncate table_lengths to maximum, if given   
-    if max_bin_size is not None:
-        for key in table_lengths.keys():
-            if table_lengths[key] > max_bin_size:
-                table_lengths[key] = max_bin_size
-
     # if a specific experiment is given, calculate time bin info only for this experiment
     if experiment_id is not None:
         start_times = {experiment_id: start_times[experiment_id]}
         table_lengths = {experiment_id: table_lengths[experiment_id]}
 
-    pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,12})?$"
+    pattern = r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,12})?$"
 
 
     # Case 1: Precomputed bins were given
@@ -388,13 +377,37 @@ def _preprocess_time_bins(
         )
         warnings.warn(warning_message)
 
-        bin_info = dict.fromkeys(table_lengths,np.arrange(0, int(np.round(60 * coordinates._frame_rate)),1)) 
+        bin_info = dict.fromkeys(table_lengths,np.arange(0, int(np.round(60 * coordinates._frame_rate)),1)) 
 
     # Case 5: No bins are given, so bins are set to the signal length
     elif precomputed_bins is None and bin_size is None and bin_index is None:
 
         for key in table_lengths.keys():
             bin_info[key] = np.arange(0,table_lengths[key],1)
+
+    #Downsample bin_info if necessary
+
+    info_message=None
+    for key in bin_info.keys():
+        full_length=len(bin_info[key])
+        if full_length>samples_max:
+            if down_sample:
+                selected_indices=np.linspace(0, full_length-1, samples_max).astype(int)
+            else:
+                selected_indices=np.arrange(0,samples_max,1)
+            bin_info[key]=bin_info[key][selected_indices]
+            
+            #I know the info message just needs to be set once, but this does not cause any performance issues and is more readable
+            info_message=(
+                "\033[33m\n"
+                f"Info! The selected range for plotting exceeds the maximum number of {samples_max} samples allowed for plotting!\n"
+                f"To plot the selected full range the plot will be downsampled accordingy by a factor of approx. {int((full_length-1)/samples_max)}.\n"
+                "To avoid this, you can increase the input parameter \"samples_max\", but this also increases computation time."
+                "\033[0m"
+            )
+
+    if info_message:
+        print(info_message)
 
 
     # Validity checks and warnings for created bins

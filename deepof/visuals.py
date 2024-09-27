@@ -67,16 +67,18 @@ def plot_arena(
         ax (Any): axes where to plot the arena.
         i (Union[int, str]): index of the animal to plot.
     """
+    key=None
     if isinstance(i, np.int64):
-        arena = coordinates._arena_params[i]
+        key=list(coordinates._tables.keys())[i]
+        arena = coordinates._arena_params[key]
 
     if "circular" in coordinates._arena:
 
         if i == "average":
             arena = [
-                np.mean(np.array([i[0] for i in coordinates._arena_params]), axis=0),
-                np.mean(np.array([i[1] for i in coordinates._arena_params]), axis=0),
-                np.mean(np.array([i[2] for i in coordinates._arena_params]), axis=0),
+                np.mean(np.array([i[0] for i in coordinates._arena_params.values()]), axis=0),
+                np.mean(np.array([i[1] for i in coordinates._arena_params.values()]), axis=0),
+                np.mean(np.array([i[2] for i in coordinates._arena_params.values()]), axis=0),
             ]
 
         ax.add_patch(
@@ -97,12 +99,12 @@ def plot_arena(
         if center == "arena" and i == "average":
 
             arena = calculate_average_arena(coordinates._arena_params)
-            avg_scaling = np.mean(np.array(coordinates._scales[:, :2]), 0)
+            avg_scaling = np.mean(np.array(list(coordinates._scales.values()))[:, :2], 0)
             arena -= avg_scaling
 
         elif center == "arena":
             arena -= np.expand_dims(
-                np.array(coordinates._scales[i, :2]).astype(int), axis=1
+                np.array(coordinates._scales[key][:2]).astype(int), axis=1
             ).T
 
         # Repeat first element for the drawn polygon to be closed
@@ -250,7 +252,7 @@ def plot_heatmaps(
     experiment_id: int = "average",
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
-    N_rows_max: int = 6000000,
+    samples_max: int = 10000,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -272,7 +274,7 @@ def plot_heatmaps(
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        N_rows_max (int): Maximum number of rows that is sampled from all tables for position estimation.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
@@ -310,7 +312,7 @@ def plot_heatmaps(
     if not experiment_id=="average":
         e_id=experiment_id
     bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, experiment_id=e_id
+        coordinates, bin_size, bin_index, experiment_id=e_id, samples_max=samples_max
     )
 
     if not center:  # pragma: no cover
@@ -327,17 +329,12 @@ def plot_heatmaps(
         title_suffix += f" - {condition_value}"
 
     if experiment_id != "average":
-
-        i = np.argmax(np.array(list(coords.keys())) == experiment_id)
         coords = coords.filter_videos([experiment_id])
 
     # for all tables in coords:
     # read tables one by one
-    # cut them in shape according to time bins
-    # sample rows from cut table for plot
-    N_rows_table=int(N_rows_max/len(coords))
+    # and cut them in shape according to time bins
     sampled_tabs = []
-
     for key in coords.keys():
 
         #load table if not already loaded
@@ -346,11 +343,8 @@ def plot_heatmaps(
         #cut slice from table
         tab=tab.iloc[bin_info[key]]
 
-        #sample evenly spaced rows from table
-        total_rows = len(tab)
-        step_size = np.max([1,total_rows/N_rows_table])
-        selected_indices=np.arange(0, total_rows, step_size).astype(int)
-        sampled_tabs.append(tab.iloc[selected_indices])
+        #append table
+        sampled_tabs.append(tab)
 
     #concatenate table samples into one table for processing
     coords = pd.concat([val for val in sampled_tabs], axis=0).reset_index(
@@ -388,6 +382,7 @@ def plot_gantt(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=10000,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -405,6 +400,7 @@ def plot_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -432,7 +428,13 @@ def plot_gantt(
         
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins=precomputed_bins, experiment_id=experiment_id, tab_dict_for_binning=supervised_annotations
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        experiment_id=experiment_id, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
         )
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
@@ -440,7 +442,13 @@ def plot_gantt(
 
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins=precomputed_bins, experiment_id=experiment_id, tab_dict_for_binning=soft_counts
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        experiment_id=experiment_id, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
         )
     else:
         plot_type = "mixed"
@@ -655,7 +663,6 @@ def plot_enrichment(
     coordinates: coordinates,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -664,6 +671,7 @@ def plot_enrichment(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=100000,
     # Visualization parameters
     exp_condition: str = None,
     exp_condition_order: list = None,
@@ -678,7 +686,6 @@ def plot_enrichment(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
@@ -687,6 +694,7 @@ def plot_enrichment(
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -707,8 +715,7 @@ def plot_enrichment(
     # Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
         [embeddings is not None, 
-         soft_counts is not None, 
-         breaks is not None]
+         soft_counts is not None]
     ):
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
@@ -734,11 +741,13 @@ def plot_enrichment(
     # Preprocess information given for time binning
     if supervised_annotations is not None:
         bin_info = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=supervised_annotations
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
         bin_info = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
 
     # Get cluster enrichment across conditions for the desired settings
@@ -1102,11 +1111,11 @@ def plot_transitions(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=10000,
     # Visualization parameters
     exp_condition: str = None,
     visualization="networks",
@@ -1121,14 +1130,13 @@ def plot_transitions(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
-
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         kwargs: additional arguments to pass to the seaborn kdeplot function.
@@ -1158,7 +1166,7 @@ def plot_transitions(
 
 
     bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings,
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
 
     grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
@@ -1276,12 +1284,12 @@ def plot_stationary_entropy(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict = None,
     add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=10000,
     # Visualization parameters
     exp_condition: str = None,
     verbose: bool = False,
@@ -1294,12 +1302,12 @@ def plot_stationary_entropy(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -1324,11 +1332,10 @@ def plot_stationary_entropy(
         }
 
     soft_counts = soft_counts.filter_videos(embeddings.keys())
-    breaks = breaks.filter_videos(embeddings.keys())
 
     # preprocess information given for time binning
     bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
 
     if (any([np.sum(bin_info[key]) < 2 for key in bin_info.keys()])):
@@ -1433,7 +1440,7 @@ def _filter_embeddings(
 
     try:
         if exp_condition is None:
-            exp_condition = list(embeddings._exp_conditions.values())[0].columns[0]
+            exp_condition = list(coordinates._exp_conditions.values())[0].columns[0]
 
         concat_hue = [
             str(coordinates.get_exp_conditions[i][exp_condition].values[0])
@@ -1606,7 +1613,6 @@ def plot_embeddings(
     coordinates: coordinates,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     # Quality selection parameters
     min_confidence: float = 0.0,
@@ -1614,6 +1620,7 @@ def plot_embeddings(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=10000,
     # Normative modelling
     normative_model: str = None,
     add_stats: str = "Mann-Whitney",
@@ -1624,7 +1631,6 @@ def plot_embeddings(
     samples: int = 500,
     show_aggregated_density: bool = True,
     colour_by: str = "exp_condition",
-    show_break_size_as_radius: bool = False,
     ax: Any = None,
     save: bool = False,
 ):
@@ -1634,7 +1640,6 @@ def plot_embeddings(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
@@ -1644,6 +1649,7 @@ def plot_embeddings(
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
@@ -1675,38 +1681,25 @@ def plot_embeddings(
         )
     # Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
-        [embeddings is not None, soft_counts is not None, breaks is not None]
+        [embeddings is not None, soft_counts is not None]
     ):
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
-        )
-    keys=[]
-    max_bin_size=10000000 #pot. introduce coordinates.get_global_maximum_rows()
-    if supervised_annotations is not None:
-        keys=supervised_annotations.keys()
-        max_bin_size=max_bin_size/len(supervised_annotations)
-    elif embeddings is not None:
-        keys=embeddings.keys()
-        max_bin_size=max_bin_size/len(embeddings)
-    else:
-        raise ValueError(
-            "This function needs either supervised or unsupervised annotations as inputs!"
-        )
-      
+        )      
 
     # preprocess information given for time binning
     if supervised_annotations is not None:
         bin_info = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=supervised_annotations, max_bin_size=max_bin_size,
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
         bin_info = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, max_bin_size=max_bin_size,
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
-    #set bin starts and ends to table lengths if none are given
 
-
-    # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
+    # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
     (
         emb_to_plot,
         counts_to_plot,
@@ -1726,9 +1719,9 @@ def plot_embeddings(
 
         samples_dict={}
 
-        #set samples to a maximum of 100k
+        #set samples to a maximum of samples_max
         if samples is None:
-            samples=int(max_bin_size)
+            samples=samples_max
 
         # make sure that not more samples are drawn than are available
         shortest = samples
@@ -2667,7 +2660,6 @@ def output_cluster_video(
 
 def output_videos_per_cluster(
     video_paths: dict,
-    breaks: table_dict,
     soft_counts: table_dict,
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
@@ -2681,7 +2673,6 @@ def output_videos_per_cluster(
 
     Args:
         video_paths: dict of paths to the videos
-        breaks: table_dict of breaks between videos
         soft_counts: table_dict of soft counts per video
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
@@ -2730,11 +2721,9 @@ def output_videos_per_cluster(
             )
             confidence_mask = (hard_counts == cluster_id) & confidence_indices
 
-            # Extend confidence mask using the corresponding breaks, to select and output all relevant video frames
             # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            frame_mask = np.repeat(confidence_mask, breaks[key])
             frame_mask = np.concatenate(
-                (np.zeros(window_length, dtype=bool), frame_mask)
+                (np.zeros(window_length, dtype=bool), confidence_mask)
             )
 
             output_cluster_video(
@@ -2752,7 +2741,6 @@ def output_videos_per_cluster(
 
 def output_unsupervised_annotated_video(
     video_path: str,
-    breaks: list,
     soft_counts: np.ndarray,
     frame_rate: float = 25,
     frame_limit: int = np.inf,
@@ -2764,7 +2752,6 @@ def output_unsupervised_annotated_video(
 
     Args:
         video_path: full path to the video
-        breaks: dictionary with break lengths for each video
         soft_counts: soft cluster assignments for a specific video
         frame_rate: frame rate of the video
         frame_limit: maximum number of frames to output.
@@ -2775,7 +2762,6 @@ def output_unsupervised_annotated_video(
     """
     # Get cluster assignment per frame
     hard_counts = np.argmax(soft_counts, axis=1)
-    assignments_per_frame = np.repeat(hard_counts, breaks)
 
     # Name clusters, and update names using the provided dictionary
     cluster_labels = {i: str(i) for i in set(hard_counts)}
@@ -2790,7 +2776,7 @@ def output_unsupervised_annotated_video(
 
     video_out = os.path.join(
         out_path,
-        video_path[:-4].split("/")[-1]
+        os.path.split(video_path)[-1].split(".")[0] 
         + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
     )
 
@@ -2811,7 +2797,7 @@ def output_unsupervised_annotated_video(
             try:
                 cv2.putText(
                     frame,
-                    "Cluster {}".format(cluster_labels[assignments_per_frame[i]]),
+                    "Cluster {}".format(cluster_labels[hard_counts[i]]),
                     (int(v_width * 0.3 / 10), int(v_height / 1.05)),
                     cv2.FONT_HERSHEY_DUPLEX,
                     0.75,
@@ -2832,7 +2818,6 @@ def output_unsupervised_annotated_video(
 def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
-    breaks: dict = None,
     experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
@@ -2845,7 +2830,6 @@ def export_annotated_video(
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
-        breaks (dict): dictionary with break lengths for each video.r
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
@@ -2904,15 +2888,10 @@ def export_annotated_video(
         if experiment_id is not None:
             # If experiment_id is provided, only output a video for that experiment
             cur_soft_counts=deepof.utils.get_dt(soft_counts, experiment_id)
-            video_path=[
-                        video
-                        for video in coordinates.get_videos(full_paths=True)
-                        if experiment_id in video
-                    ][0]
+            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
 
             deepof.visuals.output_unsupervised_annotated_video(
                 video_path,                
-                breaks[experiment_id],
                 cur_soft_counts,
                 frame_rate=coordinates._frame_rate,
                 window_length=window_length,
@@ -2927,12 +2906,7 @@ def export_annotated_video(
             )
 
             deepof.visuals.output_videos_per_cluster(
-                {
-                    key: filtered_videos[i]
-                    for i, key 
-                    in enumerate(soft_counts.keys())
-                },
-                breaks,
+                filtered_videos,
                 soft_counts,
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
@@ -2953,7 +2927,6 @@ def plot_distance_between_conditions(
     coordinates: coordinates,
     embedding: dict,
     soft_counts: dict,
-    breaks: dict,
     exp_condition: str,
     embedding_aggregation_method: str = "median",
     distance_metric: str = "wasserstein",
@@ -2970,7 +2943,6 @@ def plot_distance_between_conditions(
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         embedding (dict): embedding object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
-        breaks (dict): dictionary with break lengths for each video.
         exp_condition (str): experimental condition to use for the distance calculation.
         embedding_aggregation_method (str): method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
         distance_metric (str): distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
@@ -2991,7 +2963,6 @@ def plot_distance_between_conditions(
     distance_array = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        breaks,
         {
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
@@ -3010,7 +2981,6 @@ def plot_distance_between_conditions(
     distance_per_bin = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        breaks,
         {
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
@@ -3282,7 +3252,7 @@ def tag_annotated_frames(
 def annotate_video(
     coordinates: coordinates,
     tag_dict: Union[str, pd.DataFrame],
-    vid_index: int,
+    vid_key: int,
     frame_limit: int = np.inf,
     debug: bool = False,
     params: dict = {},
@@ -3293,7 +3263,7 @@ def annotate_video(
         coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
         tag_dict (Union[str, pd.DataFrame]): Either path to the saving location of teh dataset or the dataste itself
         debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
-        vid_index: for internal usage only; index of the video to tag in coordinates._videos.
+        vid_key: for internal usage only; key of the video to tag in coordinates._videos.
         frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
         params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
 
@@ -3310,16 +3280,11 @@ def annotate_video(
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
-    try:
-        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
-    except IndexError:
-        vid_name = tracks[vid_index]
-
-    arena_params = coordinates._arena_params[vid_index]
-    h, w = coordinates._video_resolution[vid_index]
+    arena_params = coordinates._arena_params[vid_key]
+    h, w = coordinates._video_resolution[vid_key]
     corners = deepof.annotation_utils.frame_corners(h, w)
 
-    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
+    cap = cv2.VideoCapture(os.path.join(path, videos[vid_key]))
     # Keep track of the frame number, to align with the tracking data
     fnum = 0
     writer = None
@@ -3582,7 +3547,6 @@ def plot_behavior_trends(
     coordinates: coordinates,
     embedding: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     polar_depiction: bool = True,
     show_histogram: bool = True,
@@ -3605,7 +3569,6 @@ def plot_behavior_trends(
     coordinates (coordinates): deepOF project containing the stored data.
     embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
     soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-    breaks (table_dict): table dict with changepoint detection breaks per experiment.
     supervised_annotations (table_dict): Table dict with supervised annotations per video.
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
@@ -3657,21 +3620,22 @@ def plot_behavior_trends(
 
     # Init plot type based on inputs
     if (
-        any([embedding is None, soft_counts is None, breaks is None])
+        any([embedding is None, soft_counts is None])
         and supervised_annotations is not None
     ):
         plot_type = "supervised"
         L_shortest = min(
-            len(supervised_annotations[key]) for key in supervised_annotations.keys()
+            deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
         )
     elif (
         embedding is not None
         and soft_counts is not None
-        and breaks is not None
         and supervised_annotations is None
     ):
         plot_type = "unsupervised"
-        L_shortest = min(len(soft_counts[key]) for key in soft_counts.keys())
+        L_shortest = min(
+            deepof.utils.get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
+        )
     else:
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
@@ -3693,15 +3657,14 @@ def plot_behavior_trends(
 
     # Set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = soft_counts[next(iter(soft_counts))].argmax(axis=1)
-        behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
+        keys=list(soft_counts.keys())
+        num_clusters=deepof.utils.get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
+        behavior_ids = [f"Cluster {str(k)}" for k in range(0, num_clusters)]
+        
     elif plot_type == "supervised":
-        behavior_ids = [
-            col
-            for col in supervised_annotations[
-                next(iter(supervised_annotations))
-            ].columns
-        ]
+        keys=list(supervised_annotations.keys())
+        behavior_ids = deepof.utils.get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
+
 
     #####
     # Some validity checks and more formatting
@@ -3771,54 +3734,45 @@ def plot_behavior_trends(
     df = pd.DataFrame(columns=columns)
     z = 0
 
-    # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
-    for bin_start, bin_end in custom_time_bins:
+    # Iterate over all experiments via keys
+    for key in keys:
 
-        # Create precomputed boolean snippet for time bin extraction
-        precomputed = np.array([False] * L_shortest)
-        precomputed[bin_start:bin_end] = True
-
-        # Extract time bin from data based on type of input
         if plot_type == "unsupervised":
-            _, data_snippet, _, _ = deepof.post_hoc.select_time_bin(
-                embedding=embedding,
-                soft_counts=soft_counts,
-                breaks=breaks,
-                precomputed=precomputed,
-            )
+            data_set=deepof.utils.get_dt(soft_counts,key)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
-            _, _, _, data_snippet = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations, precomputed=precomputed
-            )
+            data_set=deepof.utils.get_dt(supervised_annotations,key)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
 
-        # Iterate over all samples in the current snippet
-        for key in data_snippet.keys():
-            behavior_timebin = np.sum(index_dict_fn(data_snippet[key]))
-            # Normalize if required
+        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+
+        # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
+        for i, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+            #get current snippet
+            data_snippet=data_set[bin_start:bin_end]
+
+            behavior_timebin = np.sum(index_dict_fn(data_snippet))
             if normalize or behavior_to_plot == "speed":
                 behavior_timebin = behavior_timebin / len(
-                    index_dict_fn(data_snippet[key])
+                    index_dict_fn(data_snippet)
                 )
-
-            # Collect data in datatable
-            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+            
             new_row = pd.DataFrame(
                 [
                     {
-                        "time_bin": z,
+                        "time_bin": i,
                         "exp_condition": str(cond),
                         behavior_to_plot: behavior_timebin,
                     }
                 ]
             )
             df = pd.concat([df, new_row], ignore_index=True)
-        z += 1
+
 
     # Calculate mean values and errors accross samples
     time_bin_means = (

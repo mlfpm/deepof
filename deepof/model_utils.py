@@ -1217,7 +1217,7 @@ def embedding_model_fitting(
 
     with tf.device("CPU"):
 
-        N_windows_max=10000000
+        N_windows_max=1000000000
 
         # Load data
         preprocessed_train, preprocessed_validation= preprocessed_object
@@ -1225,8 +1225,8 @@ def embedding_model_fitting(
         # Sample up to N_windows_max windows from processed_train and processed_validation
         N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
         
-        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_tests=True)
-        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_tests=True)
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
 
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:
@@ -1467,18 +1467,16 @@ def embedding_per_video(
     model: tf.keras.models.Model,
     scale: str = "standard",
     animal_id: str = None,
-    ruptures: bool = False,
     global_scaler: Any = None,
     **kwargs,
 ):  # pragma: no cover
-    """Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
+    """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
-        ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
         **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
@@ -1486,12 +1484,10 @@ def embedding_per_video(
     Returns:
         embeddings (table_dict): embeddings per experiment.
         soft_counts (table_dict): soft_counts per experiment.
-        breaks (table_dict): breaks per experiment.
 
     """
     embeddings = {}
     soft_counts = {}
-    breaks = {}
     #interim
     file_name='unsup'
 
@@ -1515,7 +1511,6 @@ def embedding_per_video(
                 scale=scale,
                 window_size=window_size,
                 window_step=1,
-                shuffle=False,
                 pretrained_scaler=global_scaler,
             )
 
@@ -1532,10 +1527,6 @@ def embedding_per_video(
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
 
         emb = model.encoder([tab_tuple[0], tab_tuple[1]]).numpy()
-        if ruptures:
-            breaks[key] = (~np.all(tab_tuple[0] == 0, axis=2)).sum(axis=1)
-        else:
-            breaks[key] = np.ones(emb.shape[0]).astype(int)
 
         if not contrastive:
             sc = model.grouper(
@@ -1552,20 +1543,18 @@ def embedding_per_video(
     if contrastive:
         soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
 
+    table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
     return (
         deepof.data.TableDict(
             embeddings,
             typ="unsupervised_embedding",
+            table_path=table_path, 
             exp_conditions=coordinates.get_exp_conditions,
         ),
         deepof.data.TableDict(
             soft_counts,
             typ="unsupervised_counts",
-            exp_conditions=coordinates.get_exp_conditions,
-        ),
-        deepof.data.TableDict(
-            breaks,
-            typ="unsupervised_breaks",
+            table_path=table_path, 
             exp_conditions=coordinates.get_exp_conditions,
         ),
     )
