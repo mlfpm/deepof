@@ -3009,7 +3009,7 @@ def load_dt_metainfo(path: str, load_index=True):
         columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
 
         #remove column duplication caps
-        columns = columns.str.replace(r'_duplicate\d+', '', regex=True)
+        columns = pd.Index(columns).str.replace(r'_duplicate\d+', '', regex=True)
 
         #adjust columns
         columns=[
