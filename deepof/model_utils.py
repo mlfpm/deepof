@@ -1599,15 +1599,20 @@ def tune_search(
 
     """
     # Load data
-    try:
-        X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
-    except ValueError:
-        X_train, y_train, X_val, y_val = preprocessed_object
-        a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
+    N_windows_max=1000000000
+
+    # Load data
+    preprocessed_train, preprocessed_validation= preprocessed_object
+
+    # Sample up to N_windows_max windows from processed_train and processed_validation
+    N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
+    
+    X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
+    X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
 
     # Make sure that batch_size is not larger than training set
-    if batch_size > preprocessed_object[0].shape[0]:
-        batch_size = preprocessed_object[0].shape[0]
+    if batch_size > X_train.shape[0]:
+        batch_size = X_train.shape[0]
 
     # Set options for tf.data.Datasets
     options = tf.data.Options()

@@ -449,7 +449,7 @@ def _preprocess_time_bins(
                         f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
                         "\033[0m".format(key)
                     )
-                    if table_lengths[key] - bin_size_int > 0:
+                    if precomputed_bins is None and table_lengths[key] - bin_size_int > 0:
                         warning_message= (warning_message +
                             "\n\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
                                 seconds_to_time(

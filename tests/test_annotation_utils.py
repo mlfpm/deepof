@@ -122,11 +122,6 @@ def test_climb_wall(center, axes, angle, tol):
         .create(force=True, test=True)
         .get_coords()
     )
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
     climb1 = deepof.annotation_utils.climb_wall(
         "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
@@ -142,6 +137,12 @@ def test_climb_wall(center, axes, angle, tol):
         nose="Nose",
     )
 
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+    
     assert climb1.dtype == bool
     assert climb2.dtype == bool
     assert climb3.dtype == bool

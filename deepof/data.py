@@ -926,7 +926,7 @@ class Project:
 
         if _to_extend is not None:
 
-            table_path=os.path.join(self._project_path, self._project_name, "Tables")
+            table_path=os.path.join(self.project_path, self.project_name, "Tables")
             # Merge and expand coordinate objects
             angles = TableDict({**_to_extend._angles, **angles}, typ="angles", table_path=table_path)
             areas = TableDict({**_to_extend._areas, **areas}, typ="areas", table_path=table_path)
@@ -937,10 +937,10 @@ class Project:
             quality = TableDict({**_to_extend._quality, **quality}, typ="quality", table_path=table_path)
 
             # Merge metadata
-            self.tables = _to_extend._table_paths.update(self.tables)
-            self.videos = _to_extend._videos.update(self.videos)
-            self.arena_params = _to_extend._arena_params.update(self.arena_params)
-            self.scales = _to_extend._scales.update(self.scales)
+            self.tables.update(_to_extend._table_paths)
+            self.videos.update(_to_extend._videos)
+            self.arena_params.update(_to_extend._arena_params)
+            self.scales.update(_to_extend._scales)
 
             self.version= _to_extend._version
 
@@ -1069,12 +1069,11 @@ class Project:
             # Copy new videos into old directory
             for vid in tqdm(self.videos, desc="Copying videos", unit="video"):
                 if (vid not in previous_project._videos 
-                    and vid.endswith(self.video_format)
                     and os.path.abspath(video_path) != os.path.abspath(previous_vid_path)):
                     
                     shutil.copy2(
-                        os.path.join(video_path, vid),
-                        os.path.join(previous_vid_path, vid),
+                        os.path.join(video_path, self.videos[vid]),
+                        os.path.join(previous_vid_path, self.videos[vid]),
                     )
 
             if verbose:
@@ -1084,12 +1083,11 @@ class Project:
             # Copy new tables into old directory
             for tab in tqdm(self.tables, desc="Copying tables", unit="table"):
                 if (tab not in previous_project._videos 
-                    and tab.endswith(self.table_format)
                     and os.path.abspath(table_path) != os.path.abspath(previous_table_path)):
                     
                     shutil.copy2(
-                        os.path.join(table_path, tab),
-                        os.path.join(previous_table_path, tab),
+                        os.path.join(table_path, self.tables[tab]),
+                        os.path.join(previous_table_path, self.tables[tab]),
                     )
             
             self.video_path = previous_vid_path
@@ -1341,7 +1339,7 @@ class Coordinates:
 
         if polar:
             coord_1, coord_2 = "rho", "phi"
-            scale = deepof.utils.bp2polar(scale).to_numpy()
+            scale = deepof.utils.bp2polar(scale).to_numpy().reshape(-1)
             tab = deepof.utils.tab2polar(tab)
 
         if center == "arena":
@@ -1964,6 +1962,7 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        shuffle: bool = False,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -2858,7 +2857,6 @@ class TableDict(dict):
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
-        automatic_changepoints=False,
         handle_ids: str = "concat",
         window_size: int = 25,
         window_step: int = 1,
@@ -2871,6 +2869,7 @@ class TableDict(dict):
         N_rows_max: int = 60000000000,
         file_name = 'preprocessed',
         save_as_paths = None,
+        shuffle: bool = False,
     ) -> np.ndarray:
         """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
@@ -2891,6 +2890,8 @@ class TableDict(dict):
             N_rows_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
             file_name (str): Name that is used for saving the merged table
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
+            shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
+
 
         Returns:
             X_train (np.ndarray): Table dict with 3D datasets with shape (instances, sliding_window_size, features) generated from all training videos.
@@ -2935,12 +2936,12 @@ class TableDict(dict):
                     
                     #find positions that result in ranges with little nans when selected as start
                     valid_starts=[]
-                    threshold=0.2
+                    threshold=0.1
                     for i in range(0,len(no_nan_rows) - max_num_rows + 1, int(len(no_nan_rows)/10000)):
                         if no_nan_rows[i:i + max_num_rows].sum()/max_num_rows >= threshold:
                             valid_starts.append(i)
                     
-                    assert len(valid_starts)>0, "No sections with a sufficient amount of complete rows (>=20% with no NaNs) could be identified!"
+                    assert len(valid_starts)>0, "No sections with a sufficient amount of complete rows (>=10% with no NaNs) could be identified!"
 
                     start_pos=np.random.choice(valid_starts)
                     tab=tab[start_pos:start_pos+max_num_rows-1]   
@@ -3081,6 +3082,7 @@ class TableDict(dict):
             window_size=window_size,
             window_step=window_step,
             save_as_paths=save_as_paths,
+            shuffle=shuffle,
         )
 
         
@@ -3092,6 +3094,7 @@ class TableDict(dict):
                 window_size=window_size,
                 window_step=window_step,
                 save_as_paths=save_as_paths,
+                shuffle=shuffle,
             )
         else:
             test_shape = (0,)

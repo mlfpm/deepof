@@ -32,7 +32,6 @@ from deepof.visuals_utils import (
     seconds_to_time,
     create_bin_pairs,
     cohend,
-    cohend_effect_size,
     _preprocess_time_bins,
 )
 
@@ -56,9 +55,15 @@ from deepof.visuals_utils import (
     num_points=st.integers(min_value=1, max_value=10000),
 )
 def test_calculate_average_arena(all_vertices, num_points):
-    max_length = max(len(lst) for lst in all_vertices) + 1
+    all_vertices
+
+    all_vertices_dict={}
+    for index, element in enumerate(all_vertices):
+        all_vertices_dict[index] = element
+
+    max_length = max(len(lst) for lst in all_vertices_dict.values()) + 1
     if num_points > max_length:
-        avg_arena = calculate_average_arena(all_vertices, num_points)
+        avg_arena = calculate_average_arena(all_vertices_dict, num_points)
         assert len(avg_arena) == num_points
 
 
@@ -124,8 +129,8 @@ class Pseudo_Coordinates:
 
     def get_table_lengths(self):
         return self._table_lengths
-    
 
+    
 @given(
     start_times_raw=st.lists(
         elements=st.integers(min_value=0, max_value=120), min_size=5, max_size=50
@@ -168,20 +173,14 @@ def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        bin_size_int, bin_index_int, precomputed_bins_out, bin_starts, bin_ends = _preprocess_time_bins(
+        bin_info = _preprocess_time_bins(
         coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins
         )
 
-
-    len_win_requested=int(np.round(bin_size*frame_rate))
-    if has_precomputed_bins:
-        assert all(precomputed_bins_out == precomputed_bins)
-    elif is_int:
-        assert bin_size_int==int(np.round(bin_size_user*frame_rate))       
-    elif (not precomputed_bins_out[0] 
-    and not precomputed_bins_out[-1] 
-    and any(precomputed_bins_out)):
-        assert np.sum(precomputed_bins_out)==len_win_requested
-    else: 
-        assert np.sum(precomputed_bins_out) <= len_win_requested
+    for key in bin_info.keys():
+        lengths=coords.get_table_lengths()
+        assert isinstance(bin_info[key], np.ndarray)
+        if (len(bin_info[key])>0):
+            assert bin_info[key][-1] <= lengths[key]
+            assert bin_info[key][0] >= 0
     

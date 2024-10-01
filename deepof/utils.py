@@ -725,6 +725,8 @@ def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
 
     """
     tab_ = np.array(tab)
+    if len(tab_.shape)==1:
+        tab_ = tab_.reshape(1, -1)
     complex_ = tab_[:, 0] + 1j * tab_[:, 1]
     polar = pd.DataFrame(np.array([abs(complex_), np.angle(complex_)]).T)
     polar.rename(columns={0: "rho", 1: "phi"}, inplace=True)
@@ -1553,6 +1555,7 @@ def extract_windows(
     window_size: int,
     window_step: int,
     save_as_paths: bool = False,
+    shuffle: bool = False,
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
 
@@ -1564,6 +1567,8 @@ def extract_windows(
         window_size (int): specifies the length of the sliding window.
         window_step (int): specifies the stride of the sliding window.
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
+        shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
+
 
     Returns:
         ruptured_dataset (np.ndarray): Dataset with all ruptures concatenated across the first axis.
@@ -1585,6 +1590,12 @@ def extract_windows(
                 window_size,
                 window_step,
             )
+            if shuffle:
+                shuffle_idcs = np.random.choice(
+                    tab.shape[0], tab.shape[0], replace=False
+                )
+                tab = tab[shuffle_idcs]
+
             out_len=out_len+tab.shape[0]
             to_window[key] = save_dt(tab,tab_path,save_as_paths)
             pbar.update()
@@ -1997,7 +2008,7 @@ def get_arenas(
 
         # Open GUI for manual labelling of two scaling points in the first video
         arena_reference = None
-        if arena == "polygonal-autodetect":  # pragma: no cover
+        if arena == "polygonal-autodetect" and not test:  # pragma: no cover
 
 
             first_key=list(videos.keys())[0]
@@ -2012,9 +2023,9 @@ def get_arenas(
         #early return in test mode to avoid redundant slow arena detection
         if test:
             if "polygonal" in arena:
-                scales={'test2': [200.0, 26.0, 252.0, 380], 'test': [200.0, 26.0, 252.0, 380]}
-                arena_params={'test2': ((111, 49), (541, 31), (553, 438), (126, 452)), 'test': ((111, 49), (541, 31), (553, 438), (126, 452))}
-                video_resolution={'test2': (404, 416), 'test': (404, 416)}
+                scales={'test2': [309.0, 236.0, 420.12, 380], 'test': [309.0, 236.0, 420.12, 380]}
+                arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}
+                video_resolution={'test2': (480, 640), 'test': (480, 640)}
                 return scales, arena_params, video_resolution
         
             elif "circular" in arena:
@@ -2180,25 +2191,7 @@ def automatically_recognize_arena(
     w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
     # Select the corresponding tracklets
-    current_tab = tables[
-        get_close_matches(
-            videos[vid_key].split(".")[0],
-            [
-                vid
-                for vid in tables.keys()
-                if (
-                    vid.startswith(videos[vid_key].split(".")[0])
-                    or videos[vid_key].startswith(vid)
-                )
-            ],
-            cutoff=0.01,
-            n=1,
-        )[0]
-    ]
-
-    #load table if not already loaded
-    if type(current_tab)==str:
-        current_tab = pd.read_parquet(current_tab, engine='pyarrow')
+    current_tab = get_dt(tables,vid_key)
 
     # Get distances of all body parts and timepoints to both center and periphery
     distances_to_center = cdist(
@@ -2876,10 +2869,19 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
             pickle.dump(dt, file)    
     
     elif isinstance(dt, pd.DataFrame) and len(dt.columns)>0:
-        #convert column headers to str as parquet cannot save non-str column headers
+        # Convert column headers to str as parquet cannot save non-str column headers
         columns_in = copy.deepcopy(dt.columns)
         if not isinstance(dt.columns, pd.MultiIndex) and type(dt.columns[0]) != str:
             dt.columns = [str(column) for column in columns_in]
+        
+        # Add "_duplicate{i} to double column headers as parquet cannot save or load double columns 
+        # (will be removed again during loading)" 
+        if len(dt.columns)!=len(np.unique(dt.columns)):
+            cols = pd.Series(dt.columns)
+            for i, dup in enumerate(cols[cols.duplicated()]):  # Get unique duplicated names
+                cols[i] = f"{dup}_duplicate{i}"
+            dt.columns = cols
+
         #save table with parquet for fast loading later on
         path = path+'.pqt'
         dt.to_parquet(path, engine='pyarrow', index=True)
@@ -2942,8 +2944,14 @@ def load_dt(path: str, load_range: np.ndarray = None):
     else:
         tab = None
 
-    #restore tuple columns
-    if hasattr(tab, 'columns') and not isinstance(tab.columns, pd.MultiIndex): # and not isinstance(tab.columns, pd.Index):
+
+    #special case if the columns may be retrieved from .pqt files
+    if hasattr(tab, 'columns') and not isinstance(tab.columns , pd.MultiIndex):
+        #remove column duplication caps
+        cols_lit = tab.columns 
+        cols_lit = cols_lit.str.replace(r'_duplicate\d+', '', regex=True)
+
+        #restore tuple columns
         cols_lit=[
             ast.literal_eval(item)
             if type(item) == str
@@ -2951,10 +2959,18 @@ def load_dt(path: str, load_range: np.ndarray = None):
             and item.endswith(")")
             else item 
             for item 
-            in tab.columns
+            in cols_lit
             ]
         
-        tab.columns=pd.Index(cols_lit)
+        #necessary due to legacy shenanigans with things being sometimes multi indices and sometimes not
+        is_multi_index=False
+        if isinstance(cols_lit[0], tuple) and cols_lit[0][1]=='x':
+            is_multi_index=True
+
+        tab.columns=pd.Index(cols_lit,tupleize_cols=is_multi_index)
+
+
+
 
 
     
@@ -2991,6 +3007,9 @@ def load_dt_metainfo(path: str, load_index=True):
         #read columns from metadata
         info_meta = pq.read_metadata(path)
         columns = [field.name for field in info_meta.schema if not field.name == '__index_level_0__']
+
+        #remove column duplication caps
+        columns = columns.str.replace(r'_duplicate\d+', '', regex=True)
 
         #adjust columns
         columns=[

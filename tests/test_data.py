@@ -11,7 +11,7 @@ Testing module for deepof.preprocess
 import os
 import random
 import string
-from shutil import rmtree
+from shutil import rmtree, copy
 
 import numpy as np
 import pandas as pd
@@ -74,7 +74,6 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
     assert isinstance(prun.preprocess_tables(verbose=True), tuple)
 
     prun = prun.create(test=True, force=True)
-    assert isinstance(prun, deepof.data.Coordinates)
     rmtree(
         os.path.join(
             ".",
@@ -85,19 +84,37 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
         )
     )
 
+    assert isinstance(prun, deepof.data.Coordinates)
+
 
 def test_project_extend():
 
-    video_init = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "Videos"
-    )
-    table_init = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "Tables"
-    )
+    #create a new folder with only one video and table  
+    # Define the base path
+    base_path = os.path.join('.','tests', 'test_examples')
+
+    # Create folder under the local path './tests'
+    to_extend_path = os.path.join(base_path, 'to_extend')
+    os.makedirs(to_extend_path)
+
+    # Create 'Tables' and 'Videos' folders
+    tables_path = os.path.join(to_extend_path, 'Tables')
+    videos_path = os.path.join(to_extend_path, 'Videos')
+    os.makedirs(tables_path)
+    os.makedirs(videos_path)
+
+    # Define source file paths
+    source_table_file = os.path.join(base_path, 'test_single_topview', 'Tables', 'testDLC_h5_table.h5')
+    source_video_file = os.path.join(base_path, 'test_single_topview', 'Videos', 'testDLC_video_circular_arena.mp4')
+
+    # Copy files to the new folders
+    copy(source_table_file, tables_path)
+    copy(source_video_file, videos_path)
+    
     prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=video_init,
-        table_path=table_init,
+        project_path=os.path.join(".", "tests", "test_examples", "to_extend"),
+        video_path=videos_path,
+        table_path=tables_path,
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
@@ -107,18 +124,17 @@ def test_project_extend():
     )
 
     video_extend = os.path.join(
-        ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        ".", "tests", "test_examples", "test_single_topview", "Videos"
     )
     table_extend = os.path.join(
-        ".", "tests", "test_examples", "test_multi_topview", "Tables"
+        ".", "tests", "test_examples", "test_single_topview", "Tables"
     )
     ext_prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", "to_extend"),
         video_path=video_extend,
         table_path=table_extend,
         project_name=f"test_extend",
         rename_bodyparts=None,
-        animal_ids=["B", "W"],
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
@@ -129,19 +145,27 @@ def test_project_extend():
         ".",
         "tests",
         "test_examples",
-        "test_single_topview",
+        "to_extend",
         "test_extend",
     )
 
     prun.create(test=True, force=True)
+
     ext_prun.extend(prun_path, video_path=video_extend, table_path=table_extend)
 
     # ensure that new project has all four datasets from both sources
-    assert len(ext_prun.tables) == 4
-    assert len(ext_prun.videos) == 4
-    assert len(ext_prun.arena_params) == 4
-
+    
     rmtree(prun_path)
+    rmtree(to_extend_path)
+
+    assert len(prun.tables) == 1
+    assert len(prun.videos) == 1
+
+    assert len(ext_prun.tables) == 2
+    assert len(ext_prun.videos) == 2
+    assert len(ext_prun.arena_params) == 2
+
+
 
 
 def test_project_properties():
@@ -188,11 +212,6 @@ def test_project_filters():
         video_format=".mp4",
         table_format=".h5",
     ).create(force=True, test=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
     # Update experimental conditions with mock values
     prun._exp_conditions = {
@@ -203,6 +222,12 @@ def test_project_filters():
     }
 
     coords = prun.get_coords()
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
     assert isinstance(coords.filter_id("B"), dict)
     assert isinstance(coords.filter_videos(coords.keys()), dict)
     assert isinstance(coords.filter_condition(exp_filters={"CSDS": "Control"}), dict)
@@ -235,19 +260,19 @@ def test_get_distances(nodes, ego):
 
     tables, _ = prun.preprocess_tables(verbose=True)
     prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
-        tables=tables
+        tables=tables, test=True,
     )
     prun.distances = nodes
     prun.ego = ego
     prun = prun.get_distances(prun.preprocess_tables()[0], verbose=True)
-
-    assert isinstance(prun, dict)
 
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
+
+    assert isinstance(prun, dict)
 
 
 @settings(deadline=None)
@@ -348,13 +373,14 @@ def test_get_supervised_annotation(use_numba):
         table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
     ).create(force=True, test=True)
+
+    prun = prun.supervised_annotation()
+
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
-
-    prun = prun.supervised_annotation()
 
     assert isinstance(prun, deepof.data.TableDict)
     assert prun._type == "supervised"
@@ -415,22 +441,12 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         prun.ego = ego
 
     prun = prun.create(force=True, test=True)
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            f"deepof_project_{random_id}",
-        )
-    )
 
     center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = sampler.draw(st.booleans())
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
-    propagate = sampler.draw(st.sampled_from(["CSDS", False]))
-    propagate_annots = False
+
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -442,28 +458,48 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         center=center,
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
-        propagate_labels=propagate,
-        propagate_annotations=propagate_annots,
         selected_id=selected_id,
     )
     speeds = prun.get_coords(
         speed=(speed if not ego and nodes == "all" else 0),
-        propagate_labels=propagate,
         selected_id=selected_id,
     )
     distances = prun.get_distances(
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
-        propagate_labels=propagate,
         selected_id=selected_id,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
-        propagate_labels=propagate,
         selected_id=selected_id,
     )
     areas = prun.get_areas()
     merged = coords.merge(speeds, distances, angles, areas)
+
+
+    # deepof.table testing
+    prep = coords.preprocess(
+        window_size=11,
+        window_step=1,
+        scale=sampler.draw(
+            st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
+        ),
+        test_videos=1,
+        verbose=2,
+        filter_low_variance=1e-3,
+        interpolate_normalized=5,
+        shuffle=sampler.draw(st.booleans()),
+    )
+
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            f"deepof_project_{random_id}",
+        )
+    )
 
     # deepof.coordinates testing
     assert isinstance(coords, deepof.data.TableDict)
@@ -472,30 +508,15 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     assert isinstance(angles, deepof.data.TableDict)
     assert isinstance(areas, deepof.data.TableDict)
     assert isinstance(merged, deepof.data.TableDict)
-    assert isinstance(prun.get_videos(), list)
+    assert isinstance(prun.get_videos(), dict)
     assert prun.get_exp_conditions is not None
     assert isinstance(prun.get_quality(), deepof.data.TableDict)
     assert isinstance(prun.get_arenas, tuple)
 
-    # deepof.table testing
-    prep = coords.preprocess(
-        window_size=11,
-        window_step=1,
-        automatic_changepoints=(
-            False if not any([propagate_annots, propagate]) else "linear"
-        ),
-        scale=sampler.draw(
-            st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
-        ),
-        test_videos=1,
-        verbose=2,
-        filter_low_variance=1e-3 * (not any([propagate_annots, propagate])),
-        interpolate_normalized=5 * (not any([propagate_annots, propagate])),
-        shuffle=sampler.draw(st.booleans()),
-    )
-
-    assert isinstance(prep[0][0], np.ndarray)
-
+    assert isinstance(prep[0][0], dict)
+    first_key=list(prep[0][0].keys())[0]
+    assert isinstance(prep[0][0][first_key], np.ndarray)
+    
     # deepof dimensionality reduction testing
 
     assert isinstance(coords.random_projection(n_components=2), tuple)
@@ -534,21 +555,9 @@ def test_get_graph_dataset(mode, sampler, random_id):
         animal_ids=animal_ids,
         table_format=".h5",
     ).create(force=True, test=True)
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            f"deepof_project_{random_id}",
-        )
-    )
 
-    graph_dset, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
+    graph_dset, shapes, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
-        automatic_changepoints=sampler.draw(
-            st.one_of(st.just("linear"), st.just(False))
-        ),
         scale=sampler.draw(
             st.one_of(
                 st.just("standard"),
@@ -560,6 +569,16 @@ def test_get_graph_dataset(mode, sampler, random_id):
         test_videos=1,
     )
 
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            f"deepof_project_{random_id}",
+        )
+    )
+    
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)

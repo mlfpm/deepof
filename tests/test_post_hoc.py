@@ -21,6 +21,7 @@ from hypothesis.extra import numpy as hnp
 
 import deepof.data
 import deepof.post_hoc
+from deepof.data import TableDict
 
 
 @settings(deadline=None, max_examples=25)
@@ -49,12 +50,7 @@ def test_recluster(states):
         animal_ids=[""],
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
+    ).create(force=True, test=True)
 
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
@@ -78,6 +74,12 @@ def test_recluster(states):
         save=False,
     )
 
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+
 
 def test_get_time_on_cluster():
 
@@ -87,10 +89,7 @@ def test_get_time_on_cluster():
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-    # Define a test breaks dictionary
-    breaks = {i: [10] * 100 for i in range(10)}
-
-    toc = deepof.post_hoc.get_time_on_cluster(soft_counts, breaks)
+    toc = deepof.post_hoc.get_time_on_cluster(soft_counts)
 
     # Assert that both the soft counts and breaks are correctly aggregated
     assert toc.shape[0] * 100 == np.concatenate(list(soft_counts.values())).shape[0]
@@ -128,8 +127,6 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-    # Create a dictionary of breaks, whose sums add up to the number of chunks
-    breaks = {i: np.array([10] * 100) for i in range(10)}
 
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
@@ -137,7 +134,6 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     distance_binning = deepof.post_hoc.condition_distance_binning(
         embedding=embedding,
         soft_counts=soft_counts,
-        breaks=breaks,
         exp_conditions=exp_conditions,
         start_bin=11,
         end_bin=99,
@@ -173,9 +169,13 @@ def test_fit_normative_global_model(input_data):
 )
 def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
-    # Define a test embedding dictionary
+    # Define a test embedding dictionary and derive upervised annotations from it
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
+    supervised_annotations= TableDict({i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}, typ='supervised')
+    for key in supervised_annotations.keys():
+        supervised_annotations[key].columns=pd.Index(["speed","1","2","3","4","5","6","7","8","9"])
+
 
     # Define a test matrix of soft counts
     soft_counts = {}
@@ -183,24 +183,23 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-    # Create a dictionary of breaks, whose sums add up to the number of chunks
-    breaks = {i: np.array([10] * 100) for i in range(10)}
+    soft_counts=TableDict(soft_counts, typ='soft_counts')
+
+    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+
 
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
     enrichment = deepof.post_hoc.enrichment_across_conditions(
-        embedding,
         soft_counts,
-        breaks,
         supervised_annotations=(
             None
             if not supervised
-            else {i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}
+            else supervised_annotations
         ),
         exp_conditions=exp_conditions,
-        bin_size=bin_size,
-        bin_index=0,
+        bin_info=bin_info,
         normalize=normalize,
     )
 
@@ -224,10 +223,11 @@ def test_get_transitions(n_states):
     bin_size=st.integers(min_value=11, max_value=100),
     aggregate=st.booleans(),
     normalize=st.booleans(),
+    silence_diagonal=st.booleans(),
     steady_state_entropy=st.booleans(),
 )
 def test_compute_transition_matrix_per_condition(
-    bin_size, aggregate, normalize, steady_state_entropy
+    bin_size, silence_diagonal, aggregate, normalize, steady_state_entropy
 ):
 
     # Define a test embedding dictionary
@@ -240,19 +240,19 @@ def test_compute_transition_matrix_per_condition(
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-    # Create a dictionary of breaks, whose sums add up to the number of chunks
-    breaks = {i: np.array([10] * 100) for i in range(10)}
-
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
+    #convert into used formats
+    soft_counts=TableDict(soft_counts, typ='soft_counts')
+    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+
+    
     transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
-        embedding,
         soft_counts,
-        breaks,
         exp_conditions,
-        bin_size=bin_size,
-        bin_index=0,
+        silence_diagonal,
+        bin_info=bin_info,
         aggregate=aggregate,
         normalize=normalize,
     )
@@ -308,19 +308,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "deepof_project",
-        )
-    )
-
-    # get breaks
-    breaks = {i: np.array([10] * 10) for i in ["test", "test2"]}
+    ).create(force=True, test=True)
 
     # extract kinematic features
     kinematics = deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -331,6 +319,16 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         animal_id=(
             sampler.draw(st.sampled_from(["B", "W"])) if mode == "multi" else None
         ),
+    )
+
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "deepof_project",
+        )
     )
 
     # check that the output is a DataFrame
@@ -392,33 +390,24 @@ def test_shap_pipeline(mode, sampler):
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "deepof_project",
-        )
-    )
+    ).create(force=True, test=True)
 
     # get breaks and soft_counts
-    breaks = {}
     soft_counts = {}
     for i in ["test", "test2"]:
         counts = np.random.normal(size=(100 - 5 + 1, 10))
-        breaks[i] = np.array([1] * (100 - 5 + 1))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
     # get supervised annotations from project
     supervised_annotations = prun.supervised_annotation()
 
+    #convert into used formats
+    soft_counts=TableDict(soft_counts, typ='soft_counts')
+
     # annotate time chunks
     time_chunks, hard_counts, breaks = deepof.post_hoc.annotate_time_chunks(
         prun,
         soft_counts,
-        breaks,
         supervised_annotations,
         window_size=5,
         animal_id=(
@@ -428,6 +417,16 @@ def test_shap_pipeline(mode, sampler):
         include_distances=sampler.draw(st.booleans()),
         include_angles=sampler.draw(st.booleans()),
         aggregate=sampler.draw(st.one_of(st.just("mean"), st.just("seglearn"))),
+    )
+
+    rmtree(
+        os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_{}_topview".format(mode),
+            "deepof_project",
+        )
     )
 
     assert isinstance(time_chunks, pd.DataFrame)
