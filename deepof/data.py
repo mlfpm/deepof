@@ -604,7 +604,7 @@ class Project:
         #warn in case of excessive missing data
         if sum_warn_nans>0:
             warnings.warn("\033[38;5;208m"
-                          f"more than 30% of all tracked position values in {sum_warn_nans} out of {N_tables} tables are missing.\n"
+                          f"more than 30% of all tracked position values in {sum_warn_nans} out of {N_tables} tables are missing or outliers.\n"
                           "This may be expected if your mice were obscured and not tracked for long intervals\n"
                           "(e.g. when sleeping in an occluded location or leaving the arena)."
                           "\033[0m"

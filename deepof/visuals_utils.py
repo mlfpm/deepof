@@ -242,7 +242,7 @@ def _preprocess_time_bins(
     precomputed_bins: np.ndarray = None,
     tab_dict_for_binning: table_dict = None,
     experiment_id: str = None,
-    samples_max: str = 10000,
+    samples_max: str = 20000,
     down_sample: bool = True,
 ):
     """Return a heatmap of the movement of a specific bodypart in the arena.

@@ -252,7 +252,7 @@ def plot_heatmaps(
     experiment_id: int = "average",
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
-    samples_max: int = 10000,
+    samples_max: int = 20000,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -382,7 +382,7 @@ def plot_gantt(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=10000,
+    samples_max=20000,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -1115,7 +1115,7 @@ def plot_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=10000,
+    samples_max=20000,
     # Visualization parameters
     exp_condition: str = None,
     visualization="networks",
@@ -1289,7 +1289,7 @@ def plot_stationary_entropy(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=10000,
+    samples_max=20000,
     # Visualization parameters
     exp_condition: str = None,
     verbose: bool = False,
@@ -1620,7 +1620,7 @@ def plot_embeddings(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=10000,
+    samples_max=20000,
     # Normative modelling
     normative_model: str = None,
     add_stats: str = "Mann-Whitney",
