@@ -419,6 +419,59 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
             assert dist_min<25
 
 
+@settings(deadline=None, max_examples=3)
+@given(
+    detection_mode=st.one_of(
+        st.just("polygonal-autodetect"), st.just("circular-autodetect")
+    ),
+)
+def test_detection_modes(detection_mode):
+
+    if detection_mode=="circular-autodetect":
+        arena_type="test_single_topview"
+    else:
+        arena_type="test_square_arena_topview"
+
+    path = os.path.join(".", "tests", "test_examples", arena_type, "Videos")
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Tables"
+        ),
+        arena=detection_mode,
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        iterative_imputation="partial",
+    )
+    #get arenas with actual detection
+    coords = prun.create(force=True, test="detect_arena")
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", arena_type, "deepof_project"
+        )
+    )
+    
+    #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
+    assert len(coords._arena_params)==2
+    if detection_mode=="polygonal-autodetect":
+        assert isinstance(coords._arena_params['test'], np.ndarray)
+        assert isinstance(coords._arena_params['test2'], np.ndarray)
+    else:
+        assert isinstance(coords._arena_params['test'], tuple)
+        assert isinstance(coords._arena_params['test2'], tuple)
+    assert (coords._video_resolution['test'][0]<coords._video_resolution['test'][1])
+    assert (coords._video_resolution['test2'][0]<coords._video_resolution['test2'][1])
+    assert (len(coords._scales['test'])==4)
+    assert (len(coords._scales['test2'])==4)
+
+
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     dframe=data_frames(

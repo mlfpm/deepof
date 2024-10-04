@@ -2027,13 +2027,19 @@ def get_arenas(
                 scales={'test2': [309.0, 236.0, 420.12, 380], 'test': [309.0, 236.0, 420.12, 380]}
                 arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}
                 video_resolution={'test2': (480, 640), 'test': (480, 640)}
-                return scales, arena_params, video_resolution
+                if test == "detect_arena":
+                    arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
+                else:
+                    return scales, arena_params, video_resolution
         
             elif "circular" in arena:
                 scales={'test2': [200.0, 26.0, 252.0, 380], 'test': [200.0, 26.0, 252.0, 380]}
                 arena_params={'test2': ((200, 196), (166, 168), 14.361458778381348), 'test': ((200, 196), (166, 168), 14.361458778381348)}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
-                return scales, arena_params, video_resolution
+                if test == "detect_arena":
+                    pass
+                else:
+                    return scales, arena_params, video_resolution
 
 
         # Load SAM                             
