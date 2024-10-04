@@ -2045,7 +2045,7 @@ class Coordinates:
             if type(list(dists.values())[0]) == str:
                 edge_feature_names=get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
             else:
-                edge_feature_names = list(list(dists.keys())[0].columns)
+                edge_feature_names = list(list(dists.values())[0].columns)
 
             if type(list(tab_dict.values())[0]) == str:
                 feature_names=pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])

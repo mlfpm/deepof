@@ -59,15 +59,27 @@ def get_dt(
             raw_data = load_dt(raw_data, load_range)
     
     # Extract metainfo if dictionary entry is a data frame
-    elif (isinstance(raw_data, pd.DataFrame) or isinstance(raw_data, np.ndarray)) and only_metainfo:
+    elif only_metainfo:
         raw_data = get_metainfo_from_loaded_dt(raw_data,load_index)
 
     # Cut data into shape if it is already loaded but a load range was given
-    elif (isinstance(raw_data, pd.DataFrame) or isinstance(raw_data, np.ndarray)) and load_range is not None:
+    elif isinstance(raw_data, np.ndarray) and load_range is not None:
         if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
-            raw_data = raw_data[load_range[0]:load_range[1]]   
+            raw_data = raw_data[load_range[0]:load_range[1]+1]   
         else:
             raw_data = raw_data[load_range]   
+
+    elif isinstance(raw_data, pd.DataFrame) and load_range is not None:
+        if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
+            raw_data = raw_data.iloc[load_range[0]:load_range[1]+1]   
+        else:
+            raw_data = raw_data.iloc[load_range] 
+
+    elif isinstance(raw_data, Tuple) and len(raw_data)==2 and load_range is not None:
+        if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
+            raw_data = (raw_data[0][load_range[0]:load_range[1]+1],raw_data[1][load_range[0]:load_range[1]+1])
+        else:
+            raw_data = (raw_data[0][load_range], raw_data[1][load_range])
 
     # Invisible "else" case: if none of the above, do nothig, since this means 
     # raw_data is the full table in memory and hence already loaded 
@@ -150,18 +162,27 @@ def load_dt(path: str, load_range: np.ndarray = None):
         mmap_array = np.load(path, mmap_mode='r')
         # Get specific range
         if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
-            tab = mmap_array[load_range[0]:load_range[1]] 
+            tab = mmap_array[load_range[0]:load_range[1]+1] 
         else:
             tab = mmap_array[load_range] 
     elif path.endswith('.pqt') and load_range is not None:
         #this obviously still loads the whole table and is only an intermediary solution
-        tab=pd.read_parquet(path, engine='pyarrow').iloc[load_range]   
+        if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
+            tab=pd.read_parquet(path, engine='pyarrow').iloc[load_range[0]:load_range[1]+1] 
+        else:  
+            tab=pd.read_parquet(path, engine='pyarrow').iloc[load_range]
     
     elif load_range is not None:
 
-        raise NotImplementedError(
-            "range loading is currently only possible with numpy arrays"
-        )
+        with open(path, 'rb') as file:
+            tab = pickle.load(file)
+            if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
+                tab1=tab[0][load_range[0]:load_range[1]+1] 
+                tab2=tab[1][load_range[0]:load_range[1]+1] 
+            else:
+                tab1=tab[0][load_range]
+                tab2=tab[1][load_range]
+            tab=(tab1,tab2)
 
     elif path.endswith('.npy'):
         with open(path, 'rb') as file:

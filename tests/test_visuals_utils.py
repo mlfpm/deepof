@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.visuals
+Testing module for deepof.visuals_utils
 
 """
 
