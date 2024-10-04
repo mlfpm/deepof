@@ -4,13 +4,11 @@
 
 """
 
-Testing module for deepof.visuals_utils
+Testing module for deepof.data_loading
 
 """
 
 import os
-from itertools import combinations
-
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -23,20 +21,11 @@ from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from scipy.spatial import distance
 from shutil import rmtree
-import warnings
 
-import deepof.data
 from deepof.data_loading import (
     get_dt, save_dt
 )
-from deepof.visuals_utils import (
-    calculate_average_arena,
-    time_to_seconds,
-    seconds_to_time,
-    create_bin_pairs,
-    cohend,
-    _preprocess_time_bins,
-)
+
 
 @given(
     table_type=st.one_of(

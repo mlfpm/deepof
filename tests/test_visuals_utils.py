@@ -156,9 +156,14 @@ class Pseudo_Coordinates:
     bin_index=st.floats(min_value=0, max_value=100),
     is_int=st.booleans(),
     has_precomputed_bins=st.booleans(),
-
+    samples_max=st.integers(min_value=10, max_value=2000),
+    makes_sense=st.one_of(
+        st.just("yes"),
+        st.just("no"),
+        st.just("no bins")
+    )
 )
-def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_int,has_precomputed_bins):
+def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_int,has_precomputed_bins, samples_max, makes_sense):
     
     # Only allow up to 8 decimales for float inputs 
     # (because of time string conversion limitations this otherwise leads to 1-index deviations 
@@ -187,10 +192,18 @@ def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_
         bin_index_user = seconds_to_time(bin_index, False)
         bin_size_user = seconds_to_time(bin_size, False)
 
+    # Simulate "special" inputs"
+    if makes_sense=="no":
+        bin_index_user="Banana!"
+    elif makes_sense=="no bins":
+        bin_size_user=None
+        bin_index_user=None
+        precomputed_bins=None
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         bin_info = _preprocess_time_bins(
-        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins
+        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins, samples_max=samples_max,
         )
 
     for key in bin_info.keys():

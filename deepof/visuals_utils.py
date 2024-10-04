@@ -386,7 +386,6 @@ def _preprocess_time_bins(
             bin_info[key] = np.arange(0,table_lengths[key],1)
 
     #Downsample bin_info if necessary
-
     info_message=None
     for key in bin_info.keys():
         full_length=len(bin_info[key])
