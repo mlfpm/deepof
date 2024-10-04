@@ -1,15 +1,15 @@
-"""General plotting functions for the deepof package."""
 # @author NoCreativeIdeaForGoodusername
 # encoding: utf-8
 # module deepof
 
-
+"""Plotting utility functions for the deepof package."""
 import copy
 import numpy as np
 import re
 from typing import Any, List, NewType, Tuple, Union
 import warnings
-from deepof.utils import get_dt
+from deepof.data_loading import get_dt, load_dt
+
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)

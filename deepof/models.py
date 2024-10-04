@@ -32,6 +32,8 @@ from tensorflow.keras.optimizers import Nadam
 
 import deepof.model_utils
 import deepof.utils
+from deepof.data_loading import get_dt, load_dt
+
 
 tfb = tfp.bijectors
 tfd = tfp.distributions

@@ -37,6 +37,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 import deepof.data
 import deepof.utils
+from deepof.data_loading import get_dt, load_dt, save_dt
+
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -245,7 +247,7 @@ def get_time_on_cluster(
 
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
-        hard_counts = np.argmax(deepof.utils.get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
         
         # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
@@ -303,7 +305,7 @@ def get_aggregated_embedding(
             arr_range = bin_info[key]
 
         # Load full dataset (arr_range==None) or section
-        current_embedding=deepof.utils.get_dt(embedding,key,load_range=arr_range)
+        current_embedding=get_dt(embedding,key,load_range=arr_range)
 
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
@@ -547,7 +549,7 @@ def enrichment_across_conditions(
         for key in supervised_annotations.keys():
         
             #load and cut current data set
-            current_sa=deepof.utils.get_dt(supervised_annotations,key).iloc[bin_info[key]]
+            current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]]
 
             #only keep speed column or only drop speed column
             if plot_speed:
@@ -625,7 +627,7 @@ def compute_transition_matrix_per_condition(
 
     """
     
-    n_states = deepof.utils.get_dt(soft_counts, list(soft_counts.keys())[0], only_metainfo=True)["num_cols"]
+    n_states = get_dt(soft_counts, list(soft_counts.keys())[0], only_metainfo=True)["num_cols"]
 
     transitions_dict = {}
     if aggregate: 
@@ -635,7 +637,7 @@ def compute_transition_matrix_per_condition(
     for key in soft_counts.keys():
 
         #load requested range from current soft counts
-        current_sc = deepof.utils.get_dt(soft_counts, key, load_range=bin_info[key])
+        current_sc = get_dt(soft_counts, key, load_range=bin_info[key])
 
         # Get hard counts per video
         hard_counts = np.argmax(current_sc, axis=1)
@@ -759,7 +761,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
         if any([include_distances, include_angles,include_areas]):
             quality=deepof_project.get_quality().filter_videos([key])
             #load table if not already loaded
-            quality[key] = deepof.utils.get_dt(quality,key)
+            quality[key] = get_dt(quality,key)
 
         kin_features = pd.DataFrame()
 
@@ -849,7 +851,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
         # save paths for modified tables
         table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key, key + '_' + file_name)
-        kinematic_features[key] = deepof.utils.save_dt(kin_features,table_path,return_path)
+        kinematic_features[key] = save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics
     return deepof.data.TableDict(
@@ -946,7 +948,7 @@ def annotate_time_chunks(
 )
 
     first_key = list(comprehensive_features.keys())[0]
-    feature_names = deepof.utils.get_dt(comprehensive_features, first_key, only_metainfo=True)['columns']
+    feature_names = get_dt(comprehensive_features, first_key, only_metainfo=True)['columns']
 
     # Do some preprocessing and convert to numpy matrices 
     comprehensive_features = comprehensive_features.preprocess(

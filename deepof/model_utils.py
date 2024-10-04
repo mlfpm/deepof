@@ -29,6 +29,8 @@ import deepof.data
 import deepof.hypermodels
 import deepof.models
 import deepof.post_hoc
+from deepof.data_loading import get_dt, load_dt
+
 
 tfb = tfp.bijectors
 tfd = tfp.distributions

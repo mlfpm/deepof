@@ -48,6 +48,8 @@ import deepof.model_utils
 import deepof.models
 import deepof.utils
 import deepof.visuals
+from deepof.data_loading import get_dt, load_dt, save_dt
+
 
 # SET DEEPOF VERSION
 current_deepof_version="0.8.0"
@@ -591,8 +593,8 @@ class Project:
                 # save paths for tables
                 quality_path = os.path.join(directory, key + '_likelyhood')
                 table_path = os.path.join(directory, key)
-                lik_dict[key] = deepof.utils.save_dt(likely_dict[key],quality_path,self.run_numba)
-                tab_dict[key] = deepof.utils.save_dt(table_dict[key],table_path,self.run_numba)
+                lik_dict[key] = save_dt(likely_dict[key],quality_path,self.run_numba)
+                tab_dict[key] = save_dt(table_dict[key],table_path,self.run_numba)
 
                 #cleanup
                 del table_dict[key]
@@ -643,14 +645,14 @@ class Project:
             for i, (key, tab) in enumerate(tab_dict.items()):
 
                 #load active table
-                tab = deepof.utils.get_dt(tab_dict, key)
+                tab = get_dt(tab_dict, key)
 
                 #get distances for this table
                 distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
 
                 #save disctances for active table
                 distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
-                distance_dict[key] = deepof.utils.save_dt(distance_tab,distance_path,self.run_numba)
+                distance_dict[key] = save_dt(distance_tab,distance_path,self.run_numba)
 
                 #clean up
                 del distance_tab
@@ -713,7 +715,7 @@ class Project:
                 for key in tab_dict.keys():
 
                     #load table 
-                    tab = deepof.utils.get_dt(tab_dict, key)
+                    tab = get_dt(tab_dict, key)
 
                     dats = []
                     for clique in bridges:
@@ -733,7 +735,7 @@ class Project:
 
                     # get path for saving
                     angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
-                    angle_dict[key] = deepof.utils.save_dt(dats,angle_path,self.run_numba)
+                    angle_dict[key] = save_dt(dats,angle_path,self.run_numba)
                     pbar.update()
 
 
@@ -785,7 +787,7 @@ class Project:
             for key in tab_dict.keys():
 
                 #load table 
-                tab = deepof.utils.get_dt(tab_dict, key)
+                tab = get_dt(tab_dict, key)
 
                 current_table = pd.DataFrame()
 
@@ -855,7 +857,7 @@ class Project:
                     current_table = pd.concat([current_table, areas_table], axis=1)
 
                 area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
-                all_areas_dict[key] = deepof.utils.save_dt(current_table,area_path,self.run_numba)
+                all_areas_dict[key] = save_dt(current_table,area_path,self.run_numba)
                 pbar.update()
 
 
@@ -1263,7 +1265,7 @@ class Coordinates:
             
             # save paths for modified tables
             table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-            tab_dict[key] = deepof.utils.save_dt(tab,table_path,return_path)
+            tab_dict[key] = save_dt(tab,table_path,return_path)
 
             #cleanup
             del tab
@@ -1322,11 +1324,11 @@ class Coordinates:
         coord_1, coord_2 = "x", "y"
 
         #load table if not already loaded
-        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._tables, key))
+        tab = deepof.utils.deepcopy(get_dt(self._tables, key))
         #to avoid reloading quality if quality is given
         if quality is None:
             quality=self.get_quality().filter_videos([key])
-            quality[key] = deepof.utils.get_dt(quality,key)
+            quality[key] = get_dt(quality,key)
 
         if align:
 
@@ -1497,7 +1499,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
+                tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
                 del tab
@@ -1538,11 +1540,11 @@ class Coordinates:
         """
 
         #load table if not already loaded
-        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._distances, key))
+        tab = deepof.utils.deepcopy(get_dt(self._distances, key))
         #to avoid reloading quality if quality is given
         if quality is None:
             quality=self.get_quality().filter_videos([key])
-            quality[key] = deepof.utils.get_dt(quality,key)
+            quality[key] = get_dt(quality,key)
 
         if speed:
             tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
@@ -1621,7 +1623,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
+                tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
                 del tab
@@ -1662,11 +1664,11 @@ class Coordinates:
         """  
 
         #load table if not already loaded
-        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._angles, key))
+        tab = deepof.utils.deepcopy(get_dt(self._angles, key))
         #to avoid reloading quality if quality is given
         if quality is None:
             quality=self.get_quality().filter_videos([key])
-            quality[key] = deepof.utils.get_dt(quality,key)
+            quality[key] = get_dt(quality,key)
 
         if degrees:
             tab = np.degrees(tab) 
@@ -1724,7 +1726,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables', key, key + '_' + file_name)
-                tabs[key] = deepof.utils.save_dt(tab,table_path,return_path)
+                tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
                 del tab
@@ -1767,11 +1769,11 @@ class Coordinates:
         """
         
         #load table if not already loaded
-        tab = deepof.utils.deepcopy(deepof.utils.get_dt(self._areas, key))
+        tab = deepof.utils.deepcopy(get_dt(self._areas, key))
         #to avoid reloading quality if quality is given
         if quality is None:
             quality=self.get_quality().filter_videos([key])
-            quality[key] = deepof.utils.get_dt(quality,key)
+            quality[key] = get_dt(quality,key)
 
         if selected_id == "all":
             selected_ids = self._animal_ids
@@ -1820,7 +1822,7 @@ class Coordinates:
         start_times = {}
         for key in self._tables:
             if type(self._tables[key]) == str:
-                start_times[key] = deepof.utils.load_dt_metainfo(self._tables[key])['start_time']
+                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
             else:
                 start_times[key] = self._tables[key].index[0]
         return start_times
@@ -1830,7 +1832,7 @@ class Coordinates:
         end_times = {}
         for key in self._tables:
             if type(self._tables[key]) == str:
-                end_times[key] = deepof.utils.load_dt_metainfo(self._tables[key])['end_time']
+                end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
             else:
                 end_times[key] = self._tables[key].index[-1]
         return end_times
@@ -1840,7 +1842,7 @@ class Coordinates:
         table_lengths = {}
         for key in self._tables:
             if type(self._tables[key]) == str:
-                table_lengths[key] = deepof.utils.load_dt_metainfo(self._tables[key])['num_rows']
+                table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
             else:
                 table_lengths[key] = self._tables[key].shape[0]
         return table_lengths
@@ -2041,12 +2043,12 @@ class Coordinates:
 
             #read table metadata
             if type(list(dists.values())[0]) == str:
-                edge_feature_names=deepof.utils.load_dt_metainfo(list(dists.values())[0])['columns']
+                edge_feature_names=get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
             else:
-                edge_feature_names = list(list(dists.values())[0].columns)
+                edge_feature_names = list(list(dists.keys())[0].columns)
 
             if type(list(tab_dict.values())[0]) == str:
-                feature_names=pd.Index(deepof.utils.load_dt_metainfo(list(tab_dict.values())[0])['columns'])
+                feature_names=pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
             else:
                 feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
 
@@ -2093,7 +2095,7 @@ class Coordinates:
 
                         #load table if not already loaded
 
-                        tab, table_path = deepof.utils.get_dt(to_preprocess[k], key, return_path=True) 
+                        tab, table_path = get_dt(to_preprocess[k], key, return_path=True) 
 
                         dataset = (
                             tab[:, :, ~feature_names.isin(edge_feature_names)][
@@ -2107,7 +2109,7 @@ class Coordinates:
                     
 
                         # save paths for modified tables
-                        to_preprocess[k][key] = deepof.utils.save_dt(dataset,table_path,self._run_numba) 
+                        to_preprocess[k][key] = save_dt(dataset,table_path,self._run_numba) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:
                         shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
@@ -2124,7 +2126,7 @@ class Coordinates:
             with tqdm(total=len(to_preprocess), desc="Reshaping     ", unit="array") as pbar:
                 for key in to_preprocess.keys():
 
-                    tab, table_path = deepof.utils.get_dt(to_preprocess, key, return_path=True) 
+                    tab, table_path = get_dt(to_preprocess, key, return_path=True) 
 
                     tab = np.array(tab)
 
@@ -2144,7 +2146,7 @@ class Coordinates:
 
 
                     # save paths for modified tables
-                    to_preprocess[key] = deepof.utils.save_dt(dataset,table_path,self._run_numba)
+                    to_preprocess[key] = save_dt(dataset,table_path,self._run_numba)
                     pbar.update()
 
 
@@ -2265,7 +2267,7 @@ class Coordinates:
                 # Remove indices and add at the very end, to avoid conflicts if
                 # frame_rate is specified in project
                 if isinstance(raw_coords[key], str):
-                    tag_index = deepof.utils.load_dt_metainfo(raw_coords[key])['index_column']
+                    tag_index = get_dt(raw_coords,key, only_metainfo=True, load_index=True)['index_column']
                 else:
                     tag_index = raw_coords[key].index
                 self._trained_model_path = resource_filename(__name__, "trained_models")
@@ -2289,7 +2291,7 @@ class Coordinates:
                 pbar.set_postfix(step="post processing")
 
                 quality=self.get_quality().filter_videos([key])
-                quality[key] = deepof.utils.get_dt(quality,key)
+                quality[key] = get_dt(quality,key)
                 table_dict={key:supervised_tags}
                 # Set table_dict to NaN if animals are missing
                 table_dict = deepof.utils.set_missing_animals(
@@ -2309,7 +2311,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(coords._table_path, key, key + '_' + "supervised_annotations")
-                tag_dict[key] = deepof.utils.save_dt(supervised_tags,table_path,self._run_numba) 
+                tag_dict[key] = save_dt(supervised_tags,table_path,self._run_numba) 
 
                 pbar.update() 
 
@@ -2768,7 +2770,7 @@ class TableDict(dict):
             for tabdict in args:
 
                 #load table 
-                tab = deepof.utils.get_dt(tabdict, key)
+                tab = get_dt(tabdict, key)
 
                 merged_tab.append(tab)
 
@@ -2789,7 +2791,7 @@ class TableDict(dict):
 
             # save paths for modified tables
             table_path = os.path.join(self._table_path, key, key + '_' + file_name)
-            merged_dict[key] = deepof.utils.save_dt(merged_tab,table_path,save_as_paths)           
+            merged_dict[key] = save_dt(merged_tab,table_path,save_as_paths)           
 
         merged_tables = TableDict(
             merged_dict,
@@ -2903,14 +2905,14 @@ class TableDict(dict):
 
         #determine the number of rows to use
         N_elements_max=int(1000000000/8) #up to 1GB in save space
-        num_cols=deepof.utils.get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
+        num_cols=get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
         max_num_rows=int(N_elements_max/(window_size*num_cols)*window_step)
 
         #save outputs as paths if first table is larger than a threshold
         if save_as_paths is None:
             save_as_paths=False
             first_key=list(table_temp.keys())[0]
-            num_rows=deepof.utils.get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
+            num_rows=get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
             if num_rows>N_rows_max/len(table_temp):
                 save_as_paths=True
 
@@ -2927,7 +2929,7 @@ class TableDict(dict):
 
                 #pbar.set_postfix("Rescaling")
                 #load table if not already loaded
-                tab = deepof.utils.get_dt(table_temp, key) 
+                tab = get_dt(table_temp, key) 
 
                 #select subset of tab
                 if tab.shape[0]>max_num_rows:
@@ -2982,7 +2984,7 @@ class TableDict(dict):
 
                 # save paths for modified tables
                 table_path = os.path.join(self._table_path, key, key + '_' + file_name)
-                table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
+                table_temp[key] = save_dt(tab,table_path,save_as_paths) 
                 pbar.update()
 
         if scale:    
@@ -3008,7 +3010,7 @@ class TableDict(dict):
 
                 #pbar.set_postfix("Rescaling")
                 #load table if not already loaded
-                tab = deepof.utils.get_dt(table_temp, key)   
+                tab = get_dt(table_temp, key)   
                     
                 if scale:
 
@@ -3065,7 +3067,7 @@ class TableDict(dict):
 
                     # save paths for modified tables
                     table_path = os.path.join(self._table_path, key, key + '_' + file_name)
-                    table_temp[key] = deepof.utils.save_dt(tab,table_path,save_as_paths) 
+                    table_temp[key] = save_dt(tab,table_path,save_as_paths) 
                 pbar.update()
 
         # Split videos and generate training and test sets
@@ -3126,7 +3128,7 @@ class TableDict(dict):
 
         for key in self.keys():
             # Load table tuple
-            tab_tuple = deepof.utils.get_dt(self, key)
+            tab_tuple = get_dt(self, key)
 
             # Check if only one dataset or two (e.g., training and testing data) was given
             if isinstance(tab_tuple, tuple):

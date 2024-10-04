@@ -37,6 +37,7 @@ from statannotations.Annotator import Annotator
 import deepof.post_hoc
 from deepof.utils import _suppress_warning
 import deepof.utils
+from deepof.data_loading import get_dt, load_dt
 from deepof.visuals_utils import (
     calculate_average_arena,
     seconds_to_time,
@@ -338,7 +339,7 @@ def plot_heatmaps(
     for key in coords.keys():
 
         #load table if not already loaded
-        tab = deepof.utils.get_dt(coords, key)  
+        tab = get_dt(coords, key)  
         
         #cut slice from table
         tab=tab.iloc[bin_info[key]]
@@ -424,7 +425,7 @@ def plot_gantt(
     # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
-        data_frame=deepof.utils.get_dt(supervised_annotations,experiment_id)
+        data_frame=get_dt(supervised_annotations,experiment_id)
         
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
@@ -438,7 +439,7 @@ def plot_gantt(
         )
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
-        data_frame=deepof.utils.get_dt(soft_counts,experiment_id)
+        data_frame=get_dt(soft_counts,experiment_id)
 
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
@@ -463,7 +464,7 @@ def plot_gantt(
 
     # set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = deepof.utils.get_dt(soft_counts,experiment_id).argmax(axis=1)
+        hard_counts = get_dt(soft_counts,experiment_id).argmax(axis=1)
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
@@ -1743,7 +1744,7 @@ def plot_embeddings(
         for key in emb_to_plot.keys():
 
             #get correct section of current embedding 
-            current_emb=deepof.utils.get_dt(emb_to_plot,key)[bin_info[key]]
+            current_emb=get_dt(emb_to_plot,key)[bin_info[key]]
 
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
@@ -1755,7 +1756,7 @@ def plot_embeddings(
 
         # Concatenate experiments and align experimental conditions
         concat_embeddings = np.concatenate(
-            [deepof.utils.get_dt(emb_to_plot,key) 
+            [get_dt(emb_to_plot,key) 
                 for key in emb_to_plot],
             axis=0
         )
@@ -1763,7 +1764,7 @@ def plot_embeddings(
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
             np.concatenate(
-                [deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
+                [get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
                 for key in counts_to_plot], 
                 axis=0
             ), 
@@ -1773,7 +1774,7 @@ def plot_embeddings(
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
             [
-                np.max(deepof.utils.get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
+                np.max(get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
                 for key in counts_to_plot
             ]
         )
@@ -2184,8 +2185,8 @@ def animate_skeleton(
 
     if embeddings is not None:
         #Get data for requested experiment
-        cur_embeddings=deepof.utils.get_dt(embeddings, experiment_id)
-        cur_soft_counts=deepof.utils.get_dt(soft_counts, experiment_id)
+        cur_embeddings=get_dt(embeddings, experiment_id)
+        cur_soft_counts=get_dt(soft_counts, experiment_id)
     else:
         cur_embeddings=None
         cur_soft_counts=None
@@ -2683,7 +2684,7 @@ def output_videos_per_cluster(
         out_path: path to the output directory.
 
     """
-    N_clusters=deepof.utils.get_dt(soft_counts,list(soft_counts.keys())[0],only_metainfo=True)['num_cols']
+    N_clusters=get_dt(soft_counts,list(soft_counts.keys())[0],only_metainfo=True)['num_cols']
     # Iterate over all clusters, and output a masked video for each
     for cluster_id in range(N_clusters):
 
@@ -2701,7 +2702,7 @@ def output_videos_per_cluster(
 
         for key in soft_counts.keys():
 
-            cur_soft_counts = deepof.utils.get_dt(soft_counts,key)
+            cur_soft_counts = get_dt(soft_counts,key)
             # Get hard counts and confidence estimates per cluster
             hard_counts = np.argmax(cur_soft_counts, axis=1)
             confidence = np.max(cur_soft_counts, axis=1)
@@ -2858,7 +2859,7 @@ def export_annotated_video(
     first_key = list(coordinates.get_quality().keys())[0]
     window_length = (
         coordinates.get_table_lengths()[first_key]
-        - deepof.utils.get_dt(soft_counts, first_key, only_metainfo=True)['num_rows']
+        - get_dt(soft_counts, first_key, only_metainfo=True)['num_rows']
         + 1
     )
 
@@ -2887,7 +2888,7 @@ def export_annotated_video(
     if soft_counts is not None:
         if experiment_id is not None:
             # If experiment_id is provided, only output a video for that experiment
-            cur_soft_counts=deepof.utils.get_dt(soft_counts, experiment_id)
+            cur_soft_counts=get_dt(soft_counts, experiment_id)
             video_path=coordinates.get_videos(full_paths=True)[experiment_id]
 
             deepof.visuals.output_unsupervised_annotated_video(
@@ -2957,7 +2958,7 @@ def plot_distance_between_conditions(
         exp_condition=exp_condition,
     )
 
-    min_len=np.min([deepof.utils.get_dt(soft_counts, key, only_metainfo=True)['num_rows'] for key in soft_counts.keys()])
+    min_len=np.min([get_dt(soft_counts, key, only_metainfo=True)['num_rows'] for key in soft_counts.keys()])
 
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
@@ -3270,7 +3271,7 @@ def annotate_video(
     """
 
     if isinstance(tag_dict, str):
-        tag_dict=deepof.utils.load_dt(tag_dict)
+        tag_dict=load_dt(tag_dict)
 
     # Extract useful information from coordinates object
     tracks = list(coordinates._tables.keys())
@@ -3431,7 +3432,7 @@ def _check_enum_inputs(
             [
             coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
             if type(coordinates._tables[key]) != str   #if table is not a save path
-            else [t[0] for t in deepof.utils.load_dt_metainfo(coordinates._tables[key])['columns']] #otherwise read in saved column headers and then extract first elements
+            else [t[0] for t in get_dt(coordinates._tables,key,only_metainfo=True)['columns']] #otherwise read in saved column headers and then extract first elements
             for key 
             in coordinates._tables.keys()
             ]
@@ -3625,7 +3626,7 @@ def plot_behavior_trends(
     ):
         plot_type = "supervised"
         L_shortest = min(
-            deepof.utils.get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
+            get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
         )
     elif (
         embedding is not None
@@ -3634,7 +3635,7 @@ def plot_behavior_trends(
     ):
         plot_type = "unsupervised"
         L_shortest = min(
-            deepof.utils.get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
+            get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
         )
     else:
         raise ValueError(
@@ -3658,12 +3659,12 @@ def plot_behavior_trends(
     # Set behavior ids
     if plot_type == "unsupervised":
         keys=list(soft_counts.keys())
-        num_clusters=deepof.utils.get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
+        num_clusters=get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, num_clusters)]
         
     elif plot_type == "supervised":
         keys=list(supervised_annotations.keys())
-        behavior_ids = deepof.utils.get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
+        behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
 
 
     #####
@@ -3738,12 +3739,12 @@ def plot_behavior_trends(
     for key in keys:
 
         if plot_type == "unsupervised":
-            data_set=deepof.utils.get_dt(soft_counts,key)
+            data_set=get_dt(soft_counts,key)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
-            data_set=deepof.utils.get_dt(supervised_annotations,key)
+            data_set=get_dt(supervised_annotations,key)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting

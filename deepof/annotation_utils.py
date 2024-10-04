@@ -25,6 +25,8 @@ from tqdm import tqdm
 import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
+from deepof.data_loading import get_dt, load_dt
+
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -691,11 +693,11 @@ def supervised_tagging(
     undercond = "_" if len(animal_ids) > 1 else ""
 
     #extract various data tables from their Table dicts
-    raw_coords = deepof.utils.get_dt(raw_coords,key).reset_index(drop=True)
-    coords = deepof.utils.get_dt(coords,key).reset_index(drop=True)
-    dists = deepof.utils.get_dt(dists,key).reset_index(drop=True)
-    speeds = deepof.utils.get_dt(speeds,key).reset_index(drop=True)
-    likelihoods = deepof.utils.get_dt(coord_object.get_quality(),key).reset_index(drop=True)
+    raw_coords = get_dt(raw_coords,key).reset_index(drop=True)
+    coords = get_dt(coords,key).reset_index(drop=True)
+    dists = get_dt(dists,key).reset_index(drop=True)
+    speeds = get_dt(speeds,key).reset_index(drop=True)
+    likelihoods = get_dt(coord_object.get_quality(),key).reset_index(drop=True)
     arena_abs = coord_object._scales[key][-1]
     arena_rel = coord_object._scales[key][-2]
 
@@ -852,9 +854,9 @@ def supervised_tagging(
     for _id in animal_ids:
         
         if _id:
-            current_features=deepof.utils.get_dt(full_features[_id],key) 
+            current_features=get_dt(full_features[_id],key) 
         else:
-            current_features=deepof.utils.get_dt(full_features,key)
+            current_features=get_dt(full_features,key)
 
         tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
             climb_wall(
