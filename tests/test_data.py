@@ -351,22 +351,30 @@ def test_run(nodes, ego, use_numba):
 @settings(max_examples=2, deadline=None)
 @given(
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+    detection_mode=st.one_of(
+        st.just("polygonal-autodetect"), st.just("circular-autodetect")
+    ),
 )
-def test_get_supervised_annotation(use_numba):
+def test_get_supervised_annotation(use_numba,detection_mode):
+
+    if detection_mode=="circular-autodetect":
+        arena_type="test_single_topview"
+    else:
+        arena_type="test_square_arena_topview"
 
     fast_implementations_threshold = 100000
     if use_numba:
         fast_implementations_threshold = 10
 
     prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
         video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
+            ".", "tests", "test_examples", arena_type, "Videos"
         ),
         table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
+            ".", "tests", "test_examples", arena_type, "Tables"
         ),
-        arena="circular-autodetect",
+        arena=detection_mode,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
         video_scale=380,
         video_format=".mp4",
@@ -378,7 +386,7 @@ def test_get_supervised_annotation(use_numba):
 
     rmtree(
         os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+            ".", "tests", "test_examples", arena_type, "deepof_project"
         )
     )
 
