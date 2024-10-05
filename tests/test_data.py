@@ -497,7 +497,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         filter_low_variance=1e-3,
         interpolate_normalized=5,
         shuffle=sampler.draw(st.booleans()),
+        N_rows_max=sampler.draw(st.integers(min_value=10, max_value=500000)),
     )
+    first_key=list(prep[0][0].keys())[0]
+    prep_data=deepof.data_loading.get_dt(prep[0][0],first_key)
 
     rmtree(
         os.path.join(
@@ -522,8 +525,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     assert isinstance(prun.get_arenas, tuple)
 
     assert isinstance(prep[0][0], dict)
-    first_key=list(prep[0][0].keys())[0]
-    assert isinstance(prep[0][0][first_key], np.ndarray)
+    assert isinstance(prep_data, np.ndarray)
     
     # deepof dimensionality reduction testing
 

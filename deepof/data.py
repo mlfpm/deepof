@@ -1442,17 +1442,6 @@ class Coordinates:
         table_dict = deepof.utils.set_missing_animals(self, table_dict, quality)
         tab = table_dict[key]
 
-        if propagate_annotations:
-            annotations = list(propagate_annotations.values())[0].columns
-
-            for ann in annotations:
-                tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
-
-        if propagate_labels:
-            tab.loc[:, "pheno"] = np.repeat(
-                self._exp_conditions[key][propagate_labels].values, tab.shape[0]
-            )
-
         return tab
     
     def get_distances_header(self, copy_keys: bool = False):
@@ -2641,11 +2630,6 @@ class TableDict(dict):
         """Return a numpy ndarray from the preprocessing of the table_dict object, ready for projection into a lower dimensional space."""
         labels = None
 
-        # Takes care of propagated labels if present
-        if self._propagate_labels:
-            labels = {k: v.iloc[0, -1] for k, v in self.items()}
-            labels = np.array([val for val in labels.values()])
-
         X = {k: np.mean(v, axis=0) for k, v in self.items()}
         X = np.concatenate(
             [np.array(exp)[:, np.newaxis] for exp in X.values()], axis=1
@@ -2775,19 +2759,6 @@ class TableDict(dict):
                 merged_tab.append(tab)
 
             merged_tab=pd.concat(merged_tab, axis=1, ignore_index=ignore_index, join="inner")
-
-            # If there are labels passed, keep only one and append it as the last column
-            pheno_cols = [col for col in merged_tab.columns if "pheno" in str(col)]
-            if len(pheno_cols) > 0:
-
-                pheno_col = (
-                    pheno_cols[0] if len(pheno_cols[0]) == 1 else [pheno_cols[0]]
-                )
-                labels = merged_tab.loc[:, pheno_col].iloc[:, 0]
-
-                merged_tab = merged_tab.drop(pheno_cols, axis=1)
-                merged_tab["pheno"] = labels
-
 
             # save paths for modified tables
             table_path = os.path.join(self._table_path, key, key + '_' + file_name)

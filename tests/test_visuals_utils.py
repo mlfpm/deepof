@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from hypothesis import HealthCheck
 from hypothesis import given
-from hypothesis import settings
+from hypothesis import settings, example
 from hypothesis import strategies as st
 from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
@@ -146,7 +146,8 @@ class Pseudo_Coordinates:
     def get_table_lengths(self):
         return self._table_lengths
 
-    
+
+@settings(deadline=None, max_examples=100)    
 @given(
     start_times_raw=st.lists(
         elements=st.integers(min_value=0, max_value=120), min_size=5, max_size=50
