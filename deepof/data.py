@@ -863,8 +863,7 @@ class Project:
 
         return all_areas_dict
 
-    #from memory_profiler import profile
-    #@profile
+
     def create(
         self,
         verbose: bool = True,
