@@ -25,17 +25,31 @@ from scipy.spatial import distance
 from shutil import rmtree
 import warnings
 
-import deepof.data
+from deepof.data import TableDict
 from deepof.visuals_utils import (
-    calculate_average_arena,
     time_to_seconds,
     seconds_to_time,
+    calculate_average_arena,
+    _filter_embeddings,
+    _get_polygon_coords,
+    _process_animation_data,
     create_bin_pairs,
     cohend,
     _preprocess_time_bins,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
+
+
+@given(
+    second=st.floats(min_value=0, max_value=100000),
+    full_second=st.integers(min_value=0, max_value=100000),
+)
+def test_time_conversion(second, full_second):
+    assert full_second == time_to_seconds(seconds_to_time(float(full_second)))
+    second = np.round(second * 10**9) / 10**9 #up to 9 digits allowed
+    second_second=time_to_seconds(seconds_to_time(float(second), cut_milliseconds=False)) 
+    assert second == second_second #this pun is intended and necessary
 
 
 @settings(deadline=None)
@@ -67,15 +81,62 @@ def test_calculate_average_arena(all_vertices, num_points):
         assert len(avg_arena) == num_points
 
 
+
 @given(
-    second=st.floats(min_value=0, max_value=100000),
-    full_second=st.integers(min_value=0, max_value=100000),
+    keys=st.lists(
+        st.text(alphabet='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', min_size=1, max_size=10),
+        min_size=1, max_size=10, unique=True), 
+    exp_condition=st.one_of(st.just('Cond1'),st.just('Cond2')) 
 )
-def test_time_conversion(second, full_second):
-    assert full_second == time_to_seconds(seconds_to_time(float(full_second)))
-    second = np.round(second * 10**9) / 10**9
+def test_filter_embeddings(keys,exp_condition):
+    
+
+    class Pseudo_Coordinates:
+        def __init__(self, keys):
+            self._exp_conditions = {}
+ 
+            #create random exp conditions
+            for i, key in enumerate(keys):
+                if (i+1)%2==0:
+                    self._exp_conditions[key]=pd.DataFrame([['even','blubb']],columns=['Cond1','Cond2'])
+                else:
+                    self._exp_conditions[key]=pd.DataFrame([['odd','blobb']],columns=['Cond1','Cond2'])
+
+        @property
+        def get_exp_conditions(self):
+            """Return the stored dictionary with experimental conditions per subject."""
+            return self._exp_conditions
+    
+    coordinates=Pseudo_Coordinates(keys)
+
+    # Define a test embedding dictionary
+    embeddings = {i: np.random.normal(size=(100, 10)) for i in keys}
+    soft_counts = {}
+    for i in keys:
+        counts = np.abs(np.random.normal(size=(100, 2)))
+        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    supervised_annotations= TableDict({i: pd.DataFrame(embeddings[i]) for i in keys}, typ='supervised')
+
+    embeddings, soft_counts, supervised_annotations, concat_hue = _filter_embeddings(
+    coordinates,
+    embeddings,
+    soft_counts,
+    supervised_annotations,
+    exp_condition,
+    )
+
+    N_keys=len(embeddings.keys())
+    if exp_condition=='Cond1':
+        comp_list=['odd' if i % 2 == 0 else 'even' for i in range(N_keys)]
+        assert concat_hue == comp_list
+    else:
+        comp_list=['blobb' if i % 2 == 0 else 'blubb' for i in range(N_keys)]
+        assert concat_hue == comp_list
+    assert embeddings.keys()==soft_counts.keys()
+    assert embeddings.keys()==supervised_annotations.keys()
 
 
+    
 @given(
     L_array=st.integers(min_value=1, max_value=100000),
     N_time_bins=st.integers(min_value=1, max_value=100),
