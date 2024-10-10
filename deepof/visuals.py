@@ -114,7 +114,7 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
     )
@@ -238,7 +238,7 @@ def plot_gantt(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
     )
 
     # set active axes if provided
@@ -281,7 +281,7 @@ def plot_gantt(
         )
 
 
-    # get start and end positions of outputs
+    # get indices to be plotted
     bin_indices=bin_info[experiment_id]
 
 
@@ -344,10 +344,224 @@ def plot_gantt(
             gantt[rows] = data_frame[
                 behavior_ids[feature]
             ].iloc[bin_indices]
+        gantt[rows][gantt[rows]>0]+=rows
 
-        # create gantt matrix for current feature map plot
-        gantt_cp = gantt.copy()
-        gantt_cp[[i for i in range(gantt.shape[0]) if i != rows]] = np.nan
+        rows+=1
+
+    gantt_plotter(
+        coordinates=coordinates,
+        gantt_matrix=gantt,
+        plot_type=plot_type,
+        instance_id=experiment_id,
+        n_available_instances=n_available_features,
+        instances_to_plot=behaviors_to_plot,
+        colors=colors,
+        bin_indices=bin_indices,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        ax=ax,
+        save=save,
+    )
+
+
+def plot_global_gantt(
+    coordinates: project,
+    behavior_id: str,
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max=20000,
+    # Visualization parameters
+    soft_counts: table_dict = None,
+    supervised_annotations: table_dict = None,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    experiments_to_plot: list = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        behavior_id (str): Name of the behavior to display.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        experiments_to_plot (list): list of experiments to plot. If None, all experiments are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        behaviors=behavior_id,
+        experiment_ids=experiments_to_plot,
+    )
+
+    # set active axes if provided
+    if ax:
+        plt.sca(ax)
+
+    # Determine plot type and length of the whole dataset
+    if soft_counts is None and supervised_annotations is not None:
+        plot_type = "supervised"
+        all_experiments=list(supervised_annotations.keys())
+        
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
+        )
+    elif soft_counts is not None and supervised_annotations is None:
+        plot_type = "unsupervised"
+        all_experiments=list(soft_counts.keys())
+
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
+        )
+    else:
+        plot_type = "mixed"
+        raise NotImplementedError(
+            "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        )
+
+
+    # only keep valid experiments
+    if experiments_to_plot is not None:
+        experiments_to_plot = np.unique(experiments_to_plot)
+        experiments_to_plot = [
+            experiments_to_plot[k]
+            for k in range(0, len(experiments_to_plot))
+            if experiments_to_plot[k] in all_experiments
+        ]
+    else:
+        experiments_to_plot = all_experiments
+
+    # get common indices between all selected experiments
+    bin_indices=bin_info[list(bin_info.keys())[0]]
+    for exp_id in experiments_to_plot:
+        bin_indices=np.intersect1d(bin_indices,bin_info[exp_id]) 
+
+    # set gantt matrix
+    n_available_experiments = len(all_experiments)
+    gantt = np.zeros([len(experiments_to_plot), len(bin_indices)])
+
+    # If available, add additional checkpoints to the Gantt matrix
+    if additional_checkpoints is not None:
+        additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if experiments_to_plot is not None:
+            gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
+
+    # set colors with number of available features to keep color consitent if only a subset is selected
+    colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()),
+        int(np.ceil(n_available_experiments / 20)),
+    )
+
+    # Iterate over experiments and plot
+    rows = 0
+    for exp_id in range(n_available_experiments):
+
+        # skip if feature is not selected for plotting
+        if all_experiments[exp_id] not in experiments_to_plot:
+            continue
+
+        # fill gantt row
+        if plot_type == "unsupervised":
+            hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
+            cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
+            gantt[rows] = hard_counts[bin_indices] == cluster_no
+        elif plot_type == "supervised":
+            gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
+        gantt[rows][gantt[rows]>0]+=rows
+        
+        rows += 1
+
+    gantt_plotter(
+        coordinates=coordinates,
+        gantt_matrix=gantt,
+        plot_type=plot_type,
+        instance_id=behavior_id,
+        n_available_instances=n_available_experiments,
+        instances_to_plot=experiments_to_plot,
+        colors=colors,
+        bin_indices=bin_indices,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        ax=ax,
+        save=save,
+    )
+
+    
+def gantt_plotter(
+    coordinates: project,
+    gantt_matrix: np.ndarray,
+    plot_type: str,
+    instance_id: str,
+    n_available_instances: int, 
+    instances_to_plot: list,
+    colors: list,
+    # Time selection parameters
+    bin_indices: np.ndarray,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        gantt_matrix (np.ndarray): 2D integer matrix denoting time sections with present or absent behavior
+        plot_type (str): type of plot, either "supervised" or "unsupervised"
+        behavior_id (str): Name of the behavior to display.
+        n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
+        instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
+        colors (list): list of color hexcodes for plotting
+        bin_indices (np.ndarray): indices to plot
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+  
+    #only add "white" as base color if there are frames with no behaviors
+    if (gantt_matrix==0).any():
+        colors=colors=['#FFFFFF'] + colors.tolist()
+
+    sns.heatmap(
+        data=gantt_matrix,
+        cbar=False,
+        cmap=ListedColormap(colors, name="deepof", N=gantt_matrix.shape[0]+1),
+        ax=ax,
+    )
+
+    n_instances=len(instances_to_plot)
+
+    rows = 0
+    for exp_id, color in zip(range(n_available_instances), colors):
 
         # overlay lineplot with normalized signal
         if signal_overlay is not None:
@@ -363,31 +577,17 @@ def plot_gantt(
         # plot line for axis to separate between features
         plt.axhline(y=rows, color="k", linewidth=0.5)
 
-        # workaround for cases in which the entire segment to plot is only 1s
-        # (would result in a white plot otherwise)
-        vals = np.unique(gantt_cp)
-        if not any(vals == 0):
-            colors = [color, "white"]
-        else:
-            colors = ["white", color]
-
-        # plot actual heatmap for current feature
-        sns.heatmap(
-            data=gantt_cp,
-            cbar=False,
-            cmap=LinearSegmentedColormap.from_list("deepof", colors, N=2),
-            ax=ax,
-        )
         rows += 1
+
 
     # Iterate over additional checkpoints and plot
     if additional_checkpoints is not None:
         for checkpoint in range(additional_checkpoints.shape[0]):
-            gantt_cp = gantt.copy()
+            gantt_cp = gantt_matrix.copy()
             gantt_cp[
-                [i for i in range(gantt.shape[0]) if i != n_features + checkpoint]
+                [i for i in range(gantt_matrix.shape[0]) if i != n_instances + checkpoint]
             ] = np.nan
-            plt.axhline(y=n_features + checkpoint, color="k", linewidth=0.5)
+            plt.axhline(y=n_instances + checkpoint, color="k", linewidth=0.5)
 
             sns.heatmap(
                 data=gantt_cp,
@@ -397,9 +597,6 @@ def plot_gantt(
                 ),
                 ax=ax,
             )
-
-    # Set behavior labels for y-axis
-    behavior_ticks = behavior_ids if behaviors_to_plot is None else behaviors_to_plot
 
     # set x-ticks
     plt.xticks([])
@@ -435,11 +632,11 @@ def plot_gantt(
     # set y-ticks
     # set y-ticks
     plt.yticks(
-        np.array(range(gantt.shape[0])) + 0.5,
+        np.array(range(gantt_matrix.shape[0])) + 0.5,
         # Concatenate cluster IDs and checkpoint names if they exist
         np.concatenate(
             [
-                behavior_ticks,
+                instances_to_plot,
                 np.array(additional_checkpoints.index)
                 if additional_checkpoints is not None
                 else [],
@@ -451,9 +648,9 @@ def plot_gantt(
 
     # plot stuff
     plt.axhline(y=0, color="k", linewidth=1)
-    plt.axhline(y=gantt.shape[0], color="k", linewidth=2)
+    plt.axhline(y=gantt_matrix.shape[0], color="k", linewidth=2)
     plt.axvline(x=0, color="k", linewidth=1)
-    plt.axvline(x=gantt.shape[1], color="k", linewidth=2)
+    plt.axvline(x=gantt_matrix.shape[1], color="k", linewidth=2)
     plt.xlabel("Time", fontsize=10)
     if coordinates._frame_rate is not None:
         plt.xlabel("Time in HH:MM:SS", fontsize=10)
@@ -474,7 +671,7 @@ def plot_gantt(
             )
         )
 
-    title = "deepOF - Gantt chart of {} behaviors - {}".format(plot_type, experiment_id)
+    title = "deepOF - Gantt chart of {} behaviors - {}".format(plot_type, instance_id)
     if ax is not None:
         ax.set_title(title, fontsize=8)
     else:
@@ -1764,7 +1961,7 @@ def animate_skeleton(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
         animal_id=animal_id,
         center=center,
     )
@@ -2213,7 +2410,7 @@ def export_annotated_video(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
     )
 
     # Create output directory if it doesn't exist
@@ -2494,8 +2691,11 @@ def plot_behavior_trends(
     # Initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         exp_condition=exp_condition,
         condition_values=condition_values,
+        behaviors=behavior_to_plot,
     )
 
     #####

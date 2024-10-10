@@ -31,11 +31,14 @@ table_dict = NewType("deepof_table_dict", Any)
 #not covered by testing as the only purpose of this function is to throw specific exceptions
 def _check_enum_inputs(
     coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
     origin: object = None,
-    experiment_id: str = None,
+    experiment_ids: list = None,
     exp_condition: str = None,
     exp_condition_order: list = None,
     condition_values: list = None,
+    behaviors: list = None,
     bodyparts: list = None,
     animal_id: str = None,
     center: str = None,
@@ -53,7 +56,7 @@ def _check_enum_inputs(
     exp_condition (str): Experimental condition to plot.
     exp_condition_order (list): Order in which to plot experimental conditions.
     condition_values (list): Experimental condition value to plot.
-    experiment_id (str): data set name of the animal to plot.
+    experiment_ids (list): list of data set name of the animal to plot.
     bodyparts (list): list of body parts to plot.
     visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
     normative_model (str): Name of the cohort to use as controls.
@@ -65,6 +68,19 @@ def _check_enum_inputs(
     # appears to yield inconsitent results)
     warnings.simplefilter("always", UserWarning)
 
+    #fix types
+    if isinstance(experiment_ids, str):
+        experiment_ids=[experiment_ids]
+    if isinstance(exp_condition_order, str):
+        exp_condition_order=[exp_condition_order]
+    if isinstance(condition_values, str):
+        condition_values=[condition_values]
+    if isinstance(behaviors, str):
+        behaviors=[behaviors]
+    if isinstance(bodyparts, str):
+        bodyparts=[bodyparts]
+     
+
     # Generate lists of possible options for all enum-likes (solution will be improved in the future)
     if origin == "plot_heatmaps":
         experiment_id_options_list = ["average"] + os_sorted(
@@ -72,6 +88,17 @@ def _check_enum_inputs(
         )
     else:
         experiment_id_options_list = os_sorted(list(coordinates._tables.keys()))
+
+    #get all possible behaviors from supervised annotations and soft counts
+    behaviors_options_list=[]
+    if supervised_annotations is not None:
+        first_key=list(supervised_annotations.keys())[0]
+        behaviors_options_list=get_dt(supervised_annotations,first_key,only_metainfo=True)['columns']
+    if soft_counts is not None:
+        first_key=list(soft_counts.keys())[0]
+        N_clusters=get_dt(soft_counts,first_key,only_metainfo=True)['num_cols']
+        behaviors_options_list+=["Cluster "+str(i) for i in range(N_clusters)]
+
 
     if coordinates.get_exp_conditions is not None:
         exp_condition_options_list = np.unique(
@@ -122,12 +149,15 @@ def _check_enum_inputs(
     colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
 
     # check if given values are valid. Throw exception and suggest correct values if not
-    if experiment_id is not None and experiment_id not in experiment_id_options_list:
+    if experiment_ids is not None and not experiment_ids == [None] and not set(
+        experiment_ids
+    ).issubset(set(experiment_id_options_list)): 
         raise ValueError(
             '"experiment_id" needs to be one of the following: {} ... '.format(
                 str(experiment_id_options_list[0:4])[1:-1]
             )
         )
+    
     if exp_condition is not None and exp_condition not in exp_condition_options_list:
         if len(exp_condition_options_list) > 0:
             raise ValueError(
@@ -137,8 +167,9 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
+        
     if exp_condition_order is not None and not exp_condition_order == [None] and not set(
-        condition_value_options_list
+        exp_condition_order
     ).issubset(set(condition_value_options_list)):
         if len(condition_value_options_list) > 0:
             raise ValueError(
@@ -148,6 +179,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
+        
     if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
         set(condition_value_options_list)
     ):
@@ -159,6 +191,19 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
+        
+    if behaviors is not None and not behaviors == [None] and not set(
+        behaviors
+    ).issubset(set(behaviors_options_list)):
+        if len(behaviors_options_list) > 0:
+            raise ValueError(
+                'One or more behaviors are not part of: {}'.format(
+                    str(behaviors_options_list)[1:-1]
+                )
+            )
+        else:
+            raise ValueError("No supervised annotations or soft counts loaded!")
+        
     if (
         normative_model is not None
         and normative_model not in condition_value_options_list
@@ -171,6 +216,7 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
+        
     if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
         set(bodyparts_options_list)
     ):
@@ -179,24 +225,28 @@ def _check_enum_inputs(
                 str(bodyparts_options_list)[1:-1]
             )
         )
+    
     if animal_id is not None and animal_id not in animal_id_options_list:
         raise ValueError(
             '"animal_id" needs to be one of the following: {}'.format(
                 str(animal_id_options_list)
             )
         )
+    
     if center is not None and center not in center_options_list:
         raise ValueError(
             'For input "center" currently only {} is supported'.format(
                 str(center_options_list)
             )
         )
+    
     if visualization is not None and visualization not in visualization_options_list:
         raise ValueError(
             '"visualization" needs to be one of the following: {}'.format(
                 str(visualization_options_list)
             )
         )
+    
     if (
         aggregate_experiments is not None
         and aggregate_experiments not in aggregate_experiments_options_list
@@ -206,6 +256,7 @@ def _check_enum_inputs(
                 str(aggregate_experiments_options_list)
             )
         )
+    
     if colour_by is not None and colour_by not in colour_by_options_list:
         raise ValueError(
             '"colour_by" needs to be one of the following: {}'.format(

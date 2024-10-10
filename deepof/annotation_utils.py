@@ -931,7 +931,7 @@ def tagged_video_output(
 
     def output_video(key):
         """Output a single annotated video. Enclosed in a function to enable parallelization."""
-        deepof.visuals.annotate_video(
+        deepof.visuals_utils.annotate_video(
             coordinates,
             tag_dict=tag_dict[key],
             vid_key=key,
