@@ -10,6 +10,7 @@ import time
 import warnings
 from typing import Any, List, NewType, Tuple, Union
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
