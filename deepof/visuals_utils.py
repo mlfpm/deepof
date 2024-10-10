@@ -3,11 +3,22 @@
 # module deepof
 
 """Plotting utility functions for the deepof package."""
-import copy
-import numpy as np
+import calendar
+import os
 import re
-from typing import Any, List, NewType, Tuple, Union
+import time
 import warnings
+from typing import Any, List, NewType, Tuple, Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib.patches import Ellipse
+from natsort import os_sorted
+
+import deepof.post_hoc
+import deepof.utils
 from deepof.data_loading import get_dt, load_dt
 
 
@@ -15,6 +26,375 @@ from deepof.data_loading import get_dt, load_dt
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
+
+
+#not covered by testing as the only purpose of this function is to throw specific exceptions
+def _check_enum_inputs(
+    coordinates: coordinates,
+    origin: object = None,
+    experiment_id: str = None,
+    exp_condition: str = None,
+    exp_condition_order: list = None,
+    condition_values: list = None,
+    bodyparts: list = None,
+    animal_id: str = None,
+    center: str = None,
+    visualization: str = None,
+    normative_model: str = None,
+    aggregate_experiments: str = None,
+    colour_by: str = None,
+): # pragma: no cover
+    """
+    Checks and validates enum-like input parameters for the different plot functions.
+
+    Args:
+    coordinates (coordinates): deepof Coordinates object.
+    center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
+    exp_condition (str): Experimental condition to plot.
+    exp_condition_order (list): Order in which to plot experimental conditions.
+    condition_values (list): Experimental condition value to plot.
+    experiment_id (str): data set name of the animal to plot.
+    bodyparts (list): list of body parts to plot.
+    visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+    normative_model (str): Name of the cohort to use as controls.
+    aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
+    colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
+
+    """
+    # activate warnings (again, because just putting it at the beginning of the skript
+    # appears to yield inconsitent results)
+    warnings.simplefilter("always", UserWarning)
+
+    # Generate lists of possible options for all enum-likes (solution will be improved in the future)
+    if origin == "plot_heatmaps":
+        experiment_id_options_list = ["average"] + os_sorted(
+            list(coordinates._tables.keys())
+        )
+    else:
+        experiment_id_options_list = os_sorted(list(coordinates._tables.keys()))
+
+    if coordinates.get_exp_conditions is not None:
+        exp_condition_options_list = np.unique(
+            np.concatenate(
+                [
+                    condition.columns.values[:]
+                    for condition in coordinates.get_exp_conditions.values()
+                ]
+            )
+        )
+    else:
+        exp_condition_options_list = []
+    if exp_condition is not None and exp_condition in exp_condition_options_list:
+        condition_value_options_list = np.unique(
+            np.concatenate(
+                [
+                    condition[exp_condition].values.astype(str)
+                    for condition in coordinates.get_exp_conditions.values()
+                ]
+            )
+        )
+    else:
+        condition_value_options_list = []
+
+    #get lists of all body parts     
+    bodyparts_options_list = np.unique(
+        np.concatenate(
+            [
+            coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
+            if type(coordinates._tables[key]) != str   #if table is not a save path
+            else [t[0] for t in get_dt(coordinates._tables,key,only_metainfo=True)['columns']] #otherwise read in saved column headers and then extract first elements
+            for key 
+            in coordinates._tables.keys()
+            ]
+        )
+    )
+    bodyparts_options_list = [
+        item for item in bodyparts_options_list if item not in coordinates._excluded
+    ]
+    animal_id_options_list = coordinates._animal_ids
+    # fixed option lists
+    center_options_list = ["arena"]
+    if origin == "plot_transitions":
+        visualization_options_list = ["networks", "heatmaps"]
+    else:
+        visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
+    aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
+    colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
+
+    # check if given values are valid. Throw exception and suggest correct values if not
+    if experiment_id is not None and experiment_id not in experiment_id_options_list:
+        raise ValueError(
+            '"experiment_id" needs to be one of the following: {} ... '.format(
+                str(experiment_id_options_list[0:4])[1:-1]
+            )
+        )
+    if exp_condition is not None and exp_condition not in exp_condition_options_list:
+        if len(exp_condition_options_list) > 0:
+            raise ValueError(
+                '"exp_condition" needs to be one of the following: {}'.format(
+                    str(exp_condition_options_list)[1:-1]
+                )
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
+    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
+        condition_value_options_list
+    ).issubset(set(condition_value_options_list)):
+        if len(condition_value_options_list) > 0:
+            raise ValueError(
+                'One or more conditions in "exp_condition_order" are not part of: {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
+    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
+        set(condition_value_options_list)
+    ):
+        if len(condition_value_options_list) > 0:
+            raise ValueError(
+                'One or more condition values in "condition_value(s)" are not part of {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
+    if (
+        normative_model is not None
+        and normative_model not in condition_value_options_list
+    ):
+        if len(condition_value_options_list) > 0:
+            raise ValueError(
+                '"normative_model" needs to be one of the following: {}'.format(
+                    str(condition_value_options_list)[1:-1]
+                )
+            )
+        else:
+            raise ValueError("No experiment conditions loaded!")
+    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
+        set(bodyparts_options_list)
+    ):
+        raise ValueError(
+            'One or more bodyparts in "bodyparts" are not part of: {}'.format(
+                str(bodyparts_options_list)[1:-1]
+            )
+        )
+    if animal_id is not None and animal_id not in animal_id_options_list:
+        raise ValueError(
+            '"animal_id" needs to be one of the following: {}'.format(
+                str(animal_id_options_list)
+            )
+        )
+    if center is not None and center not in center_options_list:
+        raise ValueError(
+            'For input "center" currently only {} is supported'.format(
+                str(center_options_list)
+            )
+        )
+    if visualization is not None and visualization not in visualization_options_list:
+        raise ValueError(
+            '"visualization" needs to be one of the following: {}'.format(
+                str(visualization_options_list)
+            )
+        )
+    if (
+        aggregate_experiments is not None
+        and aggregate_experiments not in aggregate_experiments_options_list
+    ):
+        raise ValueError(
+            '"aggregate_experiments" needs to be one of the following: {}'.format(
+                str(aggregate_experiments_options_list)
+            )
+        )
+    if colour_by is not None and colour_by not in colour_by_options_list:
+        raise ValueError(
+            '"colour_by" needs to be one of the following: {}'.format(
+                str(colour_by_options_list)
+            )
+        )
+    
+
+def plot_arena(
+    coordinates: coordinates, center: str, color: str, ax: Any, i: Union[int, str]
+):
+    """Plot the arena in the given canvas.
+
+    Args:
+        coordinates (coordinates): deepof Coordinates object.
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        color (str): color of the displayed arena.
+        ax (Any): axes where to plot the arena.
+        i (Union[int, str]): index of the animal to plot.
+    """
+    key=None
+    if isinstance(i, np.int64):
+        key=list(coordinates._tables.keys())[i]
+        arena = coordinates._arena_params[key]
+
+    if "circular" in coordinates._arena:
+
+        if i == "average":
+            arena = [
+                np.mean(np.array([i[0] for i in coordinates._arena_params.values()]), axis=0),
+                np.mean(np.array([i[1] for i in coordinates._arena_params.values()]), axis=0),
+                np.mean(np.array([i[2] for i in coordinates._arena_params.values()]), axis=0),
+            ]
+
+        ax.add_patch(
+            Ellipse(
+                xy=((0, 0) if center == "arena" else arena[0]),
+                width=arena[1][0] * 2,
+                height=arena[1][1] * 2,
+                angle=arena[2],
+                edgecolor=color,
+                fc="None",
+                lw=3,
+                ls="--",
+            )
+        )
+
+    elif "polygonal" in coordinates._arena:
+
+        if center == "arena" and i == "average":
+
+            arena = calculate_average_arena(coordinates._arena_params)
+            avg_scaling = np.mean(np.array(list(coordinates._scales.values()))[:, :2], 0)
+            arena -= avg_scaling
+
+        elif center == "arena":
+            arena -= np.expand_dims(
+                np.array(coordinates._scales[key][:2]).astype(int), axis=1
+            ).T
+
+        # Repeat first element for the drawn polygon to be closed
+        arena_corners = np.array(list(arena) + [arena[0]])
+
+        ax.plot(
+            *arena_corners.T,
+            color=color,
+            lw=3,
+            ls="--",
+        )
+
+
+def heatmap(
+    dframe: pd.DataFrame,
+    bodyparts: List,
+    xlim: tuple = None,
+    ylim: tuple = None,
+    title: str = None,
+    mask: np.ndarray = None,
+    save: str = False,
+    dpi: int = 200,
+    ax: Any = None,
+    **kwargs,
+) -> plt.figure:
+    """Return a heatmap of the movement of a specific bodypart in the arena.
+
+    If more than one bodypart is passed, it returns one subplot for each.
+
+    Args:
+        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1).
+        bodyparts (list): list of body parts to plot.
+        xlim (float): limits of the x-axis.
+        ylim (float): limits of the y-axis.
+        title (str): title of the figure.
+        mask (np.ndarray): mask to apply to the heatmap across time.
+        save (str): if provided, saves the figure to the specified file.
+        dpi (int): dots per inch of the figure to create.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
+
+    Returns:
+        heatmaps (plt.figure): figure with the specified characteristics
+    """
+    # noinspection PyTypeChecker
+    if ax is None:
+        heatmaps, ax = plt.subplots(
+            1,
+            len(bodyparts),
+            sharex=True,
+            sharey=True,
+            dpi=dpi,
+            figsize=(8 * len(bodyparts), 8),
+        )
+
+    if isinstance(dframe, dict):
+
+        if mask is not None:
+            assert isinstance(
+                mask, dict
+            ), "If dframe is a dictionary, mask must be one as well."
+
+            # Pad each mask in the dictionary with False values to match the length of each dataframe
+            mask = {
+                k: np.pad(
+                    v, (0, len(dframe[k]) - len(v)), "constant", constant_values=False
+                )
+                for k, v in mask.items()
+            }
+            mask = np.concatenate(list(mask.values()), axis=0)
+
+        # Concatenate all dataframes which are values of the dictionary into a single one
+        dframe = pd.concat(dframe.values(), axis=0).reset_index(drop=True)
+
+    if mask is None:
+        mask = np.ones(len(dframe), dtype=bool)
+
+    else:
+        # Pad the mask with False values to match the length of the dataframe
+        mask = np.pad(
+            mask, (0, len(dframe) - len(mask)), "constant", constant_values=False
+        )
+
+    for i, bpart in enumerate(bodyparts):
+        heatmap = dframe[bpart].loc[mask]
+
+        if len(bodyparts) > 1:
+            sns.kdeplot(
+                x=heatmap.x,
+                y=heatmap.y,
+                cmap="magma",
+                fill=True,
+                alpha=1,
+                ax=ax[i],
+                **kwargs,
+            )
+        else:
+            sns.kdeplot(
+                x=heatmap.x,
+                y=heatmap.y,
+                cmap="magma",
+                fill=True,
+                alpha=1,
+                ax=ax,
+                **kwargs,
+            )
+            ax = np.array([ax])
+
+    for x, bp in zip(ax, bodyparts):
+        if xlim is not None:
+            x.set_xlim(xlim)
+        if ylim is not None:
+            x.set_ylim(ylim)
+        if title is not None:
+            x.set_title(f"{bp} - {title}", fontsize=10)
+
+    if save:  # pragma: no cover
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_heatmaps{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
+
+    return ax
+
 
 
 def time_to_seconds(time_string: str) -> float:
@@ -130,6 +510,737 @@ def calculate_average_arena(
     avg_points = avg_points / len(all_vertices)
 
     return avg_points
+
+
+def _filter_embeddings(
+    coordinates,
+    embeddings,
+    soft_counts,
+    supervised_annotations,
+    exp_condition,
+):
+    """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
+    # Get experimental conditions per video
+    if embeddings is None and supervised_annotations is None:
+        raise ValueError(
+            "Either embeddings and soft_counts or supervised_annotations must be provided."
+        )
+
+    try:
+        if exp_condition is None:
+            exp_condition = list(coordinates._exp_conditions.values())[0].columns[0]
+
+        concat_hue = [
+            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
+            for i in list(embeddings.keys())
+        ]
+        soft_counts = soft_counts.filter_videos(embeddings.keys())
+
+    except AttributeError:
+        if exp_condition is None:
+            exp_condition = list(supervised_annotations._exp_conditions.values())[
+                0
+            ].columns[0]
+
+        concat_hue = [
+            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
+            for i in list(supervised_annotations.keys())
+        ]
+
+    # Keep only those experiments for which we have an experimental condition assigned
+    if embeddings is not None:
+        embeddings = {
+            key: val
+            for key, val in embeddings.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+        soft_counts = {
+            key: val
+            for key, val in soft_counts.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+    elif supervised_annotations is not None:
+        supervised_annotations = {
+            key: val
+            for key, val in supervised_annotations.items()
+            if key in coordinates.get_exp_conditions.keys()
+        }
+
+    return embeddings, soft_counts, supervised_annotations, concat_hue
+
+
+def _scatter_embeddings(
+    embeddings: np.ndarray,
+    soft_counts: np.ndarray = None,
+    ax: Any = None,
+    save: str = False,
+    show: bool = True,
+    dpi: int = 200,
+) -> plt.figure:
+    """Return a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
+
+    If labels are propagated, it automatically colours all data points with their respective condition.
+
+    Args:
+        embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
+        cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
+        ax: axes where to plot the arena.
+        save (str): if provided, saves the figure to the specified file.
+        show (bool): if True, displays the current figure. If not, returns the given axes.
+        dpi (int): dots per inch of the figure to create.
+
+    Returns:
+        projection_scatter (plt.figure): figure with the specified characteristics
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, dpi=dpi)
+
+    # Plot entire UMAP
+    ax.scatter(
+        embeddings[:, 0],
+        embeddings[:, 1],
+        c=soft_counts,
+        cmap=("tab20" if soft_counts is not None else None),
+        edgecolor="black",
+        linewidths=0.25,
+    )
+
+    plt.tight_layout()
+
+    if save:
+        plt.savefig(save)
+
+    if not show:
+        return ax
+
+    plt.show()
+
+
+def _get_polygon_coords(data, animal_id=""):
+    """Generate polygons to animate for the indicated animal in the provided dataframe."""
+    if animal_id:
+        animal_id += "_"
+
+    elif animal_id is None:
+        animal_id = ""
+
+    head = np.concatenate(
+        [
+            data.xs(f"{animal_id}Nose", 1).values,
+            data.xs(f"{animal_id}Left_ear", 1).values,
+            data.xs(f"{animal_id}Spine_1", 1).values,
+            data.xs(f"{animal_id}Right_ear", 1).values,
+        ],
+        axis=1,
+    )
+
+    body = np.concatenate(
+        [
+            data.xs(f"{animal_id}Spine_1", 1).values,
+            data.xs(f"{animal_id}Left_fhip", 1).values,
+            data.xs(f"{animal_id}Left_bhip", 1).values,
+            data.xs(f"{animal_id}Spine_2", 1).values,
+            data.xs(f"{animal_id}Right_bhip", 1).values,
+            data.xs(f"{animal_id}Right_fhip", 1).values,
+        ],
+        axis=1,
+    )
+
+    tail = np.concatenate(
+        [
+            data.xs(f"{animal_id}Spine_2", 1).values,
+            data.xs(f"{animal_id}Tail_base", 1).values,
+        ],
+        axis=1,
+    )
+
+    return [head, body, tail]
+
+
+def _process_animation_data(
+    coords: table_dict,
+    cur_embeddings: table_dict,
+    cur_soft_counts: table_dict,
+    min_confidence: float,
+    min_bout_duration: int,
+    selected_cluster: np.ndarray,
+):
+    """Auxiliary function to process data for animation outputs.
+
+        Args:
+        coords (table_dict): position data to prepare for displaying.
+        cur_embeddings (table_dict): embedding data to prepare for displaying
+        cur_soft_counts (table_dict): soft_counts to prepare for displaying
+        min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
+        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
+        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
+
+        Returns:
+
+
+    """
+    
+    cluster_embedding, concat_embedding = None, None
+
+    # Filter assignments and embeddings
+    cluster_confidence = cur_soft_counts.max(axis=1)
+    hard_counts = cur_soft_counts.argmax(axis=1)
+    confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
+
+    # Compute bout lengths, and filter out bouts shorter than min_bout_duration
+    full_confidence_indices = deepof.utils.filter_short_bouts(
+        hard_counts,
+        cluster_confidence,
+        confidence_indices,
+        min_confidence,
+        min_bout_duration,
+    )
+    confidence_indices = full_confidence_indices.copy()
+
+    # Reduce full embeddings to 2D UMAP
+    reducers = deepof.post_hoc.compute_UMAP(cur_embeddings, hard_counts)
+    twoDim_embeddings = reducers[1].transform(reducers[0].transform(cur_embeddings))
+
+
+    # Center sliding window instances
+    try:
+        win_size = coords.shape[0] - twoDim_embeddings.shape[0]
+    except AttributeError:
+        win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
+    coords = coords[win_size // 2 : -win_size // 2]
+
+    # Ensure that shapes are matching
+    assert (
+        twoDim_embeddings.shape[0] == coords.shape[0]
+    ), "there should be one embedding per row in data"
+    assert (
+        len(cur_soft_counts) == coords.shape[0]
+    ), "there should be one cluster assignment per row in data"
+
+    concat_embedding = twoDim_embeddings
+
+    # Only keep information for specific cluster if specific cluster is chosen
+    if selected_cluster is not None:
+
+        assert selected_cluster in set(
+            hard_counts
+        ), "selected cluster should be in the clusters provided"
+
+        cluster_embedding = [twoDim_embeddings[hard_counts == selected_cluster]]
+        confidence_indices = confidence_indices[
+            hard_counts == selected_cluster
+        ]
+
+        coords = coords.loc[hard_counts == selected_cluster, :]
+        coords = coords.loc[confidence_indices, :]
+        cluster_embedding = cluster_embedding[0][confidence_indices]
+        concat_embedding = concat_embedding[full_confidence_indices]
+        hard_counts = hard_counts[full_confidence_indices]
+
+    else:
+        cluster_embedding = twoDim_embeddings
+
+    return (
+        coords,
+        [twoDim_embeddings],
+        [cluster_embedding],
+        concat_embedding,
+        hard_counts,
+    )
+
+
+def _tag_annotated_frames(
+    frame,
+    font,
+    frame_speeds,
+    animal_ids,
+    corners,
+    tag_dict,
+    fnum,
+    undercond,
+    hparams,
+    arena,
+    arena_type,
+    debug,
+    coords,
+):
+    """Annotate a given frame with on-screen information about the recognised patterns.
+
+    Helper function for annotate_video. No public use intended.
+
+    """
+    arena, w, h = arena
+
+    def write_on_frame(text, pos, col=(255, 255, 255)):
+        """Partial closure over cv2.putText to avoid code repetition."""
+        return cv2.putText(frame, text, pos, font, 0.75, col, 2)
+
+    def conditional_flag():
+        """Return a tag depending on a condition."""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return left_flag
+        return right_flag
+
+    def conditional_pos():
+        """Return a position depending on a condition."""
+        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+            return corners["downleft"]
+        return corners["downright"]
+
+    def conditional_col(cond=None):
+        """Return a colour depending on a condition."""
+        if cond is None:
+            cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
+        if cond:
+            return 150, 255, 150
+        return 150, 150, 255
+
+    # Keep track of space usage in the output video
+    # The flags are set to False as soon as the lower
+    # corners are occupied with text
+    left_flag, right_flag = True, True
+
+    if debug:
+
+        if arena_type.startswith("circular"):
+            # Print arena for debugging
+            cv2.ellipse(
+                img=frame,
+                center=arena[0],
+                axes=arena[1],
+                angle=arena[2],
+                startAngle=0,
+                endAngle=360,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        elif arena_type.startswith("polygonal"):
+
+            # Draw polygon
+            cv2.polylines(
+                img=frame,
+                pts=[np.array(arena, dtype=np.int32)],
+                isClosed=True,
+                color=(40, 86, 236),
+                thickness=3,
+            )
+
+        # Print body parts for debuging
+        for bpart in coords.columns.levels[0]:
+            if not np.isnan(coords[bpart]["x"][fnum]):
+                cv2.circle(
+                    frame,
+                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
+                    radius=3,
+                    color=(
+                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
+                    ),
+                    thickness=-1,
+                )
+        # Print frame number
+        write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
+
+    if len(animal_ids) > 1:
+
+        if tag_dict["nose2nose"][fnum]:
+            write_on_frame("Nose-Nose", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
+            write_on_frame("nose2body", corners["downleft"])
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
+            write_on_frame("nose2body", corners["downright"])
+            right_flag = False
+
+        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
+            write_on_frame("Nose-Tail", corners["downleft"])
+            left_flag = False
+
+        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
+            write_on_frame("Nose-Tail", corners["downright"])
+            right_flag = False
+
+        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
+            write_on_frame("Side-side", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
+            write_on_frame("Side-Rside", conditional_pos())
+            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
+                left_flag = False
+            else:
+                right_flag = False
+
+    zipped_pos = list(
+        zip(
+            animal_ids,
+            [corners["downleft"], corners["downright"]],
+            [corners["upleft"], corners["upright"]],
+            [left_flag, right_flag],
+        )
+    )
+
+    for _id, down_pos, up_pos, flag in zipped_pos:
+
+        if flag:
+
+            if tag_dict[_id + undercond + "climbing"][fnum]:
+                write_on_frame("climbing", down_pos)
+            elif tag_dict[_id + undercond + "huddle"][fnum]:
+                write_on_frame("huddling", down_pos)
+            elif tag_dict[_id + undercond + "sniffing"][fnum]:
+                write_on_frame("sniffing", down_pos)
+
+        # Define the condition controlling the colour of the speed display
+        if len(animal_ids) > 1:
+            colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
+        else:
+            colcond = hparams["huddle_speed"] < frame_speeds
+
+        write_on_frame(
+            str(
+                np.round(
+                    (frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2
+                )
+            )
+            + " mmpf",
+            up_pos,
+            conditional_col(cond=colcond),
+        )
+
+
+# noinspection PyProtectedMember,PyDefaultArgument
+def annotate_video(
+    coordinates: coordinates,
+    tag_dict: Union[str, pd.DataFrame],
+    vid_key: int,
+    frame_limit: int = np.inf,
+    debug: bool = False,
+    params: dict = {},
+) -> True:
+    """Render a version of the input video with all supervised taggings in place.
+
+    Args:
+        coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
+        tag_dict (Union[str, pd.DataFrame]): Either path to the saving location of teh dataset or the dataste itself
+        debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
+        vid_key: for internal usage only; key of the video to tag in coordinates._videos.
+        frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
+        params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
+
+    """
+
+    if isinstance(tag_dict, str):
+        tag_dict=load_dt(tag_dict)
+
+    # Extract useful information from coordinates object
+    tracks = list(coordinates._tables.keys())
+    videos = coordinates._videos
+    path = os.path.join(coordinates._project_path, coordinates._project_name, "Videos")
+
+    animal_ids = coordinates._animal_ids
+    undercond = "_" if len(animal_ids) > 1 else ""
+
+    arena_params = coordinates._arena_params[vid_key]
+    h, w = coordinates._video_resolution[vid_key]
+    corners = deepof.annotation_utils.frame_corners(h, w)
+
+    cap = cv2.VideoCapture(os.path.join(path, videos[vid_key]))
+    # Keep track of the frame number, to align with the tracking data
+    fnum = 0
+    writer = None
+    frame_speeds = (
+        {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
+    )
+
+    # Loop over the frames in the video
+    while cap.isOpened() and fnum < frame_limit:
+
+        ret, frame = cap.read()
+        # if frame is read correctly ret is True
+        if not ret:  # pragma: no cover
+            print("Can't receive frame (stream end?). Exiting ...")
+            break
+
+        font = cv2.FONT_HERSHEY_DUPLEX
+
+        # Capture speeds
+        try:
+            if (
+                list(frame_speeds.values())[0] == -np.inf
+                or fnum % params["speed_pause"] == 0
+            ):
+                for _id in animal_ids:
+                    frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
+        except AttributeError:
+            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
+                frame_speeds = tag_dict["speed"][fnum]
+
+        # Display all annotations in the output video
+        _tag_annotated_frames(
+            frame,
+            font,
+            frame_speeds,
+            animal_ids,
+            corners,
+            tag_dict,
+            fnum,
+            undercond,
+            params,
+            (arena_params, h, w),
+            coordinates._arena,
+            debug,
+            coordinates.get_coords(center=False)[vid_key],
+        )
+
+        if writer is None:
+            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
+            # Define the FPS. Also frame size is passed.
+            writer = cv2.VideoWriter()
+            writer.open(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Out_videos",
+                    vid_key + "_supervised_tagged.avi",
+                ),
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                coordinates._frame_rate,
+                (frame.shape[1], frame.shape[0]),
+                True,
+            )
+
+        writer.write(frame)
+        fnum += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return True
+
+
+def output_cluster_video(
+    cap: Any,
+    out: Any,
+    frame_mask: list,
+    v_width: int,
+    v_height: int,
+    path: str,
+    frame_limit: int = np.inf,
+):
+    """Output a video with the frames corresponding to the cluster.
+
+    Args:
+        cap: video capture object
+        out: video writer object
+        frame_mask: list of booleans indicating whether a frame should be written
+        v_width: video width
+        v_height: video height
+        path: path to the video file
+        frame_limit: maximum number of frames to render
+
+    """
+    frame_idx = np.where(frame_mask)[0]
+    frame_limit = np.min([frame_limit, len(frame_idx)])
+    i = 0
+    while cap.isOpened() and i < frame_limit:
+        if i == 0 or (i > 0 and frame_idx[i] - frame_idx[i - 1] > 1):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx[i])
+        ret, frame = cap.read()
+        if ret == False:
+            break
+
+        try:
+
+            res_frame = cv2.resize(frame, [v_width, v_height])
+            re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
+
+            if path is not None:
+                cv2.putText(
+                    res_frame,
+                    re_path,
+                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.75,
+                    (255, 255, 255),
+                    2,
+                )
+
+            out.write(res_frame)
+            i += 1
+
+        except IndexError:
+            ret = False
+            i += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def output_videos_per_cluster(
+    video_paths: dict,
+    soft_counts: table_dict,
+    frame_rate: float = 25,
+    frame_limit_per_video: int = np.inf,
+    single_output_resolution: tuple = None,
+    window_length: int = None,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
+    out_path: str = ".",
+):
+    """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
+
+    Args:
+        video_paths: dict of paths to the videos
+        soft_counts: table_dict of soft counts per video
+        frame_rate: frame rate of the videos
+        frame_limit_per_video: number of frames to render per video.
+        single_output_resolution: if single_output is provided, this is the resolution of the output video.
+        window_length: window length used to compute the soft counts.
+        min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
+        min_bout_duration: minimum duration of a bout to be considered.
+        out_path: path to the output directory.
+
+    """
+    N_clusters=get_dt(soft_counts,list(soft_counts.keys())[0],only_metainfo=True)['num_cols']
+    # Iterate over all clusters, and output a masked video for each
+    for cluster_id in range(N_clusters):
+
+        out = cv2.VideoWriter(
+            os.path.join(
+                out_path,
+                "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
+                    cluster_id, min_confidence, calendar.timegm(time.gmtime())
+                ),
+            ),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            frame_rate,
+            single_output_resolution,
+        )
+
+        for key in soft_counts.keys():
+
+            cur_soft_counts = get_dt(soft_counts,key)
+            # Get hard counts and confidence estimates per cluster
+            hard_counts = np.argmax(cur_soft_counts, axis=1)
+            confidence = np.max(cur_soft_counts, axis=1)
+            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
+
+            # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+            cap = cv2.VideoCapture(video_paths[key])
+            v_width, v_height = single_output_resolution
+
+            # Compute confidence mask, filtering out also bouts that are too short
+            confidence_indices = deepof.utils.filter_short_bouts(
+                hard_counts,
+                confidence,
+                confidence_indices,
+                min_confidence,
+                min_bout_duration,
+            )
+            confidence_mask = (hard_counts == cluster_id) & confidence_indices
+
+            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
+            frame_mask = np.concatenate(
+                (np.zeros(window_length, dtype=bool), confidence_mask)
+            )
+
+            output_cluster_video(
+                cap,
+                out,
+                frame_mask,
+                v_width,
+                v_height,
+                video_paths[key],
+                frame_limit_per_video,
+            )
+
+        out.release()
+
+
+def output_unsupervised_annotated_video(
+    video_path: str,
+    soft_counts: np.ndarray,
+    frame_rate: float = 25,
+    frame_limit: int = np.inf,
+    window_length: int = None,
+    cluster_names: dict = {},
+    out_path: str = ".",
+):
+    """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
+
+    Args:
+        video_path: full path to the video
+        soft_counts: soft cluster assignments for a specific video
+        frame_rate: frame rate of the video
+        frame_limit: maximum number of frames to output.
+        window_length: window length used to compute the soft counts.
+        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+        out_path: out_path: path to the output directory.
+
+    """
+    # Get cluster assignment per frame
+    hard_counts = np.argmax(soft_counts, axis=1)
+
+    # Name clusters, and update names using the provided dictionary
+    cluster_labels = {i: str(i) for i in set(hard_counts)}
+    cluster_labels.update(cluster_names)
+
+    # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+    cap = cv2.VideoCapture(video_path)
+
+    # Get width and height of current video
+    v_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    v_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    video_out = os.path.join(
+        out_path,
+        os.path.split(video_path)[-1].split(".")[0] 
+        + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
+    )
+
+    out = cv2.VideoWriter(
+        video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
+    )
+
+    i, j = 0, 0
+    while cap.isOpened() and i < frame_limit:
+        if j >= window_length:
+            j += 1
+
+        else:
+            ret, frame = cap.read()
+            if ret == False:
+                break
+
+            try:
+                cv2.putText(
+                    frame,
+                    "Cluster {}".format(cluster_labels[hard_counts[i]]),
+                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.75,
+                    (255, 255, 255),
+                    2,
+                )
+                out.write(frame)
+
+                i += 1
+
+            except IndexError:
+                ret = False
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 def create_bin_pairs(L_array: int, N_time_bins: int):
