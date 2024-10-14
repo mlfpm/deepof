@@ -31,7 +31,7 @@ from deepof.data_loading import (
     table_type=st.one_of(
         st.just("numpy"),
         st.just("panda"),
-        st.just("pickle"),
+        st.just("tuple"),
     ),
     return_path=st.booleans(),
     only_metainfo=st.booleans(),
@@ -85,6 +85,10 @@ def test_get_dt_and_subfunctions(table_type, return_path, only_metainfo, load_in
     assert isinstance(path, str)
     if only_metainfo:
         assert isinstance(data, dict)
+        assert 'num_rows' in data
+        assert data['num_rows'] == 100
+        assert 'num_cols' in data
+        assert data['num_cols'] == 5
     elif table_type=="numpy":
         assert (save_dict['1'][adj_load_range]==data).all()
     elif table_type=="panda":

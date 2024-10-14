@@ -283,9 +283,9 @@ def load_dt_metainfo(path: str, load_index=True):
             meta_info['end_time'] = str(index_column[0][-1])
         
         meta_info['columns'] = columns
-        meta_info['num_cols'] = info_meta.num_columns
+        meta_info['num_cols'] = len(columns)
         meta_info['num_rows'] = info_meta.num_rows
-        meta_info['shape'] = (info_meta.num_rows, info_meta.num_columns)
+        meta_info['shape'] = (info_meta.num_rows, len(columns))
 
     elif path.endswith('.npz'):
 
@@ -342,7 +342,7 @@ def get_metainfo_from_loaded_dt(table: Union[np.ndarray,pd.DataFrame], load_inde
     elif (isinstance(table, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in table)):
 
         meta_info['shape'] = table[0].shape
-        if len(table.shape)==2:
+        if len(table[0].shape)==2:
             meta_info['num_rows'] = table[0].shape[0]
             meta_info['num_cols'] = table[0].shape[1]
 
