@@ -802,7 +802,7 @@ def _check_enum_inputs(
         experiment_ids
     ).issubset(set(experiment_id_options_list)): 
         raise ValueError(
-            '"experiment_id" needs to be one of the following: {} ... '.format(
+            'Included experiments need to be a subset of the following: {} ... '.format(
                 str(experiment_id_options_list[0:4])[1:-1]
             )
         )

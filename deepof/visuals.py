@@ -201,7 +201,7 @@ def plot_heatmaps(
 
 def plot_gantt(
     coordinates: project,
-    experiment_id: str,
+    instance_id: str,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -212,7 +212,7 @@ def plot_gantt(
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
-    behaviors_to_plot: list = None,
+    instances_to_plot: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -235,10 +235,90 @@ def plot_gantt(
 
     """
 
+    #Check if inputs correspond to behavior or experiment subtypes, then call respective gantt function
+    if instance_id in list(coordinates._tables.keys()):
+
+        _plot_experiment_gantt(
+        coordinates=coordinates,
+        experiment_id=instance_id,
+        # Time selection parameters
+        bin_index=bin_index,
+        bin_size=bin_size,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        # Visualization parameters
+        soft_counts=soft_counts,
+        supervised_annotations=supervised_annotations,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        behaviors_to_plot=instances_to_plot,
+        ax=ax,
+        save=save)
+
+    else:
+
+        _plot_behavior_gantt(
+        coordinates=coordinates,
+        behavior_id=instance_id,
+        # Time selection parameters
+        bin_index=bin_index,
+        bin_size=bin_size,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        # Visualization parameters
+        soft_counts=soft_counts,
+        supervised_annotations=supervised_annotations,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        experiments_to_plot=instances_to_plot,
+        ax=ax,
+        save=save)
+
+
+
+def _plot_experiment_gantt(
+    coordinates: project,
+    experiment_id: str,
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max=20000,
+    # Visualization parameters
+    soft_counts: table_dict = None,
+    supervised_annotations: table_dict = None,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    behaviors_to_plot: list = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        instance_id (str): Either name of the experiment to display or of a behavior.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         experiment_ids=experiment_id,
+        behaviors=behaviors_to_plot,
     )
 
     # set active axes if provided
@@ -364,7 +444,7 @@ def plot_gantt(
     )
 
 
-def plot_global_gantt(
+def _plot_behavior_gantt(
     coordinates: project,
     behavior_id: str,
     # Time selection parameters
