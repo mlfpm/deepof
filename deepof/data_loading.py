@@ -175,7 +175,8 @@ def load_dt(path: str, load_range: np.ndarray = None):
     elif load_range is not None:
 
         with open(path, 'rb') as file:
-            tab = pickle.load(file)
+            loaded = np.load(file, allow_pickle=True)
+            tab = tuple(loaded[f'arr_{i}'][1] for i in range(len(loaded.files)))
             if len(load_range) ==2 and load_range[1]-load_range[0]> 1:
                 tab1=tab[0][load_range[0]:load_range[1]+1] 
                 tab2=tab[1][load_range[0]:load_range[1]+1] 
