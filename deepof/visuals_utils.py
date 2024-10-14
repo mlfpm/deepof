@@ -491,7 +491,7 @@ def _preprocess_time_bins(
         table_lengths = coordinates.get_table_lengths()
     else:
         for key in tab_dict_for_binning.keys():
-            table_lengths[key]=int(get_dt(tab_dict_for_binning,key,only_metainfo=True)['num_rows'])
+            table_lengths[key]=int(get_dt(tab_dict_for_binning,key,only_metainfo=True)['shape'][0])
 
     #init specific warnings
     warn_start_time = {}

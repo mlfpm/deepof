@@ -969,8 +969,8 @@ def annotate_time_chunks(
     # Load sampled features and remove chunks with missing values
     # use up to 200% of requested samples to factor in data reduction by filtering downstream
     N_windows_tab = int(samples*2/len(comprehensive_features))
-    sampled_features, sampled_idcs_dict=comprehensive_features.sample_windows_from_data(
-        sampled_indices={}, 
+    sampled_features, bin_info=comprehensive_features.sample_windows_from_data(
+        bin_info={}, 
         N_windows_tab=N_windows_tab, 
         no_nans=True
         )
@@ -995,13 +995,13 @@ def annotate_time_chunks(
 
 
     # Filter instances with less confidence than specified
-    sampled_soft_counts, _=soft_counts.sample_windows_from_data(sampled_indices=sampled_idcs_dict)
+    sampled_soft_counts, _=soft_counts.sample_windows_from_data(bin_info=bin_info)
     sampled_hard_counts=pd.Series(np.argmax(sampled_soft_counts, axis=1))
 
     qual_filter = (sampled_soft_counts.max(axis=1) > min_confidence)
     sampled_features = sampled_features[qual_filter]
     hard_counts = sampled_hard_counts[qual_filter].reset_index(drop=True)
-    sampled_idcs_dict = sample_from_idcs(sampled_idcs_dict, np.where(qual_filter)[0])
+    bin_info = sample_from_idcs(bin_info, np.where(qual_filter)[0])
 
     # Sample X and y matrices to increase computational efficiency
     if samples is not None:
@@ -1013,7 +1013,7 @@ def annotate_time_chunks(
 
         sampled_features = sampled_features[random_idcs]
         hard_counts = hard_counts[random_idcs]
-        sampled_idcs_dict = sample_from_idcs(sampled_idcs_dict, random_idcs)
+        bin_info = sample_from_idcs(bin_info, random_idcs)
 
     # Aggregate summary statistics per chunk, by either taking the average or running seglearn
     if aggregate == "mean":
@@ -1030,7 +1030,7 @@ def annotate_time_chunks(
             sampled_features, feature_names
         )
 
-    return sampled_features, hard_counts, sampled_idcs_dict
+    return sampled_features, hard_counts, bin_info
 
 
 def chunk_cv_splitter(

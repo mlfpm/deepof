@@ -111,9 +111,9 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
             np.lib.format.write_array(file, dt)
 
     elif (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)):
-        path = path + '.pkl'
+        path = path + '.npz'
         with open(path, 'wb') as file:
-            pickle.dump(dt, file)    
+            np.savez(file, *[('arr_{}'.format(i), arr) for i, arr in enumerate(dt)]) 
     
     elif isinstance(dt, pd.DataFrame) and len(dt.columns)>0:
         # Convert column headers to str as parquet cannot save non-str column headers
@@ -192,10 +192,11 @@ def load_dt(path: str, load_range: np.ndarray = None):
     elif path.endswith('.pqt'):
         tab = pd.read_parquet(path, engine='pyarrow')
 
-    elif path.endswith('.pkl'):
+    elif path.endswith('.npz'):
         with open(path, 'rb') as file:
-            # Load the array using pickle
-            tab = pickle.load(file)
+            loaded = np.load(file, allow_pickle=True)
+            # Reconstruct the tuple of NumPy arrays
+            tab = tuple(loaded[f'arr_{i}'][1] for i in range(len(loaded.files)))
 
     else:
         tab = None
@@ -227,6 +228,7 @@ def load_dt(path: str, load_range: np.ndarray = None):
 
     
     return tab
+
 
 def load_dt_metainfo(path: str, load_index=True):
     """Loads the columns of data frame given as path
@@ -284,7 +286,21 @@ def load_dt_metainfo(path: str, load_index=True):
         meta_info['num_cols'] = info_meta.num_columns
         meta_info['num_rows'] = info_meta.num_rows
         meta_info['shape'] = (info_meta.num_rows, info_meta.num_columns)
-        
+
+    elif path.endswith('.npz'):
+
+        with np.load(path, allow_pickle=True) as npz_file:
+
+            first_array_name = npz_file.files[0]
+            # Get the array without loading it into memory
+            shape = npz_file[first_array_name][1].shape
+
+            meta_info['shape'] = shape
+            if len (shape)==2:
+                meta_info['num_rows'] = shape[0]
+                meta_info['num_cols'] = shape[1]
+
+            
     return meta_info
 
     
@@ -322,6 +338,13 @@ def get_metainfo_from_loaded_dt(table: Union[np.ndarray,pd.DataFrame], load_inde
         meta_info['num_cols'] = len(meta_info['columns'])
         meta_info['num_rows'] = table.shape[0]
         meta_info['shape'] = (table.shape[0], len(meta_info['columns']))
+
+    elif (isinstance(table, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in table)):
+
+        meta_info['shape'] = table[0].shape
+        if len(table.shape)==2:
+            meta_info['num_rows'] = table[0].shape[0]
+            meta_info['num_cols'] = table[0].shape[1]
 
 
     return meta_info

@@ -48,6 +48,7 @@ import deepof.model_utils
 import deepof.models
 import deepof.utils
 import deepof.visuals
+from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, load_dt, save_dt
 
 
@@ -2334,6 +2335,12 @@ class Coordinates:
         self,
         preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         adjacency_matrix: np.ndarray = None,
+        #binning info
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max=1000000000,
+        #model info
         embedding_model: str = "VaDE",
         encoder_type: str = "recurrent",
         batch_size: int = 64,
@@ -2366,6 +2373,10 @@ class Coordinates:
         Args:
             preprocessed_object (tuple): Tuple containing a preprocessed object (X_train, y_train, X_test, y_test).
             adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
+            bin_size (Union[int,str]): bin size for time filtering.
+            bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+            precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+            samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
             embedding_model (str): Name of the embedding model to use. Must be one of VQVAE (default), VaDE, or contrastive.
             encoder_type (str): Encoder architecture to use. Must be one of "recurrent", "TCN", and "transformer".
             batch_size (int): Batch size for training.
@@ -2396,6 +2407,11 @@ class Coordinates:
         Returns:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
+        
+        bin_info=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[0], samples_max=samples_max)
+        bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
+        bin_info.update(bin_info_test)
+
         if pretrained:
             pretrained_path = os.path.join(
                 self._project_path,
@@ -2447,6 +2463,7 @@ class Coordinates:
                 save_checkpoints=save_checkpoints,
                 save_weights=save_weights,
                 input_type=input_type,
+                bin_info=bin_info,
                 run=run,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup=kl_warmup,
@@ -3078,7 +3095,7 @@ class TableDict(dict):
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
 
-    def sample_windows_from_data(self, sampled_indices: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
+    def sample_windows_from_data(self, bin_info: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
         """
         Sample a set of windows / rows from all entries of table dict to avoid breaking memory.
 
@@ -3093,7 +3110,7 @@ class TableDict(dict):
         """
         X_data, a_data = [], []
         use_input_samples=False
-        if len(sampled_indices) > 0 and self.keys() == sampled_indices.keys():
+        if len(bin_info) > 0 and set(self.keys()).issubset(bin_info.keys()):
             use_input_samples=True 
 
         for key in self.keys():
@@ -3109,17 +3126,17 @@ class TableDict(dict):
             #Quick block to process if input samples are given
             if use_input_samples:
                 if isinstance(tab, np.ndarray):
-                    X_data.append(tab[sampled_indices[key]])
+                    X_data.append(tab[bin_info[key]])
                     if return_edges and isinstance(tab_tuple, tuple):
-                        a_data.append(tab_tuple[1][sampled_indices[key]])
+                        a_data.append(tab_tuple[1][bin_info[key]])
                     elif return_edges:
                         a_frame = np.zeros(X_data[-1].shape)
                         a_data.append(a_frame)
 
                 elif isinstance(tab, pd.DataFrame):
-                    X_data.append(tab.iloc[sampled_indices[key]])
+                    X_data.append(tab.iloc[bin_info[key]])
                     if return_edges and isinstance(tab_tuple, tuple):
-                        a_data.append(tab_tuple[1].iloc[sampled_indices[key]])
+                        a_data.append(tab_tuple[1].iloc[bin_info[key]])
                     elif return_edges:
                         a_frame = np.zeros(X_data[-1].shape)
                         a_frame = pd.DataFrame(a_frame)
@@ -3149,7 +3166,7 @@ class TableDict(dict):
                 X_data.append(tab.iloc[start:start + N_windows_tab, :])
 
             #collect idcs 
-            sampled_indices[key]=np.where(possible_idcs)[0][start:start + N_windows_tab]
+            bin_info[key]=np.where(possible_idcs)[0][start:start + N_windows_tab]
 
             # Handle test dataset, if existent
             if return_edges and isinstance(tab_tuple, tuple):
@@ -3167,9 +3184,9 @@ class TableDict(dict):
 
         if return_edges:
             a_data = np.concatenate(a_data, axis=0)
-            return X_data, a_data, sampled_indices
+            return X_data, a_data, bin_info
         else:
-            return X_data, sampled_indices
+            return X_data, bin_info
 
 
 if __name__ == "__main__":

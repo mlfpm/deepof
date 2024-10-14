@@ -8,6 +8,7 @@ import os
 from datetime import date, datetime
 from typing import Any, List, NewType, Tuple, Union
 
+from IPython.display import clear_output
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -1150,6 +1151,7 @@ def embedding_model_fitting(
     save_checkpoints: bool,
     save_weights: bool,
     input_type: str,
+    bin_info: dict,
     # VaDE Model specific parameters
     kl_annealing_mode: str,
     kl_warmup: int,
@@ -1219,16 +1221,11 @@ def embedding_model_fitting(
 
     with tf.device("CPU"):
 
-        N_windows_max=1000000000
-
         # Load data
         preprocessed_train, preprocessed_validation= preprocessed_object
-
-        # Sample up to N_windows_max windows from processed_train and processed_validation
-        N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
         
-        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
-        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(bin_info=bin_info, return_edges=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(bin_info=bin_info, return_edges=True)
 
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:
@@ -1503,7 +1500,10 @@ def embedding_per_video(
             graph, contrastive = True, True
 
     window_size = model.layers[0].input_shape[0][1]
-    for key in tqdm.tqdm(to_preprocess.keys()):
+    for key in tqdm.tqdm(to_preprocess.keys(), desc="Computing embeddings", unit="table"):
+
+        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
+        print("")
 
         if graph:
             processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
@@ -1541,6 +1541,9 @@ def embedding_per_video(
         # save paths for modified tables
         table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
         embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._run_numba) 
+
+        #to not flood the output with loading bars
+        clear_output()
 
     if contrastive:
         soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
