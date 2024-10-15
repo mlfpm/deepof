@@ -14,7 +14,7 @@ install-pypi:
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - pip install git+https://github.com/mlfpm/deepof.git@Reducing_RAM
-    - python -c 'import deepof.data'
+    #- python -c 'import deepof.data'
 
 install-poetry:
 
@@ -29,7 +29,7 @@ install-poetry:
     - curl -sSL https://install.python-poetry.org | python3 -
     - export PATH="/root/.local/bin:$PATH"
     - poetry install
-    #- poetry run python -c 'import deepof.data'
+    - poetry run python -c 'import deepof.data'
 
 test:
   stage: test
