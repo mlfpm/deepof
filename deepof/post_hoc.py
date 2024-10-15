@@ -943,7 +943,7 @@ def annotate_time_chunks(
     if supervised_annotations is not None:
         comprehensive_features = comprehensive_features.merge(
             supervised_annotations,
-            save_as_paths=deepof_project._run_numba, 
+            save_as_paths=deepof_project._very_large_project, 
             file_name=file_name,
 )
 
@@ -963,7 +963,7 @@ def annotate_time_chunks(
         window_step=window_step,
         filter_low_variance=False,
         interpolate_normalized=False,
-        save_as_paths=deepof_project._run_numba,
+        save_as_paths=deepof_project._very_large_project,
         file_name=file_name,
     )[0][0]
 

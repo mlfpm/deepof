@@ -668,6 +668,7 @@ def supervised_tagging(
         trained_model_path (str): path indicating where all pretrained models are located
         center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
+        run_numba (bool): Decides if numba versions of functions should be used
 
     Returns:
         tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time

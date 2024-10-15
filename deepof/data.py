@@ -120,7 +120,7 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
         coordinates._video_resolution=video_resolution
         print(f"Changed type from list to dictionary for _table_paths, _videos, _scales, _arena_params, _video_resolution")
 
-
+        coordinates._very_large_project=False
         coordinates._version=current_deepof_version
         for attr_name, attr_value in vars(coordinates).items():
             if isinstance(attr_value, TableDict):
@@ -250,12 +250,18 @@ class Project:
         self.arena_dims = video_scale
         self.ellipse_detection = None
 
-        # check if fast_implementations_threshold is reached
+        # check if there are enough frames to use numba compilation and / or use memory efficient implementations
         self.run_numba = False
+        self.very_large_project = False
         video_paths = {key: os.path.join(video_path, video) for key, video in self.videos.items()}
         total_frames = deepof.utils.get_total_Frames(video_paths)
-        if total_frames > fast_implementations_threshold:
+        frames_sum=np.sum(total_frames)
+        frames_max=np.max(total_frames)
+
+        if frames_sum > fast_implementations_threshold:
             self.run_numba = True
+        if frames_max > 360000: #roughly 4 hour video at 25 fps
+            self.very_large_project = True
 
         # Set the rest of the init parameters
         self.angles = True
@@ -595,8 +601,8 @@ class Project:
                 # save paths for tables
                 quality_path = os.path.join(directory, key + '_likelyhood')
                 table_path = os.path.join(directory, key)
-                lik_dict[key] = save_dt(likely_dict[key],quality_path,self.run_numba)
-                tab_dict[key] = save_dt(table_dict[key],table_path,self.run_numba)
+                lik_dict[key] = save_dt(likely_dict[key],quality_path,self.very_large_project)
+                tab_dict[key] = save_dt(table_dict[key],table_path,self.very_large_project)
 
                 #cleanup
                 del table_dict[key]
@@ -654,7 +660,7 @@ class Project:
 
                 #save disctances for active table
                 distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
-                distance_dict[key] = save_dt(distance_tab,distance_path,self.run_numba)
+                distance_dict[key] = save_dt(distance_tab,distance_path,self.very_large_project)
 
                 #clean up
                 del distance_tab
@@ -737,7 +743,7 @@ class Project:
 
                     # get path for saving
                     angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_angle')
-                    angle_dict[key] = save_dt(dats,angle_path,self.run_numba)
+                    angle_dict[key] = save_dt(dats,angle_path,self.very_large_project)
                     pbar.update()
 
 
@@ -859,7 +865,7 @@ class Project:
                     current_table = pd.concat([current_table, areas_table], axis=1)
 
                 area_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_area')
-                all_areas_dict[key] = save_dt(current_table,area_path,self.run_numba)
+                all_areas_dict[key] = save_dt(current_table,area_path,self.very_large_project)
                 pbar.update()
 
 
@@ -982,7 +988,8 @@ class Project:
             video_path=self.video_path,
             video_resolution=self.video_resolution,
             run_numba=self.run_numba,
-            version=self.version
+            very_large_project=self.very_large_project,
+            version=self.version,
         )
 
         # Save created coordinates to the project directory
@@ -1139,6 +1146,7 @@ class Coordinates:
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
         run_numba: bool = False,
+        very_large_project: bool = False,
         version: str = None,
     ):
         """Class for storing the results of a ran project. Methods are mostly setters and getters in charge of tidying up the generated tables.
@@ -1166,6 +1174,7 @@ class Coordinates:
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
             run_numba (bool): Decides if numba versions of functions should be used
+            very_large_project (bool): Decides if memory efficient data loading and saving should be used
             version (str): version of deepof this object was created with
 
         """
@@ -1194,6 +1203,7 @@ class Coordinates:
         self._distances = distances
         self._connectivity = connectivity
         self._run_numba = run_numba
+        self._very_large_project = very_large_project
         self._version = version
 
     def __str__(self):  # pragma: no cover
@@ -1979,24 +1989,24 @@ class Coordinates:
 
             # Get all relevant features
             coords = self.get_coords(
-                selected_id=animal_id, center=center, align=align, polar=polar, return_path=self._run_numba,
+                selected_id=animal_id, center=center, align=align, polar=polar, return_path=self._very_large_project,
             )
 
             pbar.update()
             pbar.set_postfix(step="Loading speeds")
 
-            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=self._run_numba)
+            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=self._very_large_project)
 
             pbar.update()
             pbar.set_postfix(step="Loading distances")
 
-            dists = self.get_distances(selected_id=animal_id, return_path=self._run_numba)
+            dists = self.get_distances(selected_id=animal_id, return_path=self._very_large_project)
 
             # Merge and extract names
             tab_dict = coords.merge(
                 speeds,
                 dists,
-                save_as_paths=self._run_numba
+                save_as_paths=self._very_large_project
                 )
             
             pbar.update()
@@ -2074,7 +2084,7 @@ class Coordinates:
             to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 **kwargs,
-                save_as_paths=self._run_numba
+                save_as_paths=self._very_large_project
                 )
    
             shapes=[]
@@ -2100,7 +2110,7 @@ class Coordinates:
                     
 
                         # save paths for modified tables
-                        to_preprocess[k][key] = save_dt(dataset,table_path,self._run_numba) 
+                        to_preprocess[k][key] = save_dt(dataset,table_path,self._very_large_project) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:
                         shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
@@ -2137,7 +2147,7 @@ class Coordinates:
 
 
                     # save paths for modified tables
-                    to_preprocess[key] = save_dt(dataset,table_path,self._run_numba)
+                    to_preprocess[key] = save_dt(dataset,table_path,self._very_large_project)
                     pbar.update()
 
 
@@ -2203,25 +2213,25 @@ class Coordinates:
             params = deepof.annotation_utils.get_hparameters(params)
 
             #get all kinds of tables
-            raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._run_numba)
+            raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._very_large_project)
             pbar.update()
             pbar.set_postfix(step="Loading coords")
  
             try:
-                coords = self.get_coords(center=center, align=align, return_path=self._run_numba)
+                coords = self.get_coords(center=center, align=align, return_path=self._very_large_project)
             except AssertionError:
 
                 try:
-                    coords = self.get_coords(center="Center", align="Spine_1", return_path=self._run_numba)
+                    coords = self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
                 except AssertionError:
-                    coords = self.get_coords(center="Center", align="Nose", return_path=self._run_numba)
+                    coords = self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
             pbar.update() 
 
-            speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._run_numba)
+            speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._very_large_project)
             pbar.update()
             pbar.set_postfix(step="Loading speeds") 
 
-            dists = self.get_distances(return_path=self._run_numba)
+            dists = self.get_distances(return_path=self._very_large_project)
             pbar.update() 
             pbar.set_postfix(step="Loading distances")
 
@@ -2231,7 +2241,7 @@ class Coordinates:
             if len(self._animal_ids) <= 1:
                 features_dict = (
                     deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                        self, center=center, align=align, include_angles=False, return_path=self._run_numba
+                        self, center=center, align=align, include_angles=False, return_path=self._very_large_project
                     )
                 )
                 pbar.update() 
@@ -2245,7 +2255,7 @@ class Coordinates:
                         animal_id=_id,
                         include_angles=False,
                         file_name='kinematics_'+_id,
-                        return_path=self._run_numba
+                        return_path=self._very_large_project
                     )
                     pbar.update() 
 
@@ -2302,7 +2312,7 @@ class Coordinates:
 
                 # save paths for modified tables
                 table_path = os.path.join(coords._table_path, key, key + '_' + "supervised_annotations")
-                tag_dict[key] = save_dt(supervised_tags,table_path,self._run_numba) 
+                tag_dict[key] = save_dt(supervised_tags,table_path,self._very_large_project) 
 
                 pbar.update() 
 
@@ -2951,7 +2961,7 @@ class TableDict(dict):
             save_as_paths=False
             first_key=list(table_temp.keys())[0]
             num_rows=get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
-            if coordinates._run_numba:
+            if coordinates._very_large_project:
                 save_as_paths=True
 
         assert handle_ids in [

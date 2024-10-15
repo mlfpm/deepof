@@ -915,7 +915,7 @@ def _check_enum_inputs(
     
 
 def plot_arena(
-    coordinates: coordinates, center: str, color: str, ax: Any, i: Union[int, str]
+    coordinates: coordinates, center: str, color: str, ax: Any, key: str
 ): # pragma: no cover
     """Plot the arena in the given canvas.
 
@@ -924,16 +924,14 @@ def plot_arena(
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         color (str): color of the displayed arena.
         ax (Any): axes where to plot the arena.
-        i (Union[int, str]): index of the animal to plot.
+        key str: key of the animal to plot with optional "all of them" (if key=="average").
     """
-    key=None
-    if isinstance(i, np.int64):
-        key=list(coordinates._tables.keys())[i]
+    if key != "average":
         arena = coordinates._arena_params[key]
 
     if "circular" in coordinates._arena:
 
-        if i == "average":
+        if key == "average":
             arena = [
                 np.mean(np.array([i[0] for i in coordinates._arena_params.values()]), axis=0),
                 np.mean(np.array([i[1] for i in coordinates._arena_params.values()]), axis=0),
@@ -955,7 +953,7 @@ def plot_arena(
 
     elif "polygonal" in coordinates._arena:
 
-        if center == "arena" and i == "average":
+        if center == "arena" and key == "average":
 
             arena = calculate_average_arena(coordinates._arena_params)
             avg_scaling = np.mean(np.array(list(coordinates._scales.values()))[:, :2], 0)

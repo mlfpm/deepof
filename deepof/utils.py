@@ -2784,9 +2784,9 @@ def cluster_transition_matrix(
 
 def get_total_Frames(video_paths: dict) -> int:
 
-    total_frames = 0
+    total_frames = []
     for _, video_path in video_paths.items():
         current_video_cap = cv2.VideoCapture(video_path)
-        total_frames += int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        total_frames.append(int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         current_video_cap.release()
     return total_frames

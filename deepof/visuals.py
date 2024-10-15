@@ -76,6 +76,7 @@ def plot_heatmaps(
     experiment_id: int = "average",
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
     samples_max: int = 20000,
     dpi: int = 100,
     ax: Any = None,
@@ -136,7 +137,7 @@ def plot_heatmaps(
     if not experiment_id=="average":
         e_id=experiment_id
     bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, experiment_id=e_id, samples_max=samples_max
+        coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, samples_max=samples_max
     )
 
     if not center:  # pragma: no cover
@@ -191,7 +192,10 @@ def plot_heatmaps(
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
-    plt.gca().invert_yaxis()
+    if not ax:
+        plt.gca().invert_yaxis()
+    else:
+        ax.invert_yaxis()
 
     if show:
         plt.show()
@@ -631,10 +635,13 @@ def gantt_plotter(
     if (gantt_matrix==0).any():
         colors=colors=['#FFFFFF'] + colors.tolist()
 
+    col_indices=np.unique(gantt_matrix)
+    col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
+    N_colors=len(col_indices)
     sns.heatmap(
         data=gantt_matrix,
         cbar=False,
-        cmap=ListedColormap(colors, name="deepof", N=gantt_matrix.shape[0]+1),
+        cmap=ListedColormap(colors, name="deepof", N=N_colors+3),
         ax=ax,
     )
 
@@ -704,7 +711,7 @@ def gantt_plotter(
         if np.max(np.diff(bin_indices))>1:
             warning_message = (
                 "\033[38;5;208m\n"  # Set text color to orange
-                "Warning! Since the provided time bins contain gaps, the time range below will be incorrectly displayed!"
+                "Warning! Since the provided time bins contain gaps, the time range below may be incorrectly displayed!"
                 "\033[0m"  # Reset text color
             )
             warnings.warn(warning_message)
@@ -2190,8 +2197,7 @@ def animate_skeleton(
         tail_lines.append(ax2.plot(*aid[2][0, :].reshape(-1, 2).T))
 
     if display_arena and center in [False, "arena"] and align is None:
-        i = np.argmax(np.array(list(coordinates.get_coords().keys())) == experiment_id)
-        plot_arena(coordinates, center, "black", ax2, i)
+        plot_arena(coordinates, center, "black", ax2, key=experiment_id)
 
     # Update data in main plot
     def animation_frame(i):
