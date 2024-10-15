@@ -487,6 +487,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
 
     # deepof.table testing
     prep = coords.preprocess(
+        prun,
         window_size=11,
         window_step=1,
         scale=sampler.draw(
