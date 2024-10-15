@@ -26,6 +26,7 @@ from shutil import rmtree
 import warnings
 
 from deepof.data import TableDict
+from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
     time_to_seconds,
     seconds_to_time,
@@ -136,7 +137,102 @@ def test_filter_embeddings(keys,exp_condition):
     assert embeddings.keys()==supervised_annotations.keys()
 
 
+@given(
+    template=st.one_of(st.just("deepof_14"),st.just("deepof_11")), #deepof_8 does not have all required body parts
+    animal_id=st.one_of(st.text(alphabet='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', min_size=1, max_size=20), st.just(None)),
+)
+def test_get_polygon_coords(template,animal_id):
     
+    # Get body parts and coords
+    features=connect_mouse(template).nodes()
+    features=[feature[10:] for feature in features]
+    coordinates = ['x', 'y']
+
+    # Create a MultiIndex for the columns
+    multi_index_columns = pd.MultiIndex.from_product(
+        [features, coordinates],
+        names=['Feature', 'Coordinate']
+    )
+
+    # Generate random data and dataframe
+    data = np.random.rand(len(features)*len(coordinates),len(features)*len(coordinates))
+    df = pd.DataFrame(data, columns=multi_index_columns)
+    
+    #to include None-case in testing for that 1 line of extra coverage
+    if animal_id is None:
+        a_id=""
+    else:
+        a_id=animal_id+"_"
+
+    # add animal ids
+    df.columns = pd.MultiIndex.from_tuples(
+        [(f"{a_id}{feature}", coordinate) for feature, coordinate in df.columns]
+    )
+
+    [head, body, tail]=_get_polygon_coords(df,animal_id)
+
+    assert head.shape[1]==8
+    assert body.shape[1]==12
+    assert tail.shape[1]==4
+
+
+@settings(max_examples=20, deadline=None)
+@given(
+    min_confidence=st.floats(min_value=0.0, max_value=0.5),
+    min_bout_duration=st.integers(min_value=1, max_value=5),
+    selected_cluster=st.integers(min_value=0, max_value=1),
+)
+def test_process_animation_data(min_confidence,min_bout_duration,selected_cluster):
+    
+    animal_id="test_"
+    # Get body parts and coords
+    features=connect_mouse("deepof_14").nodes()
+    features=[feature[10:] for feature in features]
+    coordinates = ['x', 'y']
+
+    # Create a MultiIndex for the columns
+    multi_index_columns = pd.MultiIndex.from_product(
+        [features, coordinates],
+        names=['Feature', 'Coordinate']
+    )
+
+    # Generate random data and dataframe
+    data = np.random.rand(len(features)*len(coordinates),len(features)*len(coordinates))
+    coords = pd.DataFrame(data, columns=multi_index_columns)
+    
+
+    # add animal ids
+    coords.columns = pd.MultiIndex.from_tuples(
+        [(f"{animal_id}{feature}", coordinate) for feature, coordinate in coords.columns]
+    )
+
+    #create random embeddings and soft counts
+    cur_embeddings = np.random.normal(size=(len(features)*len(coordinates)-5, 10))
+    counts = np.abs(np.random.normal(size=(len(features)*len(coordinates)-5, 2)))
+    cur_soft_counts = counts / counts.sum(axis=1)[:, None]
+
+    
+    (   
+        coords,
+        cur_embeddings,
+        cluster_embedding,
+        concat_embedding,
+        hard_counts,
+    ) = _process_animation_data(
+        coords,
+        cur_embeddings=cur_embeddings,
+        cur_soft_counts=cur_soft_counts,
+        min_confidence=min_confidence,
+        min_bout_duration=min_bout_duration,
+        selected_cluster=selected_cluster
+    )
+
+    assert coords.shape[0]==np.sum(hard_counts==selected_cluster) #data from correct cluster was selected for coords
+    assert cur_embeddings[0].shape[0]>=concat_embedding.shape[0] #concatenated embeddings are of equal size or smaller than original
+    assert cur_embeddings[0].shape[1]==concat_embedding.shape[1] #embeddings were reshaped to 2D
+    assert cluster_embedding[0].shape[0]==coords.shape[0]  #data from correct cluster was selected for cluster_embedding
+
+
 @given(
     L_array=st.integers(min_value=1, max_value=100000),
     N_time_bins=st.integers(min_value=1, max_value=100),
