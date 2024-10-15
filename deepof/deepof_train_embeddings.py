@@ -314,6 +314,7 @@ if __name__ == "__main__":
         )
 
         preprocessed_object, global_scaler = to_preprocess.preprocess(
+            coordinates=project_coords,
             window_size=window_size,
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,

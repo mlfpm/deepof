@@ -10,6 +10,7 @@ from typing import Any, List, NewType, Tuple, Union
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
+import psutil
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -1519,6 +1520,7 @@ def embedding_per_video(
         else:
 
             processed_exp, _, _ = to_preprocess.filter_videos([key]).preprocess(
+                coordinates=coordinates,
                 scale=scale,
                 window_size=window_size,
                 window_step=1,
@@ -1603,11 +1605,15 @@ def tune_search(
         best_run (str): Name of the best run.
 
     """
-    # Load data
-    N_windows_max=1000000000
 
-    # Load data
+    # extract from Tuple
     preprocessed_train, preprocessed_validation= preprocessed_object
+    pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
+
+    #get available memory -10% as buffer
+    available_mem=psutil.virtual_memory().available*0.9
+    #calculate maximum number of rows that fit in memory based on table info 
+    N_windows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
 
     # Sample up to N_windows_max windows from processed_train and processed_validation
     N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))

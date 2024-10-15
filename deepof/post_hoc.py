@@ -952,6 +952,7 @@ def annotate_time_chunks(
 
     # Do some preprocessing and convert to numpy matrices 
     comprehensive_features = comprehensive_features.preprocess(
+        coordinates=deepof_project,
         scale=False,
         test_videos=0,
         window_size=(

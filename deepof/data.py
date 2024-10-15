@@ -29,6 +29,7 @@ from typing import Any, Dict, List, NewType, Tuple, Union
 import networkx as nx
 import numpy as np
 import pandas as pd
+import psutil
 import pims
 import umap
 from natsort import os_sorted
@@ -2071,6 +2072,7 @@ class Coordinates:
         # Create graph datasets
         if preprocess:
             to_preprocess, shapes, global_scaler = tab_dict.preprocess(
+                coordinates=self,
                 **kwargs,
                 save_as_paths=self._run_numba
                 )
@@ -2339,7 +2341,7 @@ class Coordinates:
         bin_size=None,
         bin_index=None,
         precomputed_bins=None,
-        samples_max=1000000000,
+        samples_max=None,
         #model info
         embedding_model: str = "VaDE",
         encoder_type: str = "recurrent",
@@ -2408,9 +2410,29 @@ class Coordinates:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
         
+        # extract from Tuple
+        preprocessed_train, _= preprocessed_object
+        pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
+
+        #get available memory -10% as buffer
+        available_mem=psutil.virtual_memory().available*0.9
+        #calculate maximum number of rows that fit in memory based on table info 
+        N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
+        if samples_max is None:
+            samples_max=N_rows_max
+        elif samples_max>N_rows_max:
+            warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! The selected number of samples may exceed your available memory."
+            "\033[0m"
+        )
+            warnings.warn(warning_message)
+
         bin_info=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[0], samples_max=samples_max)
         bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
         bin_info.update(bin_info_test)
+
+
 
         if pretrained:
             pretrained_path = os.path.join(
@@ -2846,16 +2868,22 @@ class TableDict(dict):
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
         self,
+        coordinates: coordinates,
         handle_ids: str = "concat",
         window_size: int = 25,
         window_step: int = 1,
+        #binning info
+        bin_size="02:30:00",
+        bin_index="00:00:00",
+        precomputed_bins=None,
+        samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
+        #otehr parameters
         scale: str = "standard",
         pretrained_scaler: Any = None,
         test_videos: int = 0,
         verbose: int = 0,
         filter_low_variance: bool = False,
         interpolate_normalized: int = 10,
-        N_rows_max: int = 60000000000,
         file_name = 'preprocessed',
         save_as_paths = None,
         shuffle: bool = False,
@@ -2865,10 +2893,15 @@ class TableDict(dict):
         Capable of returning training and test sets ready for model training.
 
         Args:
+            coordinates (coordinates): project coordinates
             automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are appiled.
             handle_ids (str): indicates the default action to handle multiple animals in the TableDict object. Must be one of "concat" (body parts from different animals are treated as features) and "split" (different sliding windows are created for each animal).
             window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False, specifies the size of the sliding window to pass through the data to generate training instances.
             window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
+            bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
+            bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+            precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+            samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
             scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
             pretrained_scaler (Any): Pre-fit global scaler, trained on the whole dataset. Useful to process single videos.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
@@ -2876,7 +2909,7 @@ class TableDict(dict):
             shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
             filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
             interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be interpolated after normalization. Only used if scale is set to "standard".
-            N_rows_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
+            samples_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
             file_name (str): Name that is used for saving the merged table
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
             shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
@@ -2886,21 +2919,39 @@ class TableDict(dict):
             X_train (np.ndarray): Table dict with 3D datasets with shape (instances, sliding_window_size, features) generated from all training videos.
             X_test (np.ndarray): Table dict with 3D datasets 3D dataset with shape (instances, sliding_window_size, features) generated from all test videos (0 by default).
         """
+        
+        #get available memory -10% as buffer
+        available_mem=psutil.virtual_memory().available*0.9
+        #calculate maximum number of rows that fit in memory based on table info 
+        N_rows_max=int(available_mem/((33+11)*window_size*8))
+        if samples_max is None:
+            samples_max=N_rows_max
+        elif samples_max>N_rows_max:
+            warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! The selected number of samples may exceed your available memory."
+            "\033[0m"
+        )
+            warnings.warn(warning_message)
+        
         # Create a temporary copy of the current TableDict object,
         # to avoid modifying it in place
         table_temp = copy.deepcopy(self)
 
+        bin_info=_preprocess_time_bins(coordinates=coordinates, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=self, samples_max=samples_max)
+
+
         #determine the number of rows to use
-        N_elements_max=int(1000000000/8) #up to 1GB in save space
-        num_cols=get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
-        max_num_rows=int(N_elements_max/(window_size*num_cols)*window_step)
+        #N_elements_max=int(1000000000/8) #up to 1GB in save space
+        #num_cols=get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
+        #samples_max=int(N_elements_max/(window_size*num_cols)*window_step)
 
         #save outputs as paths if first table is larger than a threshold
         if save_as_paths is None:
             save_as_paths=False
             first_key=list(table_temp.keys())[0]
             num_rows=get_dt(table_temp,first_key,only_metainfo=True)["num_rows"]
-            if num_rows>N_rows_max/len(table_temp):
+            if coordinates._run_numba:
                 save_as_paths=True
 
         assert handle_ids in [
@@ -2918,22 +2969,8 @@ class TableDict(dict):
                 #load table if not already loaded
                 tab = get_dt(table_temp, key) 
 
-                #select subset of tab
-                if tab.shape[0]>max_num_rows:
-                    #find rows with little nans
-                    no_nan_rows=(tab.isna().sum(axis=1) ==0).to_numpy()
-                    
-                    #find positions that result in ranges with little nans when selected as start
-                    valid_starts=[]
-                    threshold=0.1
-                    for i in range(0,len(no_nan_rows) - max_num_rows + 1, int(len(no_nan_rows)/10000)):
-                        if no_nan_rows[i:i + max_num_rows].sum()/max_num_rows >= threshold:
-                            valid_starts.append(i)
-                    
-                    assert len(valid_starts)>0, "No sections with a sufficient amount of complete rows (>=10% with no NaNs) could be identified!"
-
-                    start_pos=np.random.choice(valid_starts)
-                    tab=tab[start_pos:start_pos+max_num_rows-1]   
+                #select given range
+                tab=tab.iloc[bin_info[key]]
             
                 if filter_low_variance:
 
@@ -2967,7 +3004,7 @@ class TableDict(dict):
                         index=tab.index,
                     ).apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
 
-                    sampled_tabs.append(tab.sample(n=min(max_num_rows, len(tab)), random_state=42))
+                    sampled_tabs.append(tab.sample(n=min(samples_max, len(tab)), random_state=42))
 
                 # save paths for modified tables
                 table_path = os.path.join(self._table_path, key, key + '_' + file_name)

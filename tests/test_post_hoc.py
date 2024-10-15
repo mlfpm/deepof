@@ -169,7 +169,7 @@ def test_fit_normative_global_model(input_data):
 )
 def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
-    # Define a test embedding dictionary and derive upervised annotations from it
+    # Define a test embedding dictionary and derive supervised annotations from it
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
     supervised_annotations= TableDict({i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}, typ='supervised')
