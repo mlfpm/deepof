@@ -1959,6 +1959,11 @@ class Coordinates:
     def get_graph_dataset(
         self,
         animal_id: str = None,
+        #binning info
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
         precomputed_tab_dict: table_dict = None,
         center: str = False,
         polar: bool = False,
@@ -1971,6 +1976,10 @@ class Coordinates:
 
         Args:
             animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal graph.
+            bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
+            bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+            precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+            samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
             precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
             center (str): Name of the body part to which the positions will be centered. If false, raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
             polar (bool) States whether the coordinates should be converted to polar values.
@@ -2083,6 +2092,11 @@ class Coordinates:
         if preprocess:
             to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 coordinates=self,
+                #binning info, explicitely stated as otherwise warnings seem to get suppressed
+                bin_size=bin_size,
+                bin_index=bin_index,
+                precomputed_bins=precomputed_bins,
+                samples_max=samples_max,
                 **kwargs,
                 save_as_paths=self._very_large_project
                 )
@@ -2883,8 +2897,8 @@ class TableDict(dict):
         window_size: int = 25,
         window_step: int = 1,
         #binning info
-        bin_size="02:30:00",
-        bin_index="00:00:00",
+        bin_size=None,
+        bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
         #otehr parameters

@@ -635,13 +635,13 @@ def gantt_plotter(
     if (gantt_matrix==0).any():
         colors=colors=['#FFFFFF'] + colors.tolist()
 
-    col_indices=np.unique(gantt_matrix)
-    col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
-    N_colors=len(col_indices)
+    N_colors=int(np.nanmax(gantt_matrix))
+    #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
+    #N_colors=len(col_indices)
     sns.heatmap(
         data=gantt_matrix,
         cbar=False,
-        cmap=ListedColormap(colors, name="deepof", N=N_colors+3),
+        cmap=ListedColormap(colors[0:N_colors+1], name="deepof", N=N_colors+1),
         ax=ax,
     )
 
