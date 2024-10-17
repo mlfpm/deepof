@@ -28,7 +28,6 @@ seglearn>=1.2.5
 segment-anything==1.0
 setuptools<72.0.0
 shap>=0.41.0
-sktime==0.24.0
 sleap-io==0.0.9
 spektral>=1.2.0
 sphinx-press-theme==0.8.0
