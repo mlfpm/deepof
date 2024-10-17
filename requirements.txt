@@ -41,6 +41,8 @@ sphinxcontrib-napoleon==0.7
 sphinxcontrib-qthelp==1.0.6
 sphinxcontrib-serializinghtml==1.1.9
 statannotations>=0.5.0
+statsmodels>=0.13
+tables>=3.7.0
 tensorboard>=2.11.2
 tensorflow-macos==2.12.0;platform_machine == 'arm64' and platform_system == 'Darwin'
 tensorflow==2.12.0;platform_machine != 'arm64' or platform_system != 'Darwin'
@@ -48,4 +50,5 @@ tensorflow_probability==0.20.1
 torch==2.2.2
 torchvision==0.17.2
 tqdm==4.66.1
+umap_learn==0.5.4
 pyarrow>=17.0.0
