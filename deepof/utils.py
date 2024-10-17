@@ -43,28 +43,14 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm
 
 import deepof.data
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, load_dt, save_dt, _suppress_warning
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
-
-# DEFINE WARNINGS FUNCTION
-def _suppress_warning(warn_messages):
-    def somedec_outer(fn):
-        def somedec_inner(*args, **kwargs):
-            # Some warnings do not get filtered when record is not True
-            with warnings.catch_warnings(record=True):
-                for k in range(0, len(warn_messages)):
-                    warnings.filterwarnings("ignore", message=warn_messages[k])
-                response = fn(*args, **kwargs)
-            return response
-
-        return somedec_inner
-
-    return somedec_outer
 
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS

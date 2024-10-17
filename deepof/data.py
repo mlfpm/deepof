@@ -1951,7 +1951,7 @@ class Coordinates:
         with open(pkl_out, "wb") as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    @deepof.utils._suppress_warning(
+    @deepof.data_loading._suppress_warning(
         warn_messages=[
             "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
         ]

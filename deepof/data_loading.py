@@ -11,7 +11,30 @@ import numpy as np
 import pandas as pd
 import pickle
 import pyarrow.parquet as pq
+import re
 from typing import Any, List, NewType, Tuple, Union
+import warnings
+
+
+# DEFINE WARNINGS FUNCTION
+def _suppress_warning(warn_messages):
+    def somedec_outer(fn):
+        def somedec_inner(*args, **kwargs):
+            # Some warnings do not get filtered when record is not True
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                for k in range(0, len(warn_messages)):
+                    pattern=f"(\n)?.*{warn_messages[k]}.*"
+                    warnings.filterwarnings("ignore", message=pattern)
+                response = fn(*args, **kwargs)
+            #display caught warnings (all warnings that were not ignored)    
+            for caught_warning in caught_warnings:
+                warnings.warn(caught_warning.message)
+            return response
+        
+        return somedec_inner
+    
+    return somedec_outer
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -87,6 +110,11 @@ def get_dt(
     return (raw_data, path) if return_path else raw_data
 
 
+@_suppress_warning(
+    warn_messages=[
+        "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
+    ]
+)
 def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
     """Saves a given data frame fast and efficient using parquet
 

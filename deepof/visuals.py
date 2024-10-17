@@ -32,9 +32,8 @@ from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
-from deepof.utils import _suppress_warning
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt, load_dt, _suppress_warning
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -544,8 +543,11 @@ def _plot_behavior_gantt(
 
     # get common indices between all selected experiments
     bin_indices=bin_info[list(bin_info.keys())[0]]
+    max_index=np.max(bin_indices)
     for exp_id in experiments_to_plot:
-        bin_indices=np.intersect1d(bin_indices,bin_info[exp_id]) 
+        if max_index > np.max(bin_info[exp_id]):
+            max_index=np.max(bin_info[exp_id])
+            bin_indices=bin_info[exp_id][bin_info[exp_id]<max_index]
 
     # set gantt matrix
     n_available_experiments = len(all_experiments)

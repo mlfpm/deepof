@@ -46,9 +46,9 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 # noinspection PyCallingNonCallable
-@deepof.utils._suppress_warning(
+@deepof.data_loading._suppress_warning(
     warn_messages=[
-        "The initializer GlorotUniform is unseeded and being called multiple times, which will return identical values  each time (even if the initializer is unseeded). Please update your code to provide a seed to the initializer, or avoid using the same initalizer instance more than once."
+        "The initializer GlorotUniform is unseeded and being called multiple times, which will return identical values each time"
     ]
 )
 def get_recurrent_encoder(

@@ -25,7 +25,7 @@ from tqdm import tqdm
 import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt, load_dt, _suppress_warning
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
