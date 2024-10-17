@@ -9,7 +9,6 @@ Testing module for deepof.models
 """
 
 import networkx as nx
-import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 

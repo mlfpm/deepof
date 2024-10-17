@@ -20,8 +20,6 @@ import pickle
 import re
 import shutil
 import warnings
-from collections import defaultdict
-from difflib import get_close_matches
 from shutil import rmtree
 from time import time
 from typing import Any, Dict, List, NewType, Tuple, Union

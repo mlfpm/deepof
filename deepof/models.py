@@ -9,7 +9,6 @@
 # encoding: utf-8
 # module deepof
 
-import warnings
 from typing import Any, NewType
 
 import numpy as np

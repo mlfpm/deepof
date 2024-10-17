@@ -6,7 +6,6 @@
 
 import os
 import pickle
-import time
 import warnings
 from itertools import combinations
 from typing import Any, List, NewType, Union
@@ -14,7 +13,6 @@ from typing import Any, List, NewType, Union
 import numba as nb
 import numpy as np
 import pandas as pd
-import regex as re
 import sklearn.pipeline
 from joblib import Parallel, delayed, parallel_backend
 from natsort import os_sorted

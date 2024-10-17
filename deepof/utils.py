@@ -11,21 +11,16 @@ import os
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
-from difflib import get_close_matches
 from itertools import combinations, product
 from math import atan2, dist
 from typing import Any, List, NewType, Tuple, Union
 
-import ast
 import cv2
 import h5py
-import matplotlib.pyplot as plt
 import networkx as nx
 import numba as nb
 import numpy as np
 import pandas as pd
-import pickle
-import pyarrow.parquet as pq
 import regex as re
 import requests
 import sleap_io as sio
@@ -36,8 +31,6 @@ from scipy.spatial.distance import cdist
 from segment_anything import SamPredictor, sam_model_registry
 from shapely.geometry import Polygon
 from sklearn import mixture
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.feature_selection import VarianceThreshold
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm
