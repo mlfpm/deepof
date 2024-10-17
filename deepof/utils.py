@@ -31,6 +31,7 @@ from scipy.spatial.distance import cdist
 from segment_anything import SamPredictor, sam_model_registry
 from shapely.geometry import Polygon
 from sklearn import mixture
+from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm

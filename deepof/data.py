@@ -28,7 +28,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import psutil
-import pims
+import cv2
 import umap
 from natsort import os_sorted
 from pkg_resources import resource_filename
@@ -902,9 +902,9 @@ class Project:
 
         # load video info
         first_key=list(self.videos.keys())[0]
-        self.frame_rate = float(
-            pims.ImageIOReader(os.path.join(self.video_path, self.videos[first_key])).frame_rate
-        )
+        current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
+        self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS))
+        current_video_cap.release()
 
         # load table info
         tables, quality = self.preprocess_tables(verbose)
