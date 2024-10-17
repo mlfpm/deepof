@@ -1227,8 +1227,6 @@ class Coordinates:
         align: str = False,
         align_inplace: bool = True,
         selected_id: str = None,
-        propagate_labels: bool = False,
-        propagate_annotations: Dict = False,
         file_name: str = 'coords',
         return_path: bool = False,
     ) -> table_dict:
@@ -1241,8 +1239,6 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
             
@@ -1270,8 +1266,6 @@ class Coordinates:
                 align = align,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
-                propagate_labels = propagate_labels,
-                propagate_annotations = propagate_annotations,
             )
             
             # save paths for modified tables
@@ -1292,8 +1286,6 @@ class Coordinates:
             connectivity=self._connectivity,
             polar=polar,
             exp_conditions=self._exp_conditions,
-            propagate_labels=propagate_labels,
-            propagate_annotations=propagate_annotations,
         )
     
     def get_coords_at_key(
@@ -1307,8 +1299,6 @@ class Coordinates:
     align: str = False,
     align_inplace: bool = True,
     selected_id: str = None,
-    propagate_labels: bool = False,
-    propagate_annotations: Dict = False,
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -1322,8 +1312,6 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            propagate_labels (bool): If True, adds an extra feature for each video containing its phenotypic label
-            propagate_annotations (dict): If a dictionary is provided, supervised annotations are propagated through the training dataset. This can be used for regularising the latent space based on already known traits.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
             
@@ -1472,8 +1460,6 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
-            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
-            propagate_annotations (Dict): A dictionary of annotations to propagate.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -1598,8 +1584,6 @@ class Coordinates:
             degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
-            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
-            propagate_annotations (Dict): A dictionary of annotations to propagate.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -2191,7 +2175,6 @@ class Coordinates:
         frame_limit: int = np.inf,
         debug: bool = False,
         n_jobs: int = 1,
-        propagate_labels: bool = False,
     ) -> table_dict:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
@@ -2203,7 +2186,6 @@ class Coordinates:
             frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per video to output.
             debug (bool): Only applies if video_output is not False. If True, all videos will include debug information, such as the detected arena and the preprocessed tracking tags.
             n_jobs (int): Number of jobs to use for parallel processing.
-            propagate_labels (bool): If True, the pheno column will be propagated from the original data.
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
@@ -2354,7 +2336,6 @@ class Coordinates:
             arena_dims=self._arena_dims,
             connectivity=self._connectivity,
             exp_conditions=self._exp_conditions,
-            propagate_labels=propagate_labels,
         )
 
     def deep_unsupervised_embedding(
@@ -2546,8 +2527,6 @@ class TableDict(dict):
         connectivity: nx.Graph = None,
         polar: bool = None,
         exp_conditions: dict = None,
-        propagate_labels: bool = False,
-        propagate_annotations: Union[Dict, bool] = False,
         shapes: Dict = {},
     ):
         """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
@@ -2564,8 +2543,6 @@ class TableDict(dict):
             center (str): Type of the center. Handled internally.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
-            propagate_labels (bool): Whether to propagate phenotypic labels from the original experiments to the transformed dataset.
-            propagate_annotations (Dict): Dictionary of annotations to propagate. If provided, the supervised annotations of the individual experiments are propagated to the dataset.
             shapes (Dict): Dictionary containing the shapes of all stored tables
 
         """
@@ -2578,8 +2555,6 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._animal_ids = animal_ids
         self._exp_conditions = exp_conditions
-        self._propagate_labels = propagate_labels
-        self._propagate_annotations = propagate_annotations
         self._table_path = table_path
         self._shapes = shapes
 
@@ -2624,8 +2599,6 @@ class TableDict(dict):
                 self._type,
                 self._table_path,
                 connectivity=self._connectivity,
-                propagate_labels=self._propagate_labels,
-                propagate_annotations=self._propagate_annotations,
                 exp_conditions={
                     k: value
                     for k, value in self._exp_conditions.items()
@@ -2684,8 +2657,6 @@ class TableDict(dict):
             connectivity = self._connectivity,
             polar = self._polar,
             exp_conditions=self._exp_conditions,
-            propagate_labels = self._propagate_labels,
-            propagate_annotations = self._propagate_annotations,
         )
 
     def _prepare_projection(self) -> np.ndarray:
@@ -2806,10 +2777,6 @@ class TableDict(dict):
         """
         args = [copy.deepcopy(self)] + list(args)
 
-        propagate_labels = any(
-            [self._propagate_labels] + [tabdict._propagate_labels for tabdict in args]
-        )
-
         merged_dict={}
         for key in args[0]:
             merged_tab = []
@@ -2831,8 +2798,6 @@ class TableDict(dict):
             typ="merged",
             table_path=self._table_path,
             connectivity=self._connectivity,
-            propagate_labels=propagate_labels,
-            propagate_annotations=self._propagate_annotations,
         )
 
         # Retake original table dict properties

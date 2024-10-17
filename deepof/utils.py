@@ -1191,15 +1191,6 @@ def scale_table(
     exp_temp = feature_array.to_numpy()
 
     annot_length = 0
-    if coordinates._propagate_labels:
-        exp_temp = exp_temp[:, :-1]
-        annot_length += 1
-
-    if coordinates._propagate_annotations:
-        exp_temp = exp_temp[
-            :, : -list(coordinates._propagate_annotations.values())[0].shape[1]
-        ]
-        annot_length += list(coordinates._propagate_annotations.values())[0].shape[1]
 
     if global_scaler is None:
         # Scale each modality separately using a custom function

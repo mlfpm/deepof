@@ -308,8 +308,6 @@ if __name__ == "__main__":
             center="Center",
             align="Spine_1",
             align_inplace=True,
-            propagate_labels=False,
-            propagate_annotations=False,
             selected_id=animal_to_preprocess,
         )
 
