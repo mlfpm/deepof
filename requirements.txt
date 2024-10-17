@@ -1,9 +1,6 @@
-PIMS>=0.6.1
 POT>=0.8.2
 Shapely>=1.8.5.post1
 catboost>=1.1.1
-dask==2024.5.1
-dask_image==2022.9.0
 imageio-ffmpeg>=0.4.8
 imbalanced_learn>=0.10.1
 imblearn>=0.0
@@ -24,7 +21,6 @@ pandas~=1.5
 pomegranate>=1.0.0
 regex>=2022.10.31
 regex>=2022.3.15
-ruptures>=1.1.7
 scikit_learn==1.2.0
 scipy>=1.7.3
 seaborn>=0.11.2
