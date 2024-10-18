@@ -19,6 +19,7 @@ import pandas as pd
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from deepof.data import TableDict
 import deepof.data
 import deepof.utils
 
@@ -617,3 +618,58 @@ def test_get_graph_dataset(mode, sampler, random_id):
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
+
+
+@settings(deadline=None)
+@given(
+    use_bin_info=st.booleans(),
+    N_windows_tab=st.integers(min_value=10, max_value=100),
+    return_edges=st.booleans(),
+    no_nans=st.booleans(),
+    dtype=st.one_of(st.just("numpy"), st.just("pandas")),
+    is_tab_tuple=st.booleans(),
+)
+def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_nans, dtype, is_tab_tuple):
+
+    #create bin_info object
+    bin_info={}
+    if use_bin_info:
+        bin_info={i: np.arange(4,N_windows_tab-4) for i in range(10)}
+
+    my_dict = {i: np.random.normal(size=[100, 10]) for i in range(10)}
+    #add nans
+    num_nans=50
+    for key in my_dict:
+        indices = np.random.choice(my_dict[key].shape[0], num_nans, replace=False)
+        my_dict[key][indices,0] = np.nan 
+
+    #create different types of Table dicts
+    if is_tab_tuple:
+        if dtype == "numpy":
+            tab_dict= TableDict({i: (my_dict[i],my_dict[i]) for i in range(10)}, typ='test')
+        else:
+            tab_dict= TableDict({i: (pd.DataFrame(my_dict[i]),pd.DataFrame(my_dict[i])) for i in range(10)}, typ='test')
+    else:
+        if dtype == "numpy":
+            tab_dict= TableDict({i: my_dict[i] for i in range(10)}, typ='test')
+        else:
+            tab_dict= TableDict({i: pd.DataFrame(my_dict[i]) for i in range(10)}, typ='test')
+    
+
+    a_data=None
+    if return_edges:
+        X_data, a_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+    else:
+        X_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+
+
+    if use_bin_info:
+        assert X_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+    else:
+        assert X_data.shape[0]<=10*N_windows_tab 
+
+    if a_data is not None:
+        if use_bin_info:
+            assert a_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+        else:
+            assert a_data.shape[0]<=10*N_windows_tab
