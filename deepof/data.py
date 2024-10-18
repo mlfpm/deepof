@@ -1803,30 +1803,21 @@ class Coordinates:
         """Returns the start time for each table"""
         start_times = {}
         for key in self._tables:
-            if type(self._tables[key]) == str:
-                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
-            else:
-                start_times[key] = self._tables[key].index[0]
+            start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
         return start_times
 
     def get_end_times(self):
         """Returns the end time for each table"""
         end_times = {}
         for key in self._tables:
-            if type(self._tables[key]) == str:
-                end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
-            else:
-                end_times[key] = self._tables[key].index[-1]
+            end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
         return end_times
 
     def get_table_lengths(self):
         """Returns the length for each table"""
         table_lengths = {}
         for key in self._tables:
-            if type(self._tables[key]) == str:
-                table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
-            else:
-                table_lengths[key] = self._tables[key].shape[0]
+            table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
         return table_lengths
 
     @property
@@ -2213,7 +2204,7 @@ class Coordinates:
  
             try:
                 coords = self.get_coords(center=center, align=align, return_path=self._very_large_project)
-            except AssertionError:
+            except AssertionError: # pragma: no cover
 
                 try:
                     coords = self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)

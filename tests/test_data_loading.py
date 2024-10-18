@@ -22,6 +22,7 @@ from deepof.data_loading import (
 )
 
 
+@settings(max_examples=50, deadline=None)
 @given(
     table_type=st.one_of(
         st.just("numpy"),

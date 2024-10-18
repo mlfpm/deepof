@@ -10,6 +10,7 @@ Testing module for deepof.preprocess
 
 import os
 import random
+import re
 import string
 from shutil import rmtree, copy
 
@@ -444,6 +445,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         fast_implementations_threshold=fast_implementations_threshold,
     )
 
+    #also use large table handling 
+    if use_numba:
+        prun.very_large_project=True
+
     if mode == "single":
         prun.distances = nodes
         prun.ego = ego
@@ -455,6 +460,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     polar = sampler.draw(st.booleans())
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
 
+    #get table info
+    start_times_dict=prun.get_start_times()
+    end_times_dict=prun.get_end_times()
+    table_lengths_dict=prun.get_table_lengths()
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -512,6 +521,21 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             f"deepof_project_{random_id}",
         )
     )
+
+
+    #table info
+    assert all(
+        [int(
+            ''.join(re.findall(r'\d+', start_times_dict[key])))
+            <int(''.join(re.findall(r'\d+', end_times_dict[key]))) 
+            for key 
+            in start_times_dict.keys()
+            ])
+    assert all(
+        table_lengths_dict[key] > 0
+        for key 
+        in table_lengths_dict.keys() 
+        )
 
     # deepof.coordinates testing
     assert isinstance(coords, deepof.data.TableDict)
