@@ -1462,40 +1462,6 @@ def smooth_boolean_array(
     return a_smooth
 
 
-def split_with_breakpoints(a: np.ndarray, breakpoints: list) -> np.ndarray:
-    """
-
-    Split a numpy.ndarray at the given breakpoints.
-
-    Args:
-        a (np.ndarray): N (instances) * m (features) shape
-        breakpoints (list): list of breakpoints obtained with ruptures
-
-    Returns:
-        split_a (np.ndarray): padded array of shape N (instances) * l (maximum break length) * m (features)
-
-    """
-    rpt_lengths = list(np.array(breakpoints)[1:] - np.array(breakpoints)[:-1])
-
-    try:
-        max_rpt_length = np.max([breakpoints[0], np.max(rpt_lengths)])
-    except ValueError:
-        max_rpt_length = breakpoints[0]
-
-    # Reshape experiment data according to extracted ruptures
-    split_a = np.split(np.expand_dims(a, axis=0), breakpoints[:-1], axis=1)
-
-    split_a = [
-        np.pad(
-            i, ((0, 0), (0, max_rpt_length - i.shape[1]), (0, 0)), constant_values=0.0
-        )
-        for i in split_a
-    ]
-    split_a = np.concatenate(split_a, axis=0)
-
-    return split_a
-
-
 def rolling_window(
     a: np.ndarray,
     window_size: int,
