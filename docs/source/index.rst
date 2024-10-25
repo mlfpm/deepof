@@ -175,6 +175,7 @@ Supervised and unsupervised pipelines
 Advanced usage
 --------------
 * `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
+* `Working with big datasets <tutorial_notebooks/deepof_big_data_tutorial.ipynb>`_
 
 Cite us!
 ========
