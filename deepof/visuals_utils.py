@@ -52,9 +52,10 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
 
     Args:
         seconds (float): time in seconds
+        cut_milliseconds (bool): decides if milliseconds should be part of the output, defaults to True
 
     Returns:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...)
+        time_string (str): time string (format HH:MM:SS or HH:MM:SS.SSS...)
     """
     time_string = None
     _hours = np.floor(seconds / 3600)
@@ -80,7 +81,7 @@ def calculate_average_arena(
     lists representing arenas. Polynomial vertices can have different lengths and start at different positions
 
     Args:
-        vertices (dict[List[Tuple[float, float]]]): A dictionary of lists of 2D tuples representing the vertices of the arenas.
+        all_vertices (dict[List[Tuple[float, float]]]): A dictionary of lists of 2D tuples representing the vertices of the arenas.
         num_points (int): number of points in the averaged arena.
 
     Returns:
@@ -262,7 +263,11 @@ def _process_animation_data(
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
 
         Returns:
-
+        coords (table_dict): position data afetr preprocessing
+        twoDim_embeddings (list(np.ndarray)): 2D UMAP representation of embeddings
+        cluster_embedding (list(np.ndarray)): 2D UMAP representation of embeddings for specific cluster with sufficient confidence
+        concat_embedding (np.ndarray): 2D UMAP representation of embeddings with sufficient confidence
+        hard_counts (np.ndarray): 1D array of active cluster number for each frame
 
     """
     
@@ -426,7 +431,7 @@ def cohend_effect_size(d: float):  # pragma: no cover
         d (float): Cohens d
 
     Returns:
-        Categorized effect size (int):
+        int: Categorized effect size 
     """
 
     if abs(d) >= 0.8:
@@ -459,7 +464,6 @@ def _preprocess_time_bins(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         tab_dict_for_binning (table_dict): table_dict that will be used as reference for maximum allowed table lengths. if None, basic table lengths from coordinates are used. 
-        max_bin_size (int): Maximum size that is accepted for any bins
         experiment_id (str): id of the experiment of time bins should
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         down_sample (bool): Use downsampling to get samples_max samples (if True). Uses cutting until sample of number samples_max if False.
@@ -682,7 +686,7 @@ def _check_enum_inputs(
     coordinates: coordinates,
     supervised_annotations: table_dict = None,
     soft_counts: table_dict = None,
-    origin: object = None,
+    origin: str = None,
     experiment_ids: list = None,
     exp_condition: str = None,
     exp_condition_order: list = None,
@@ -701,12 +705,17 @@ def _check_enum_inputs(
 
     Args:
     coordinates (coordinates): deepof Coordinates object.
-    center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
+    supervised_annotations (table_dict): Contains all informations regarding supervised annotations. 
+    soft_counts (table_dict): Contains all informations regarding unsupervised annotations. 
+    origin (str): name of the function this function was called from (only applicable in specific cases)
+    experiment_ids (list): list of data set name of the animal to plot.
     exp_condition (str): Experimental condition to plot.
     exp_condition_order (list): Order in which to plot experimental conditions.
     condition_values (list): Experimental condition value to plot.
-    experiment_ids (list): list of data set name of the animal to plot.
+    behaviors (list): list of entered animal behaviors.
     bodyparts (list): list of body parts to plot.
+    animal_id (str): Id of the animal.
+    center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
     visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
     normative_model (str): Name of the cohort to use as controls.
     aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
@@ -1107,8 +1116,8 @@ def _scatter_embeddings(
     If labels are propagated, it automatically colours all data points with their respective condition.
 
     Args:
-        embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
-        cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
+        embeddings (np.ndarray): sequence embeddings obtained with the unsupervised pipeline within deepof
+        soft_counts (np.ndarray): labels of the clusters. If None, aggregation method should be provided.
         ax: axes where to plot the arena.
         save (str): if provided, saves the figure to the specified file.
         show (bool): if True, displays the current figure. If not, returns the given axes.
@@ -1324,9 +1333,9 @@ def annotate_video(
     Args:
         coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
         tag_dict (Union[str, pd.DataFrame]): Either path to the saving location of teh dataset or the dataste itself
-        debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
         vid_key: for internal usage only; key of the video to tag in coordinates._videos.
         frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
+        debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
         params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
 
     """

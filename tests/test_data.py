@@ -73,7 +73,7 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
     )
 
     assert isinstance(prun, deepof.data.Project)
-    assert isinstance(prun.preprocess_tables(verbose=True), tuple)
+    assert isinstance(prun.preprocess_tables(), tuple)
 
     prun = prun.create(test=True, force=True)
     rmtree(
@@ -260,13 +260,13 @@ def test_get_distances(nodes, ego):
     )
     prun.create(force=True, test=True)
 
-    tables, _ = prun.preprocess_tables(verbose=True)
+    tables, _ = prun.preprocess_tables()
     prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
         tables=tables, test=True,
     )
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.get_distances(prun.preprocess_tables()[0], verbose=True)
+    prun = prun.get_distances(prun.preprocess_tables()[0])
 
     rmtree(
         os.path.join(
@@ -303,7 +303,7 @@ def test_get_angles(nodes, ego):
 
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.get_angles(prun.preprocess_tables()[0], verbose=True)
+    prun = prun.get_angles(prun.preprocess_tables()[0])
 
     assert isinstance(prun, dict)
 

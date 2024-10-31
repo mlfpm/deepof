@@ -272,7 +272,7 @@ class MouseTrackingImputer:
     @_suppress_warning(
         ["A value is trying to be set on a copy of a slice from a DataFrame"]
     )
-    def fit_transform(self, data, key):
+    def fit_transform(self, data):
         """
         Performs linear interpolation for small gaps and, if full_imputation is True
         applies a multi-step imputation process for larger gaps.
@@ -366,7 +366,7 @@ class MouseTrackingImputer:
         return smoothed_data
 
     @_suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
-    def _iterative_imputation(elf, data):
+    def _iterative_imputation(self, data):
         """
         Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer
         to fill in missing values in the data.
@@ -542,7 +542,7 @@ def str2bool(v: str) -> bool:
         v (str): String to transform to boolean value.
 
     Returns:
-        bool. If conversion is not possible, it raises an error
+        bool: If conversion is not possible, it raises an error
 
     """
     if isinstance(v, bool):
@@ -592,7 +592,7 @@ def iterative_imputation(
         project (project): Project object.
         tab_dict (dict): Dictionary with the coordinates of the body parts.
         lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
-        full_imputation (bool): Determines if only small gaps get linearily imputed (False) or additionally IterativeImputer and a few otehr steps are executed to close all gaps (True)
+        full_imputation (bool): Determines if only small gaps get linearily imputed (False) or additionally IterativeImputer and a few other steps are executed to close all gaps (True)
 
     Returns:
         tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
@@ -627,7 +627,7 @@ def iterative_imputation(
                     connectivity=project.connectivity[animal_id],
                     full_imputation=full_imputation,
                 )
-                imputed = imputer.fit_transform(sub_table, k)
+                imputed = imputer.fit_transform(sub_table)
 
                 # reshape back to original format and update values
                 imputed = pd.DataFrame(
@@ -908,7 +908,6 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: n
     Args:
         p (numpy.ndarray): 2D Array containing positions of bodyparts over time.
         angles (numpy.ndarray): Set of angles (in radians) to rotate p with.
-        origin (numpy.ndarray): Rotation axis (zero vector by default).
 
     Returns:
         - rotated (numpy.ndarray): rotated positions over time
@@ -992,6 +991,7 @@ def align_trajectories(
     Args:
         data (numpy.ndarray): 3D array containing positions of body parts over time, where shape is N (sliding window instances) * m (sliding window size) * l (features)
         mode (string): Specifies if *all* instances of each sliding window get aligned, or only the *center*
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
 
     Returns:
         aligned_trajs (np.ndarray): 2D aligned positions over time.
@@ -1044,7 +1044,8 @@ def load_table(
         table_path (string): Full path to the file containing the tracks.
         table_format (str): type of the files to load, coming from either DeepLabCut (CSV and H5) and (S)LEAP (NPY).
         rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
-
+        animal_ids (list): List with the animal ids in case of multiple tracked animals. Is expected to be None if there is only a single animal getting tracked.
+        
     Returns:
         loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
 
@@ -1209,7 +1210,6 @@ def scale_animal(feature_array: np.ndarray, scale: str):
 
     Args:
         feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        graph (nx.Graph): connectivity graph for the current animals.
         scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
 
     Returns:
@@ -1248,7 +1248,8 @@ def kleinberg(
         offsets (list): a list of time offsets (numeric)
         s (float): the base of the exponential distribution that is used for modeling the event frequencies
         gamma (float): coefficient for the transition costs between states
-        n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+        n: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+        T: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         k: maximum burst level
 
     """
@@ -1361,9 +1362,9 @@ def kleinberg_core_numba(
             gaps (np.array): an array of gap sizes between time offsets (numeric)
             s (float): the base of the exponential distribution that is used for modeling the event frequencies
             gamma (float): coefficient for the transition costs between states
-            n, T: to have a fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+            n: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
+            T: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
             k: maximum burst level / number of hidden states
-            batch_size (int): Batch size for input processing
     :+
     """
     g_hat = T / n
@@ -1509,8 +1510,8 @@ def extract_windows(
 
 
     Returns:
-        ruptured_dataset (np.ndarray): Dataset with all ruptures concatenated across the first axis.
-        rupture_indices (list): Indices of ruptures.
+        to_window (dict): Dictionary containing stacks of windowed data samples for each table. Shape of the stacks: [N_samples, window_size, N_features]
+        output_shape (Tuple): shape of the output array (N_samples, window_size, N_features).
 
     """   
     # Iterate over all experiments and populate them
@@ -1704,7 +1705,6 @@ def remove_outliers(
     lag: int = 5,
     n_std: int = 3,
     mode: str = "or",
-    limit: int = 10,
 ) -> pd.DataFrame:
     """Mark all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
 
@@ -1718,7 +1718,6 @@ def remove_outliers(
         lag (int): Size of the convolution window used to compute the moving average.
         n_std (int): Number of standard deviations over the moving average to be considered an outlier.
         mode (str): If "and" both x and y have to be marked in order to call an outlier. If "or" (default), one is enough.
-        limit (int): Maximum of consecutive outliers to interpolate. Defaults to 10.
 
     Returns:
         interpolated_exp (pd.DataFrame): Interpolated version of experiment.
@@ -1736,13 +1735,6 @@ def remove_outliers(
 
 
     interpolated_exp[mask] = np.nan
-    # interpolated_exp.interpolate(
-    #    method="linear", limit=1, limit_direction="both", inplace=True
-    # )
-    # Add original frames to what happens before lag
-    # interpolated_exp = pd.concat(
-    #    [experiment.iloc[:1, :], interpolated_exp.iloc[1:, :]]
-    # )
 
     return interpolated_exp, warn_nans
 
@@ -1807,6 +1799,8 @@ def filter_columns(columns: list, selected_id: str) -> list:
 
 
 def load_segmentation_model(path):
+    """Loads model for automatic arena segmentation"""
+
     model_url = "https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download"
 
     if path is None:
@@ -1852,8 +1846,6 @@ def get_arenas(
     tables: table_dict,
     arena: str,
     arena_dims: int,
-    project_path: str,
-    project_name: str,
     segmentation_model_path: str,
     video_path: str,
     videos: list = None,
@@ -1867,12 +1859,11 @@ def get_arenas(
         tables (table_dict): TableDict object containing tracklets per animal.
         arena (str): Arena type (must be either "polygonal-manual", "circular-manual", "polygonal-autodetect", or "circular-autodetect").
         arena_dims (int): Arena dimensions.
-        project_path (str): Path to project.
-        project_name (str): Name of project.
         segmentation_model_path (str): Path to segmentation model used for automatic arena detection.
+        video_path (str): Path to folder with videos.
         videos (dict): Dictionary of videos to extract arena parameters from. Defaults to None (all videos are used).
         debug (bool): If True, a frame per video with the detected arena is saved. Defaults to False.
-        test (bool): If True, the function is run in test mode. Defaults to False.
+        test (bool): If True, the function is run in test mode. This means that instead of waiting for user-inputs fixed artifical user-inputs are used. Defaults to False.
 
     Returns:
         arena_params (dict): Dictionary of arena parameters.
@@ -2115,9 +2106,8 @@ def automatically_recognize_arena(
         coordinates (coordinates): Coordinates object.
         tables (table_dict): Dictionary of tables per experiment.
         videos (list): Relative paths of the videos to analise.
-        vid_index (int): Element of videos list to use.
+        vid_key (str): key of video to use.
         path (str): Full path of the directory where the videos are.
-        potentially more accurate in poor lighting conditions.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
         arena_reference (list): List of coordinates defining the reference arena annotated by the user.
         segmentation_model (torch.nn.Module): Model used for automatic arena detection.
@@ -2388,7 +2378,7 @@ def extract_polygonal_arena_coordinates(
 
 
     Returns:
-        np.ndarray: nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
+        arena_corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
         int: Height of the video.
         int: Width of the video.
 
@@ -2399,7 +2389,7 @@ def extract_polygonal_arena_coordinates(
     total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
     random_frame_number = np.random.choice(total_frames)
     current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
-    reading_successful, numpy_im = current_video_cap.read()
+    _, numpy_im = current_video_cap.read()
     current_video_cap.release()
 
     # open gui and let user pick corners
@@ -2420,9 +2410,9 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
         polygon (list): List of (x,y) coordinates of the corners of the polygon.
 
     Returns:
-        tuple: (x,y) coordinates of the center of the ellipse.
-        tuple: (a,b) semi-major and semi-minor axes of the ellipse.
-        float: Angle of the ellipse.
+        center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
+        axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
+        ellipse_angle (float): Angle of the ellipse.
 
     """
     # Detect the main ellipse containing the arena
@@ -2445,6 +2435,14 @@ def arena_parameter_extraction(
     Args:
         frame (np.ndarray): numpy.ndarray representing an individual frame of a video
         arena_type (str): Type of arena to be used. Must be either "circular" or "polygonal".
+
+    Returns:
+        IF arena_type=="circular":
+        center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
+        axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
+        ellipse_angle (float): Angle of the ellipse.
+        ELIF arena_type=="polygonal"        
+        np.ndarray: (x,y) coordinates of all points of the polygon
 
     """
     # Obtain contours from the image, and retain the largest one
@@ -2484,8 +2482,7 @@ def rolling_speed(
         typ (str): Type of dataset. Intended for internal usage only.
 
     Returns:
-        speeds (pd.DataFrame): Data frame containing 2D speeds for each body part in the original data or their
-        consequent derivatives.
+        speeds (pd.DataFrame): Data frame containing 2D speeds for each body part in the original data or their consequent derivatives.
 
     """
     original_shape = dframe.shape
@@ -2620,8 +2617,8 @@ def gmm_model_selection(
     Args:
         x (pandas.DataFrame): Data matrix to train the models
         n_components_range (range): Generator with numbers of components to evaluate
-        n_runs (int): Number of bootstraps for each model
         part_size (int): Size of bootstrap samples for each model
+        n_runs (int): Number of bootstraps for each model
         n_cores (int): Number of cores to use for computation
         cv_types (tuple): Covariance Matrices to try. All four available by default
 
@@ -2720,6 +2717,14 @@ def cluster_transition_matrix(
 
 
 def get_total_Frames(video_paths: dict) -> int:
+    """Get the number of all frames in all videos listed in the input dictionary
+
+    Args:
+        video_paths (dict): Paths to all videos in a dicitonary
+
+    Returns:
+        total_frames (int): Total number of all video frames
+    """
 
     total_frames = []
     for _, video_path in video_paths.items():

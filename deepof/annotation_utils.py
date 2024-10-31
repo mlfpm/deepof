@@ -129,7 +129,16 @@ def close_double_contact(
 
 
 def rotate(origin, point, ang):
-    """Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot."""
+    """Auxiliar function to climb_wall and sniff_object. Rotates x,y coordinates over a pivot.
+    
+    Parameters:
+        origin (): 
+        point (): 
+        ang (): 
+
+    Returns:
+        qx (): 
+        qy (): """
     ox, oy = origin
     px, py = point
 
@@ -170,6 +179,7 @@ def climb_wall(
         tol (float): minimum tolerance to report a hit
         nose (str): indicates the name of the body part representing the nose of the selected animal
         centered_data (bool): indicates whether the input data is centered
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
 
     Returns:
         climbing (np.array): boolean array. True if selected animal is climbing the walls of the arena
@@ -239,12 +249,13 @@ def sniff_object(
         arena (np.array): contains arena location and shape details.
         pos_dict (table_dict): position over time for all videos in a project.
         tol (float): minimum tolerance to report a hit.
+        tol_speed (float): minimum speed to report a hit.
         center_name (str): Body part to center coordinates on. "Center" by default.
         nose (str): indicates the name of the body part representing the nose of the selected animal.
         centered_data (bool): indicates whether the input data is centered.
         s_object (str): indicates the object to sniff. Must be one of ['arena', 'object'].
         animal_id (str): indicates the animal to sniff. Must be one of animal_ids.
-        tol_speed (float): minimum speed to report a hit.
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
 
     Returns:
         sniffing (np.array): boolean array. True if selected animal is sniffing the selected object
@@ -661,12 +672,12 @@ def supervised_tagging(
         coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
         dists (deepof.data.table_dict): table_dict with already processed distances
         speeds (deepof.data.table_dict): table_dict with already processed speeds
-        full_features (dict): dictionary with
+        full_features (dict): A dictionary of aligned kinematics, where the keys are the names of the experimental conditions. The values are the aligned kinematics for each condition.
         key (str): key to the experiment to tag and current set of objects (videos, tables, distances etc.)
         trained_model_path (str): path indicating where all pretrained models are located
         center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
-        run_numba (bool): Decides if numba versions of functions should be used
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
 
     Returns:
         tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time

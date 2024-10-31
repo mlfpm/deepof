@@ -10,6 +10,7 @@ import ast
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+import tensorflow as tf
 from typing import Any, List, NewType, Tuple, Union
 import warnings
 
@@ -53,15 +54,17 @@ def get_dt(
     (I use this a lot, so it gets its own function)
     
     Args:
-        tab_dict ([table_dict, dict]): Table Dict or dictionary with data tables (or paths)
+        tab_dict ([table_dict, dict]): Table Dict or dictionary with data tables in different formats (or paths)
         key (str): key to dict entry
         return_path (bool): Additionally return the path to the saving location of the table
         only_metainfo (bool): Return only meta info like numbers of rows and columns without loading the full table
         load_index (bool): Return index data additionally to meta_info
+        load_range (np.ndarray): Integer numpy array containing the indices of teh rows in the datatable to load. If the array only contains two values, all entries in a range from teh lower to the higher value will be loaded 
          
     Returns:
-        Data table after loading
-        Path to data table (if requested) 
+        raw_data (Union[pd.DataFrame, np.ndarray, Tuple[ np.ndarray, np.ndarray]]): Data table after loading
+        Optional:
+        path (str): path to data table
     """
 
     if tab_dict is None:
@@ -113,16 +116,19 @@ def get_dt(
         "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
     ]
 )
-def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
+def save_dt(dt: Union[pd.DataFrame, np.ndarray, Tuple[ np.ndarray, np.ndarray]], path: str, return_path: bool = False):
     """Saves a given data frame fast and efficient using parquet
 
     Args:
-        dt (pd.DataFrame): dataframe for saving
+        dt (Union[pd.DataFrame, np.ndarray, Tuple[ np.ndarray, np.ndarray]]): dataframe for saving
         path (str): Where to save 
-        keep_in_RAM (bool): False, If the object that gets saved should be returned, True and only the path to teh file location gets returned
+        return_path (bool): False, If the object that gets saved itself should be returned, True, if only the path to the file location where teh object was saved gets returned
 
     Returns:
-        Either saved dataframe or path to save location
+        Either:
+        path (str): path to save location (same as input path)
+        or:
+        dt (pd.DataFrame): dataframe after saving (same as input dt)
     """
 
     if path is None:
@@ -135,6 +141,11 @@ def save_dt(dt: pd.DataFrame, path: str, return_path: bool = False):
         path = path + '.npy'
         with open(path, 'wb') as file:
             np.lib.format.write_array(file, dt)
+
+    elif isinstance(dt, tf.data.Dataset):
+        path = path + '.tf'
+        #with open(path, 'wb') as file:
+        dt.save(path)
 
     elif (isinstance(dt, Tuple) and all(isinstance(dt_subset, np.ndarray) for dt_subset in dt)):
         path = path + '.npz'
@@ -174,16 +185,20 @@ def load_dt(path: str, load_range: np.ndarray = None):
     """Saves a given data frame fast and efficient using parquet
 
     Args:
-        path (str): Where to save 
+        path (str): Path to data to load
+        load_range (np.ndarray): Integer numpy array containing the indices of teh rows in the datatable to load. If the array only contains two values, all entries in a range from teh lower to the higher value will be loaded 
+
 
     Returns:
-        Data table after laoding
+        tab(pd.DataFrame OR np.ndarray OR Tuple[np.ndarray,np.ndarray]): Data table after loading
     """
 
     if path is None:
         return None
 
-    if path.endswith('.npy') and load_range is not None:
+    if path.endswith('.tf'):
+        tab = tf.data.Dataset.load(path)
+    elif path.endswith('.npy') and load_range is not None:
         # Load pointer
         mmap_array = np.load(path, mmap_mode='r')
         # Get specific range
@@ -265,7 +280,7 @@ def load_dt_metainfo(path: str, load_index=True):
         load_index (bool): Also load index column and extract some additional information
 
     Returns:
-        Dictionary of columns
+        meta_info (dict): Dictionary containing various meta data of the table
     """
 
     if path is None:
@@ -339,7 +354,7 @@ def get_metainfo_from_loaded_dt(table: Union[np.ndarray,pd.DataFrame], load_inde
         load_index (bool): Also load index column and extract some additional information
 
     Returns:
-        Dictionary of columns
+        meta_info (dict): Dictionary containing various meta data of the table
     """
 
     if table is None:
@@ -377,6 +392,8 @@ def get_metainfo_from_loaded_dt(table: Union[np.ndarray,pd.DataFrame], load_inde
     return meta_info
 
 def _init_metainfo():
+    """Helper function to initialize all fields of meta_info dictionary"""
+
     meta_info={}
 
     meta_info['index_column'] = None

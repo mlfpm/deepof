@@ -63,13 +63,13 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 def load_project(project_path: str) -> coordinates:  # pragma: no cover
-    """Load a pre-saved pickled Coordinates object.
+    """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version
 
     Args:
         project_path (str): name of the file to load.
 
     Returns:
-        Pre-run coordinates object.
+        coordinates (deepof_coordinates): Pre-run coordinates object.
 
     """
     with open(
@@ -85,7 +85,7 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
             """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
         )
-    # Compatibility fixes
+    # Compatibility fixes versions 0.7.0 to 0.7.2
     if isinstance(coordinates._table_paths, List):
         #turn all these objects into dictionaries based on keys in _tables
         tables={}
@@ -345,7 +345,7 @@ class Project:
 
     @property
     def distances(self):
-        """List. If not 'all', sets the body parts among which the distances will be computed."""
+        """Returns distances table_dict"""
         return self._distances
 
     @property
@@ -355,13 +355,12 @@ class Project:
 
     @property
     def angles(self):
-        """Bool. Toggles angle computation. True by default. If turned off, enhances performance for big datasets."""
+        """Returns angles table_dict"""
         return self._angles
 
     def get_arena(
         self,
         tables: dict,
-        verbose: bool = False,
         debug: str = False,
         test: bool = False,
     ) -> np.array:
@@ -369,7 +368,6 @@ class Project:
 
         Args:
             tables (dict): dictionary containing coordinate tables
-            verbose (bool): if True, logs to console
             debug (str): if True, saves intermediate results to disk
             test (bool): if True, runs the function in test mode
 
@@ -385,8 +383,6 @@ class Project:
             tables,
             self.arena,
             self.arena_dims,
-            self.project_path,
-            self.project_name,
             self.segmentation_path,
             self.video_path,
             self.videos,
@@ -396,15 +392,19 @@ class Project:
 
     #from memory_profiler import profile
     #@profile
-    def preprocess_tables(self, verbose: bool = True) -> Tuple:
-        """Load videos and tables into dictionaries.
-
-        Args:
-            verbose (bool): If True, prints the progress of data loading.
+    def preprocess_tables(self) -> table_dict:
+        """Load tables, performs multiple preprocessing steps:
+            - Trajectory loading,
+            - Adjusting table headers
+            - Updating the bodypart graph
+            - Creating a tiemindex column
+            - Smooting the trajectories
+            - Removing outliers
+            - Missing value imputation
+        Then saves the preprocessed tables and retruns them in a table dictionary
 
         Returns:
-            Tuple: A tuple containing the following a dictionary with all loaded tables per experiment,
-            and another dictionary with motion tracking data quality.
+            tab_dict (table_dict): A table dictionary containing tables for all experiments
 
         """
         if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
@@ -569,7 +569,6 @@ class Project:
                             likely_dict[k],
                             likelihood_tolerance=self.likelihood_tolerance,
                             mode="or",
-                            limit=self.interpolation_limit,
                             n_std=self.interpolation_std,
                         )
                     sum_warn_nans+=warn_nans
@@ -631,15 +630,14 @@ class Project:
 
     #from memory_profiler import profile
     #@profile
-    def get_distances(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Compute the distances between all selected body parts over time. If ego is provided, it only returns distances to a specified bodypart.
+    def get_distances(self, tab_dict: table_dict) -> dict:
+        """Compute the distances between all selected body parts over time for a table dictionary.
 
         Args:
-            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to True.
+            tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
 
         Returns:
-            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+            distance_dict: Table dictionary of pandas DataFrames containing the distances between all bodyparts.
 
         """
         #if verbose:
@@ -666,7 +664,17 @@ class Project:
 
         return distance_dict
     
-    def get_distances_tab(self, tab: pd.DataFrame, scale=None) -> dict:
+    def get_distances_tab(self, tab: pd.DataFrame, scale: np.ndarray=None) -> dict:
+        """Compute the distances between all selected body parts over time for a single table.
+
+        Args:
+            tab (pd.DataFrame): Pandas DataFrame containing the trajectories of all bodyparts.
+            scale (np.ndarray): Array that contains info for scaling of this dataset
+
+        Returns:
+            distance_tab: Pandas DataFrame containing the distances between all bodyparts.
+
+        """
 
 
         if scale is None:
@@ -695,15 +703,14 @@ class Project:
         return distance_tab
 
 
-    def get_angles(self, tab_dict: dict, verbose: bool = True) -> dict:
-        """Compute all the angles between adjacent bodypart trios per video and per frame in the data.
+    def get_angles(self, tab_dict: table_dict) -> dict:
+        """Compute all the angles between adjacent bodypart trios per video and per frame in all datasets in teh given table dictionary.
 
         Args:
-            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to True.
+            tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
 
         Returns:
-            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+            angle_dict: Table dictionary of pandas DataFrames containing the angles between all bodyparts.
 
         """
         #if verbose:
@@ -754,15 +761,14 @@ class Project:
 
         return angle_dict
 
-    def get_areas(self, tab_dict: dict, verbose: bool = True) -> dict:
+    def get_areas(self, tab_dict: table_dict) -> dict:
         """Compute all relevant areas (head, torso, back) per video and per frame in the data.
 
         Args:
-            tab_dict (dict): Dictionary of pandas DataFrames containing the trajectories of all bodyparts.
-            verbose (bool): If True, prints progress. Defaults to True.
+            tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
 
         Returns:
-            dict: Dictionary of pandas DataFrames containing the distances between all bodyparts.
+            all_areas_dict: Table dictionary of pandas DataFrames containing the areas (head, torso, back) between sets of bodyparts.
 
         """
 
@@ -888,7 +894,7 @@ class Project:
             _to_extend (coordinates): Coordinates object to extend with the current dataset. For internal usage only.
 
         Returns:
-            coordinates: Deepof.Coordinates object containing the trajectories of all bodyparts.
+            coordinates (coordinates): Deepof.Coordinates object containing the trajectories of all bodyparts.
 
         """
         if verbose:
@@ -907,7 +913,7 @@ class Project:
         current_video_cap.release()
 
         # load table info
-        tables, quality = self.preprocess_tables(verbose)
+        tables, quality = self.preprocess_tables()
         if self.exp_conditions is not None:
             assert (
                 tables.keys() == self.exp_conditions.keys()
@@ -919,17 +925,17 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
-            tables, verbose, debug, test
+            tables, debug, test
         )
 
         if self.distances:
-            distances = self.get_distances(tables, verbose)
+            distances = self.get_distances(tables)
 
         if self.angles:
-            angles = self.get_angles(tables, verbose)
+            angles = self.get_angles(tables)
 
         if self.areas:
-            areas = self.get_areas(tables, verbose)
+            areas = self.get_areas(tables)
 
         if _to_extend is not None:
 
@@ -1030,7 +1036,7 @@ class Project:
             test (bool): Runs the project in test mode if True. Defaults to False.
 
         Returns:
-            coordinates: Deepof.Coordinates object containing the trajectories of all body parts.
+            coordinates (coordinates): Deepof.Coordinates object containing the trajectories of all body parts.
         """
 
         if not video_path:
@@ -1171,7 +1177,7 @@ class Coordinates:
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
-            run_numba (bool): Decides if numba versions of functions should be used
+            run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
             version (str): version of deepof this object was created with
 
@@ -1215,6 +1221,7 @@ class Coordinates:
         return "deepof analysis of {} video{}".format(lens, ("s" if lens > 1 else ""))
 
     def get_table_keys(self):
+        """get the keys to all experiments in this coordinates object"""
         return self._tables.keys()
 
     def get_coords(
@@ -1238,7 +1245,7 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             file_name (str): Name of the file for saving
-            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
+            return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
         Returns:
             table_dict: A table_dict object containing the coordinates of each animal as values.
@@ -1302,7 +1309,7 @@ class Coordinates:
 
         Args:
             key (str): key for requested distance
-            scale (np.array): scale of teh current arena.
+            scale (np.array): scale of the current arena.
             quality: (table_dict): Quality information for current data Frame
             center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
             polar (bool) States whether the coordinates should be converted to polar values.
@@ -1310,11 +1317,9 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            file_name (str): Name of the file for saving
-            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
             
         Returns:
-            pd.DataFrame: A data frame containing the coordinates for the selected key as values.
+            tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
 
         """
 
@@ -1441,8 +1446,6 @@ class Coordinates:
 
         return tab
     
-    def get_distances_header(self, copy_keys: bool = False):
-        return self._distances.copy_header(copy_keys=copy_keys)
             
     def get_distances(
         self,
@@ -1500,7 +1503,8 @@ class Coordinates:
         raise ValueError(
             "Distances not computed. Read the documentation for more details"
         )  # pragma: no cover
-    
+
+
     def get_distances_at_key(
         self,
         key: str,
@@ -1519,7 +1523,7 @@ class Coordinates:
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
 
         Returns:
-            table_dict: A pd.DataFrame with the distances between body parts of one animal as values.
+            tab (pd.DataFrame): A pd.DataFrame with the distances between body parts of one animal as values.
 
         """
 
@@ -1564,10 +1568,7 @@ class Coordinates:
         
         return tab
 
-
-    def get_angles_header(self, copy_keys: bool = False):
-        return self._angles.copy_header(copy_keys=copy_keys)
-    
+   
     def get_angles(
         self,
         degrees: bool = False,
@@ -1641,7 +1642,7 @@ class Coordinates:
             selected_id (str): The id of the animal to select.
 
         Returns:
-            table_dict: A pd.DataFrame with the angles between body parts of one animal as values.
+            tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
 
         """  
 
@@ -1671,10 +1672,7 @@ class Coordinates:
 
         return tab
 
-
-    def get_areas_header(self, copy_keys: bool = False):
-        return self._areas.copy_header(copy_keys=copy_keys)
-    
+  
     def get_areas(
             self, 
             speed: int = 0,
@@ -1736,7 +1734,7 @@ class Coordinates:
         speed: int = 0,
         selected_id: str = "all",
         ) -> table_dict:
-        """Return a table_dict object with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
+        """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
         Args:
             key (str): key for requested distance
@@ -1747,7 +1745,7 @@ class Coordinates:
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
         Returns:
-            table_dict: A table_dict object with the areas of the body parts animal as values.
+            tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
         """
         
         #load table if not already loaded
@@ -1789,7 +1787,7 @@ class Coordinates:
 
 
     def get_videos(self, full_paths: bool = False, play: bool = False):
-        """Returns the videos associated with the dataset as a list."""
+        """Returns the videos associated with the dataset as a dictionary."""
         if play:  # pragma: no cover
             raise NotImplementedError  
         if full_paths:
@@ -1800,21 +1798,21 @@ class Coordinates:
         return out
 
     def get_start_times(self):
-        """Returns the start time for each table"""
+        """Returns the start time for each table in a dictionary"""
         start_times = {}
         for key in self._tables:
             start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
         return start_times
 
     def get_end_times(self):
-        """Returns the end time for each table"""
+        """Returns the end time for each table in a dictionary"""
         end_times = {}
         for key in self._tables:
             end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
         return end_times
 
     def get_table_lengths(self):
-        """Returns the length for each table"""
+        """Returns the length for each table in a dictionary"""
         table_lengths = {}
         for key in self._tables:
             table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
@@ -1887,8 +1885,6 @@ class Coordinates:
             tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
-            project_path=self._project_path,
-            project_name=self._project_name,
             segmentation_model_path=None,
             video_path=self._video_path,
             videos=videos_to_update,
@@ -1937,12 +1933,13 @@ class Coordinates:
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
+        #other info
         precomputed_tab_dict: table_dict = None,
         center: str = False,
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
-        shuffle: bool = False,
+        return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -1958,11 +1955,15 @@ class Coordinates:
             polar (bool) States whether the coordinates should be converted to polar values.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
+            return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
 
         Returns:
             merged_features: A graph-based dataset.
 
         """
+
+        if return_as_paths is None:
+            return_as_paths = self._very_large_project
 
         N_steps=4
         with tqdm(total=N_steps, desc="Loading tables", unit="step") as pbar:
@@ -1971,24 +1972,24 @@ class Coordinates:
 
             # Get all relevant features
             coords = self.get_coords(
-                selected_id=animal_id, center=center, align=align, polar=polar, return_path=self._very_large_project,
+                selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
             )
 
             pbar.update()
             pbar.set_postfix(step="Loading speeds")
 
-            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=self._very_large_project)
+            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
 
             pbar.update()
             pbar.set_postfix(step="Loading distances")
 
-            dists = self.get_distances(selected_id=animal_id, return_path=self._very_large_project)
+            dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
 
             # Merge and extract names
             tab_dict = coords.merge(
                 speeds,
                 dists,
-                save_as_paths=self._very_large_project
+                save_as_paths=return_as_paths
                 )
             
             pbar.update()
@@ -2071,7 +2072,7 @@ class Coordinates:
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
                 **kwargs,
-                save_as_paths=self._very_large_project
+                save_as_paths=return_as_paths
                 )
    
             shapes=[]
@@ -2097,7 +2098,7 @@ class Coordinates:
                     
 
                         # save paths for modified tables
-                        to_preprocess[k][key] = save_dt(dataset,table_path,self._very_large_project) 
+                        to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:
                         shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
@@ -2134,7 +2135,7 @@ class Coordinates:
 
 
                     # save paths for modified tables
-                    to_preprocess[key] = save_dt(dataset,table_path,self._very_large_project)
+                    to_preprocess[key] = save_dt(dataset,table_path,return_as_paths)
                     pbar.update()
 
 
@@ -2174,7 +2175,7 @@ class Coordinates:
             video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to "all", it will output all videos. False by default.
             frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per video to output.
             debug (bool): Only applies if video_output is not False. If True, all videos will include debug information, such as the detected arena and the preprocessed tracking tags.
-            n_jobs (int): Number of jobs to use for parallel processing.
+            n_jobs (int): Number of jobs to use for parallel processing. Only applies if video_output is not set to False. 
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
@@ -2475,6 +2476,7 @@ class Coordinates:
                     output_path,
                     "Trained_models",
                 ),
+                data_path=os.path.join(self._project_path, self._project_name, 'Tables'),
                 pretrained=pretrained,
                 save_checkpoints=save_checkpoints,
                 save_weights=save_weights,
@@ -2738,7 +2740,6 @@ class TableDict(dict):
 
         Args:
             n_components (int): Number of components to project to. Default is 2.
-            perplexity (int): Perplexity parameter for the t-SNE algorithm. Default is 30.
 
         Returns:
             tuple: Tuple containing projected data and projection type.
@@ -2806,6 +2807,9 @@ class TableDict(dict):
             test_videos (int): Number of videos to be used for testing. Defaults to 0.
 
         Returns:
+            IF there are no test videos:
+            X_train (table_dict): only training data
+            ELSE:
             tuple: Tuple containing training data, test data (as table_dicts), and test keys (if any).
         """
 
@@ -2855,7 +2859,7 @@ class TableDict(dict):
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
-        #otehr parameters
+        #other parameters
         scale: str = "standard",
         pretrained_scaler: Any = None,
         test_videos: int = 0,
@@ -2872,10 +2876,9 @@ class TableDict(dict):
 
         Args:
             coordinates (coordinates): project coordinates
-            automatic_changepoints (str): specifies the changepoint detection kernel to use to rupture the data across time using Pelt. Can be set to "rbf" (default), or "linear". If False, fixed-length ruptures are appiled.
             handle_ids (str): indicates the default action to handle multiple animals in the TableDict object. Must be one of "concat" (body parts from different animals are treated as features) and "split" (different sliding windows are created for each animal).
-            window_size (int): Minimum size of the applied ruptures. If automatic_changepoints is False, specifies the size of the sliding window to pass through the data to generate training instances.
-            window_step (int): Specifies the minimum jump for the rupture algorithms. If automatic_changepoints is False, specifies the step to take when sliding the aforementioned window. In this case, a value of 1 indicates a true sliding window, and a value equal to window_size splits the data into non-overlapping chunks.
+            window_size (int): Minimum size of the applied ruptures. 
+            window_step (int): Specifies the minimum jump for the rupture algorithms. 
             bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
             bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
             precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
@@ -2884,10 +2887,8 @@ class TableDict(dict):
             pretrained_scaler (Any): Pre-fit global scaler, trained on the whole dataset. Useful to process single videos.
             test_videos (int): Number of videos to use for testing. If 0, no test set is generated.
             verbose (int): Verbosity level. 0 (default) is silent, 1 prints progress, 2 prints debug information.
-            shuffle (bool): Whether to shuffle the data before preprocessing. Defaults to False.
             filter_low_variance (float): remove features with variance lower than the specified threshold. Useful to get rid of the x axis of the body part used for alignment (which would introduce noise after standardization).
             interpolate_normalized(int): if not 0, it specifies the number of standard deviations beyond which values will be interpolated after normalization. Only used if scale is set to "standard".
-            samples_max (int): Maximum number of rows that is sampled from all tables for global scaler estimation.
             file_name (str): Name that is used for saving the merged table
             save_as_paths (bool): If True, Saves merged datasets as paths to file locations instead of keeping tables in RAM
             shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
@@ -3115,9 +3116,10 @@ class TableDict(dict):
         Sample a set of windows / rows from all entries of table dict to avoid breaking memory.
 
         Args:
-            N_windows_tab (int): Maximum number of windows / rows to include from each recording
+            bin_info (dict): Dictionary containing integer arrays for each experiment, denoting the indices of the tables to sample
+            N_windows_tab (int): Maximum number of windows / rows to include from each recording. Will be skipped if bin_info is given
             return_edges (bool): Return second sampled set corresponding to edges [only relevant for internal use] (default: False)
-            no_nans (bool): only sample windows / rows that do not contain Nans. Notice: Turning on this option will result in the sampled windows not being completely successive anyomre (default: False)
+            no_nans (bool): only sample windows / rows that do not contain Nans. Notice: Turning on this option will result in the sampled windows not being completely successive anyomre (default: False). Will be skipped if bin_info is given
 
         Returns:
             X_data (np.array): Main dataset

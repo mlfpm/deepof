@@ -22,7 +22,7 @@ pomegranate>=1.0.0
 regex>=2022.10.31
 regex>=2022.3.15
 scikit_learn==1.2.0
-scipy>=1.7.3
+scipy==1.9.3
 seaborn>=0.11.2
 seglearn>=1.2.5
 segment-anything==1.0
