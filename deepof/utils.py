@@ -1970,9 +1970,9 @@ def get_arenas(
                     return scales, arena_params, video_resolution
 
 
-        # Load SAM                             
+        # Load SAM 
+        segmentation_model = load_segmentation_model(segmentation_model_path)                             
         with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
-            segmentation_model = load_segmentation_model(segmentation_model_path)        
             for key in videos.keys():
                 arena_parameters, h, w = automatically_recognize_arena(
                     coordinates=coordinates,
