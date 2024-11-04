@@ -2017,7 +2017,13 @@ def animate_skeleton(
     animal_id: list = None,
     center: str = "arena",
     align: str = None,
-    frame_limit: int = 500,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =20000,  
+    sampling_rate: float = None, 
+    #otehr parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
@@ -2036,7 +2042,11 @@ def animate_skeleton(
         animal_id (list): ID list of animals to display. If None (default) it shows all animals.
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
-        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
@@ -2053,6 +2063,12 @@ def animate_skeleton(
         animal_id=animal_id,
         center=center,
     )
+
+    bin_info = _preprocess_time_bins(
+    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
+    )
+    if sampling_rate is None:
+        sampling_rate=coordinates._frame_rate
 
     if embeddings is not None:
         #Get data for requested experiment
@@ -2234,8 +2250,8 @@ def animate_skeleton(
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=np.minimum(coords.shape[0], frame_limit),
-        interval=int(np.round(2000 // coordinates._frame_rate)),
+        frames=bin_info[experiment_id],
+        interval=int(np.round(1000 // sampling_rate)),
     )
 
     ax2.set_title(
@@ -2250,6 +2266,8 @@ def animate_skeleton(
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
+    ax2.invert_yaxis()
+
     plt.tight_layout()
 
     if save is not None:
@@ -2257,18 +2275,20 @@ def animate_skeleton(
             coordinates._project_path,
             coordinates._project_name,
             "Out_videos",
-            "deepof_embedding_animation{}_{}_{}.mp4".format(
+            "deepof_embedding_animation{}_{}_start{}-duration{}_{}.mp4".format(
                 (f"_{save}" if isinstance(save, str) else ""),
                 (
                     "cluster={}".format(selected_cluster)
                     if selected_cluster is not None
                     else experiment_id
                 ),
+                str(bin_index) if bin_index is not None else "",
+                str(bin_size) if bin_size is not None else "",
                 calendar.timegm(time.gmtime()),
             ),
         )
 
-        writevideo = FFMpegWriter(fps=15)
+        writevideo = FFMpegWriter(fps=sampling_rate)
         animation.save(save, writer=writevideo)
 
     return animation.to_html5_video()

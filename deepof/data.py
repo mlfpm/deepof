@@ -419,6 +419,7 @@ class Project:
         found_individuals=False
         sum_warn_nans=0
 
+
         with tqdm(total=N_tables, desc="Preprocessing tables", unit="table") as pbar:
             for i, key in enumerate(self.tables.keys()):
                                
@@ -572,7 +573,8 @@ class Project:
                             n_std=self.interpolation_std,
                         )
                     sum_warn_nans+=warn_nans
-                    
+
+
                 if self.iterative_imputation:
 
                     pbar.set_postfix(step="Iterative imputation of ocluded bodyparts")

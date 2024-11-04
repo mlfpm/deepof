@@ -365,7 +365,7 @@ class MouseTrackingImputer:
 
         return smoothed_data
 
-    @_suppress_warning(["[IterativeImputer] Early stopping criterion not reached."])
+    @_suppress_warning(["Early stopping criterion not reached."])
     def _iterative_imputation(self, data):
         """
         Perform iterative imputation on the tracking data usingses scikit-learn's IterativeImputer
