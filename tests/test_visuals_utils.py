@@ -9,19 +9,14 @@ Testing module for deepof.visuals_utils
 """
 
 import os
-from itertools import combinations
 
-import networkx as nx
 import numpy as np
 import pandas as pd
-from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings, example
 from hypothesis import strategies as st
 from hypothesis import reproduce_failure
-from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
-from scipy.spatial import distance
 from shutil import rmtree
 import warnings
 

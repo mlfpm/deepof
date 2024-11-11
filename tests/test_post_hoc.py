@@ -8,8 +8,6 @@ Testing module for deepof.post_hoc
 
 """
 import os
-import pickle
-from itertools import combinations
 from shutil import rmtree
 
 import numpy as np

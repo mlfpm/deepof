@@ -15,7 +15,6 @@ from shutil import rmtree
 import networkx as nx
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays

@@ -10,6 +10,7 @@ Testing module for deepof.preprocess
 
 import os
 import random
+import re
 import string
 from shutil import rmtree, copy
 
@@ -18,6 +19,7 @@ import pandas as pd
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from deepof.data import TableDict
 import deepof.data
 import deepof.utils
 
@@ -71,7 +73,7 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
     )
 
     assert isinstance(prun, deepof.data.Project)
-    assert isinstance(prun.preprocess_tables(verbose=True), tuple)
+    assert isinstance(prun.preprocess_tables(), tuple)
 
     prun = prun.create(test=True, force=True)
     rmtree(
@@ -258,13 +260,13 @@ def test_get_distances(nodes, ego):
     )
     prun.create(force=True, test=True)
 
-    tables, _ = prun.preprocess_tables(verbose=True)
+    tables, _ = prun.preprocess_tables()
     prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
         tables=tables, test=True,
     )
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.get_distances(prun.preprocess_tables()[0], verbose=True)
+    prun = prun.get_distances(prun.preprocess_tables()[0])
 
     rmtree(
         os.path.join(
@@ -301,7 +303,7 @@ def test_get_angles(nodes, ego):
 
     prun.distances = nodes
     prun.ego = ego
-    prun = prun.get_angles(prun.preprocess_tables()[0], verbose=True)
+    prun = prun.get_angles(prun.preprocess_tables()[0])
 
     assert isinstance(prun, dict)
 
@@ -444,6 +446,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         fast_implementations_threshold=fast_implementations_threshold,
     )
 
+    #also use large table handling 
+    if use_numba:
+        prun.very_large_project=True
+
     if mode == "single":
         prun.distances = nodes
         prun.ego = ego
@@ -455,6 +461,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     polar = sampler.draw(st.booleans())
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
 
+    #get table info
+    start_times_dict=prun.get_start_times()
+    end_times_dict=prun.get_end_times()
+    table_lengths_dict=prun.get_table_lengths()
 
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
@@ -512,6 +522,21 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             f"deepof_project_{random_id}",
         )
     )
+
+
+    #table info
+    assert all(
+        [int(
+            ''.join(re.findall(r'\d+', start_times_dict[key])))
+            <int(''.join(re.findall(r'\d+', end_times_dict[key]))) 
+            for key 
+            in start_times_dict.keys()
+            ])
+    assert all(
+        table_lengths_dict[key] > 0
+        for key 
+        in table_lengths_dict.keys() 
+        )
 
     # deepof.coordinates testing
     assert isinstance(coords, deepof.data.TableDict)
@@ -593,3 +618,58 @@ def test_get_graph_dataset(mode, sampler, random_id):
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
+
+
+@settings(deadline=None)
+@given(
+    use_bin_info=st.booleans(),
+    N_windows_tab=st.integers(min_value=10, max_value=100),
+    return_edges=st.booleans(),
+    no_nans=st.booleans(),
+    dtype=st.one_of(st.just("numpy"), st.just("pandas")),
+    is_tab_tuple=st.booleans(),
+)
+def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_nans, dtype, is_tab_tuple):
+
+    #create bin_info object
+    bin_info={}
+    if use_bin_info:
+        bin_info={i: np.arange(4,N_windows_tab-4) for i in range(10)}
+
+    my_dict = {i: np.random.normal(size=[100, 10]) for i in range(10)}
+    #add nans
+    num_nans=50
+    for key in my_dict:
+        indices = np.random.choice(my_dict[key].shape[0], num_nans, replace=False)
+        my_dict[key][indices,0] = np.nan 
+
+    #create different types of Table dicts
+    if is_tab_tuple:
+        if dtype == "numpy":
+            tab_dict= TableDict({i: (my_dict[i],my_dict[i]) for i in range(10)}, typ='test')
+        else:
+            tab_dict= TableDict({i: (pd.DataFrame(my_dict[i]),pd.DataFrame(my_dict[i])) for i in range(10)}, typ='test')
+    else:
+        if dtype == "numpy":
+            tab_dict= TableDict({i: my_dict[i] for i in range(10)}, typ='test')
+        else:
+            tab_dict= TableDict({i: pd.DataFrame(my_dict[i]) for i in range(10)}, typ='test')
+    
+
+    a_data=None
+    if return_edges:
+        X_data, a_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+    else:
+        X_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+
+
+    if use_bin_info:
+        assert X_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+    else:
+        assert X_data.shape[0]<=10*N_windows_tab 
+
+    if a_data is not None:
+        if use_bin_info:
+            assert a_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+        else:
+            assert a_data.shape[0]<=10*N_windows_tab

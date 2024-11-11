@@ -218,7 +218,7 @@ def get_time_on_cluster(
     soft_counts: table_dict,
     normalize: bool = True,
     reduce_dim: bool = False,
-    bin_info: dict = None,
+    bin_info: Union[dict,np.ndarray] = None,
 ):
     """Compute how much each animal spends on each cluster.
 
@@ -228,7 +228,7 @@ def get_time_on_cluster(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         normalize (bool): Whether to normalize the time by the total number of frames in each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
-        bin_info(dict): A dictionary containing start and end positions of all sections for given embeddings
+        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings
  
     Returns:
         A dataframe with the time spent on each cluster for each experiment.
@@ -275,7 +275,7 @@ def get_time_on_cluster(
 
 
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: dict = None
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -285,7 +285,8 @@ def get_aggregated_embedding(
         embedding (np.ndarray): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
-        bin_info(dict): A dictionary containing start and end positions of all sections for given embeddings
+        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
+ 
 
     Returns:
         A dataframe with the aggregated embeddings for each experiment.
@@ -413,6 +414,7 @@ def separation_between_conditions(
     Args:
         cur_embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         cur_soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
+        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         agg (str): The aggregation method to use. Can be one of "time on cluster", "mean", or "median".
         metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
@@ -513,13 +515,11 @@ def enrichment_across_conditions(
     """Compute the population of each cluster across conditions.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
-        bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
+        plot_speed (bool): plot "speed" behavior
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -610,14 +610,10 @@ def compute_transition_matrix_per_condition(
     """Compute the transition matrices specific to each condition.
 
     Args:
-        embedding (TableDict): A dictionary of embeddings, where the keys are the names of the experimental conditions, and the values are the embeddings for each condition.
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
-        bin_size (int): The size of the time bins to use. If None, the embeddings are not binned.
-        bin_index (int): The index of the bin to use. If None, the embeddings are not binned.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
-        precomputed (np.ndarray): Boolean array. If provided, ignores every othe parameter and just indexes each experiment using the provided mask.
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 
@@ -744,6 +740,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
         include_angles (bool): Whether to include angles in the alignment.
         include_areas (bool): Whether to include areas in the alignment.
         animal_id (str): The animal ID to use, in case of multi-animal projects.
+        file_name (str): Name of table for saving 
         return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
     Returns:
@@ -1036,7 +1033,7 @@ def annotate_time_chunks(
 
 def chunk_cv_splitter(
     chunk_stats: pd.DataFrame,
-    sampled_idcs_dict: dict,
+    bin_info: dict,
     n_folds: int = None,
 ):
     """Split a dataset into training and testing sets, grouped by video.
@@ -1048,6 +1045,7 @@ def chunk_cv_splitter(
 
     Args:
         chunk_stats (pd.DataFrame): matrix with statistics per chunk, sorted by experiment.
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
         n_folds (int): number of cross-validation folds to compute.
 
     Returns:
@@ -1055,10 +1053,10 @@ def chunk_cv_splitter(
 
     """
     # Extract number of experiments/folds
-    n_experiments = len(sampled_idcs_dict)
+    n_experiments = len(bin_info)
 
     # Create a cross-validation loop, with one fold per video
-    fold_lengths = np.array([len(value) for value in sampled_idcs_dict.values()])
+    fold_lengths = np.array([len(value) for value in bin_info.values()])
 
     # Repeat experiment indices across chunks, to generate a valid splitter
     cv_indices = np.repeat(np.arange(n_experiments), fold_lengths)
@@ -1072,7 +1070,7 @@ def chunk_cv_splitter(
 def train_supervised_cluster_detectors(
     chunk_stats: pd.DataFrame,
     hard_counts: np.ndarray,
-    sampled_idcs_dict: dict,
+    bin_info: dict,
     n_folds: int = None,
     verbose: int = 1,
 ):  # pragma: no cover
@@ -1081,7 +1079,7 @@ def train_supervised_cluster_detectors(
     Args:
         chunk_stats (pd.DataFrame): table with descriptive statistics for a series of sequences ('chunks').
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
-        sampled_idcs_dict (dict): indices of sampled samples of the experiment.
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
         n_folds (int): number of folds for cross validation. If None (default) leave-one-experiment-out CV is used.
         verbose (int): verbosity level. Must be an integer between 0 (nothing printed) and 3 (all is printed).
 
@@ -1091,7 +1089,7 @@ def train_supervised_cluster_detectors(
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
 
     """
-    groups = chunk_cv_splitter(chunk_stats, sampled_idcs_dict, n_folds=n_folds)
+    groups = chunk_cv_splitter(chunk_stats, bin_info, n_folds=n_folds)
 
     # Cross-validate GBM training across videos
     cluster_clf = Pipeline(
@@ -1139,7 +1137,7 @@ def train_supervised_cluster_detectors(
     return full_cluster_clf, cluster_gbm_performance, groups
 
 
-@deepof.utils._suppress_warning(
+@deepof.data_loading._suppress_warning(
     warn_messages=[
         "The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning"
     ]

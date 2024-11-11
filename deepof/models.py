@@ -9,7 +9,6 @@
 # encoding: utf-8
 # module deepof
 
-import warnings
 from typing import Any, NewType
 
 import numpy as np
@@ -46,9 +45,9 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 # noinspection PyCallingNonCallable
-@deepof.utils._suppress_warning(
+@deepof.data_loading._suppress_warning(
     warn_messages=[
-        "The initializer GlorotUniform is unseeded and being called multiple times, which will return identical values  each time (even if the initializer is unseeded). Please update your code to provide a seed to the initializer, or avoid using the same initalizer instance more than once."
+        "The initializer GlorotUniform is unseeded and being called multiple times, which will return identical values each time"
     ]
 )
 def get_recurrent_encoder(
@@ -261,8 +260,8 @@ def get_TCN_encoder(
         input_shape: shape of the input data
         edge_feature_shape (tuple): shape of the adjacency matrix to use in the graph attention layers. Should be time x edges x features.
         adjacency_matrix (np.ndarray): adjacency matrix for the mice connectivity graph. Shape should be nodes x nodes.
-        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         latent_dim: dimensionality of the latent space
+        use_gnn (bool): If True, the encoder uses a graph representation of the input, with coordinates and speeds as node attributes, and distances as edge attributes. If False, a regular 3D tensor is used as input.
         conv_filters: number of filters in the TCN layers
         kernel_size: size of the convolutional kernels
         conv_stacks: number of TCN layers
@@ -1669,6 +1668,7 @@ class VaDE(tf.keras.models.Model):
             **kwargs,
         )
 
+
         # Turn off pretrain mode
         self.set_pretrain_mode(0.0)
 
@@ -1676,10 +1676,18 @@ class VaDE(tf.keras.models.Model):
 
             with tf.device("CPU"):
                 # Get embedding samples
-                emb_idx = np.random.choice(range(embed_x.shape[0]), samples)
+                em_x=get_dt(embed_x, 'embed_x')
+                em_a=get_dt(embed_a, 'embed_a')
+
+                emb_idx = np.random.choice(range(em_x.shape[0]), samples)
 
                 # map to latent
-                z = self.encoder([embed_x[emb_idx], embed_a[emb_idx]])
+                z = self.encoder([em_x[emb_idx], em_a[emb_idx]])
+                
+                del em_x
+                del em_a
+                del emb_idx
+
                 # fit GMM
                 gmm = GaussianMixture(
                     n_components=self.n_components,
@@ -2000,7 +2008,6 @@ class Contrastive(tf.keras.models.Model):
                 tau=self.tau,
                 beta=self.beta,
                 elimination_topk=0.1,
-                attraction=False,
             )
 
             total_loss = contrastive_loss
@@ -2060,7 +2067,6 @@ class Contrastive(tf.keras.models.Model):
             tau=self.tau,
             beta=self.beta,
             elimination_topk=0.1,
-            attraction=False,
         )
 
         total_loss = contrastive_loss

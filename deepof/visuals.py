@@ -32,9 +32,8 @@ from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
-from deepof.utils import _suppress_warning
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt, load_dt, _suppress_warning
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -224,16 +223,16 @@ def plot_gantt(
 
     Args:
         coordinates (project): deepOF project where the data is stored.
-        experiment_id (str): Name of the experiment to display.
-        bin_size (Union[int,str]): bin size for time filtering.
+        instance_id (str): Name of the instance to display (can either be an experiment or a behavior).
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
-        behaviors_to_plot (list): list of behaviors to plot. If None, all behaviors are plotted.
+        instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -301,16 +300,16 @@ def _plot_experiment_gantt(
 
     Args:
         coordinates (project): deepOF project where the data is stored.
-        instance_id (str): Either name of the experiment to display or of a behavior.
-        bin_size (Union[int,str]): bin size for time filtering.
+        experiment_id (str): Either name of the experiment to display or of a behavior.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
-        instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
+        behaviors_to_plot (list): list of behaviors to plot.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -470,8 +469,8 @@ def _plot_behavior_gantt(
     Args:
         coordinates (project): deepOF project where the data is stored.
         behavior_id (str): Name of the behavior to display.
-        bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
@@ -622,7 +621,7 @@ def gantt_plotter(
         coordinates (project): deepOF project where the data is stored.
         gantt_matrix (np.ndarray): 2D integer matrix denoting time sections with present or absent behavior
         plot_type (str): type of plot, either "supervised" or "unsupervised"
-        behavior_id (str): Name of the behavior to display.
+        behavior_id (str): Name of the experiment or behavior to display.
         n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
         instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
         colors (list): list of color hexcodes for plotting
@@ -800,17 +799,17 @@ def plot_enrichment(
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
-        normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
     """
     # initial check if enum-like inputs were given correctly
@@ -1241,11 +1240,11 @@ def plot_transitions(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
@@ -1413,12 +1412,12 @@ def plot_stationary_entropy(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -1668,13 +1667,13 @@ def plot_embeddings(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    # Quality selection parameters
-    min_confidence: float = 0.0,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # Quality selection parameters
+    min_confidence: float = 0.0,
     # Normative modelling
     normative_model: str = None,
     add_stats: str = "Mann-Whitney",
@@ -1695,20 +1694,19 @@ def plot_embeddings(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
-        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
+        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.    
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
-        show_break_size_as_radius (bool): Only usable when embeddings come from a model using changepoint detection. If True, the size of each chunk is depicted as the radius of each dot.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -2019,7 +2017,13 @@ def animate_skeleton(
     animal_id: list = None,
     center: str = "arena",
     align: str = None,
-    frame_limit: int = 500,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =20000,  
+    sampling_rate: float = None, 
+    #otehr parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
@@ -2033,14 +2037,18 @@ def animate_skeleton(
     Args:
         coordinates (coordinates): deepof Coordinates object.
         experiment_id (str): Name of the experiment to display.
+        embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
+        soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
         animal_id (list): ID list of animals to display. If None (default) it shows all animals.
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
-        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
@@ -2055,6 +2063,12 @@ def animate_skeleton(
         animal_id=animal_id,
         center=center,
     )
+
+    bin_info = _preprocess_time_bins(
+    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
+    )
+    if sampling_rate is None:
+        sampling_rate=coordinates._frame_rate
 
     if embeddings is not None:
         #Get data for requested experiment
@@ -2236,8 +2250,8 @@ def animate_skeleton(
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=np.minimum(coords.shape[0], frame_limit),
-        interval=int(np.round(2000 // coordinates._frame_rate)),
+        frames=bin_info[experiment_id],
+        interval=int(np.round(1000 // sampling_rate)),
     )
 
     ax2.set_title(
@@ -2252,6 +2266,8 @@ def animate_skeleton(
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
+    ax2.invert_yaxis()
+
     plt.tight_layout()
 
     if save is not None:
@@ -2259,18 +2275,20 @@ def animate_skeleton(
             coordinates._project_path,
             coordinates._project_name,
             "Out_videos",
-            "deepof_embedding_animation{}_{}_{}.mp4".format(
+            "deepof_embedding_animation{}_{}_start{}-duration{}_{}.mp4".format(
                 (f"_{save}" if isinstance(save, str) else ""),
                 (
                     "cluster={}".format(selected_cluster)
                     if selected_cluster is not None
                     else experiment_id
                 ),
+                str(bin_index) if bin_index is not None else "",
+                str(bin_size) if bin_size is not None else "",
                 calendar.timegm(time.gmtime()),
             ),
         )
 
-        writevideo = FFMpegWriter(fps=15)
+        writevideo = FFMpegWriter(fps=sampling_rate)
         animation.save(save, writer=writevideo)
 
     return animation.to_html5_video()
@@ -2302,7 +2320,7 @@ def plot_cluster_detection_performance(
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
         save (bool): name of the file where to save the produced figure.
-        matrix_visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
+        visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
         ax (plt.Axes): axis where to plot the figure. If None, a new figure is created.
 
     """
@@ -2772,7 +2790,9 @@ def plot_behavior_trends(
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
     N_time_bins (int): Number of time bins for data separation. Defaults to 24.
     custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+    error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
     save (bool): If True, saves the plot to a file. Defaults to False.
     """
