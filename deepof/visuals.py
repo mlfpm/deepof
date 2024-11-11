@@ -544,8 +544,11 @@ def _plot_behavior_gantt(
 
     # get common indices between all selected experiments
     bin_indices=bin_info[list(bin_info.keys())[0]]
+    max_index=np.max(bin_indices)
     for exp_id in experiments_to_plot:
-        bin_indices=np.intersect1d(bin_indices,bin_info[exp_id]) 
+        if max_index > np.max(bin_info[exp_id]):
+            max_index=np.max(bin_info[exp_id])
+            bin_indices=bin_info[exp_id][bin_info[exp_id]<max_index]
 
     # set gantt matrix
     n_available_experiments = len(all_experiments)
@@ -1778,7 +1781,7 @@ def plot_embeddings(
         shortest = samples
         for key in bin_info.keys():
 
-            num_rows=np.sum(bin_info[key])
+            num_rows=len(bin_info[key])
 
             if num_rows < shortest:
                 shortest = num_rows
