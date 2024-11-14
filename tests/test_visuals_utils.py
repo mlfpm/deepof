@@ -96,35 +96,34 @@ def test_cohend(array_a, array_b):
     )
 
 
-#define pseudo coordinates object only containing properties necessary for testing bin preprocessing
+# define pseudo coordinates object only containing properties necessary for testing bin preprocessing
 class Pseudo_Coordinates:
     def __init__(self, start_times_raw, frame_rate):
         self._frame_rate = frame_rate
         self._start_times = {}
-        self._table_lengths = {}  
-        
-        #set start time as time strings
-        for i, start_time in enumerate(start_times_raw):
-            start_time=seconds_to_time(start_time)
-            self._start_times[f'key{i + 1}'] = start_time
+        self._table_lengths = {}
 
-        #set lengths as a minimum of start time + 10 seconds
+        # set start time as time strings
         for i, start_time in enumerate(start_times_raw):
-            min_length=120*frame_rate
-            self._table_lengths[f'key{i + 1}'] = int(min_length)
+            start_time = seconds_to_time(start_time)
+            self._start_times[f"key{i + 1}"] = start_time
 
+        # set lengths as a minimum of start time + 10 seconds
+        for i, start_time in enumerate(start_times_raw):
+            min_length = 120 * frame_rate
+            self._table_lengths[f"key{i + 1}"] = int(min_length)
 
     def add_table_lengths(self, lengths):
         """Add multiple table lengths with keys 'key1', 'key2', etc."""
         for i, length in enumerate(lengths):
-            self._table_lengths[f'key{i + 1}'] = int(length)
+            self._table_lengths[f"key{i + 1}"] = int(length)
 
     def get_start_times(self):
         return self._start_times
 
     def get_table_lengths(self):
         return self._table_lengths
-    
+
 
 @given(
     start_times_raw=st.lists(
@@ -135,53 +134,64 @@ class Pseudo_Coordinates:
     bin_index=st.floats(min_value=0, max_value=100),
     is_int=st.booleans(),
     has_precomputed_bins=st.booleans(),
-
 )
-def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_int,has_precomputed_bins):
-    
-    # Only allow up to 8 decimales for float inputs 
-    # (because of time string conversion limitations this otherwise leads to 1-index deviations 
+def test_preprocess_time_bins(
+    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins
+):
+    # Only allow up to 8 decimales for float inputs
+    # (because of time string conversion limitations this otherwise leads to 1-index deviations
     # in requested and required result, causing the test to fail)
-    bin_size=np.round(bin_size, decimals=8)
-    bin_index=np.round(bin_index, decimals=8)
+    bin_size = np.round(bin_size, decimals=8)
+    bin_index = np.round(bin_index, decimals=8)
 
     # Create Pseudo_Coordinates
-    coords = Pseudo_Coordinates(start_times_raw,frame_rate)
-    precomputed_bins=None
+    coords = Pseudo_Coordinates(start_times_raw, frame_rate)
+    precomputed_bins = None
 
-    # Simulate precomputed bin input 
+    # Simulate precomputed bin input
     # (_preprocess_time_bins just skips them, so I don't know why I put the effort in that)
     if has_precomputed_bins:
-        precomputed_bins=np.array([False]*int((bin_index+bin_size)*frame_rate+10))
-        start=int(bin_index*frame_rate)
-        stop=start+int(bin_size*frame_rate)
-        precomputed_bins[start:stop]=True
+        precomputed_bins = np.array(
+            [False] * int((bin_index + bin_size) * frame_rate + 10)
+        )
+        start = int(bin_index * frame_rate)
+        stop = start + int(bin_size * frame_rate)
+        precomputed_bins[start:stop] = True
 
     # Simulate index and time string user inputs
     if is_int:
         bin_size_user = int(bin_size)
-        max_bin_no=(120*frame_rate)/np.round(bin_size_user*frame_rate)-1
-        bin_index_user = int(np.min([int(bin_index),np.max([0,max_bin_no])]))
+        max_bin_no = (120 * frame_rate) / np.round(bin_size_user * frame_rate) - 1
+        bin_index_user = int(np.min([int(bin_index), np.max([0, max_bin_no])]))
     else:
         bin_index_user = seconds_to_time(bin_index, False)
         bin_size_user = seconds_to_time(bin_size, False)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        bin_size_int, bin_index_int, precomputed_bins_out, bin_starts, bin_ends = _preprocess_time_bins(
-        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins
+        (
+            bin_size_int,
+            bin_index_int,
+            precomputed_bins_out,
+            bin_starts,
+            bin_ends,
+        ) = _preprocess_time_bins(
+            coordinates=coords,
+            bin_size=bin_size_user,
+            bin_index=bin_index_user,
+            precomputed_bins=precomputed_bins,
         )
 
-
-    len_win_requested=int(np.round(bin_size*frame_rate))
+    len_win_requested = int(np.round(bin_size * frame_rate))
     if has_precomputed_bins:
         assert all(precomputed_bins_out == precomputed_bins)
     elif is_int:
-        assert bin_size_int==int(np.round(bin_size_user*frame_rate))       
-    elif (not precomputed_bins_out[0] 
-    and not precomputed_bins_out[-1] 
-    and any(precomputed_bins_out)):
-        assert np.sum(precomputed_bins_out)==len_win_requested
-    else: 
+        assert bin_size_int == int(np.round(bin_size_user * frame_rate))
+    elif (
+        not precomputed_bins_out[0]
+        and not precomputed_bins_out[-1]
+        and any(precomputed_bins_out)
+    ):
+        assert np.sum(precomputed_bins_out) == len_win_requested
+    else:
         assert np.sum(precomputed_bins_out) <= len_win_requested
-    

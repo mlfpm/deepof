@@ -76,7 +76,6 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
     # Error for not compatible versions
     if not (hasattr(coordinates, "_run_numba")):
-
         raise ValueError(
             """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
@@ -374,7 +373,6 @@ class Project:
 
         tab_dict = {}
         for tab in self.tables:
-
             loaded_tab = deepof.utils.load_table(
                 tab,
                 self.table_path,
@@ -393,7 +391,6 @@ class Project:
 
         # Check in the files come from a multi-animal DLC project
         if "individuals" in list(tab_dict.values())[0].index:
-
             self.animal_ids = list(
                 list(tab_dict.values())[0].loc["individuals", :].unique()
             )
@@ -407,7 +404,6 @@ class Project:
 
         # Convert the first rows of each dataframe to a multi-index
         for key, tab in tab_dict.items():
-
             tab_copy = tab.copy()
 
             tab_copy.columns = pd.MultiIndex.from_arrays(
@@ -464,7 +460,6 @@ class Project:
         lik_dict = defaultdict()
 
         for key, tab in tab_dict.items():
-
             x = tab.xs("x", level="coords", axis=1, drop_level=False)
             y = tab.xs("y", level="coords", axis=1, drop_level=False)
             lik = tab.xs("likelihood", level="coords", axis=1, drop_level=True)
@@ -475,7 +470,6 @@ class Project:
         lik_dict = TableDict(lik_dict, typ="quality", animal_ids=self.animal_ids)
 
         if self.smooth_alpha:
-
             if verbose:
                 print("Smoothing trajectories...")
 
@@ -492,7 +486,6 @@ class Project:
                 tab_dict[key] = smooth
 
         if self.exclude_bodyparts != tuple([""]):
-
             for k, tab in tab_dict.items():
                 temp = tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
                 temp.sort_index(axis=1, inplace=True)
@@ -505,7 +498,6 @@ class Project:
                 tab_dict[k] = temp.sort_index(axis=1)
 
         if self.remove_outliers:
-
             if verbose:
                 print("Removing outliers...")
 
@@ -520,7 +512,6 @@ class Project:
                 )
 
         if self.iterative_imputation:
-
             if verbose:
                 print("Iterative imputation of ocluded bodyparts...")
 
@@ -607,7 +598,6 @@ class Project:
         angle_dict = {}
         try:
             for key, tab in tab_dict.items():
-
                 dats = []
                 for clique in bridges:
                     dat = pd.DataFrame(
@@ -671,12 +661,10 @@ class Project:
 
         # iterate over all tables
         for key, tab in tab_dict.items():
-
             current_table = pd.DataFrame()
 
             # iterate over all animals in each table
             for animal_id in self.animal_ids:
-
                 if animal_id == "":
                     animal_id = None
 
@@ -688,9 +676,7 @@ class Project:
                 # iterate over all types of areas to calculate list of polygon areas for each type of area
                 areas_animal_dict = {}
                 for bp_pattern_key, bp_pattern in body_part_patterns.items():
-
                     try:
-
                         # in case of multiple animals, add animal identifier to area keys
                         if animal_id is not None:
                             bp_pattern = [
@@ -804,7 +790,6 @@ class Project:
             areas = self.get_areas(tables, verbose)
 
         if _to_extend is not None:
-
             # Merge and expand coordinate objects
             angles = TableDict({**_to_extend._angles, **angles}, typ="angles")
             areas = TableDict({**_to_extend._areas, **areas}, typ="areas")
@@ -1095,9 +1080,7 @@ class Coordinates:
                 tabs[key] = deepof.utils.tab2polar(tab)
 
         if center == "arena":
-
             for i, (key, value) in enumerate(tabs.items()):
-
                 value.loc[:, (slice("x"), [coord_1])] = (
                     value.loc[:, (slice("x"), [coord_1])] - scales[i][0]
                 )
@@ -1107,9 +1090,7 @@ class Coordinates:
                 )
 
         elif isinstance(center, str) and center != "arena":
-
             for i, (key, value) in enumerate(tabs.items()):
-
                 # Center each animal independently
                 animal_ids = self._animal_ids
                 if selected_id is not None:
@@ -1137,7 +1118,6 @@ class Coordinates:
                     )
 
         if align:
-
             assert any(
                 center in bp for bp in list(tabs.values())[0].columns.levels[0]
             ), "for align to run, center must be set to the name of a bodypart"
@@ -1254,7 +1234,6 @@ class Coordinates:
         tabs = deepof.utils.deepcopy(self._distances)
 
         if self._distances is not None:
-
             if speed:
                 for key, tab in tabs.items():
                     vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
@@ -1281,7 +1260,6 @@ class Coordinates:
                         tab.loc[:, ann] = propagate_annotations[key].loc[:, ann]
 
             if filter_on_graph:
-
                 for key, tab in tabs.items():
                     tabs[key] = tab.loc[
                         :,
@@ -1392,18 +1370,15 @@ class Coordinates:
         tabs = deepof.utils.deepcopy(self._areas)
 
         if self._areas is not None:
-
             if selected_id == "all":
                 selected_ids = self._animal_ids
             else:
                 selected_ids = [selected_id]
 
             for key, tab in tabs.items():
-
                 exp_table = pd.DataFrame()
 
                 for aid in selected_ids:
-
                     if aid == "":
                         aid = None
 
@@ -1764,7 +1739,6 @@ class Coordinates:
         try:
             coords = self.get_coords(center=center, align=align)
         except AssertionError:
-
             try:
                 coords = self.get_coords(center="Center", align="Spine_1")
             except AssertionError:
@@ -1792,7 +1766,6 @@ class Coordinates:
 
         # noinspection PyTypeChecker
         for key in tqdm(self._tables.keys()):
-
             # Remove indices and add at the very end, to avoid conflicts if
             # frame_rate is specified in project
             tag_index = raw_coords[key].index
@@ -1825,7 +1798,6 @@ class Coordinates:
                 tab["pheno"] = self._exp_conditions[key]
 
         if video_output:  # pragma: no cover
-
             deepof.annotation_utils.tagged_video_output(
                 self,
                 tag_dict,
@@ -2081,7 +2053,6 @@ class TableDict(dict):
         table = deepof.utils.deepcopy(self)
 
         for exp_condition, exp_value in exp_filters.items():
-
             filtered_table = {
                 k: value
                 for k, value in table.items()
@@ -2271,10 +2242,8 @@ class TableDict(dict):
 
         # If there are labels passed, keep only one and append it as the last column
         for key, tab in merged_tables.items():
-
             pheno_cols = [col for col in tab.columns if "pheno" in str(col)]
             if len(pheno_cols) > 0:
-
                 pheno_col = (
                     pheno_cols[0] if len(pheno_cols[0]) == 1 else [pheno_cols[0]]
                 )
@@ -2431,7 +2400,6 @@ class TableDict(dict):
         ], "handle IDs should be one of 'concat', and 'split'. See documentation for more details."
 
         if filter_low_variance:
-
             # Remove body parts with extremely low variance (usually the result of vertical alignment).
             for key, tab in table_temp.items():
                 table_temp[key] = tab.iloc[
@@ -2451,7 +2419,6 @@ class TableDict(dict):
 
             # Scale each experiment independently, to control for animal size
             for key, tab in table_temp.items():
-
                 current_tab = deepof.utils.scale_table(
                     coordinates=self,
                     feature_array=tab,
@@ -2482,7 +2449,6 @@ class TableDict(dict):
                 global_scaler = pretrained_scaler
 
             for key, tab in table_temp.items():
-
                 current_tab = deepof.utils.scale_table(
                     coordinates=self,
                     feature_array=tab,
@@ -2498,7 +2464,6 @@ class TableDict(dict):
             global_scaler = None
 
         if scale == "standard" and interpolate_normalized:
-
             # Interpolate outliers after preprocessing
             to_interpolate = copy.deepcopy(table_temp)
             for key, tab in to_interpolate.items():
@@ -2510,7 +2475,6 @@ class TableDict(dict):
 
                 # Deal with the edge case of phenotype label propagation
                 except TypeError:  # pragma: no cover
-
                     cur_tab[
                         np.append(
                             (cur_tab[:, :-1].astype(float) > interpolate_normalized),
@@ -2565,7 +2529,6 @@ class TableDict(dict):
             print("maximum rupture length: {}".format(rpt_lengths.max()))
 
         if self._propagate_labels or self._propagate_annotations:
-
             if train_breaks is None:
                 y_train, _ = deepof.utils.rupture_per_experiment(
                     table_dict=table_temp,
@@ -2585,7 +2548,6 @@ class TableDict(dict):
             y_train = y_train.mean(axis=1)
 
         if test_videos and len(test_index) > 0:
-
             # Apply rupture method to each test experiment independently
             X_test, test_breaks = deepof.utils.rupture_per_experiment(
                 table_dict=table_temp,

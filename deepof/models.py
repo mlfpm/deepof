@@ -116,7 +116,6 @@ def get_recurrent_encoder(
 
     # Instantiate spatial graph block
     if use_gnn:
-
         # Embed edge features too
         a_encoder = deepof.model_utils.get_recurrent_block(
             a_reshaped, latent_dim, gru_unroll, bidirectional_merge
@@ -325,7 +324,6 @@ def get_TCN_encoder(
 
     # Instantiate spatial graph block
     if use_gnn:
-
         # Embed edge features too
         a_encoder = TimeDistributed(
             tcn.TCN(
@@ -537,7 +535,6 @@ def get_transformer_encoder(
     )
 
     if use_gnn:
-
         # Embed edge features too
         transformer_a_embedding = TimeDistributed(
             deepof.model_utils.TransformerEncoder(
@@ -1671,7 +1668,6 @@ class VaDE(tf.keras.models.Model):
         self.set_pretrain_mode(0.0)
 
         if gmm_initialize:
-
             with tf.device("CPU"):
                 # Get embedding samples
                 emb_idx = np.random.choice(range(embed_x.shape[0]), samples)
@@ -1713,7 +1709,6 @@ class VaDE(tf.keras.models.Model):
         y = (labels for labels in y)
 
         with tf.GradientTape() as tape:
-
             # Get outputs from the full model
             outputs = self.vade([x, a], training=True)
 
@@ -1736,7 +1731,6 @@ class VaDE(tf.keras.models.Model):
             # Add a regularization term to the soft_counts, to prevent the embedding layer from
             # collapsing into a few clusters.
             if self.reg_cat_clusters:
-
                 soft_counts = self.grouper([x, a], training=True)
                 soft_counts_regulrization = (
                     self.reg_cat_clusters
@@ -1886,7 +1880,6 @@ class Contrastive(tf.keras.models.Model):
 
         # Define Contrastive model
         if encoder_type == "recurrent":
-
             self.encoder = get_recurrent_encoder(
                 input_shape=(self.window_length, input_shape[-1]),
                 edge_feature_shape=(
@@ -1913,7 +1906,6 @@ class Contrastive(tf.keras.models.Model):
             )
 
         elif encoder_type == "transformer":
-
             self.encoder = get_transformer_encoder(
                 (self.window_length, input_shape[-1]),
                 edge_feature_shape=(
@@ -1965,7 +1957,6 @@ class Contrastive(tf.keras.models.Model):
             ]  # Labels won't be used for now, but may come handy if exploring regularizers in the future
 
         with tf.GradientTape() as tape:
-
             # Get positive and negative pairs
             def ts_samples(mbatch, win):
                 x = mbatch[:, 1 : win + 1]

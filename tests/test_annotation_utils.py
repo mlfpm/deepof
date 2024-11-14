@@ -39,7 +39,6 @@ import deepof.data
     tol=st.floats(min_value=0.01, max_value=4.98),
 )
 def test_close_single_contact(pos_dframe, tol):
-
     idx = pd.MultiIndex.from_product(
         [["bpart1", "bpart2"], ["X", "y"]], names=["bodyparts", "coords"]
     )
@@ -71,7 +70,6 @@ def test_close_single_contact(pos_dframe, tol):
     rev=st.booleans(),
 )
 def test_close_double_contact(pos_dframe, tol, rev):
-
     idx = pd.MultiIndex.from_product(
         [["bpart1", "bpart2", "bpart3", "bpart4"], ["X", "y"]],
         names=["bodyparts", "coords"],
@@ -98,7 +96,6 @@ def test_close_double_contact(pos_dframe, tol, rev):
     tol=st.data(),
 )
 def test_climb_wall(center, axes, angle, tol):
-
     arena = (center, axes, np.radians(angle))
     tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
     tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
@@ -154,7 +151,6 @@ def test_climb_wall(center, axes, angle, tol):
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(animal_id=st.one_of(st.just("B"), st.just("W")))
 def test_single_animal_traits(animal_id):
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
         video_path=os.path.join(
@@ -224,7 +220,6 @@ def test_single_animal_traits(animal_id):
     tol=st.floats(min_value=0.01, max_value=4.98),
 )
 def test_following_path(distance_dframe, position_dframe, frames, tol):
-
     bparts = ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"]
 
     pos_idx = pd.MultiIndex.from_product(
@@ -302,7 +297,6 @@ def test_frame_corners(w, h):
 @settings(deadline=None)
 @given(multi_animal=st.just(False), video_output=st.booleans())
 def test_rule_based_tagging(multi_animal, video_output):
-
     if video_output:
         video_output = ["test"]
 
@@ -371,7 +365,6 @@ polygons = [
     polygons=st.sampled_from(polygons),
 )
 def test_point_in_polygon(points, polygons):
-
     points = np.array(points)
     polygons = np.array(polygons)
     assert all(

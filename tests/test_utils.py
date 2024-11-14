@@ -291,7 +291,6 @@ def test_smooth_mult_trajectory(alpha, series):
 @settings(deadline=None)
 @given(mode=st.one_of(st.just("or")))
 def test_remove_outliers(mode):
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -350,7 +349,6 @@ def test_remove_outliers(mode):
     ),
 )
 def test_recognize_arena_and_subfunctions(indexes, detection_mode):
-
     path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
     videos = [i for i in os.listdir(path) if i.endswith("mp4")]
     vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
@@ -407,7 +405,6 @@ def test_recognize_arena_and_subfunctions(indexes, detection_mode):
     sampler=st.data(),
 )
 def test_rolling_speed(dframe, sampler):
-
     dframe *= np.random.uniform(0, 1, dframe.shape)
 
     order1 = sampler.draw(st.integers(min_value=1, max_value=3))
@@ -474,7 +471,6 @@ def test_gmm_model_selection(x, sampler):
 @settings(deadline=None)
 @given(sampler=st.data(), autocorrelation=st.booleans(), return_graph=st.booleans())
 def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
-
     nclusts = sampler.draw(st.integers(min_value=1, max_value=10))
     cluster_sequence = sampler.draw(
         arrays(

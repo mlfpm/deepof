@@ -26,7 +26,6 @@ import deepof.post_hoc
 @settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -80,7 +79,6 @@ def test_recluster(states):
 
 
 def test_get_time_on_cluster():
-
     # Define a test matrix of soft counts
     soft_counts = {}
     for i in range(10):
@@ -99,7 +97,6 @@ def test_get_time_on_cluster():
 
 @given(reduce_dim=st.booleans(), agg=st.sampled_from(["mean", "median"]))
 def test_get_aggregated_embedding(reduce_dim, agg):
-
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
 
@@ -116,7 +113,6 @@ def test_get_aggregated_embedding(reduce_dim, agg):
     supervised=st.booleans(),
 )
 def test_select_time_bin(bin_size, bin_index, supervised):
-
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     if supervised:
@@ -157,7 +153,6 @@ def test_select_time_bin(bin_size, bin_index, supervised):
     metric=st.sampled_from(["auc", "wasserstein"]),
 )
 def test_condition_distance_binning(scan_mode, agg, metric):
-
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
@@ -212,7 +207,6 @@ def test_fit_normative_global_model(input_data):
     supervised=st.booleans(),
 )
 def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
-
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
@@ -252,7 +246,6 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(n_states=st.integers(min_value=2, max_value=25))
 def test_get_transitions(n_states):
-
     sequence = np.random.choice(range(n_states), 1000, replace=True)
     transitions = deepof.post_hoc.get_transitions(sequence, n_states=n_states)
 
@@ -269,7 +262,6 @@ def test_get_transitions(n_states):
 def test_compute_transition_matrix_per_condition(
     bin_size, aggregate, normalize, steady_state_entropy
 ):
-
     # Define a test embedding dictionary
     embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
@@ -322,7 +314,6 @@ def test_compute_transition_matrix_per_condition(
     sampler=st.data(),
 )
 def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
-
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
@@ -378,7 +369,6 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
 
 
 def test_chunk_summary_statistics():
-
     # Set up testing names for our random features
     body_part_names = ["test_name_{}".format(i) for i in range(4)]
 
@@ -405,7 +395,6 @@ def test_chunk_summary_statistics():
     sampler=st.data(),
 )
 def test_shap_pipeline(mode, sampler):
-
     np.random.seed(42)
     prun = deepof.data.Project(
         project_path=os.path.join(
@@ -477,7 +466,6 @@ def test_shap_pipeline(mode, sampler):
 
 @given(folds=st.integers(min_value=2, max_value=10))
 def test_chunk_cv_splitter(folds):
-
     # Create an example stats matrix with indices as the first feature
     chunk_stats = (
         pd.DataFrame(

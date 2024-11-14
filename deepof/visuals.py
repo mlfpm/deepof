@@ -40,7 +40,7 @@ from deepof.visuals_utils import (
     calculate_average_arena,
     seconds_to_time,
     time_to_seconds,
-    _preprocess_time_bins
+    _preprocess_time_bins,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -71,7 +71,6 @@ def plot_arena(
         arena = coordinates._arena_params[i]
 
     if "circular" in coordinates._arena:
-
         if i == "average":
             arena = [
                 np.mean(np.array([i[0] for i in coordinates._arena_params]), axis=0),
@@ -93,9 +92,7 @@ def plot_arena(
         )
 
     elif "polygonal" in coordinates._arena:
-
         if center == "arena" and i == "average":
-
             arena = calculate_average_arena(coordinates._arena_params)
             avg_scaling = np.mean(np.array(coordinates._scales[:, :2]), 0)
             arena -= avg_scaling
@@ -160,7 +157,6 @@ def heatmap(
         )
 
     if isinstance(dframe, dict):
-
         if mask is not None:
             assert isinstance(
                 mask, dict
@@ -289,19 +285,19 @@ def plot_heatmaps(
         center=center,
         experiment_id=experiment_id,
         exp_condition=exp_condition,
-        condition_values=[condition_value],
+        condition_values=(
+            [condition_value]
+            if not isinstance(condition_value, list)
+            else condition_value
+        ),
     )
 
     coords = coordinates.get_coords(center=center, align=align)
 
-    #only keep requested experiment conditions
+    # only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
-        coords = coords.filter_videos(
-            [
-                k
-                for k, v in coordinates.get_exp_conditions.items()
-                if v[exp_condition].values.astype(str) == condition_value
-            ]
+        coords = coords.filter_condition(
+            {k: v for k, v in zip(exp_condition, condition_value)}
         )
 
     # preprocess information given for time binning
@@ -313,7 +309,9 @@ def plot_heatmaps(
     if bin_starts is not None and bin_ends is not None:
         # cut down coords to desired range
         coords = {
-            key: coords[key].iloc[bin_starts[key] : np.minimum(coords[key].shape[0], bin_ends[key])]
+            key: coords[key].iloc[
+                bin_starts[key] : np.minimum(coords[key].shape[0], bin_ends[key])
+            ]
             for key in coords.keys()
         }
 
@@ -342,7 +340,6 @@ def plot_heatmaps(
         title_suffix += f" - {condition_value}"
 
     if experiment_id != "average":
-
         i = np.argmax(np.array(list(coords.keys())) == experiment_id)
         coords = coords[experiment_id]
 
@@ -363,7 +360,7 @@ def plot_heatmaps(
         ax=ax,
         **kwargs,
     )
-    
+
     if display_arena:
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, i)
@@ -493,7 +490,6 @@ def plot_gantt(
     # Iterate over features and plot
     rows = 0
     for feature, color in zip(range(n_available_features), colors):
-
         # skip if feature is not selected for plotting
         if behavior_ids[feature] not in behaviors_to_plot:
             continue
@@ -777,13 +773,11 @@ def plot_enrichment(
     else:
         y_axis_label = "time on cluster in frames"
 
-    
     # More inits
     all_exp_conditions = np.unique(enrichment["exp condition"])
     num_exp_conds = len(all_exp_conditions)
     # Additional plot modifications for polar depiction
     if polar_depiction:
-
         # Yes, all of this is necessary to switch out the input axes object with a polar axis without actually deleting
         # the axis as it is later used outside of the function in the tutorial. Low hanging fruit my ass.
         fig = ax.figure
@@ -908,7 +902,9 @@ def plot_enrichment(
 
     else:
         # Plot a barchart grouped per experimental conditions
-        np.random.seed(42) #to ensure the outlier points are always jittered te same (relevant for automatic testing)
+        np.random.seed(
+            42
+        )  # to ensure the outlier points are always jittered te same (relevant for automatic testing)
         sns.barplot(
             data=enrichment,
             x="cluster",
@@ -1007,7 +1003,7 @@ def plot_enrichment(
         # Get overall max value in plot
         max_value = np.max([np.max(arr) for arr in plot_means.values()])
         # Customize y-axis ticks
-        max_tick = np.ceil(np.max([np.log10(max_value),0])) + 0.5
+        max_tick = np.ceil(np.max([np.log10(max_value), 0])) + 0.5
         y_ticks = np.logspace(0, max_tick, num=int(max_tick * 2) + 1)
         ax.set_yticks(y_ticks)
         ax.set_rlabel_position(0)  # Set y-axis to top
@@ -1015,7 +1011,6 @@ def plot_enrichment(
         # Add labels manually at good positions
         z = 0
         for midangle, label in zip(mid_angles[0:-1], x_bin_labels):
-
             # Use different offset for every second x-axis label to avoid overlaps
             if np.mod(z, 2) == 0:
                 offset = 1.5
@@ -1197,9 +1192,7 @@ def plot_transitions(
         iters = zip([None], ax)
 
     if visualization == "networks":
-
         for exp_condition, ax in iters:
-
             try:
                 G = nx.DiGraph(grouped_transitions[exp_condition])
             except nx.NetworkXError:
@@ -1225,9 +1218,7 @@ def plot_transitions(
             ax.set_title(exp_condition)
 
     elif visualization == "heatmaps":
-
         for exp_condition, ax in iters:
-
             if isinstance(grouped_transitions, dict):
                 clustered_transitions = grouped_transitions[exp_condition]
             else:
@@ -1252,7 +1243,6 @@ def plot_transitions(
             ax.set_title(exp_condition)
 
     if ax is None:
-
         plt.tight_layout()
 
         if save:
@@ -1288,6 +1278,7 @@ def plot_stationary_entropy(
     exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
+    return_data: bool = False,
     save: bool = False,
 ):
     """Compute and plots transition stationary distribution entropy per condition.
@@ -1304,6 +1295,7 @@ def plot_stationary_entropy(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        return_data (bool): if True, returns the computed entropy scores.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
@@ -1428,6 +1420,9 @@ def plot_stationary_entropy(
 
     if ax is None:
         plt.show()
+
+    if return_data:
+        return ungrouped_entropy_scores
 
 
 def _filter_embeddings(
@@ -1763,9 +1758,7 @@ def plot_embeddings(
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
-
         if samples is not None:
-
             # make sure that not more samples are drawn than are available
             shortest = samples
             for key in emb_to_plot.keys():
@@ -1781,7 +1774,6 @@ def plot_embeddings(
 
             # Sample per animal, to avoid alignment issues
             for key in emb_to_plot.keys():
-
                 sample_ids = np.random.choice(
                     range(emb_to_plot[key].shape[0]), samples, replace=False
                 )
@@ -1835,7 +1827,6 @@ def plot_embeddings(
         ]
 
     else:
-
         # set aggregate_experiments default based on type of plot
         if (
             not aggregate_experiments or aggregate_experiments == "time on cluster"
@@ -2127,14 +2118,12 @@ def _process_animation_data(
         confidence_indices = full_confidence_indices.copy()
 
     if isinstance(embedding, dict):
-
         embedding = embedding[experiment_id]
         reducers = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)
         embedding = reducers[1].transform(reducers[0].transform(embedding))
 
     # Checks that all shapes and passed parameters are correct
     if embedding is not None:
-
         # Center sliding window instances
         try:
             win_size = data.shape[0] - embedding.shape[0]
@@ -2151,7 +2140,6 @@ def _process_animation_data(
             embedding = [embedding]
 
         elif isinstance(embedding, list):
-
             assert len(embedding) == len(coordinates._animal_ids)
 
             for emb in embedding:
@@ -2171,14 +2159,12 @@ def _process_animation_data(
             cluster_embedding = embedding
 
     if cluster_assignments is not None:
-
         assert (
             len(cluster_assignments) == data.shape[0]
         ), "there should be one cluster assignment per row in data"
 
         # Filter data to keep only those instances assigned to a given cluster
         if selected_cluster is not None:
-
             assert selected_cluster in set(
                 cluster_assignments
             ), "selected cluster should be in the clusters provided"
@@ -2319,7 +2305,6 @@ def animate_skeleton(
     if animal_id is None:
         hue = np.zeros(len(np.array(init_x)))
         for i, id in enumerate(coordinates._animal_ids):
-
             hue[data.columns.levels[0].str.startswith(id)] = i
 
             # Set a custom legend outside the plot, with the color of each animal
@@ -2372,7 +2357,6 @@ def animate_skeleton(
 
     # Update data in main plot
     def animation_frame(i):
-
         if embedding is not None:
             # Update umap scatter
             for j, xy in umap_scatter.items():
@@ -2416,7 +2400,6 @@ def animate_skeleton(
     ax2.set_ylabel("y")
 
     if center not in [False, "arena"]:
-
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
@@ -2498,7 +2481,6 @@ def plot_cluster_detection_performance(
     cluster_names = ["cluster {}".format(i) for i in sorted(list(set(hard_counts)))]
 
     if visualization == "confusion_matrix":
-
         cm = np.stack(confusion_matrices).sum(axis=0)
         cm = cm / cm.sum(axis=1)[:, np.newaxis]
         cm = pd.DataFrame(cm, index=cluster_names, columns=cluster_names)
@@ -2673,7 +2655,6 @@ def output_cluster_video(
             break
 
         try:
-
             res_frame = cv2.resize(frame, [v_width, v_height])
             re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
 
@@ -2728,7 +2709,6 @@ def output_videos_per_cluster(
     """
     # Iterate over all clusters, and output a masked video for each
     for cluster_id in range(soft_counts[0].shape[1]):
-
         out = cv2.VideoWriter(
             os.path.join(
                 out_path,
@@ -2742,7 +2722,6 @@ def output_videos_per_cluster(
         )
 
         for i, path in enumerate(video_paths):
-
             # Get hard counts and confidence estimates per cluster
             hard_counts = np.argmax(soft_counts[i], axis=1)
             confidence = np.max(soft_counts[i], axis=1)
@@ -2917,7 +2896,6 @@ def export_annotated_video(
         filtered_videos = videos
 
         for condition, state in conditions.items():
-
             filtered_videos = [
                 video
                 for video in filtered_videos
@@ -3205,7 +3183,6 @@ def tag_annotated_frames(
     left_flag, right_flag = True, True
 
     if debug:
-
         if arena_type.startswith("circular"):
             # Print arena for debugging
             cv2.ellipse(
@@ -3220,7 +3197,6 @@ def tag_annotated_frames(
             )
 
         elif arena_type.startswith("polygonal"):
-
             # Draw polygon
             cv2.polylines(
                 img=frame,
@@ -3246,7 +3222,6 @@ def tag_annotated_frames(
         write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
 
     if len(animal_ids) > 1:
-
         if tag_dict["nose2nose"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
@@ -3294,9 +3269,7 @@ def tag_annotated_frames(
     )
 
     for _id, down_pos, up_pos, flag in zipped_pos:
-
         if flag:
-
             if tag_dict[_id + undercond + "climbing"][fnum]:
                 write_on_frame("climbing", down_pos)
             elif tag_dict[_id + undercond + "huddle"][fnum]:
@@ -3368,7 +3341,6 @@ def annotate_video(
 
     # Loop over the frames in the video
     while cap.isOpened() and fnum < frame_limit:
-
         ret, frame = cap.read()
         # if frame is read correctly ret is True
         if not ret:  # pragma: no cover
@@ -3535,9 +3507,13 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
-        condition_value_options_list
-    ).issubset(set(condition_value_options_list)):
+    if (
+        exp_condition_order is not None
+        and not exp_condition_order == [None]
+        and not set(condition_value_options_list).issubset(
+            set(condition_value_options_list)
+        )
+    ):
         if len(condition_value_options_list) > 0:
             raise ValueError(
                 'One or more conditions in "exp_condition_order" are not part of: {}'.format(
@@ -3546,8 +3522,11 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
-        set(condition_value_options_list)
+
+    if (
+        condition_values is not None
+        and not condition_values == [None]
+        and not set(condition_values).issubset(set(condition_value_options_list))
     ):
         if len(condition_value_options_list) > 0:
             raise ValueError(
@@ -3569,8 +3548,10 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No experiment conditions loaded!")
-    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
-        set(bodyparts_options_list)
+    if (
+        bodyparts is not None
+        and not bodyparts == [None]
+        and not set(bodyparts).issubset(set(bodyparts_options_list))
     ):
         raise ValueError(
             'One or more bodyparts in "bodyparts" are not part of: {}'.format(
@@ -3630,6 +3611,7 @@ def plot_behavior_trends(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     ax: Any = None,
+    return_data: bool = False,
     save: bool = False,
 ):
     """
@@ -3753,7 +3735,6 @@ def plot_behavior_trends(
     ) > 3 or all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
         isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
     ):  # List has shape Nx2
-
         # Convert time string elements to integers
         custom_time_bins = [
             [
@@ -3807,7 +3788,6 @@ def plot_behavior_trends(
 
     # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
     for bin_start, bin_end in custom_time_bins:
-
         # Create precomputed boolean snippet for time bin extraction
         precomputed = np.array([False] * L_shortest)
         precomputed[bin_start:bin_end] = True
@@ -3956,7 +3936,6 @@ def plot_behavior_trends(
 
     # Get stats annotations if required
     if add_stats:
-
         # Initialize a set to keep track of seen pairs
         pairs = df.groupby("time_bin").apply(
             lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
@@ -4102,7 +4081,6 @@ def plot_behavior_trends(
 
     # Special modifications for the polar plot
     if polar_depiction:
-
         # Set xticks to angles and hide labels
         ax.set_xticks(angles)
         ax.set_xticklabels([])
@@ -4186,7 +4164,6 @@ def plot_behavior_trends(
 
     # Special modifications for the polar plot
     if polar_depiction:
-
         # Add xticklabels manually for each circle segment in the middle between ticks
         for midangle, label in zip(mid_angles, xticklabels):
             ax.text(midangle, ax.get_rmax() * 1.05, label, ha="center", va="center")
@@ -4223,7 +4200,6 @@ def plot_behavior_trends(
             )
             ax.add_artist(legend_2)
     else:
-
         # Add stat annotations as text in plot
         if add_stats:
             z = 0
@@ -4269,3 +4245,6 @@ def plot_behavior_trends(
                 ),
             )
         )
+
+    if return_data:
+        return df, hourly_effect_sizes_df

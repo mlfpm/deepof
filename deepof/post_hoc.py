@@ -23,6 +23,7 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
+from pomegranate._utils import _update_parameter
 from pomegranate.hmm import DenseHMM
 from scipy import stats
 from seglearn import feature_functions
@@ -44,7 +45,9 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
+def _fit_hmm_range(
+    concat_embeddings, states, min_states, max_states, covariance_type="full"
+):
     """Auxiliary function for fitting a range of HMMs with different number of states.
 
     Args:
@@ -57,10 +60,16 @@ def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
     hmm_models = []
     model_selection = []
     for i in tqdm.tqdm(range(min_states, max_states + 1)):
-
         try:
-            model = DenseHMM([Normal() for _ in range(i)])
-            model = model.fit(concat_embeddings)
+            try:
+                model = DenseHMM(
+                    [Normal(covariance_type=covariance_type) for _ in range(i)]
+                )
+                model = model.fit(concat_embeddings)
+            except:
+                model = DenseHMM([Normal(covariance_type="diag") for _ in range(i)])
+                model = model.fit(concat_embeddings)
+
             hmm_models.append(model)
 
             # Compute AIC and BIC
@@ -76,7 +85,7 @@ def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
                     n_params * np.log(concat_embeddings.shape[0]) - 2 * log_likelihood
                 )
 
-        except np.linalg.LinAlgError:
+        except (np.linalg.LinAlgError, IndexError):
             model_selection.append(np.inf)
 
     if states in ["aic", "bic"]:
@@ -94,6 +103,7 @@ def recluster(
     min_confidence: float = 0.75,
     states: Union[str, int] = "aic",
     pretrained: Union[bool, str] = False,
+    covariance_type: str = "full",
     min_states: int = 2,
     max_states: int = 25,
     save: bool = True,
@@ -107,6 +117,7 @@ def recluster(
         min_confidence (float): minimum confidence the model should assign to a data point for the model to avoid resorting to a uniform prior around it.
         states: Number of states to use for the HMM. If "aic" or "bic", the number of states is chosen by minimizing the AIC or BIC criteria (respectively) over a predefined range of states.
         pretrained: Whether to use a pretrained model or not. If True, DeepOF will search for an existing file with the provided parameters. If a string, DeepOF will search for a file with the provided name.
+        covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
         min_states: Minimum number of states to use for the HMM if automatic search is enabled.
         max_states: Maximum number of states to use for the HMM if automatic search is enabled.
         save: Whether to save the trained model or not.
@@ -129,7 +140,7 @@ def recluster(
     # Load Pretrained model if necessary, or train a new one if not
     if pretrained:  # pragma: no cover
         if isinstance(pretrained, str):
-            hmm_model = pickle.load(open(pretrained, "rb"))
+            hmm_model = pickle.load(open(pretrained, "rb"))[0]
         else:
             hmm_model = pickle.load(
                 open(
@@ -137,11 +148,11 @@ def recluster(
                         coordinates._project_path,
                         coordinates._project_name,
                         "Trained_models",
-                        +"hmm_trained_{}.pkl".format(states),
+                        "hmm_trained_{}.pkl".format(states),
                     ),
                     "rb",
                 )
-            )
+            )[0]
 
     elif soft_counts is not None:
         concat_soft_counts = np.concatenate(
@@ -163,26 +174,36 @@ def recluster(
                     1 / list(soft_counts.values())[0].shape[1]
                 )
 
-        # Initialize the model
-        hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
-
-        # Fit the model
-        hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
+        # Initialize and fit the model
+        try:
+            hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
+            hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
+        except:
+            hmm_model = DenseHMM(
+                [
+                    Normal(covariance_type="diag")
+                    for _ in range(concat_soft_counts.shape[2])
+                ]
+            )
+            hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
 
     else:
-
         if isinstance(states, int):
             min_states = max_states = states
 
         # Fit a range of HMMs with different number of states
         hmm_model, model_selection = _fit_hmm_range(
-            concat_embeddings, states, min_states, max_states
+            concat_embeddings,
+            states,
+            min_states,
+            max_states,
+            covariance_type=covariance_type,
         )
 
     # Save the best model
     if save:  # pragma: no cover
         pickle.dump(
-            hmm_model,
+            [hmm_model, model_selection],
             open(
                 os.path.join(
                     coordinates._project_path,
@@ -252,7 +273,6 @@ def get_time_on_cluster(
     counter_df = counter_df[sorted(counter_df.columns)]
 
     if reduce_dim:
-
         agg_pipeline = Pipeline(
             [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
@@ -329,7 +349,6 @@ def select_time_bin(
     # If precomputed, filter each experiment using the provided boolean array
     supervised_annotations_out = None
     if supervised_annotations is None:
-
         if precomputed is not None:  # pragma: no cover
             breaks_mask_dict = {}
 
@@ -386,7 +405,6 @@ def select_time_bin(
                     ]
 
         else:
-
             supervised_annotations_out = {
                 key: val.iloc[
                     bin_size
@@ -432,11 +450,10 @@ def condition_distance_binning(
         An array with distances between conditions across the resulting time bins
 
     """
+
     # Divide the embeddings in as many corresponding bins, and compute distances
     def embedding_distance(bin_index):
-
         if scan_mode == "per-bin":
-
             cur_embedding, cur_soft_counts, cur_breaks, _ = select_time_bin(
                 embedding, soft_counts, breaks, bin_size=step_bin, bin_index=bin_index
             )
@@ -515,7 +532,6 @@ def separation_between_conditions(
         )
 
     if metric == "auc":
-
         # Compute AUC of a logistic regression classifying between conditions in the current bin
         y = LabelEncoder().fit_transform(
             aggregated_embeddings.index.map(exp_conditions)
@@ -529,7 +545,6 @@ def separation_between_conditions(
         )
 
     else:
-
         aggregated_embeddings["exp_condition"] = aggregated_embeddings.index.map(
             exp_conditions
         )
@@ -636,7 +651,6 @@ def enrichment_across_conditions(
         )
 
     if supervised_annotations is None:
-
         assert list(embedding.values())[0].shape[0] > 0
 
         # Extract time on cluster for all videos and add experimental information
@@ -850,13 +864,11 @@ def align_deepof_kinematics_with_unsupervised_labels(
     kinematic_features = defaultdict(pd.DataFrame)
 
     for der in range(kin_derivative + 1):
-
         try:
             cur_kinematics = deepof_project.get_coords(
                 center=center, align=align, speed=der
             )
         except AssertionError:
-
             try:
                 cur_kinematics = deepof_project.get_coords(
                     center="Center", align="Spine_1"
@@ -1051,7 +1063,6 @@ def annotate_time_chunks(
     comprehensive_features = comprehensive_features[possible_idcs]
 
     def sample_from_breaks(breaks, idcs):
-
         # Sample from breaks, keeping each animal's identity
         cumulative_breaks = 0
         subset_breaks = {}
@@ -1097,7 +1108,6 @@ def annotate_time_chunks(
         )
 
     elif aggregate == "seglearn":
-
         # Extract all relevant features for each cluster
         comprehensive_features = chunk_summary_statistics(
             comprehensive_features, feature_names

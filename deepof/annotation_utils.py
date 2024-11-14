@@ -191,10 +191,8 @@ def climb_wall(
         )
 
     elif arena_type.startswith("polygon"):
-
         # intermediary for testing, will be replaced with length-based condition
         if run_numba:
-
             # extract outer arena polygon coordinates
             xp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
             yp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
@@ -204,7 +202,6 @@ def climb_wall(
             climbing = np.invert(point_in_polygon_numba(nose.values, outer_polygon))
 
         else:
-
             climbing = np.invert(
                 point_in_polygon(nose.values, Polygon(arena).buffer(tol))
             )
@@ -279,10 +276,8 @@ def sniff_object(
             )
 
         elif arena_type.startswith("polygon"):
-
             # intermediary for testing, will be replaced with length-based condition
             if run_numba:
-
                 # extract outer arena polygon coordinates
                 xp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
                 yp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[1])
@@ -302,7 +297,6 @@ def sniff_object(
                 )
 
             else:
-
                 nosing_min = np.invert(
                     point_in_polygon(nose.values, Polygon(arena).buffer(-tol))
                 )
@@ -799,7 +793,6 @@ def supervised_tagging(
     animal_pairs = list(combinations(animal_ids, 2))
 
     if len(animal_ids) >= 2:
-
         for animal_pair in animal_pairs:
             # Define behaviours that can be computed on the fly from the distance matrix
             tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2nose"] = onebyone_contact(

@@ -37,7 +37,6 @@ import deepof.utils
     custom_bodyparts=st.booleans(),
 )
 def test_project_init(table_type, arena_detection, custom_bodyparts):
-
     if custom_bodyparts or table_type == "npy":
         custom_bodyparts = [
             "".join(random.choice(string.ascii_lowercase) for _ in range(10))
@@ -87,7 +86,6 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
 
 
 def test_project_extend():
-
     video_init = os.path.join(
         ".", "tests", "test_examples", "test_single_topview", "Videos"
     )
@@ -145,7 +143,6 @@ def test_project_extend():
 
 
 def test_project_properties():
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -174,7 +171,6 @@ def test_project_properties():
 
 
 def test_project_filters():
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -214,7 +210,6 @@ def test_project_filters():
     ego=st.integers(min_value=0, max_value=2),
 )
 def test_get_distances(nodes, ego):
-
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
@@ -256,7 +251,6 @@ def test_get_distances(nodes, ego):
     ego=st.integers(min_value=0, max_value=2),
 )
 def test_get_angles(nodes, ego):
-
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
@@ -288,7 +282,6 @@ def test_get_angles(nodes, ego):
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
 def test_run(nodes, ego, use_numba):
-
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
     fast_implementations_threshold = 100000
@@ -328,7 +321,6 @@ def test_run(nodes, ego, use_numba):
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
 def test_get_supervised_annotation(use_numba):
-
     fast_implementations_threshold = 100000
     if use_numba:
         fast_implementations_threshold = 10
@@ -371,7 +363,6 @@ def test_get_supervised_annotation(use_numba):
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
 def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba):
-
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
@@ -509,7 +500,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
 )
 def test_get_graph_dataset(mode, sampler, random_id):
-
     if mode == "multi":
         animal_ids = ["B", "W"]
     elif mode == "madlc":

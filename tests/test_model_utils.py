@@ -84,7 +84,6 @@ def test_model_embedding_fitting(
     encoder_type,
     use_graph,
 ):
-
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
         video_path=os.path.join(
@@ -143,7 +142,6 @@ def test_model_embedding_fitting(
     use_graph=st.booleans(),
 )
 def test_tune_search(hpt_type, encoder_type, embedding_model, use_graph):
-
     X_train = np.ones([20, 5, 6]).astype(float)
     y_train = np.array([20, 1]).astype(float)
 

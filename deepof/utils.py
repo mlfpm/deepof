@@ -47,6 +47,7 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
+
 # DEFINE WARNINGS FUNCTION
 def _suppress_warning(warn_messages):
     def somedec_outer(fn):
@@ -168,11 +169,10 @@ def enforce_skeleton_constraints_numba(
     """
     n_frames, _, _ = data.shape
     for frame in range(n_frames):
-
         if np.all(original_pos[frame, :, 0]):
             continue  # Skip this frame
 
-        for (part1, part2, dist) in skeleton_constraints:
+        for part1, part2, dist in skeleton_constraints:
             p1, p2 = data[frame, part1], data[frame, part2]
             current_dist = np.sqrt(np.sum((p1 - p2) ** 2))
             if current_dist > dist * (1 + tolerance) or current_dist < dist * (
@@ -620,11 +620,8 @@ def iterative_imputation(
     imputed_tabs = copy.deepcopy(tab_dict)
 
     for animal_id in project.animal_ids:
-
         for k, tab in tab_dict.filter_id(animal_id).items():
-
             try:
-
                 # get table for current animal
                 sub_table = tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
                 # add row number info (twice as it makes things easier later when splitting in x and y)
@@ -928,7 +925,6 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: n
     reshaped_frame = np.empty(new_shape, dtype=np.float64)
 
     for frame in range(data.shape[0]):
-
         # reshape [x1,y1,x2,y2,...] to [[x1,y1],[x1,y2],...]
         for i in range(new_shape[0]):
             reshaped_frame[i, 0] = data[frame][2 * i]
@@ -1057,7 +1053,6 @@ def load_table(
     """
 
     if table_format == "h5":
-
         loaded_tab = pd.read_hdf(os.path.join(table_path, tab), dtype=float)
 
         # Adapt index to be compatible with downstream processing
@@ -1066,7 +1061,6 @@ def load_table(
         loaded_tab = loaded_tab.iloc[1:]
 
     elif table_format == "csv":
-
         loaded_tab = pd.read_csv(
             os.path.join(table_path, tab),
             index_col=0,
@@ -1074,7 +1068,6 @@ def load_table(
         )
 
     elif table_format in ["npy", "slp", "analysis.h5"]:
-
         if table_format == "analysis.h5":
             # Load sleap .h5 file from disk
             with h5py.File(os.path.join(table_path, tab), "r") as f:
@@ -1959,10 +1952,8 @@ def get_arenas(
         return math.dist(arena_corners[0], arena_corners[1])
 
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
-
         propagate_last = False
         for i, video_path in enumerate(videos):
-
             if not propagate_last:
                 arena_corners, h, w = extract_polygonal_arena_coordinates(
                     os.path.join(project_path, project_name, "Videos", video_path),
@@ -1988,7 +1979,6 @@ def get_arenas(
                 cur_arena_params = arena_corners
 
             if arena == "circular-manual":
-
                 if not propagate_last:
                     cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
 
@@ -2014,11 +2004,9 @@ def get_arenas(
             video_resolution.append((h, w))
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
-
         # Open GUI for manual labelling of two scaling points in the first video
         arena_reference = None
         if arena == "polygonal-autodetect":  # pragma: no cover
-
             if test:
                 arena_reference = np.zeros((4, 2))
             else:
@@ -2046,7 +2034,6 @@ def get_arenas(
             )
 
             if "polygonal" in arena:
-
                 closest_side_points = closest_side(
                     simplify_polygon(arena_parameters), arena_reference[:2]
                 )
@@ -2265,7 +2252,6 @@ def automatically_recognize_arena(
         arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
 
     if debug:
-
         # Save frame with mask and arena detected
         frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
 
@@ -2282,7 +2268,6 @@ def automatically_recognize_arena(
             )
 
         elif "polygonal" in arena_type:
-
             cv2.polylines(
                 img=frame_with_arena,
                 pts=[arena],
@@ -2702,9 +2687,7 @@ def gmm_model_selection(
     pbar = tqdm(total=len(cv_types) * len(n_components_range))
 
     for cv_type in cv_types:
-
         for n_components in n_components_range:
-
             res = Parallel(n_jobs=n_cores, prefer="threads")(
                 delayed(gmm_compute)(
                     x.sample(part_size, replace=True), n_components, cv_type
@@ -2779,7 +2762,6 @@ def cluster_transition_matrix(
 
 
 def get_total_Frames(video_paths: List[str]) -> int:
-
     total_frames = 0
     for video_path in video_paths:
         current_video_cap = cv2.VideoCapture(video_path)

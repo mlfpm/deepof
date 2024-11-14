@@ -51,8 +51,8 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
         time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
     else:
         time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
-        l_max=time_string.find('.')+10
-        time_string=time_string[0:l_max]
+        l_max = time_string.find(".") + 10
+        time_string = time_string[0:l_max]
 
     return time_string
 
@@ -108,7 +108,6 @@ def calculate_average_arena(
 
         # Fill interpolated arena with new values from interpolation for all edges
         for j in range(len(vertices) - 1):
-
             start_point = vertices[j, :]
             end_point = vertices[j + 1, :]
             interp_points = N_new_points[j]
@@ -275,7 +274,7 @@ def _preprocess_time_bins(
     bin_index_int = None
     bin_starts = None
     bin_ends = None
-    #dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
+    # dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
     warn_start_time = {}
 
     # skip preprocessing if exact bins are already provided by the user
@@ -291,7 +290,6 @@ def _preprocess_time_bins(
         pattern = r"^\b\d{1,4}:\d{1,4}:\d{1,4}(?:\.\d{1,12})?$"
         # Case 1: Integer bins are only adjusted using the frame rate
         if type(bin_size) is int and type(bin_index) is int:
-
             bin_size_int = int(np.round(bin_size * coordinates._frame_rate))
             bin_index_int = bin_index
             bin_starts = dict.fromkeys(table_lengths, bin_size_int * bin_index)
@@ -305,7 +303,6 @@ def _preprocess_time_bins(
             and re.match(pattern, bin_size) is not None
             and re.match(pattern, bin_index) is not None
         ):
-
             # set starts and ends for all coord items
             bin_starts = {key: 0 for key in table_lengths}
             bin_ends = {key: 0 for key in table_lengths}
@@ -323,13 +320,15 @@ def _preprocess_time_bins(
             for key in table_lengths:
                 start_time = time_to_seconds(start_times[key])
                 bin_index_time = time_to_seconds(bin_index)
-                start_time_adjusted=int(
+                start_time_adjusted = int(
                     np.round((bin_index_time - start_time) * coordinates._frame_rate)
                 )
-                bin_starts[key] = np.max([0,start_time_adjusted])
-                bin_ends[key] = np.max([0,bin_size_int + start_time_adjusted])
+                bin_starts[key] = np.max([0, start_time_adjusted])
+                bin_ends[key] = np.max([0, bin_size_int + start_time_adjusted])
                 if start_time_adjusted < 0:
-                    warn_start_time[key]=seconds_to_time(bin_ends[key]-bin_starts[key])
+                    warn_start_time[key] = seconds_to_time(
+                        bin_ends[key] - bin_starts[key]
+                    )
 
             precomputed_bins[
                 bin_starts[key_to_longest] : (bin_ends[key_to_longest])
@@ -364,7 +363,7 @@ def _preprocess_time_bins(
                     "\033[0m"
                 )
                 warnings.warn(warning_message)
-            
+
             for key in table_lengths:
                 if bin_size_int == 0:
                     raise ValueError("Please make sure bin_size is > 0")
@@ -392,8 +391,9 @@ def _preprocess_time_bins(
                             "\033[0m"
                         )
                         if table_lengths[key] - bin_size_int > 0:
-                            warning_message= (warning_message +
-                                "\n\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
+                            warning_message = (
+                                warning_message
+                                + "\n\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
                                     seconds_to_time(
                                         (table_lengths[key] - bin_size_int)
                                         / coordinates._frame_rate,
@@ -401,10 +401,9 @@ def _preprocess_time_bins(
                                     ),
                                     int(np.ceil(table_lengths[key] / bin_size_int)) - 2,
                                     bin_size,
-                                    )
+                                )
                             )
-                                
-                            
+
                         warnings.warn(warning_message)
                         bin_warning = True
 

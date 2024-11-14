@@ -20,7 +20,6 @@ import deepof.model_utils
 import deepof.utils
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(
         description="Autoencoder training for DeepOF animal pose recognition"
     )
@@ -300,7 +299,6 @@ if __name__ == "__main__":
     print("Preprocessing data...")
 
     if input_type == "coords":
-
         # Coordinates for training data
         to_preprocess = project_coords.get_coords(
             center="Center",
@@ -324,7 +322,6 @@ if __name__ == "__main__":
         print("Validation set shape:", preprocessed_object[2].shape)
 
     elif input_type == "graph":
-
         # Get graph dataset
         (
             preprocessed_object,
@@ -354,7 +351,6 @@ if __name__ == "__main__":
     # Proceed with training mode. Fit autoencoder with the same parameters,
     # as many times as specified by runs
     if not tune:
-
         # noinspection PyUnboundLocalVariable
         trained_models = project_coords.deep_unsupervised_embedding(
             preprocessed_object,
@@ -400,7 +396,6 @@ if __name__ == "__main__":
             ),
             "wb",
         ) as x:
-
             pickle.dump(
                 [
                     deep_encodings_per_video,

@@ -43,6 +43,7 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
+
 ### CONTRASTIVE LEARNING UTILITIES
 def select_contrastive_loss(
     history,
@@ -1216,7 +1217,6 @@ def embedding_model_fitting(
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     with tf.device("CPU"):
-
         # Load data
         try:
             X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
@@ -1283,7 +1283,6 @@ def embedding_model_fitting(
 
     # Build model
     with strategy.scope():
-
         if embedding_model == "VQVAE":
             ae_full_model = deepof.models.VQVAE(
                 input_shape=X_train.shape,
@@ -1379,7 +1378,16 @@ def embedding_model_fitting(
 
     else:  # pragma: no cover
         # If pretrained models are specified, load weights and return
-        ae_full_model.build([X_train.shape, a_train.shape])
+        if embedding_model != "Contrastive":
+            ae_full_model.build([X_train.shape, a_train.shape])
+        else:
+            ae_full_model.build(
+                [
+                    (X_train.shape[0], X_train.shape[1] // 2, X_train.shape[2]),
+                    (a_train.shape[0], a_train.shape[1] // 2, a_train.shape[2]),
+                ]
+            )
+
         ae_full_model.load_weights(pretrained)
         return ae_full_model
 
@@ -1465,6 +1473,7 @@ def embedding_per_video(
     animal_id: str = None,
     ruptures: bool = False,
     global_scaler: Any = None,
+    pretrained: bool = False,
     **kwargs,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
@@ -1477,6 +1486,7 @@ def embedding_per_video(
         ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        pretrained (bool): whether to use the specified pretrained model to recluster the data.
         **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
     Returns:
@@ -1489,17 +1499,17 @@ def embedding_per_video(
     soft_counts = {}
     breaks = {}
 
-    graph, contrastive = False, False
+    graph = False
+    contrastive = isinstance(model, deepof.models.Contrastive)
     try:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
             graph = True
     except AttributeError:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
-            graph, contrastive = True, True
+            graph = True
 
     window_size = model.layers[0].input_shape[0][1]
     for key in tqdm.tqdm(to_preprocess.keys()):
-
         if graph:
             processed_exp, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
@@ -1513,7 +1523,6 @@ def embedding_per_video(
             )
 
         else:
-
             processed_exp, _ = to_preprocess.filter_videos([key]).preprocess(
                 scale=scale,
                 window_size=window_size,
@@ -1534,7 +1543,11 @@ def embedding_per_video(
             ).numpy()
 
     if contrastive:
-        soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
+        soft_counts = deepof.post_hoc.recluster(
+            coordinates, embeddings, pretrained=pretrained, **kwargs
+        )
+    if isinstance(soft_counts, tuple):
+        soft_counts = soft_counts[0]
 
     return (
         deepof.data.TableDict(
