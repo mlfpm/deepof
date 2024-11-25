@@ -736,7 +736,9 @@ class Project:
                     for clique in bridges:
                         dat = pd.DataFrame(
                             deepof.utils.angle(
-                                np.array(tab[clique]).reshape([3, tab.shape[0], 2])
+                                np.transpose(
+                                    np.array(tab[clique]).reshape([tab.shape[0], 3, 2])
+                                ,(1, 0, 2))
                             ).T
                         )
 
@@ -2220,6 +2222,7 @@ class Coordinates:
             pbar.set_postfix(step="Loading speeds") 
 
             dists = self.get_distances(return_path=self._very_large_project)
+            angles = self.get_angles(return_path=self._very_large_project)
             pbar.update() 
             pbar.set_postfix(step="Loading distances")
 
@@ -2266,6 +2269,7 @@ class Coordinates:
                     raw_coords=raw_coords,
                     coords=coords,
                     dists=dists,
+                    angles=angles,
                     full_features=features_dict,
                     speeds=speeds,
                     key=key, 

@@ -1409,7 +1409,16 @@ def embedding_model_fitting(
 
     else:  # pragma: no cover
         # If pretrained models are specified, load weights and return
-        ae_full_model.build([train_shape, a_train_shape])
+        if embedding_model != "Contrastive":
+            ae_full_model.build([X_train.shape, a_train.shape])
+        else:
+            ae_full_model.build(
+                [
+                    (X_train.shape[0], X_train.shape[1] // 2, X_train.shape[2]),
+                    (a_train.shape[0], a_train.shape[1] // 2, a_train.shape[2]),
+                ]
+            )
+
         ae_full_model.load_weights(pretrained)
         return ae_full_model
 
@@ -1494,7 +1503,8 @@ def embedding_per_video(
     scale: str = "standard",
     animal_id: str = None,
     global_scaler: Any = None,
-    samples_max: int = 227272,
+	pretrained: bool = False,
+	samples_max: int = 227272,
     **kwargs,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
@@ -1503,6 +1513,7 @@ def embedding_per_video(
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        pretrained (bool): whether to use the specified pretrained model to recluster the data.
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
@@ -1520,13 +1531,14 @@ def embedding_per_video(
     file_name='unsup'
 
 
-    graph, contrastive = False, False
+    graph = False
+    contrastive = isinstance(model, deepof.models.Contrastive)
     try:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
             graph = True
     except AttributeError:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
-            graph, contrastive = True, True
+            graph = True
 
     window_size = model.layers[0].input_shape[0][1]
     for key in tqdm.tqdm(to_preprocess.keys(), desc="Computing embeddings", unit="table"):
@@ -1567,7 +1579,12 @@ def embedding_per_video(
             ).numpy()
             # save paths for modified tables
             table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
-            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
+            soft_counts = deepof.post_hoc.recluster(
+            coordinates, embeddings, pretrained=pretrained, **kwargs
+                )
+        if isinstance(soft_counts, tuple):
+            soft_counts = soft_counts[0]
+
 
         # save paths for modified tables
         table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
