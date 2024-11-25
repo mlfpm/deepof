@@ -23,6 +23,7 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
+from pomegranate._utils import _update_parameter
 from pomegranate.hmm import DenseHMM
 from scipy import stats
 from seglearn import feature_functions
@@ -46,7 +47,10 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
+def _fit_hmm_range(
+    concat_embeddings, states, min_states, max_states, covariance_type="full"
+):
+
     """Auxiliary function for fitting a range of HMMs with different number of states.
 
     Args:
@@ -54,6 +58,7 @@ def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
         states (str): Whether to use AIC or BIC to select the number of states.
         min_states (int): Minimum number of states to use for the HMM.
         max_states (int): Maximum number of states to use for the HMM.
+        covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
 
     """
     hmm_models = []
@@ -61,8 +66,15 @@ def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
     for i in tqdm.tqdm(range(min_states, max_states + 1)):
 
         try:
-            model = DenseHMM([Normal() for _ in range(i)])
-            model = model.fit(concat_embeddings)
+            try:
+                model = DenseHMM(
+                    [Normal(covariance_type=covariance_type) for _ in range(i)]
+                )
+                model = model.fit(concat_embeddings)
+            except:
+                model = DenseHMM([Normal(covariance_type="diag") for _ in range(i)])
+                model = model.fit(concat_embeddings)
+
             hmm_models.append(model)
 
             # Compute AIC and BIC
@@ -78,7 +90,7 @@ def _fit_hmm_range(concat_embeddings, states, min_states, max_states):
                     n_params * np.log(concat_embeddings.shape[0]) - 2 * log_likelihood
                 )
 
-        except np.linalg.LinAlgError:
+        except (np.linalg.LinAlgError, IndexError):
             model_selection.append(np.inf)
 
     if states in ["aic", "bic"]:
@@ -96,6 +108,7 @@ def recluster(
     min_confidence: float = 0.75,
     states: Union[str, int] = "aic",
     pretrained: Union[bool, str] = False,
+    covariance_type: str = "full",
     min_states: int = 2,
     max_states: int = 25,
     save: bool = True,
@@ -109,6 +122,7 @@ def recluster(
         min_confidence (float): minimum confidence the model should assign to a data point for the model to avoid resorting to a uniform prior around it.
         states: Number of states to use for the HMM. If "aic" or "bic", the number of states is chosen by minimizing the AIC or BIC criteria (respectively) over a predefined range of states.
         pretrained: Whether to use a pretrained model or not. If True, DeepOF will search for an existing file with the provided parameters. If a string, DeepOF will search for a file with the provided name.
+        covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
         min_states: Minimum number of states to use for the HMM if automatic search is enabled.
         max_states: Maximum number of states to use for the HMM if automatic search is enabled.
         save: Whether to save the trained model or not.
@@ -131,7 +145,7 @@ def recluster(
     # Load Pretrained model if necessary, or train a new one if not
     if pretrained:  # pragma: no cover
         if isinstance(pretrained, str):
-            hmm_model = pickle.load(open(pretrained, "rb"))
+            hmm_model = pickle.load(open(pretrained, "rb"))[0]
         else:
             hmm_model = pickle.load(
                 open(
@@ -139,11 +153,11 @@ def recluster(
                         coordinates._project_path,
                         coordinates._project_name,
                         "Trained_models",
-                        +"hmm_trained_{}.pkl".format(states),
+                        "hmm_trained_{}.pkl".format(states),
                     ),
                     "rb",
                 )
-            )
+            )[0]
 
     elif soft_counts is not None:
         concat_soft_counts = np.concatenate(
@@ -165,11 +179,19 @@ def recluster(
                     1 / list(soft_counts.values())[0].shape[1]
                 )
 
-        # Initialize the model
-        hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
+        # Initialize and fit the model
+        try:
+            hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
+            hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
+        except:
+            hmm_model = DenseHMM(
+                [
+                    Normal(covariance_type="diag")
+                    for _ in range(concat_soft_counts.shape[2])
+                ]
+            )
+            hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
 
-        # Fit the model
-        hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
 
     else:
 
@@ -178,13 +200,17 @@ def recluster(
 
         # Fit a range of HMMs with different number of states
         hmm_model, model_selection = _fit_hmm_range(
-            concat_embeddings, states, min_states, max_states
+            concat_embeddings,
+            states,
+            min_states,
+            max_states,
+            covariance_type=covariance_type,
         )
 
     # Save the best model
     if save:  # pragma: no cover
         pickle.dump(
-            hmm_model,
+            [hmm_model, model_selection],
             open(
                 os.path.join(
                     coordinates._project_path,
@@ -360,6 +386,7 @@ def condition_distance_binning(
         An array with distances between conditions across the resulting time bins
 
     """
+    
     # Divide the embeddings in as many corresponding bins, and compute distances
     def embedding_distance(bin_index):
 

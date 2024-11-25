@@ -475,6 +475,7 @@ def huddle(
 
 def look_around(
     speed_dframe: pd.DataFrame,
+    angles_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
@@ -485,6 +486,7 @@ def look_around(
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
+        angles_dframe (pandas.DataFrame): angles of body parts relative to each other 
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
@@ -498,13 +500,35 @@ def look_around(
     if animal_id != "":
         animal_id += "_"
 
-    speed = speed_dframe[animal_id + center_name] < tol_speed
-    nose_speed = (
-        speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
-    )
-    nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
 
-    lookaround = speed & nose_likelihood & nose_speed
+    spine_1_angles=[tup for tup 
+                    in angles_dframe.keys() 
+                    if animal_id + "Spine_1" 
+                    in tup]    
+    left_angle=[tup for tup 
+                in spine_1_angles 
+                if animal_id + "Left_ear" 
+                in tup
+                and animal_id + "Center"
+                in tup]
+    right_angle=[tup for tup 
+                 in spine_1_angles 
+                if animal_id + "Right_ear" 
+                in tup
+                and animal_id + "Center"
+                in tup]
+
+    #angle smaller than 45 deg (looking straight ahead corresponds to about 90 deg for thsi angle)
+    look_left=(angles_dframe[left_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[right_angle].to_numpy().squeeze())
+    look_right=(angles_dframe[right_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[left_angle].to_numpy().squeeze())
+
+    speed = (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
+    #nose_speed = (
+    #    speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
+    #)
+    #nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
+
+    lookaround = speed & (look_left | look_right)
 
     return lookaround
 
@@ -654,6 +678,7 @@ def supervised_tagging(
     raw_coords: table_dict,
     coords: table_dict,
     dists: table_dict,
+    angles: table_dict,
     speeds: table_dict,
     full_features: dict,
     key: str,
@@ -671,6 +696,7 @@ def supervised_tagging(
         raw_coords (deepof.data.table_dict): table_dict with raw coordinates
         coords (deepof.data.table_dict): table_dict with already processed (centered and aligned) coordinates
         dists (deepof.data.table_dict): table_dict with already processed distances
+        angles (deepof.data.table_dict): table_dict with already processed angles
         speeds (deepof.data.table_dict): table_dict with already processed speeds
         full_features (dict): A dictionary of aligned kinematics, where the keys are the names of the experimental conditions. The values are the aligned kinematics for each condition.
         key (str): key to the experiment to tag and current set of objects (videos, tables, distances etc.)
@@ -706,6 +732,7 @@ def supervised_tagging(
     raw_coords = get_dt(raw_coords,key).reset_index(drop=True)
     coords = get_dt(coords,key).reset_index(drop=True)
     dists = get_dt(dists,key).reset_index(drop=True)
+    angles = get_dt(angles,key).reset_index(drop=True)
     speeds = get_dt(speeds,key).reset_index(drop=True)
     likelihoods = get_dt(coord_object.get_quality(),key).reset_index(drop=True)
     arena_abs = coord_object._scales[key][-1]
@@ -901,13 +928,16 @@ def supervised_tagging(
                 animal_id=_id + undercond,
             )
         )
-        tag_dict[_id + undercond + "lookaround"] = look_around(
+        tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
+            look_around(
             speeds,
+            angles,
             likelihoods,
             params["huddle_speed"],
             params["nose_likelihood"],
             center_name=center,
             animal_id=_id,
+            )
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this

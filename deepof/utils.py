@@ -157,7 +157,7 @@ def enforce_skeleton_constraints_numba(
                                 0]):
             continue  # Skip this frame
 
-        for (part1, part2, dist) in skeleton_constraints:
+        for part1, part2, dist in skeleton_constraints:
             p1, p2 = data[frame, part1], data[frame, part2]
             current_dist = np.sqrt(np.sum((p1 - p2) ** 2))
             if current_dist > dist * (1 + tolerance) or current_dist < dist * (

@@ -67,8 +67,8 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
         time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
     else:
         time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
-        l_max=time_string.find('.')+10
-        time_string=time_string[0:l_max]
+        l_max = time_string.find(".") + 10
+        time_string = time_string[0:l_max]
 
     return time_string
 
@@ -485,7 +485,7 @@ def _preprocess_time_bins(
     # init outputs
     bin_size_int = None
     bin_info = {}
-    #dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
+    # dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
   
 
     # get start and end times for each table

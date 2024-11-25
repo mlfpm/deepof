@@ -269,28 +269,28 @@ def test_cohend(array_a, array_b, array_c, array_d):
     )
 
 
-#define pseudo coordinates object only containing properties necessary for testing bin preprocessing
+# define pseudo coordinates object only containing properties necessary for testing bin preprocessing
 class Pseudo_Coordinates:
     def __init__(self, start_times_raw, frame_rate):
         self._frame_rate = frame_rate
         self._start_times = {}
         self._table_lengths = {}  
         
-        #set start time as time strings
+        # set start time as time strings
         for i, start_time in enumerate(start_times_raw):
-            start_time=seconds_to_time(start_time)
-            self._start_times[f'key{i + 1}'] = start_time
+            start_time = seconds_to_time(start_time)
+            self._start_times[f"key{i + 1}"] = start_time
 
-        #set lengths as a minimum of start time + 10 seconds
+        # set lengths as a minimum of start time + 10 seconds
         for i, start_time in enumerate(start_times_raw):
-            min_length=120*frame_rate
-            self._table_lengths[f'key{i + 1}'] = int(min_length)
+            min_length = 120 * frame_rate
+            self._table_lengths[f"key{i + 1}"] = int(min_length)
 
 
     def add_table_lengths(self, lengths):
         """Add multiple table lengths with keys 'key1', 'key2', etc."""
         for i, length in enumerate(lengths):
-            self._table_lengths[f'key{i + 1}'] = int(length)
+            self._table_lengths[f"key{i + 1}"] = int(length)
 
     def get_start_times(self):
         return self._start_times
@@ -316,7 +316,9 @@ class Pseudo_Coordinates:
         st.just("no bins")
     )
 )
-def test_preprocess_time_bins(start_times_raw, frame_rate,bin_size,bin_index,is_int,has_precomputed_bins, samples_max, makes_sense):
+def test_preprocess_time_bins(
+    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins, samples_max, makes_sense
+    ):
     
     # Only allow up to 8 decimales for float inputs 
     # (because of time string conversion limitations this otherwise leads to 1-index deviations 
