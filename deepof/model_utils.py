@@ -1494,6 +1494,7 @@ def embedding_per_video(
     scale: str = "standard",
     animal_id: str = None,
     global_scaler: Any = None,
+    samples_max: int = 227272,
     **kwargs,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
@@ -1505,6 +1506,7 @@ def embedding_per_video(
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
     Returns:
@@ -1541,6 +1543,7 @@ def embedding_per_video(
                 window_size=window_size,
                 window_step=1,
                 pretrained_scaler=global_scaler,
+                samples_max=samples_max,
             )
 
         else:
