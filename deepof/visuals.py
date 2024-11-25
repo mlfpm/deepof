@@ -1779,7 +1779,7 @@ def plot_embeddings(
         shortest = samples
         for key in bin_info.keys():
 
-            num_rows=np.sum(bin_info[key])
+            num_rows=len(bin_info[key])
 
             if num_rows < shortest:
                 shortest = num_rows
