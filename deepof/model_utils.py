@@ -1410,12 +1410,12 @@ def embedding_model_fitting(
     else:  # pragma: no cover
         # If pretrained models are specified, load weights and return
         if embedding_model != "Contrastive":
-            ae_full_model.build([X_train.shape, a_train.shape])
+            ae_full_model.build([train_shape, a_train_shape])
         else:
             ae_full_model.build(
                 [
-                    (X_train.shape[0], X_train.shape[1] // 2, X_train.shape[2]),
-                    (a_train.shape[0], a_train.shape[1] // 2, a_train.shape[2]),
+                    (train_shape[0], train_shape[1] // 2, train_shape[2]),
+                    (a_train_shape[0], a_train_shape[1] // 2, a_train_shape[2]),
                 ]
             )
 
@@ -1579,12 +1579,7 @@ def embedding_per_video(
             ).numpy()
             # save paths for modified tables
             table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
-            soft_counts = deepof.post_hoc.recluster(
-            coordinates, embeddings, pretrained=pretrained, **kwargs
-                )
-        if isinstance(soft_counts, tuple):
-            soft_counts = soft_counts[0]
-
+            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
         # save paths for modified tables
         table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
@@ -1594,7 +1589,12 @@ def embedding_per_video(
         clear_output()
 
     if contrastive:
-        soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
+        soft_counts = deepof.post_hoc.recluster(
+            coordinates, embeddings, pretrained=pretrained, **kwargs
+        )
+    if isinstance(soft_counts, tuple):
+        soft_counts = soft_counts[0]
+
 
     table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
     return (
