@@ -761,12 +761,12 @@ def plot_enrichment(
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed in pixel / s"
+        y_axis_label = "average speed [mm/s]"
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100
     elif coordinates._frame_rate is not None:
-        y_axis_label = "time on cluster in s"
+        y_axis_label = "time on cluster [s]"
         enrichment["time on cluster"] = (
             enrichment["time on cluster"] / coordinates._frame_rate
         )
@@ -3834,6 +3834,9 @@ def plot_behavior_trends(
             df = pd.concat([df, new_row], ignore_index=True)
         z += 1
 
+    # Normalize frames to reflect seconds
+    df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
+
     # Calculate mean values and errors accross samples
     time_bin_means = (
         df.groupby(["time_bin", "exp_condition"]).mean(numeric_only=True).reset_index()
@@ -4106,6 +4109,10 @@ def plot_behavior_trends(
         ax.set_xticklabels(xticklabels)
         # Start position of histograms on y axis
         top = ax.get_ylim()[0]
+
+        # Add axis labels
+        ax.set_xlabel("Time Bins", fontsize=12)
+        ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
 
         # Add legend
         legend_1 = ax.legend(

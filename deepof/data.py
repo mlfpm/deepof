@@ -553,6 +553,7 @@ class Project:
 
         scales = self.scales[:, 2:]
 
+        # Scale distances per video. Resulting distances are in mm
         distance_dict = {
             key: deepof.utils.bpart_distance(tab, scales[i, 1], scales[i, 0])
             for i, (key, tab) in enumerate(tab_dict.items())
@@ -1169,8 +1170,15 @@ class Coordinates:
                 tabs[key] = aligned_coordinates
 
         if speed:
-            for key, tab in tabs.items():
-                vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
+            for i, (key, tab) in enumerate(tabs.items()):
+                scale = self._scales[i][2] / self._scales[i][3]
+                vel = deepof.utils.rolling_speed(
+                    tab,
+                    frame_rate=self._frame_rate,
+                    video_scale=scale,
+                    deriv=speed,
+                    center=center,
+                )
                 tabs[key] = vel
 
         # Id selected_id was specified, selects coordinates of only one animal for further processing

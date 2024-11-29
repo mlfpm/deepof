@@ -2509,6 +2509,8 @@ def arena_parameter_extraction(
 
 def rolling_speed(
     dframe: pd.DatetimeIndex,
+    frame_rate: int = 1,
+    video_scale: int = 1,
     window: int = 3,
     rounds: int = 3,
     deriv: int = 1,
@@ -2520,6 +2522,8 @@ def rolling_speed(
 
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.
+        frame_rate (int): Number of frames per second.
+        video_scale (int): Conversion factor from pixels to mm.
         window (int): Number of frames to average over.
         rounds (int): Float rounding decimals.
         deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
@@ -2566,7 +2570,14 @@ def rolling_speed(
         speeds = np.round(distances.rolling(window).mean(), rounds)
         dframe = speeds
 
+    # Speed is in pixels per frame
     speeds.columns = body_parts
+
+    # Convert to pixels per second
+    speeds *= frame_rate
+
+    # Convert to mm per second
+    speeds *= video_scale
 
     return speeds.fillna(0.0)
 
