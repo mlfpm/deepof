@@ -632,8 +632,8 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
         "climb_tol": 10,
         "close_contact_tol": 25,
         "side_contact_tol": 45,
-        "follow_frames": int(coords._sampling_rate/2),   # Half of a second, before: 10
-        "follow_tol": int(coords._sampling_rate/4),      # Quarter of a second, before: 5
+        "follow_frames": int(coords._frame_rate/2),   # Half of a second, before: 10
+        "follow_tol": int(coords._frame_rate/4),      # Quarter of a second, before: 5
         "huddle_speed": 2,
         "nose_likelihood": 0.85,
     }
