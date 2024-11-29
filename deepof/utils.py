@@ -1949,7 +1949,7 @@ def get_arenas(
                 test=test,
             )[0]
 
-        #early return in test mode to avoid redundant slow arena detection
+        # Early return in test mode to avoid redundant slow arena detection
         if test:
             if "polygonal" in arena:
                 scales={'test2': [309.0, 236.0, 420.12, 380], 'test': [309.0, 236.0, 420.12, 380]}

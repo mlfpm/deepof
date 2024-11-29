@@ -1969,7 +1969,7 @@ class Coordinates:
         if return_as_paths is None:
             return_as_paths = self._very_large_project
 
-        N_steps=4
+        N_steps=5
         with tqdm(total=N_steps, desc="Loading tables", unit="step") as pbar:
                                
             pbar.set_postfix(step="Loading coords")
@@ -1989,9 +1989,15 @@ class Coordinates:
 
             dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
 
+            pbar.update()
+            pbar.set_postfix(step="Loading angles")
+
+            angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+
             # Merge and extract names
             tab_dict = coords.merge(
                 speeds,
+                angles,
                 dists,
                 save_as_paths=return_as_paths
                 )
@@ -2030,12 +2036,12 @@ class Coordinates:
 
             #read table metadata
             if type(list(dists.values())[0]) == str:
-                edge_feature_names=get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
+                edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
             else:
                 edge_feature_names = list(list(dists.values())[0].columns)
 
             if type(list(tab_dict.values())[0]) == str:
-                feature_names=pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
+                feature_names = pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
             else:
                 feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
 
@@ -2043,6 +2049,7 @@ class Coordinates:
                 [(i, "x") for i in list(graph.nodes())]
                 + [(i, "y") for i in list(graph.nodes())]
                 + list(graph.nodes())
+                + get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
             # Sort indices to have always the same node order
@@ -2200,7 +2207,7 @@ class Coordinates:
             pbar.set_postfix(step="Loading raw coords")
 
             tag_dict = {}
-            params = deepof.annotation_utils.get_hparameters(params)
+            params = deepof.annotation_utils.get_hparameters(self, params)
 
             #get all kinds of tables
             raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._very_large_project)
