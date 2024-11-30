@@ -281,9 +281,16 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 
 def test_get_hparameters():
-    assert isinstance(deepof.annotation_utils.get_hparameters(), dict)
+    #create fake coords 
+    class FakeCoords:
+        def __init__(self, frame_rate):
+            self._frame_rate = frame_rate
+        
+    fake_coords=FakeCoords(25)
+
+    assert isinstance(deepof.annotation_utils.get_hparameters(fake_coords), dict)
     assert (
-        deepof.annotation_utils.get_hparameters({"speed_pause": 20})["speed_pause"]
+        deepof.annotation_utils.get_hparameters(fake_coords,{"speed_pause": 20})["speed_pause"]
         == 20
     )
 
