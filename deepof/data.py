@@ -1992,12 +1992,12 @@ class Coordinates:
             pbar.update()
             pbar.set_postfix(step="Loading angles")
 
-            angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+            #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
 
             # Merge and extract names
             tab_dict = coords.merge(
                 speeds,
-                angles,
+                #angles,
                 dists,
                 save_as_paths=return_as_paths
                 )
@@ -2049,7 +2049,7 @@ class Coordinates:
                 [(i, "x") for i in list(graph.nodes())]
                 + [(i, "y") for i in list(graph.nodes())]
                 + list(graph.nodes())
-                + get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
+                #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
             # Sort indices to have always the same node order
