@@ -629,6 +629,38 @@ class Project:
                                    table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
                                    animal_ids=self.animal_ids)
 
+    def scale_tables(self, tab_dict: table_dict) -> table_dict:
+        """Scales all tables to mm using scaling information from arena detection.
+        
+        Args:
+            tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+
+        Returns:
+            tab_dict (table_dict): Scaled table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+        """
+
+        with tqdm(total=len(tab_dict), desc="Rescaling tables    ", unit="table") as pbar:
+            for i, (key, tab) in enumerate(tab_dict.items()):
+
+                #load active table
+                tab = get_dt(tab_dict, key)  
+
+                #determine ratio for scaling
+                scaling_ratio=1
+                if self.scales is not None:
+                    scaling_ratio = self.scales[key][3]/self.scales[key][2]
+
+                #scale
+                tab=tab*scaling_ratio
+
+                #save scaled table
+                distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key)
+                tab_dict[key] = save_dt(tab,distance_path,self.very_large_project)
+
+                pbar.update()
+
+        return tab_dict
+
 
     #from memory_profiler import profile
     #@profile
@@ -656,7 +688,7 @@ class Project:
                 #get distances for this table
                 distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
 
-                #save disctances for active table
+                #save distances for active table
                 distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
                 distance_dict[key] = save_dt(distance_tab,distance_path,self.very_large_project)
 
@@ -931,6 +963,8 @@ class Project:
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
             tables, debug, test
         )
+
+        tables=self.scale_tables(tables)
 
         if self.distances:
             distances = self.get_distances(tables)
