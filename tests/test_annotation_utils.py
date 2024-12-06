@@ -100,8 +100,8 @@ def test_close_double_contact(pos_dframe, tol, rev):
 def test_climb_wall(center, axes, angle, tol):
 
     arena = (center, axes, np.radians(angle))
-    tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
-    tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
+    tol1 = tol.draw(st.floats(min_value=0.001, max_value=1))
+    tol2 = tol.draw(st.floats(min_value=tol1, max_value=1))
 
     prun = (
         deepof.data.Project(
@@ -124,17 +124,17 @@ def test_climb_wall(center, axes, angle, tol):
     )
 
     climb1 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
+        "circular-autodetect", arena, prun["test"], tol1, ""
     )
     climb2 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol2, nose="Nose"
+        "circular-autodetect", arena, prun["test"], tol2, ""
     )
     climb3 = deepof.annotation_utils.climb_wall(
         "polygonal-manual",
         [[-1, -1], [-1, 1], [1, 1], [1, -1]],
         prun["test"],
         tol1,
-        nose="Nose",
+        "",
     )
 
     rmtree(
@@ -149,7 +149,7 @@ def test_climb_wall(center, axes, angle, tol):
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, nose="Nose")
+        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, "")
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])

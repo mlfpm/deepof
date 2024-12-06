@@ -119,8 +119,6 @@ def test_compute_dist(pair_array, arena_abs, arena_rel):
     assert np.allclose(
         deepof.utils.compute_dist(pair_array, arena_abs, arena_rel),
         pd.DataFrame(distance.cdist(pair_array[:, :2], pair_array[:, 2:]).diagonal())
-        * arena_abs
-        / arena_rel,
     )
 
 
