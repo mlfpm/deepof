@@ -1434,7 +1434,13 @@ class Coordinates:
             tab = aligned_coordinates
 
         if speed:
-            vel = deepof.utils.rolling_speed(tab, deriv=speed, center=center)
+            vel = deepof.utils.rolling_speed(
+                tab,
+                frame_rate=self._frame_rate,
+
+                deriv=speed,
+                center=center,
+            )
             tab = vel
 
         # Id selected_id was specified, selects coordinates of only one animal for further processing
@@ -1780,7 +1786,7 @@ class Coordinates:
         tab = exp_table
 
         if speed:
-            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="areas")
 
         table_dict={key:tab}
         # Set table_dict to NaN if animals are missing
