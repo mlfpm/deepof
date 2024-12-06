@@ -165,8 +165,8 @@ def climb_wall(
     arena_type: str,
     arena: np.array,
     pos_dict: pd.DataFrame,
-    tol: float,
-    nose: str,
+    rel_tol: float,
+    id: str,
     centered_data: bool = False,
     run_numba: bool = False,
 ) -> np.array:
@@ -176,8 +176,8 @@ def climb_wall(
         arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect']
         arena (np.array): contains arena location and shape details
         pos_dict (table_dict): position over time for all videos in a project
-        tol (float): minimum tolerance to report a hit
-        nose (str): indicates the name of the body part representing the nose of the selected animal
+        rel_tol (float): relative tolerance (to mouse length) to report a hit
+        id (str): indicates the id + subcondition of the animal
         centered_data (bool): indicates whether the input data is centered
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
 
@@ -185,7 +185,34 @@ def climb_wall(
         climbing (np.array): boolean array. True if selected animal is climbing the walls of the arena
 
     """
-    nose = pos_dict[nose]
+    
+    backbone=[id+"Nose",id+"Spine_1",id+"Center", id+"Spine_2", id+"Tail_base"]
+    nose = pos_dict[id+"Nose"]
+
+    #remove mising bodyparts from backbone
+    for bp in backbone:
+        if not bp in pos_dict.keys():
+            backbone.remove(bp)
+
+    #calculate overall length of bodypart chain i.e. mouse length
+    mouse_lens=0
+    indices=np.random.choice(np.arange(0, len(pos_dict)), size=np.min([5000, len(pos_dict)]), replace=False)
+    if len(backbone)>1:
+        for bp_pos in range(0, len(backbone)-1):
+            mouse_lens+=np.apply_along_axis(
+                    np.linalg.norm, 1, (
+                        pos_dict[backbone[bp_pos+1]].iloc[indices]
+                        -pos_dict[backbone[bp_pos]].iloc[indices]
+                        )
+                    )
+        mouse_len=np.nanpercentile(mouse_lens,80)
+                
+    #assume default mouse length if body parts for length estimation are insufficient
+    else:
+        mouse_len=50
+    
+    #absolute tolerance       
+    tol=mouse_len*rel_tol
 
     if arena_type.startswith("circular"):
         center = np.zeros(2) if centered_data else np.array(arena[0])
@@ -519,10 +546,14 @@ def look_around(
                 in tup]
 
     #angle smaller than 45 deg (looking straight ahead corresponds to about 90 deg for thsi angle)
-    look_left=(angles_dframe[left_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[right_angle].to_numpy().squeeze())
-    look_right=(angles_dframe[right_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[left_angle].to_numpy().squeeze())
+    look_left = False
+    look_right = False
+    speed = np.array([False]*len(speed_dframe))
+    if len(left_angle) > 0 and len(right_angle) > 0:
+        look_left=(angles_dframe[left_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[right_angle].to_numpy().squeeze())
+        look_right=(angles_dframe[right_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[left_angle].to_numpy().squeeze())
 
-    speed = (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
+        speed = (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
     #nose_speed = (
     #    speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
     #)
@@ -629,7 +660,8 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
     """
     defaults = {
         "speed_pause": 5,
-        "climb_tol": 10,
+        "climb_tol": 0.1,
+        "sniff_tol": 10,
         "close_contact_tol": 25,
         "side_contact_tol": 45,
         "follow_frames": int(coords._frame_rate/2),   # Half of a second, before: 10
@@ -895,33 +927,32 @@ def supervised_tagging(
         else:
             current_features=get_dt(full_features,key)
 
-        tag_dict[_id + undercond + "climbing"] = deepof.utils.smooth_boolean_array(
-            climb_wall(
-                arena_type,
-                arena_params,
-                raw_coords,
-                params["climb_tol"],
-                _id + undercond + "Nose",
-                run_numba=run_numba,
-            )
-        )
-        tag_dict[_id + undercond + "sniffing"] = deepof.utils.smooth_boolean_array(
-            sniff_object(
-                speed_dframe=speeds,
-                arena_type=arena_type,
-                arena=arena_params,
-                pos_dict=raw_coords,
-                tol=params["climb_tol"],
-                tol_speed=params["huddle_speed"],
-                nose=_id + undercond + "Nose",
-                center_name=center,
-                s_object="arena",
-                animal_id=_id,
-                run_numba=run_numba,
-            )
+        tag_dict[_id + undercond + "climb_wall"] = climb_wall(
+            arena_type,
+            arena_params,
+            raw_coords,
+            params["climb_tol"],
+            _id + undercond,
+            run_numba=run_numba,
         )
 
-        tag_dict[_id + undercond + "huddle"] = deepof.utils.smooth_boolean_array(
+
+        tag_dict[_id + undercond + "sniff_wall"] = sniff_object(
+            speed_dframe=speeds,
+            arena_type=arena_type,
+            arena=arena_params,
+            pos_dict=raw_coords,
+            tol=params["sniff_tol"],
+            tol_speed=params["huddle_speed"],
+            nose=_id + undercond + "Nose",
+            center_name=center,
+            s_object="arena",
+            animal_id=_id,
+            run_numba=run_numba,
+        )
+
+
+        tag_dict[_id + undercond + "cowering"] = deepof.utils.smooth_boolean_array(
             huddle(
                 current_features,
                 huddle_estimator=huddle_estimator,

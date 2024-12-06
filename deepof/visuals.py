@@ -889,7 +889,10 @@ def plot_enrichment(
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed in pixel / s"
+        y_axis_label = "average speed in m / s"
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"] / 1000 #convert from mm / s to m / s
+        )
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100

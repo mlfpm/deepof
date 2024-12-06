@@ -62,11 +62,34 @@ table_dict = NewType("deepof_table_dict", Any)
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
 
 
-def load_project(project_path: str) -> coordinates:  # pragma: no cover
+def load_project(
+        project_path: str,
+        animal_ids: List = None,
+        arena: str = "polygonal-autodetect",
+        bodypart_graph: Union[str, dict] = "deepof_14",
+        iterative_imputation: str = "partial",
+        exclude_bodyparts: List = tuple([""]),
+        exp_conditions: dict = None,
+        remove_outliers: bool = True,
+        interpolation_limit: int = 5,
+        interpolation_std: int = 3,
+        likelihood_tol: float = 0.75,
+        model: str = "mouse_topview",
+        project_name: str = "deepof_project",
+        video_path: str = None,
+        table_path: str = None,
+        rename_bodyparts: list = None,
+        sam_checkpoint_path: str = None,
+        smooth_alpha: float = 1,
+        table_format: str = "autodetect",
+        video_format: str = ".mp4",
+        video_scale: int = 1,
+        fast_implementations_threshold: int = 50000,) -> coordinates:  # pragma: no cover
     """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version
 
     Args:
         project_path (str): name of the file to load.
+        Otherwise same as Project init inputs, will only be used in case of a version upgrade
 
     Returns:
         coordinates (deepof_coordinates): Pre-run coordinates object.
@@ -86,46 +109,57 @@ def load_project(project_path: str) -> coordinates:  # pragma: no cover
             These older versions are not compatible with the current version"""
         )
     # Compatibility fixes versions 0.7.0 to 0.7.2
-    if isinstance(coordinates._table_paths, List):
-        #turn all these objects into dictionaries based on keys in _tables
-        tables={}
-        videos={}
-        scales={}
-        arena_params={}
-        video_resolution={}
-        print(f"Compatibility measures:")
+    if True: #isinstance(coordinates._table_paths, List):
+        
+        print(f"Initiate project upgrade to 0.8")
+        print(f"IMPORTANT: The following original input options cannot be transferred and the following values will be used:")
+        print(f"(you can change these values using load_project input variables)")
+        print(f"- iterative_imputation: " + str(iterative_imputation))
+        print(f"- remove_outliers: " + str(remove_outliers))
+        print(f"- interpolation_limit: " + str(interpolation_limit))
+        print(f"- interpolation_std: " + str(interpolation_std))
+        print(f"- likelihood_tol: " + str(likelihood_tol))
+        print(f"- model: " + str(model))
+        print(f"- rename_bodyparts: " + str(rename_bodyparts))
+        print(f"- sam_checkpoint_path: " + str(sam_checkpoint_path))
+        print(f"- smooth_alpha: " + str(smooth_alpha))
+        print(f"- fast_implementations_threshold: " + str(fast_implementations_threshold))
 
-        coordinates._source_table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables')
-        coordinates._video_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Videos') 
-        print(f"Initialized _source_table_path and _video_path with project table and video paths:")
-        print(f"{coordinates._source_table_path}")
-        print(f"{coordinates._video_path}")
-        for i, key in enumerate(coordinates._tables):
-            # Remove the DLC suffix from the table name
-            tables[key]=coordinates._table_paths[i]
-            videos[key]=coordinates._videos[i]
-            scales[key]=coordinates._scales[i,:]
-            arena_params[key]=coordinates._arena_params[i]
-            video_resolution[key]=coordinates._video_resolution[i]
-            #create folder for current data set
-            directory = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-        coordinates._table_paths=tables
-        coordinates._videos=videos
-        coordinates._scales=scales
-        coordinates._arena_params=arena_params
-        coordinates._video_resolution=video_resolution
-        print(f"Changed type from list to dictionary for _table_paths, _videos, _scales, _arena_params, _video_resolution")
+        #get file endings
+        table_extension=".h5"
+        video_extension=".mp4"
+        #if coordinates._table_paths[0].endswith(".analysis.h5"):
+        #    table_extension=".analysis.h5"
+        #else:
+        #    _, table_extension = os.path.splitext(coordinates._table_paths[0])
+        #_, video_extension = os.path.splitext(coordinates._videos[0])
 
-        coordinates._very_large_project=False
-        coordinates._version=current_deepof_version
-        for attr_name, attr_value in vars(coordinates).items():
-            if isinstance(attr_value, TableDict):
-                # Add further properties to the table_dict instance
-                attr_value._table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables')
-                print(f"Added _table_path to {attr_name}:{attr_value._table_path}")
+        redone_project = deepof.data.Project(
+            animal_ids=coordinates._animal_ids,
+            arena=coordinates._arena,
+            bodypart_graph=coordinates._bodypart_graph, 
+            iterative_imputation=iterative_imputation,
+            exclude_bodyparts = coordinates._excluded,
+            exp_conditions=coordinates._exp_conditions,
+            remove_outliers = remove_outliers,
+            interpolation_limit = interpolation_limit,
+            interpolation_std = interpolation_std,
+            likelihood_tol = likelihood_tol,
+            model = model,
+            project_name=coordinates._project_name,
+            project_path=project_path,
+            video_path=os.path.join(project_path, 'Videos'),
+            table_path=os.path.join(project_path, 'Tables'),
+            rename_bodyparts=rename_bodyparts,
+            sam_checkpoint_path=sam_checkpoint_path,
+            smooth_alpha=smooth_alpha,
+            table_format=table_extension,
+            video_format=video_extension,
+            video_scale=coordinates._arena_dims,
+            fast_implementations_threshold=fast_implementations_threshold,
+        )
 
+        coordinates=redone_project.create(force=True)
 
     return coordinates
 
@@ -629,6 +663,38 @@ class Project:
                                    table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
                                    animal_ids=self.animal_ids)
 
+    def scale_tables(self, tab_dict: table_dict) -> table_dict:
+        """Scales all tables to mm using scaling information from arena detection.
+        
+        Args:
+            tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+
+        Returns:
+            tab_dict (table_dict): Scaled table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
+        """
+
+        with tqdm(total=len(tab_dict), desc="Rescaling tables    ", unit="table") as pbar:
+            for i, (key, tab) in enumerate(tab_dict.items()):
+
+                #load active table
+                tab = get_dt(tab_dict, key)  
+
+                #determine ratio for scaling
+                scaling_ratio=1
+                if self.scales is not None:
+                    scaling_ratio = self.scales[key][3]/self.scales[key][2]
+
+                #scale
+                tab=tab*scaling_ratio
+
+                #save scaled table
+                distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key)
+                tab_dict[key] = save_dt(tab,distance_path,self.very_large_project)
+
+                pbar.update()
+
+        return tab_dict
+
 
     #from memory_profiler import profile
     #@profile
@@ -656,7 +722,7 @@ class Project:
                 #get distances for this table
                 distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
 
-                #save disctances for active table
+                #save distances for active table
                 distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key, key + '_dist')
                 distance_dict[key] = save_dt(distance_tab,distance_path,self.very_large_project)
 
@@ -931,6 +997,8 @@ class Project:
         self.scales, self.arena_params, self.video_resolution = self.get_arena(
             tables, debug, test
         )
+
+        tables=self.scale_tables(tables)
 
         if self.distances:
             distances = self.get_distances(tables)
@@ -1998,12 +2066,12 @@ class Coordinates:
             pbar.update()
             pbar.set_postfix(step="Loading angles")
 
-            angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+            #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
 
             # Merge and extract names
             tab_dict = coords.merge(
                 speeds,
-                angles,
+                #angles,
                 dists,
                 save_as_paths=return_as_paths
                 )
@@ -2055,7 +2123,7 @@ class Coordinates:
                 [(i, "x") for i in list(graph.nodes())]
                 + [(i, "y") for i in list(graph.nodes())]
                 + list(graph.nodes())
-                + get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
+                #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
             # Sort indices to have always the same node order

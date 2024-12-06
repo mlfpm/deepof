@@ -755,7 +755,7 @@ def compute_dist(
     ab = a - b
 
     dist = np.sqrt(np.einsum("...i,...i", ab, ab))
-    return pd.DataFrame(dist * arena_abs / arena_rel)
+    return pd.DataFrame(dist) #* arena_abs / arena_rel
 
 
 def bpart_distance(
@@ -1866,7 +1866,27 @@ def get_arenas(
         test (bool): If True, the function is run in test mode. This means that instead of waiting for user-inputs fixed artifical user-inputs are used. Defaults to False.
 
     Returns:
-        arena_params (dict): Dictionary of arena parameters.
+        scales (dict): Dictionary of scaling information. Each scales object consists of:
+            - x position of the center of arena in mm
+            - y position of the center of the arena in mm
+            - diameter of the arena (when circular) or length of first edge in pixels
+            - diameter of the arena (when circular) or length of first edge in mm
+        
+        arena_params (dict): Dictionary of arena parameters. Each arena parameter object consists of:
+            (when circular)
+            - x position of the center of arena in pixel
+            - y position of the center of the arena in pixel
+            - x axis radii of the arena in pixel
+            - y axis radii of the arena in pixel
+            - angle of the elipse
+            (when polygonal)
+            - x and y positions of the polygon vertices in pixel
+
+        video_resolution (dict): Dictionary of video resolutions. Each video resolution object consists of:
+            - height of the video in pixel
+            - width of teh video in pixel
+
+        
 
     """
     scales = {}
@@ -1895,9 +1915,11 @@ def get_arenas(
                         propagate_last = True
 
                     else:
-                        cur_scales = [
-                            *np.mean(arena_corners, axis=0).astype(int),
-                            get_first_length(arena_corners),
+                        arena_dist=get_first_length(arena_corners)
+
+                        cur_scales=[
+                            *(np.mean(arena_corners, axis=0)*(arena_dims/arena_dist)),
+                            arena_dist,
                             arena_dims,
                         ]
 
@@ -1912,15 +1934,14 @@ def get_arenas(
                     if not propagate_last:
                         cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
 
+                    arena_diameter=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
+
                     scales[key]=list(
                             np.array(
                                 [
-                                    cur_arena_params[0][0],
-                                    cur_arena_params[0][1],
-                                    np.mean(
-                                        [cur_arena_params[1][0], cur_arena_params[1][1]]
-                                    )
-                                    * 2,
+                                    cur_arena_params[0][0]*(arena_dims/arena_diameter),
+                                    cur_arena_params[0][1]*(arena_dims/arena_diameter),
+                                    arena_diameter
                                 ]
                             )
                         ) + [arena_dims]
@@ -1952,7 +1973,7 @@ def get_arenas(
         # Early return in test mode to avoid redundant slow arena detection
         if test:
             if "polygonal" in arena:
-                scales={'test2': [309.0, 236.0, 420.12, 380], 'test': [309.0, 236.0, 420.12, 380]}
+                scales={'test2': [279.5, 213.5, 420.12, 380], 'test': [279.5, 213.5, 420.12, 380]}
                 arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}
                 video_resolution={'test2': (480, 640), 'test': (480, 640)}
                 if test == "detect_arena":
@@ -1961,7 +1982,7 @@ def get_arenas(
                     return scales, arena_params, video_resolution
         
             elif "circular" in arena:
-                scales={'test2': [200.0, 26.0, 252.0, 380], 'test': [200.0, 26.0, 252.0, 380]}
+                scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
                 arena_params={'test2': ((200, 196), (166, 168), 14.361458778381348), 'test': ((200, 196), (166, 168), 14.361458778381348)}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 if test == "detect_arena":
@@ -1992,9 +2013,11 @@ def get_arenas(
                         simplify_polygon(arena_parameters), arena_reference[:2]
                     )
 
+                    arena_dist=dist(*closest_side_points)
+
                     scales[key]=[
-                            *np.mean(arena_parameters, axis=0).astype(int),
-                            dist(*closest_side_points),
+                            *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
+                            arena_dist,
                             arena_dims,
                         ]
                     
@@ -2003,15 +2026,15 @@ def get_arenas(
                     # scales contains the coordinates of the center of the arena,
                     # the absolute diameter measured from the video in pixels, and
                     # the provided diameter in mm (1 -default- equals not provided)
+
+                    arena_diameter=np.mean([arena_parameters[1][0], arena_parameters[1][1]])* 2
+
                     scales[key]=list(
                             np.array(
                                 [
-                                    arena_parameters[0][0],
-                                    arena_parameters[0][1],
-                                    np.mean(
-                                        [arena_parameters[1][0], arena_parameters[1][1]]
-                                    )
-                                    * 2,
+                                    arena_parameters[0][0]*(arena_dims/arena_diameter),
+                                    arena_parameters[0][1]*(arena_dims/arena_diameter),
+                                    arena_diameter,
                                 ]
                             )
                         )+ [arena_dims]
