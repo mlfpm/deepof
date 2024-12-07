@@ -495,8 +495,8 @@ def test_rolling_speed(dframe, sampler):
     )
     dframe.columns = idx
 
-    speeds1 = deepof.utils.rolling_speed(dframe, 5, 10, order1)
-    speeds2 = deepof.utils.rolling_speed(dframe, 5, 10, order2)
+    speeds1 = deepof.utils.rolling_speed(dframe, 10, 5, 10, order1)
+    speeds2 = deepof.utils.rolling_speed(dframe, 10, 5, 10, order2)
 
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2

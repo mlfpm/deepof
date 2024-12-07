@@ -109,7 +109,7 @@ def load_project(
             These older versions are not compatible with the current version"""
         )
     # Compatibility fixes versions 0.7.0 to 0.7.2
-    if True: #isinstance(coordinates._table_paths, List):
+    if isinstance(coordinates._table_paths, List):
         
         print(f"Initiate project upgrade to 0.8")
         print(f"IMPORTANT: The following original input options cannot be transferred and the following values will be used:")
