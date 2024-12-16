@@ -754,8 +754,9 @@ def compute_dist(
     a, b = pair_array[:, :lim], pair_array[:, lim:]
     ab = a - b
 
+    #calculate euclidean distance fast
     dist = np.sqrt(np.einsum("...i,...i", ab, ab))
-    return pd.DataFrame(dist) #* arena_abs / arena_rel
+    return pd.DataFrame(dist) 
 
 
 def bpart_distance(
@@ -2487,7 +2488,6 @@ def arena_parameter_extraction(
 def rolling_speed(
     dframe: pd.DatetimeIndex,
     frame_rate: int = 1,
-
     window: int = 3,
     rounds: int = 3,
     deriv: int = 1,

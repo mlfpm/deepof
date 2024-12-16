@@ -37,8 +37,6 @@ def close_single_contact(
     left: str,
     right: str,
     tol: float,
-    arena_abs: int,
-    arena_rel: int,
 ) -> np.array:
     """Return a boolean array that's True if the specified body parts are closer than tol.
 
@@ -47,8 +45,6 @@ def close_single_contact(
         left (string): First member of the potential contact
         right (string): Second member of the potential contact
         tol (float): maximum distance for which a contact is reported
-        arena_abs (int): length in mm of the diameter of the real arena
-        arena_rel (int): length in pixels of the diameter of the arena in the video
 
     Returns:
         contact_array (np.array): True if the distance between the two specified points is less than tol, False otherwise
@@ -57,16 +53,12 @@ def close_single_contact(
     close_contact = None
 
     if isinstance(right, str):
-        close_contact = (
-            np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
-        ) / arena_rel < tol
+        close_contact = np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) < tol
 
     elif isinstance(right, list):
         close_contact = np.any(
             [
-                (np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) * arena_abs)
-                / arena_rel
-                < tol
+                np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) < tol
                 for r in right
             ],
             axis=0,
@@ -82,8 +74,6 @@ def close_double_contact(
     right1: str,
     right2: str,
     tol: float,
-    arena_abs: int,
-    arena_rel: int,
     rev: bool = False,
 ) -> np.array:
     """Return a boolean array that's True if the specified body parts are closer than tol.
@@ -95,8 +85,6 @@ def close_double_contact(
         right1 (string): First contact point of animal 2
         right2 (string): Second contact point of animal 2
         tol (float): maximum distance for which a contact is reported
-        arena_abs (int): length in mm of the diameter of the real arena
-        arena_rel (int): length in pixels of the diameter of the arena in the video
         rev (bool): reverses the default behaviour (nose2tail contact for both mice)
 
     Returns:
@@ -105,23 +93,19 @@ def close_double_contact(
     """
     if rev:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1)
             < tol
         ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1)
             < tol
         )
 
     else:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1)
             < tol
         ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1)
             < tol
         )
 
@@ -185,7 +169,6 @@ def climb_wall(
         climbing (np.array): boolean array. True if selected animal is climbing the walls of the arena
 
     """
-    
     backbone=[id+"Nose",id+"Spine_1",id+"Center", id+"Spine_2", id+"Tail_base"]
     nose = pos_dict[id+"Nose"]
 
@@ -659,15 +642,15 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
 
     """
     defaults = {
-        "speed_pause": 5,
-        "climb_tol": 0.1,
-        "sniff_tol": 10,
-        "close_contact_tol": 25,
-        "side_contact_tol": 45,
+        "speed_pause": int(coords._frame_rate/4),     # Quarter of a second, before: 5, currently not used
+        "climb_tol": 0.10,                            # If mouse nouse is 10% or more of it's length outside of teh arena, counts as climbing
+        "sniff_tol": 10,                              # Noses need to be 10 mm apart or closer
+        "close_contact_tol": 25,                      # Body parts need to be 25 mm apart or closer
+        "side_contact_tol": 45,                       # Sides need to be 45 mm apart or closer
         "follow_frames": int(coords._frame_rate/2),   # Half of a second, before: 10
         "follow_tol": int(coords._frame_rate/4),      # Quarter of a second, before: 5
-        "huddle_speed": 2,
-        "nose_likelihood": 0.85,
+        "huddle_speed": 40,                           # Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
+        "nose_likelihood": 0.85,                      # Minimum degree of certainty of the nose position prediction
     }
 
     for k, v in hparams.items():
@@ -755,7 +738,14 @@ def supervised_tagging(
 
     # Extract useful information from coordinates object
     arena_params = coord_object._arena_params[key]
+    to_mm_scaling = coord_object._scales[key][3]/coord_object._scales[key][2]
     arena_type = coord_object._arena
+    if arena_type.startswith("circular"):
+        #multiply ellipse information (except angle) by scaling factor
+        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params[0:2]] + [arena_params[2]])
+    elif arena_type.startswith("polygon"):
+        #multiply set of arena points by scaling factor
+        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params])
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
@@ -767,8 +757,6 @@ def supervised_tagging(
     angles = get_dt(angles,key).reset_index(drop=True)
     speeds = get_dt(speeds,key).reset_index(drop=True)
     likelihoods = get_dt(coord_object.get_quality(),key).reset_index(drop=True)
-    arena_abs = coord_object._scales[key][-1]
-    arena_rel = coord_object._scales[key][-2]
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -793,7 +781,7 @@ def supervised_tagging(
 
     def onebyone_contact(interactors: List, bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params
 
         try:
             left = interactors[0] + bparts[0]
@@ -811,14 +799,12 @@ def supervised_tagging(
                 (left if not isinstance(left, list) else right),
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
-                arena_abs,
-                arena_rel,
             )
         )
 
     def twobytwo_contact(interactors: List, rev: bool):
         """Return a smooth boolean array with side by side contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
                 raw_coords,
@@ -828,8 +814,6 @@ def supervised_tagging(
                 interactors[1] + "_Tail_base",
                 params["side_contact_tol"],
                 rev=rev,
-                arena_abs=arena_abs,
-                arena_rel=arena_rel,
             )
         )
 
@@ -927,9 +911,9 @@ def supervised_tagging(
         else:
             current_features=get_dt(full_features,key)
 
-        tag_dict[_id + undercond + "climb_wall"] = climb_wall(
+        tag_dict[_id + undercond + "climb_arena"] = climb_wall(
             arena_type,
-            arena_params,
+            arena_params_scaled,
             raw_coords,
             params["climb_tol"],
             _id + undercond,
@@ -937,10 +921,10 @@ def supervised_tagging(
         )
 
 
-        tag_dict[_id + undercond + "sniff_wall"] = sniff_object(
+        tag_dict[_id + undercond + "sniff_arena"] = sniff_object(
             speed_dframe=speeds,
             arena_type=arena_type,
-            arena=arena_params,
+            arena=arena_params_scaled,
             pos_dict=raw_coords,
             tol=params["sniff_tol"],
             tol_speed=params["huddle_speed"],
