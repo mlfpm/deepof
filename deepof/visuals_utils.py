@@ -9,6 +9,7 @@ import re
 import time
 import warnings
 from typing import Any, List, NewType, Tuple, Union
+from tqdm import tqdm
 
 import cv2
 import matplotlib.pyplot as plt
@@ -1172,7 +1173,7 @@ def _tag_annotated_frames(
     """
     arena, w, h = arena
 
-    def write_on_frame(text, pos, col=(255, 255, 255)):
+    def write_on_frame(text, pos, col=(150, 255, 150)):
         """Partial closure over cv2.putText to avoid code repetition."""
         return cv2.putText(frame, text, pos, font, 0.75, col, 2)
 
@@ -1244,37 +1245,37 @@ def _tag_annotated_frames(
 
     if len(animal_ids) > 1:
 
-        if tag_dict["nose2nose"][fnum]:
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] + "_nose2nose"][fnum]:
             write_on_frame("Nose-Nose", conditional_pos())
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 left_flag = False
             else:
                 right_flag = False
 
-        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] +  "_nose2body"][fnum] and left_flag:
             write_on_frame("nose2body", corners["downleft"])
             left_flag = False
 
-        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
+        if tag_dict[animal_ids[1] + "_" + animal_ids[0] +  "_nose2body"][fnum] and right_flag:
             write_on_frame("nose2body", corners["downright"])
             right_flag = False
 
-        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] +  "_nose2tail"][fnum] and left_flag:
             write_on_frame("Nose-Tail", corners["downleft"])
             left_flag = False
 
-        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
+        if tag_dict[animal_ids[1] + "_" + animal_ids[0] +  "_nose2tail"][fnum] and right_flag:
             write_on_frame("Nose-Tail", corners["downright"])
             right_flag = False
 
-        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] + "_sidebyside"][fnum] and left_flag and conditional_flag():
             write_on_frame("Side-side", conditional_pos())
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 left_flag = False
             else:
                 right_flag = False
 
-        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] + "_sidereside"][fnum] and left_flag and conditional_flag():
             write_on_frame("Side-Rside", conditional_pos())
             if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
                 left_flag = False
@@ -1294,12 +1295,12 @@ def _tag_annotated_frames(
 
         if flag:
 
-            if tag_dict[_id + undercond + "climbing"][fnum]:
-                write_on_frame("climbing", down_pos)
-            elif tag_dict[_id + undercond + "huddle"][fnum]:
-                write_on_frame("huddling", down_pos)
-            elif tag_dict[_id + undercond + "sniffing"][fnum]:
-                write_on_frame("sniffing", down_pos)
+            if tag_dict[_id + undercond + "climb_wall"][fnum]:
+                write_on_frame("climb_wall", down_pos)
+            elif tag_dict[_id + undercond + "cowering"][fnum]:
+                write_on_frame("cowering", down_pos)
+            elif tag_dict[_id + undercond + "sniff_wall"][fnum]:
+                write_on_frame("sniff_wall", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
@@ -1322,8 +1323,8 @@ def _tag_annotated_frames(
 # noinspection PyProtectedMember,PyDefaultArgument
 def annotate_video(
     coordinates: coordinates,
-    tag_dict: Union[str, pd.DataFrame],
-    vid_key: int,
+    supervised_annotations: Union[str, pd.DataFrame],
+    key: int,
     frame_limit: int = np.inf,
     debug: bool = False,
     params: dict = {},
@@ -1340,22 +1341,21 @@ def annotate_video(
 
     """
 
-    if isinstance(tag_dict, str):
-        tag_dict=load_dt(tag_dict)
+    tag_dict=get_dt(supervised_annotations, key)
+
+    
 
     # Extract useful information from coordinates object
-    tracks = list(coordinates._tables.keys())
-    videos = coordinates._videos
-    path = os.path.join(coordinates._project_path, coordinates._project_name, "Videos")
+    vid_path=coordinates.get_videos(full_paths=True)[key]
 
     animal_ids = coordinates._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
 
-    arena_params = coordinates._arena_params[vid_key]
-    h, w = coordinates._video_resolution[vid_key]
-    corners = deepof.annotation_utils.frame_corners(h, w)
+    arena_params = coordinates._arena_params[key]
+    h, w = coordinates._video_resolution[key]
+    corners = deepof.annotation_utils.frame_corners(w, h)
 
-    cap = cv2.VideoCapture(os.path.join(path, videos[vid_key]))
+    cap = cv2.VideoCapture(vid_path)
     # Keep track of the frame number, to align with the tracking data
     fnum = 0
     writer = None
@@ -1364,64 +1364,65 @@ def annotate_video(
     )
 
     # Loop over the frames in the video
-    while cap.isOpened() and fnum < frame_limit:
+    with tqdm(total=frame_limit, desc="annotating Video", unit="frame") as pbar:
+        while cap.isOpened() and fnum < frame_limit:
 
-        ret, frame = cap.read()
-        # if frame is read correctly ret is True
-        if not ret:  # pragma: no cover
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
+            ret, frame = cap.read()
+            # if frame is read correctly ret is True
+            if not ret:  # pragma: no cover
+                print("Can't receive frame (stream end?). Exiting ...")
+                break
 
-        font = cv2.FONT_HERSHEY_DUPLEX
+            font = cv2.FONT_HERSHEY_DUPLEX
 
-        # Capture speeds
-        try:
-            if (
-                list(frame_speeds.values())[0] == -np.inf
-                or fnum % params["speed_pause"] == 0
-            ):
+            # Capture speeds
+            try:
+
                 for _id in animal_ids:
                     frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
-        except AttributeError:
-            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
-                frame_speeds = tag_dict["speed"][fnum]
+            except AttributeError:
+                if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
+                    frame_speeds = tag_dict["speed"][fnum]
 
-        # Display all annotations in the output video
-        _tag_annotated_frames(
-            frame,
-            font,
-            frame_speeds,
-            animal_ids,
-            corners,
-            tag_dict,
-            fnum,
-            undercond,
-            params,
-            (arena_params, h, w),
-            coordinates._arena,
-            debug,
-            coordinates.get_coords(center=False)[vid_key],
-        )
-
-        if writer is None:
-            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
-            # Define the FPS. Also frame size is passed.
-            writer = cv2.VideoWriter()
-            writer.open(
-                os.path.join(
-                    coordinates._project_path,
-                    coordinates._project_name,
-                    "Out_videos",
-                    vid_key + "_supervised_tagged.avi",
-                ),
-                cv2.VideoWriter_fourcc(*"MJPG"),
-                coordinates._frame_rate,
-                (frame.shape[1], frame.shape[0]),
-                True,
+            # Display all annotations in the output video
+            _tag_annotated_frames(
+                frame,
+                font,
+                frame_speeds,
+                animal_ids,
+                corners,
+                tag_dict,
+                fnum,
+                undercond,
+                params,
+                (arena_params, h, w),
+                coordinates._arena,
+                debug,
+                coordinates.get_coords(center=False)[key],
             )
 
-        writer.write(frame)
-        fnum += 1
+            if writer is None:
+                # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
+                # Define the FPS. Also frame size is passed.
+                out_folder=os.path.join(coordinates._project_path, coordinates._project_name, "Out_videos")
+                if not os.path.exists(out_folder):
+                    os.makedirs(out_folder)   
+                
+                writer = cv2.VideoWriter()
+                writer.open(
+                    os.path.join(
+                        out_folder,
+                        key + "_supervised_tagged.avi",
+                    ),
+                    cv2.VideoWriter_fourcc(*"MJPG"),
+                    coordinates._frame_rate,
+                    (frame.shape[1], frame.shape[0]),
+                    True,
+                )
+
+            writer.write(frame)
+            fnum += 1
+            pbar.update()
 
     cap.release()
     cv2.destroyAllWindows()
