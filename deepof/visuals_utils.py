@@ -1295,12 +1295,12 @@ def _tag_annotated_frames(
 
         if flag:
 
-            if tag_dict[_id + undercond + "climb_wall"][fnum]:
-                write_on_frame("climb_wall", down_pos)
+            if tag_dict[_id + undercond + "climb_arena"][fnum]:
+                write_on_frame("climb_arena", down_pos)
             elif tag_dict[_id + undercond + "cowering"][fnum]:
                 write_on_frame("cowering", down_pos)
-            elif tag_dict[_id + undercond + "sniff_wall"][fnum]:
-                write_on_frame("sniff_wall", down_pos)
+            elif tag_dict[_id + undercond + "sniff_arena"][fnum]:
+                write_on_frame("sniff_arena", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
@@ -1376,13 +1376,12 @@ def annotate_video(
             font = cv2.FONT_HERSHEY_DUPLEX
 
             # Capture speeds
-            try:
-
+            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
+                frame_speeds = tag_dict["speed"][fnum]
+            else:
                 for _id in animal_ids:
                     frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
-            except AttributeError:
-                if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
-                    frame_speeds = tag_dict["speed"][fnum]
+
 
             # Display all annotations in the output video
             _tag_annotated_frames(
