@@ -1376,7 +1376,7 @@ def annotate_video(
             font = cv2.FONT_HERSHEY_DUPLEX
 
             # Capture speeds
-            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
+            if len(animal_ids) == 1 or fnum % params["speed_pause"] == 0:
                 frame_speeds = tag_dict["speed"][fnum]
             else:
                 for _id in animal_ids:
