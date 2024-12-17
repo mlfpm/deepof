@@ -45,7 +45,7 @@ def test_close_single_contact(pos_dframe, tol):
     )
     pos_dframe.columns = idx
     close_contact = deepof.annotation_utils.close_single_contact(
-        pos_dframe, "bpart1", "bpart2", tol, 1, 1
+        pos_dframe, "bpart1", "bpart2", tol,
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]

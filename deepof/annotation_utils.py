@@ -646,9 +646,9 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
         "climb_tol": 0.10,                            # If mouse nouse is 10% or more of it's length outside of teh arena, counts as climbing
         "sniff_tol": 10,                              # Noses need to be 10 mm apart or closer
         "close_contact_tol": 25,                      # Body parts need to be 25 mm apart or closer
-        "side_contact_tol": 45,                       # Sides need to be 45 mm apart or closer
+        "side_contact_tol": 50,                       # Sides need to be 45 mm apart or closer
         "follow_frames": int(coords._frame_rate/2),   # Half of a second, before: 10
-        "follow_tol": int(coords._frame_rate/4),      # Quarter of a second, before: 5
+        "follow_tol": 10,                             # 10 mm, before: 5
         "huddle_speed": 40,                           # Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
         "nose_likelihood": 0.85,                      # Minimum degree of certainty of the nose position prediction
     }
@@ -988,8 +988,8 @@ def tagged_video_output(
         """Output a single annotated video. Enclosed in a function to enable parallelization."""
         deepof.visuals_utils.annotate_video(
             coordinates,
-            tag_dict=tag_dict[key],
-            vid_key=key,
+            supervised_annotations=tag_dict,
+            key=key,
             debug=debug,
             frame_limit=frame_limit,
             params=params,
