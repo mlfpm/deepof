@@ -755,10 +755,10 @@ def supervised_tagging(
     mouse_lens={}
     mouse_areas={}
     for _id in animal_ids:
-        _id=_id+undercond
+        _id=_id
         
         #calculate mouse lengths
-        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
+        backbone=[_id+"_Nose",_id+"_Spine_1",_id+"_Center", _id+"_Spine_2", _id+"_Tail_base"]
 
         #remove missing bodyparts from backbone
         for bp in backbone:
@@ -784,7 +784,7 @@ def supervised_tagging(
         
         if _id+"full_area" in coord_object._areas[key]:
             mouse_areas[_id]=np.nanpercentile(
-                coord_object._areas[key][_id+"full_area"]
+                coord_object._areas[key][_id+"_full_area"]
                 ,80)
                  
 
@@ -843,18 +843,21 @@ def supervised_tagging(
     def twobytwo_contact(interactors: List, rev: bool):
         """Return a smooth boolean array with side by side contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, mouse_lens
+        
+        return deepof.utils.smooth_boolean_array(
             close_double_contact(
-                raw_coords,
-                mouse_lens[interactors[0]+"_"],
-                interactors[0] + "_Nose",
-                interactors[0] + "_Tail_base",
-                mouse_lens[interactors[1]+"_"],
-                interactors[1] + "_Nose",
-                interactors[1] + "_Tail_base",
-                params["side_contact_tol"],
-                rev=rev,
+            raw_coords,
+            mouse_lens[interactors[0]],
+            interactors[0] + "_Nose",
+            interactors[0] + "_Tail_base",
+            mouse_lens[interactors[1]],
+            interactors[1] + "_Nose",
+            interactors[1] + "_Tail_base",
+            params["side_contact_tol"],
+            rev=rev,
             )
         )
+        
 
     @_suppress_warning(warn_messages=["All-NaN slice encountered"])
     def overall_speed(ovr_speeds, _id, ucond):
