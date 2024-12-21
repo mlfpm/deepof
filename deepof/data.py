@@ -16,12 +16,12 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 #bug fix for linux cv2 issue
 import cv2
 
-try:
-    cv2.imshow("test",1)
-    cv2.waitKey(1)
-    cv2.destroyAllWindows()
-except:
-    pass
+#try:
+#    cv2.imshow("test",1)
+#    cv2.waitKey(1)
+#    cv2.destroyAllWindows()
+#except:
+#    pass
 
 
 import copy
