@@ -13,6 +13,12 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # encoding: utf-8
 # module deepof
 
+#bug fix for linux cv2 issue
+import cv2
+
+cv2.imshow("test",1)
+cv2.waitKey(1)
+cv2.destroyAllWindows()
 
 import copy
 import os

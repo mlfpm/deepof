@@ -1896,9 +1896,28 @@ def get_arenas(
 
     def get_first_length(arena_corners):
         return math.dist(arena_corners[0], arena_corners[1])
+    
+    #set message for user
+    if "polygon" in arena:
+
+        multi_line_message = [
+        "Note: The first line you draw will be used for scaling.",
+        "This means that this line should correspond to the",
+        "\"real world\" length of " + str(arena_dims) + " mm you set during",
+        "project creation."
+        ]
+    else:
+        multi_line_message = [
+        "Note: The diameter of the arena will be used for scaling.",
+        "This means that the diameter should correspond to the",
+        "\"real world\" length of " + str(arena_dims) + " mm you set during",
+        "project creation."
+        ]
 
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
+        display_message(multi_line_message)
+        
         propagate_last = False
         with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
             for vid_idx, key in enumerate(videos.keys()):
@@ -1961,6 +1980,7 @@ def get_arenas(
         arena_reference = None
         if arena == "polygonal-autodetect" and not test:  # pragma: no cover
 
+            display_message(multi_line_message)
 
             first_key=list(videos.keys())[0]
             arena_reference = extract_polygonal_arena_coordinates(
@@ -2263,6 +2283,59 @@ def automatically_recognize_arena(
         )
 
     return arena, h, w
+
+
+def display_message(message: List[str]):
+    """
+    Opens a window that displays a message for the user
+
+    Args:
+        message: List of strings containing the message
+    """
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.7
+    font_color = (255, 255, 255)  # White color
+    line_type = 2
+    
+    # Calculate dimensions based on message content
+    max_line_length = max(len(line) for line in message)
+    line_height = 30  # Height per line of text
+    image_height = line_height * len(message) + 20  # Add some padding
+    image_width = max(600, max_line_length * 12)  # Minimum width or based on longest line
+
+    # Create a blank image with calculated dimensions
+    image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+
+    # Initial position for the first line of text
+    x, y = 10, line_height
+    
+    # Loop through each line and put it on the image
+    for line in message:
+        cv2.putText(image, line, (x, y), font, font_scale, font_color, line_type)
+        y += line_height  # Move down for the next line
+
+    window_name = "Arena scaling"
+    
+    # Display the image in a window
+    cv2.imshow(window_name, image)
+    
+    try:
+        # Wait for a key press or until the window is closed
+        while True:
+            key = cv2.waitKey(1) & 0xFF
+            
+            if key == ord('q'):  # Exit on 'q' key press
+                break
+            
+            # Check if window is still open
+            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                break
+    except Exception as e:
+        print(f"An error occurred: {e}")   # Handle window close exception gracefully
+
+    if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) >= 1:
+        cv2.destroyWindow(window_name)
 
 
 def retrieve_corners_from_image(
@@ -2607,6 +2680,82 @@ def filter_short_bouts(
         confidence_indices
     )
 
+
+def filter_short_true_segments(array: np.ndarray, min_length: int):
+    """Filters out sahort "True" sections from boolean array "array"
+
+    Args:
+        array (np.ndarray): Boolean array
+        min_length (int): Minimum length of "true" sections within array.
+
+    Returns:
+        np.ndarray: Mask of confidence indices to keep.
+
+    """
+    
+    #inits 
+    n = len(array)
+    output_array = np.zeros(n, dtype=np.bool_)
+    count = 0
+    in_segment = False
+    
+    for i in range(n):
+        if array[i]:
+            count += 1
+            in_segment = True
+        else:
+            if in_segment:
+                # Check count if True-segment ends
+                if count >= min_length:
+                    output_array[i - count:i] = True
+                # Reset count and segment flag
+                count = 0
+                in_segment = False
+    
+    # Check for a segment that may end at the last element
+    if in_segment and count >= min_length:
+        output_array[n - count:n] = True
+    
+    return output_array
+
+
+@nb.njit
+def filter_short_true_segments_numba(array: np.ndarray, min_length: int):
+    """Filters out sahort "True" sections from boolean array "array"
+
+    Args:
+        array (np.ndarray): Boolean array
+        min_length (int): Minimum length of "true" sections within array.
+
+    Returns:
+        np.ndarray: Mask of confidence indices to keep.
+
+    """
+    
+    #inits 
+    n = len(array)
+    output_array = np.zeros(n, dtype=np.bool_)
+    count = 0
+    in_segment = False
+    
+    for i in range(n):
+        if array[i]:
+            count += 1
+            in_segment = True
+        else:
+            if in_segment:
+                # Check count if True-segment ends
+                if count >= min_length:
+                    output_array[i - count:i] = True
+                # Reset count and segment flag
+                count = 0
+                in_segment = False
+    
+    # Check for a segment that may end at the last element
+    if in_segment and count >= min_length:
+        output_array[n - count:n] = True
+    
+    return output_array
 
 # MACHINE LEARNING FUNCTIONS #
 
