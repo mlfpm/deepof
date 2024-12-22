@@ -70,10 +70,10 @@ def close_single_contact(
 
 def close_double_contact(
     pos_dframe: pd.DataFrame,
-    left_len: float,
+    #left_len: float,
     left1: str,
     left2: str,
-    right_len: float,
+    #right_len: float,
     right1: str,
     right2: str,
     rel_tol: float,
@@ -83,10 +83,10 @@ def close_double_contact(
 
     Parameters:
         pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable to two-animal experiments.
-        left_len (float): Length of animal 1
+        #left_len (float): Length of animal 1
         left1 (string): First contact point of animal 1
         left2 (string): Second contact point of animal 1
-        right_len (float): Length of animal 2
+        #right_len (float): Length of animal 2
         right1 (string): First contact point of animal 2
         right2 (string): Second contact point of animal 2
         rel_tol (float): relative shar which affects the maximum distance for which a contact is reported
@@ -158,8 +158,8 @@ def climb_wall(
     arena: np.array,
     pos_dict: pd.DataFrame,
     rel_tol: float,
-    mouse_len: 50,
     id: str,
+    mouse_len: 50,
     centered_data: bool = False,
     run_numba: bool = False,
 ) -> np.array:
@@ -755,10 +755,11 @@ def supervised_tagging(
     mouse_lens={}
     mouse_areas={}
     for _id in animal_ids:
-        _id=_id
+        if _id:
+         _id=_id+"_"
         
         #calculate mouse lengths
-        backbone=[_id+"_Nose",_id+"_Spine_1",_id+"_Center", _id+"_Spine_2", _id+"_Tail_base"]
+        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
 
         #remove missing bodyparts from backbone
         for bp in backbone:
@@ -784,7 +785,7 @@ def supervised_tagging(
         
         if _id+"full_area" in coord_object._areas[key]:
             mouse_areas[_id]=np.nanpercentile(
-                coord_object._areas[key][_id+"_full_area"]
+                coord_object._areas[key][_id+"full_area"]
                 ,80)
                  
 
@@ -847,10 +848,10 @@ def supervised_tagging(
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
             raw_coords,
-            mouse_lens[interactors[0]],
+            #mouse_lens[interactors[0]+"_"],
             interactors[0] + "_Nose",
             interactors[0] + "_Tail_base",
-            mouse_lens[interactors[1]],
+            #mouse_lens[interactors[1]+"_"],
             interactors[1] + "_Nose",
             interactors[1] + "_Tail_base",
             params["side_contact_tol"],
@@ -979,8 +980,8 @@ def supervised_tagging(
             arena_params_scaled,
             raw_coords,
             params["climb_tol"],
-            mouse_lens[_id],
             _id + undercond,
+            mouse_lens[_id + undercond],
             run_numba=run_numba,
         )
 

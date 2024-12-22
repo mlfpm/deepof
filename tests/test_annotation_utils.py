@@ -96,8 +96,9 @@ def test_close_double_contact(pos_dframe, tol, rev):
     ),
     angle=st.floats(min_value=0, max_value=360),
     tol=st.data(),
+    mouse_len=st.floats(min_value=10,max_value=60),
 )
-def test_climb_wall(center, axes, angle, tol):
+def test_climb_wall(center, axes, angle, tol, mouse_len):
 
     arena = (center, axes, np.radians(angle))
     tol1 = tol.draw(st.floats(min_value=0.001, max_value=1))
@@ -124,10 +125,10 @@ def test_climb_wall(center, axes, angle, tol):
     )
 
     climb1 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol1, ""
+        "circular-autodetect", arena, prun["test"], tol1, "", mouse_len,
     )
     climb2 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol2, ""
+        "circular-autodetect", arena, prun["test"], tol2, "", mouse_len,
     )
     climb3 = deepof.annotation_utils.climb_wall(
         "polygonal-manual",
@@ -135,6 +136,7 @@ def test_climb_wall(center, axes, angle, tol):
         prun["test"],
         tol1,
         "",
+        mouse_len,
     )
 
     rmtree(
@@ -149,7 +151,7 @@ def test_climb_wall(center, axes, angle, tol):
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, "")
+        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, "", mouse_len)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -222,10 +224,18 @@ def test_single_animal_traits(animal_id):
             elements=st.floats(min_value=-20, max_value=20),
         ),
     ),
+    speeds_dframe=data_frames(
+        index=range_indexes(min_size=20, max_size=20),
+        columns=columns(
+            ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"],
+            dtype=float,
+            elements=st.floats(min_value=0, max_value=20),
+        ),
+    ),
     frames=st.integers(min_value=1, max_value=20),
     tol=st.floats(min_value=0.01, max_value=4.98),
 )
-def test_following_path(distance_dframe, position_dframe, frames, tol):
+def test_following_path(distance_dframe, position_dframe, speeds_dframe, frames, tol):
 
     bparts = ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"]
 
@@ -239,6 +249,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     follow = deepof.annotation_utils.following_path(
         distance_dframe,
         position_dframe,
+        speeds_dframe,
         follower="A",
         followed="B",
         frames=frames,
