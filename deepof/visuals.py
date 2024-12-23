@@ -106,8 +106,8 @@ def plot_heatmaps(
 
     Returns:
         heatmaps (plt.figure): figure with the specified characteristics
-    """
 
+    """
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -314,7 +314,6 @@ def _plot_experiment_gantt(
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
     """
-
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -1252,7 +1251,6 @@ def plot_transitions(
         kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
-
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -2797,6 +2795,7 @@ def plot_behavior_trends(
     save (bool): If True, saves the plot to a file. Defaults to False.
     """
 
+    """
     # Initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
