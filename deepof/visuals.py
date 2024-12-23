@@ -2795,7 +2795,7 @@ def plot_behavior_trends(
     save (bool): If True, saves the plot to a file. Defaults to False.
     """
 
-    """
+
     # Initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
