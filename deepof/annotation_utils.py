@@ -153,7 +153,7 @@ def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
     return term_x + term_y > 1
 
 
-def climb_wall(
+def climb_arena(
     arena_type: str,
     arena: np.array,
     pos_dict: pd.DataFrame,
@@ -412,7 +412,7 @@ def _is_point_inside_numba(
     return inside
 
 
-def huddle(
+def cowering(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
@@ -476,7 +476,7 @@ def huddle(
     return y_huddle
 
 
-def look_around(
+def nose_activity(
     speed_dframe: pd.DataFrame,
     angles_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
@@ -643,14 +643,14 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
     """
     defaults = {
         "speed_pause": int(coords._frame_rate/4),       # Quarter of a second, before: 5, currently not used
-        "climb_tol": 0.15,                              # If mouse nouse is 10% or more of it's length outside of teh arena, counts as climbing
-        "sniff_tol": 12.5,                              # Noses need to be 10 mm apart or closer
+        "climb_tol": 0.15,                              # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
+        "sniff_tol": 12.5,                              # Noses need to be 12.5 mm apart or closer
         "close_contact_tol": 25,                        # Body parts need to be 25 mm apart or closer
-        "side_contact_tol": 60,                         # Sides need to be 50 mm apart or closer
-        "follow_frames": int(coords._frame_rate/2),     # Half of a second, before: 10
-        "min_follow_frames": int(coords._frame_rate/4), # Quarter of a second
+        "side_contact_tol": 60,                         # Sides need to be 60 mm apart or closer
+        "follow_frames": int(coords._frame_rate/2),     # Frames over which following is considered, Half of a second, before: 10
+        "min_follow_frames": int(coords._frame_rate/4), # Minimum time mouse needs to follow, Quarter of a second
         "follow_tol": 25,                               # 25 mm, before: 5
-        "huddle_speed": 40,                             # Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
+        "cower_speed": 40,                              # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
         "nose_likelihood": 0.85,                        # Minimum degree of certainty of the nose position prediction
     }
 
@@ -750,45 +750,7 @@ def supervised_tagging(
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
-
-    #extract mouse normalization information from coordinates object
-    mouse_lens={}
-    mouse_areas={}
-    for _id in animal_ids:
-        if _id:
-         _id=_id+"_"
-        
-        #calculate mouse lengths
-        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
-
-        #remove missing bodyparts from backbone
-        for bp in backbone:
-            if not bp in raw_coords[key].keys():
-                backbone.remove(bp)
-
-        #calculate overall length of bodypart chain i.e. mouse length
-        indices=np.random.choice(np.arange(0, len(raw_coords[key])), size=np.min([5000, len(raw_coords[key])]), replace=False)
-        if len(backbone)>1:
-            mouse_lens_raw=0
-            for bp_pos in range(0, len(backbone)-1):
-                mouse_lens_raw+=np.apply_along_axis(
-                        np.linalg.norm, 1, (
-                            raw_coords[key][backbone[bp_pos+1]].iloc[indices]
-                            -raw_coords[key][backbone[bp_pos]].iloc[indices]
-                            )
-                        )
-            mouse_lens[_id]=np.nanpercentile(mouse_lens_raw,80)
-                    
-        #assume default mouse length if body parts for length estimation are insufficient
-        else:
-            mouse_lens[_id]=50
-        
-        if _id+"full_area" in coord_object._areas[key]:
-            mouse_areas[_id]=np.nanpercentile(
-                coord_object._areas[key][_id+"full_area"]
-                ,80)
-                 
-
+               
     #extract various data tables from their Table dicts
     raw_coords = get_dt(raw_coords,key).reset_index(drop=True)
     coords = get_dt(coords,key).reset_index(drop=True)
@@ -817,6 +779,43 @@ def supervised_tagging(
         for body_part in main_body
         if any(body_part in col[0] for col in coords.columns)
     ]
+
+    #extract mouse normalization information from coordinates object
+    mouse_lens={}
+    mouse_areas={}
+    for _id in animal_ids:
+        if _id:
+         _id=_id+"_"
+        
+        #calculate mouse lengths
+        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
+
+        #remove missing bodyparts from backbone
+        for bp in backbone:
+            if not bp in raw_coords.keys():
+                backbone.remove(bp)
+
+        #calculate overall length of bodypart chain i.e. mouse length
+        indices=np.random.choice(np.arange(0, len(raw_coords)), size=np.min([5000, len(raw_coords)]), replace=False)
+        if len(backbone)>1:
+            mouse_lens_raw=0
+            for bp_pos in range(0, len(backbone)-1):
+                mouse_lens_raw+=np.apply_along_axis(
+                        np.linalg.norm, 1, (
+                            raw_coords[backbone[bp_pos+1]].iloc[indices]
+                            -raw_coords[backbone[bp_pos]].iloc[indices]
+                            )
+                        )
+            mouse_lens[_id]=np.nanpercentile(mouse_lens_raw,80)
+                    
+        #assume default mouse length if body parts for length estimation are insufficient
+        else:
+            mouse_lens[_id]=50
+        
+        if _id+"full_area" in coord_object._areas[key]:
+            mouse_areas[_id]=np.nanpercentile(
+                coord_object._areas[key][_id+"full_area"]
+                ,80)
 
     def onebyone_contact(interactors: List, bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
@@ -930,7 +929,7 @@ def supervised_tagging(
                         followed=animal_pair[1],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
-                        tol_speed=params["huddle_speed"]
+                        tol_speed=params["cower_speed"]
                     )
                 )
 
@@ -945,7 +944,7 @@ def supervised_tagging(
                         followed=animal_pair[0],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
-                        tol_speed=params["huddle_speed"],
+                        tol_speed=params["cower_speed"],
                     )
                 )
 
@@ -975,7 +974,7 @@ def supervised_tagging(
         else:
             current_features=get_dt(full_features,key)
 
-        tag_dict[_id + undercond + "climb_arena"] = climb_wall(
+        tag_dict[_id + undercond + "climb_arena"] = climb_arena(
             arena_type,
             arena_params_scaled,
             raw_coords,
@@ -992,7 +991,7 @@ def supervised_tagging(
             arena=arena_params_scaled,
             pos_dict=raw_coords,
             tol=params["sniff_tol"],
-            tol_speed=params["huddle_speed"],
+            tol_speed=params["cower_speed"],
             nose=_id + undercond + "Nose",
             center_name=center,
             s_object="arena",
@@ -1002,7 +1001,7 @@ def supervised_tagging(
 
 
         tag_dict[_id + undercond + "cowering"] = deepof.utils.smooth_boolean_array(
-            huddle(
+            cowering(
                 current_features,
                 huddle_estimator=huddle_estimator,
                 animal_id=_id + undercond,
@@ -1010,11 +1009,11 @@ def supervised_tagging(
         )
         #tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
         #    deepof.utils.filter_short_true_segments(
-        tag_dict[_id + undercond + "lookaround"] = look_around(
+        tag_dict[_id + undercond + "nose_activity"] = nose_activity(
         speeds,
         angles,
         likelihoods,
-        params["huddle_speed"],
+        params["cower_speed"],
         params["nose_likelihood"],
         center_name=center,
         animal_id=_id,

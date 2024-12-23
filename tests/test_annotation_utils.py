@@ -124,13 +124,13 @@ def test_climb_wall(center, axes, angle, tol, mouse_len):
         .get_coords()
     )
 
-    climb1 = deepof.annotation_utils.climb_wall(
+    climb1 = deepof.annotation_utils.climb_arena(
         "circular-autodetect", arena, prun["test"], tol1, "", mouse_len,
     )
-    climb2 = deepof.annotation_utils.climb_wall(
+    climb2 = deepof.annotation_utils.climb_arena(
         "circular-autodetect", arena, prun["test"], tol2, "", mouse_len,
     )
-    climb3 = deepof.annotation_utils.climb_wall(
+    climb3 = deepof.annotation_utils.climb_arena(
         "polygonal-manual",
         [[-1, -1], [-1, 1], [1, 1], [1, -1]],
         prun["test"],
@@ -151,7 +151,7 @@ def test_climb_wall(center, axes, angle, tol, mouse_len):
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, "", mouse_len)
+        deepof.annotation_utils.climb_arena("", arena, prun["test"], tol1, "", mouse_len)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -191,7 +191,7 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         huddle_clf = pickle.load(handle)
 
-    huddling = deepof.annotation_utils.huddle(
+    huddling = deepof.annotation_utils.cowering(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
     ).astype(int)
 
