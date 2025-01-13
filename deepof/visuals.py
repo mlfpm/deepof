@@ -2007,7 +2007,282 @@ def plot_embeddings(
         plt.tight_layout()
         plt.show()
 
+#added by Dipanwita
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, FFMpegWriter
+import calendar
+import time
+import os
 
+def compute_angle_and_speed_test(coords, sampling_rate):
+    """
+    Compute the angle and speed based on coordinates data.
+    
+    Args:
+        coords (DataFrame): Coordinates data containing x and y values for the animals.
+        sampling_rate (float): The sampling rate for the frames.
+        
+    Returns:
+        angles (np.ndarray): Computed angles between two consecutive frames.
+        speeds (np.ndarray): Computed speed (distance between consecutive frames).
+    """
+    # Initialize lists to store speed and angle for each center point
+    speeds_B = []
+    angles_B = []
+    speeds_W = []
+    angles_W = []
+
+    # Loop through the data starting from the second row
+    for i in range(1, len(coords)):
+        # For B_Center
+        dx_B = coords.iloc[i]['B_Center']['x'] - coords.iloc[i-1]['B_Center']['x']
+        dy_B = coords.iloc[i]['B_Center']['y'] - coords.iloc[i-1]['B_Center']['y']
+        speed_B = np.sqrt(dx_B**2 + dy_B**2) * sampling_rate
+        
+        # Compute angle for B_Center
+        if i > 1:  # Ensure we have enough data for angle calculation
+            prev_dx_B = coords.iloc[i-1]['B_Center']['x'] - coords.iloc[i-2]['B_Center']['x']
+            prev_dy_B = coords.iloc[i-1]['B_Center']['y'] - coords.iloc[i-2]['B_Center']['y']
+            angle_B = np.arctan2(dy_B, dx_B) - np.arctan2(prev_dy_B, prev_dx_B)
+        else:
+            angle_B = 0  # Set to 0 for the first calculation
+        
+        # Store the results for B_Center
+        speeds_B.append(speed_B)
+        angles_B.append(angle_B)
+        
+        # For W_Center
+        dx_W = coords.iloc[i]['W_Center']['x'] - coords.iloc[i-1]['W_Center']['x']
+        dy_W = coords.iloc[i]['W_Center']['y'] - coords.iloc[i-1]['W_Center']['y']
+        speed_W = np.sqrt(dx_W**2 + dy_W**2) * sampling_rate
+        
+        # Compute angle for W_Center
+        if i > 1:  # Ensure we have enough data for angle calculation
+            prev_dx_W = coords.iloc[i-1]['W_Center']['x'] - coords.iloc[i-2]['W_Center']['x']
+            prev_dy_W = coords.iloc[i-1]['W_Center']['y'] - coords.iloc[i-2]['W_Center']['y']
+            angle_W = np.arctan2(dy_W, dx_W) - np.arctan2(prev_dy_W, prev_dx_W)
+        else:
+            angle_W = 0  # Set to 0 for the first calculation
+        
+        # Store the results for W_Center
+        speeds_W.append(speed_W)
+        angles_W.append(angle_W)
+
+    # Now you have the speeds and angles for both B_Center and W_Center
+
+    
+    return np.array(speeds_B), np.array(speeds_W),np.array(angles_B), np.array(angles_W)
+
+def compute_angle_and_speed(coords, sampling_rate, window=5, shift=1):
+    """
+    Compute the smoothed speed (using rolling_speed) and angles based on coordinates data.
+    
+    Args:
+        coords (DataFrame): Coordinates data containing x and y values for the animals.
+        sampling_rate (float): The sampling rate for the frames.
+        window (int): Rolling window size for smoothing speed.
+        shift (int): Shift for the rolling window.
+
+    Returns:
+        smoothed_speeds_B (np.ndarray): Smoothed speeds for B_Center.
+        smoothed_speeds_W (np.ndarray): Smoothed speeds for W_Center.
+        angles_B (np.ndarray): Computed angles for B_Center.
+        angles_W (np.ndarray): Computed angles for W_Center.
+    """
+    # Calculate smoothed speeds using rolling_speed
+    smoothed_speeds = deepof.utils.rolling_speed(coords, window=window, shift=shift)
+    smoothed_speeds_B = smoothed_speeds['B_Center'] * sampling_rate
+    smoothed_speeds_W = smoothed_speeds['W_Center'] * sampling_rate
+
+    # Calculate angles as before
+    angles_B = []
+    angles_W = []
+
+    for i in range(1, len(coords)):
+        # For B_Center
+        dx_B = coords.iloc[i]['B_Center']['x'] - coords.iloc[i-1]['B_Center']['x']
+        dy_B = coords.iloc[i]['B_Center']['y'] - coords.iloc[i-1]['B_Center']['y']
+        if i > 1:
+            prev_dx_B = coords.iloc[i-1]['B_Center']['x'] - coords.iloc[i-2]['B_Center']['x']
+            prev_dy_B = coords.iloc[i-1]['B_Center']['y'] - coords.iloc[i-2]['B_Center']['y']
+            angle_B = np.arctan2(dy_B, dx_B) - np.arctan2(prev_dy_B, prev_dx_B)
+        else:
+            angle_B = 0
+        angles_B.append(angle_B)
+
+        # For W_Center
+        dx_W = coords.iloc[i]['W_Center']['x'] - coords.iloc[i-1]['W_Center']['x']
+        dy_W = coords.iloc[i]['W_Center']['y'] - coords.iloc[i-1]['W_Center']['y']
+        if i > 1:
+            prev_dx_W = coords.iloc[i-1]['W_Center']['x'] - coords.iloc[i-2]['W_Center']['x']
+            prev_dy_W = coords.iloc[i-1]['W_Center']['y'] - coords.iloc[i-2]['W_Center']['y']
+            angle_W = np.arctan2(dy_W, dx_W) - np.arctan2(prev_dy_W, prev_dx_W)
+        else:
+            angle_W = 0
+        angles_W.append(angle_W)
+
+    return np.array(smoothed_speeds_B), np.array(smoothed_speeds_W), np.array(angles_B), np.array(angles_W)
+
+def animate_angle_speed_plot(coordinates, experiment_id, sampling_rate=None, save=None, dpi=100, center="arena", align=None):
+    """
+    Animate the smoothed speed and angles over time for a given experiment and coordinates data.
+    
+    Args:
+        coordinates (coordinates): Coordinates object containing x, y data.
+        experiment_id (str): Name of the experiment.
+        sampling_rate (float): Sampling rate for video frames.
+        save (str): Path to save the animation.
+        dpi (int): DPI for the saved video.
+    
+    Returns:
+        Video HTML for embedding the animation.
+    """
+    # Assuming 'coordinates' is a DataFrame with 'x' and 'y' columns
+    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
+
+    # Sort column index to allow for multiindex slicing
+    coords = coords.sort_index(ascending=True, inplace=False, axis=1)
+
+    # Ensure sampling_rate is set
+    if sampling_rate is None:
+        sampling_rate = coordinates._frame_rate
+
+    # Compute smoothed speeds and angles
+    smoothed_speeds_B, smoothed_speeds_W, angles_B, angles_W = compute_angle_and_speed(coords, sampling_rate)
+
+    fig, (ax_speed, ax_angle) = plt.subplots(2, 1, figsize=(12, 8), dpi=dpi)
+
+    # Speed plot
+    line_speed_B, = ax_speed.plot([], [], label="Smoothed Speed B (cm/s)", color="red")
+    line_speed_W, = ax_speed.plot([], [], label="Smoothed Speed W (cm/s)", color="blue")
+    ax_speed.set_xlim(0, len(coords))
+    ax_speed.set_ylim(min(min(smoothed_speeds_B), min(smoothed_speeds_W)) - 1, max(max(smoothed_speeds_B), max(smoothed_speeds_W)) + 1)
+    ax_speed.set_title("Smoothed Speed Over Time", fontsize=15)
+    ax_speed.set_xlabel("Time (Frames)")
+    ax_speed.set_ylabel("Speed (cm/s)")
+    ax_speed.legend(loc="upper right")
+
+    # Angle plot
+    line_angle_B, = ax_angle.plot([], [], label="Angle B (radians)", color="red")
+    line_angle_W, = ax_angle.plot([], [], label="Angle W (radians)", color="blue")
+    ax_angle.set_xlim(0, len(coords))
+    ax_angle.set_ylim(min(min(angles_B), min(angles_W)) - 1, max(max(angles_B), max(angles_W)) + 1)
+    ax_angle.set_title("Angle Over Time", fontsize=15)
+    ax_angle.set_xlabel("Time (Frames)")
+    ax_angle.set_ylabel("Angle (radians)")
+    ax_angle.legend(loc="upper right")
+
+    # Function to update the plots at each frame
+    def update_frame(i):
+        # Update speed lines
+        line_speed_B.set_data(np.arange(i), smoothed_speeds_B[:i])
+        line_speed_W.set_data(np.arange(i), smoothed_speeds_W[:i])
+        # Update angle lines
+        line_angle_B.set_data(np.arange(i), angles_B[:i])
+        line_angle_W.set_data(np.arange(i), angles_W[:i])
+        return line_speed_B, line_speed_W, line_angle_B, line_angle_W
+
+    # Create the animation
+    animation = FuncAnimation(fig, update_frame, frames=len(coords), interval=1000 // sampling_rate)
+
+    # If save is specified, save the animation as a video
+    if save:
+        save_path = os.path.join(save, f"{experiment_id}_angle_speed_animation.mp4")
+        writer = FFMpegWriter(fps=sampling_rate)
+        animation.save(save_path, writer=writer)
+
+    # Show the plots
+    plt.tight_layout()
+    plt.show()
+
+    # Return video HTML for embedding in applications
+    return animation.to_html5_video()
+def plot_skeleton_with_angles(coordinates: coordinates,
+    experiment_id: str):
+    """
+    Generates a plot of the skeleton with angles between body parts based on the coordinates and angles data.
+
+    Args:
+        coordinates (Coordinates): The deepOF Coordinates object containing the x, y coordinates of the body parts.
+        experiment_id (str): The experiment ID to select the relevant data for plotting.
+    """
+    # Extract angles data
+    angles_dict = dict(my_deepof_project.get_angles())
+    df = angles_dict[experiment_id]  # Get the specific experiment data from angles_dict
+    second_row = df.iloc[1]  # Select the second row (index 1) for the angles
+
+    # Create an empty graph for plotting
+    G = nx.Graph()
+
+    # Function to extract connections based on the row data (angles_dict)
+    def add_connections_from_row(row_data):
+        for key, angle in row_data.items():
+            # Each key has the format like ('B_Right_ear', 'B_Spine_1', 'B_Left_ear')
+            body_part1, body_part2, body_part3 = key
+            G.add_edge(body_part1, body_part2, weight=angle)
+            G.add_edge(body_part2, body_part3, weight=angle)
+
+    # Add the connections for the second row of the dataframe
+    add_connections_from_row(second_row)
+
+    # Set the aesthetic style using Seaborn
+    sns.set(style="whitegrid")
+
+    # Define node positions using coordinates from the coordinates object
+    # Example: Assuming 'coordinates' is a DataFrame with body part positions over time
+    coords = coordinates.get_coords_at_key(center="arena", align=None, scale=coordinates._scales[experiment_id], key=experiment_id)
+
+    # Extract the coordinates for the body parts (x, y) at time step 0
+    body_parts = list(coords.columns.levels[0])  # Assuming body part names are stored as the first level of columns
+    pos = {body_part: (coords.loc[0, ('x', body_part)], coords.loc[0, ('y', body_part)]) for body_part in body_parts}
+
+    # Create the plot
+    plt.figure(figsize=(14, 14))
+
+    # Draw the nodes with enhanced style
+    node_color = '#1f78b4'  # Professional blue color
+    node_size = 600  # Adjusted node size for better visualization
+    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color=node_color, alpha=0.8)
+
+    # Draw the edges with variable color intensity based on angles
+    edge_colors = [G[u][v]['weight'] for u, v in G.edges()]  # Use weight for edge color intensity
+    edge_widths = [0.5 + 2 * G[u][v]['weight'] / max(edge_colors) for u, v in G.edges()]  # Adjust edge width by angle
+
+    # Draw edges with gradient color intensity
+    edges = nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors, edge_cmap=plt.cm.Blues, alpha=0.6)
+
+    # Draw the labels for nodes with larger font and bold
+    nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold', font_color='black')
+
+    # Function to calculate the midpoint for angle label placement
+    def calculate_midpoint(pos, node1, node2):
+        x1, y1 = pos[node1]
+        x2, y2 = pos[node2]
+        return (x1 + x2) / 2, (y1 + y2) / 2
+
+    # Add the angle labels at the intersections of the angles
+    for key, angle in second_row.items():
+        body_part1, body_part2, body_part3 = key
+        # Calculate midpoints of the two edges forming the angle
+        mid1 = calculate_midpoint(pos, body_part1, body_part2)
+        mid2 = calculate_midpoint(pos, body_part2, body_part3)
+        
+        # Calculate the final position between the two midpoints
+        angle_pos = ((mid1[0] + mid2[0]) / 2, (mid1[1] + mid2[1]) / 2)
+        
+        # Display the angle at this position
+        plt.text(angle_pos[0], angle_pos[1], f'{angle:.2f}°', fontsize=10, color='darkred', ha='center', va='center')
+
+    # Set plot title with larger font
+    plt.title(f"Skeleton Visualization with Angles ({experiment_id})", fontsize=18, fontweight='bold')
+
+    # Remove axis for a clean plot
+    plt.axis('off')
+
+    # Show the plot with enhanced quality
+    plt.tight_layout()
+    plt.show()
 # noinspection PyTypeChecker
 def animate_skeleton(
     coordinates: coordinates,
@@ -2078,6 +2353,7 @@ def animate_skeleton(
         cur_embeddings=None
         cur_soft_counts=None
 
+
     #for legacy reasons scales is not a dictionary which complicates things
     coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
 
@@ -2146,6 +2422,7 @@ def animate_skeleton(
 
     # Add skeleton animation
     ax2 = fig.add_subplot((122 if cur_embeddings is not None else 111))
+
 
     # Plot!
     init_x = coords.loc[:, (slice("x"), ["x"])].iloc[0, :]
@@ -2231,6 +2508,13 @@ def animate_skeleton(
         x = coords.loc[:, (slice("x"), ["x"])].iloc[i, :]
         y = coords.loc[:, (slice("x"), ["y"])].iloc[i, :]
 
+        if i > 0:  # To avoid index errors for the first frame
+            prev_x = coords.loc[:, (slice("x"), ["x"])].iloc[i - 1, :]
+            prev_y = coords.loc[:, (slice("x"), ["y"])].iloc[i - 1, :]
+
+            dt = 1 / sampling_rate  # Time difference between frames
+            
+
         skeleton_scatter.set_offsets(np.c_[x, y])
 
         for p, aid in enumerate(polygons):
@@ -2244,7 +2528,6 @@ def animate_skeleton(
 
         if cur_embeddings is not None:
             return umap_scatter, skeleton_scatter
-
         return skeleton_scatter
 
     animation = FuncAnimation(
