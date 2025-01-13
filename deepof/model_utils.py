@@ -27,6 +27,7 @@ from tensorflow.keras.layers import (
     TimeDistributed,
 )
 
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
 import deepof.hypermodels
 import deepof.models
@@ -1541,7 +1542,7 @@ def embedding_per_video(
             graph = True
 
     window_size = model.layers[0].input_shape[0][1]
-    for key in tqdm.tqdm(to_preprocess.keys(), desc="Computing embeddings", unit="table"):
+    for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
 
         #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
         print("")
