@@ -742,10 +742,10 @@ def supervised_tagging(
     to_mm_scaling = coord_object._scales[key][3]/coord_object._scales[key][2]
     arena_type = coord_object._arena
     if arena_type.startswith("circular"):
-        #multiply ellipse information (except angle) by scaling factor
+        # Multiply ellipse information (except angle) by scaling factor
         arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params[0:2]] + [arena_params[2]])
     elif arena_type.startswith("polygon"):
-        #multiply set of arena points by scaling factor
+        # Multiply set of arena points by scaling factor
         arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params])
 
     animal_ids = coord_object._animal_ids
