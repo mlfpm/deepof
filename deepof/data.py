@@ -305,7 +305,7 @@ class Project:
         if frames_max > 360000: #roughly 4 hour video at 25 fps
             self.very_large_project = True
 
-        # Set the rest of the init parameters
+        # Init the rest of the parameters
         self.angles = True
         self.animal_ids = animal_ids if animal_ids is not None else [""]
         self.areas = True
