@@ -43,6 +43,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.model_utils
 import deepof.models
 import deepof.utils
@@ -419,8 +420,7 @@ class Project:
         found_individuals=False
         sum_warn_nans=0
 
-
-        with tqdm(total=N_tables, desc="Preprocessing tables", unit="table") as pbar:
+        with tqdm(total=N_tables, desc=f"{'Preprocessing tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for i, key in enumerate(self.tables.keys()):
                                
                 pbar.set_postfix(step="Loading trajectories")
@@ -646,8 +646,8 @@ class Project:
         #    print("Computing distances...")
 
 
-        distance_dict = {}                  
-        with tqdm(total=len(tab_dict), desc="Computing distances ", unit="table") as pbar:
+        distance_dict = {}                
+        with tqdm(total=len(tab_dict), desc=f"{'Computing distances':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for i, (key, tab) in enumerate(tab_dict.items()):
 
                 #load active table
@@ -726,7 +726,7 @@ class Project:
 
         angle_dict = {}
         try:                                        
-            with tqdm(total=len(tab_dict), desc="Computing angles    ", unit="table") as pbar:
+            with tqdm(total=len(tab_dict), desc=f"{'Computing angles':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for key in tab_dict.keys():
 
                     #load table 
@@ -797,7 +797,7 @@ class Project:
         all_areas_dict = {}
 
         # iterate over all tables
-        with tqdm(total=len(tab_dict), desc="Computing areas     ", unit="table") as pbar:
+        with tqdm(total=len(tab_dict),desc=f"{'Computing areas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in tab_dict.keys():
 
                 #load table 
@@ -1968,7 +1968,7 @@ class Coordinates:
             return_as_paths = self._very_large_project
 
         N_steps=4
-        with tqdm(total=N_steps, desc="Loading tables", unit="step") as pbar:
+        with tqdm(total=N_steps, desc=f"{'Loading tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
                                
             pbar.set_postfix(step="Loading coords")
 
@@ -2078,7 +2078,7 @@ class Coordinates:
                 )
    
             shapes=[]
-            with tqdm(total=len(to_preprocess), desc="Reshaping     ", unit="table") as pbar:
+            with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for k in range(0,len(to_preprocess)):
                 
                     num_rows=0
@@ -2114,7 +2114,7 @@ class Coordinates:
 
             shapes=[]
             num_rows=0
-            with tqdm(total=len(to_preprocess), desc="Reshaping     ", unit="array") as pbar:
+            with tqdm(total=len(to_preprocess), desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="array") as pbar:
                 for key in to_preprocess.keys():
 
                     tab, table_path = get_dt(to_preprocess, key, return_path=True) 
@@ -2193,7 +2193,7 @@ class Coordinates:
         N_preprocessing_steps=4+len(self._animal_ids)
         N_processing_steps=len(self._tables.keys())
         
-        with tqdm(total=N_preprocessing_steps, desc="data preprocessing    ", unit="step") as pbar:
+        with tqdm(total=N_preprocessing_steps, desc=f"{'data preprocessing':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
 
             pbar.set_postfix(step="Loading raw coords")
 
@@ -2247,7 +2247,7 @@ class Coordinates:
                     )
                     pbar.update() 
 
-        with tqdm(total=N_processing_steps, desc="supervised annotations", unit="table") as pbar:
+        with tqdm(total=N_processing_steps, desc=f"{'supervised annotations':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             # noinspection PyTypeChecker
             for key in self._tables.keys():
                                
@@ -2317,9 +2317,7 @@ class Coordinates:
                 n_jobs=n_jobs,
                 params=params,
             )
-
-
-        return TableDict(
+        supervised_annotation_instance = TableDict(
             tag_dict,
             typ="supervised",
             table_path=os.path.join(self._project_path, self._project_name, "Tables"),
@@ -2329,6 +2327,9 @@ class Coordinates:
             connectivity=self._connectivity,
             exp_conditions=self._exp_conditions,
         )
+        self.save(filename="supervised_annotation_instance")
+
+        return supervised_annotation_instance
 
     def deep_unsupervised_embedding(
         self,
@@ -2567,8 +2568,7 @@ class TableDict(dict):
         assert np.all([k in table.keys() for k in keys]), "Invalid keys selected"
 
         return self.new_dict_same_header({k: value for k, value in table.items() if k in keys})
-
-
+            
     def filter_condition(self, exp_filters: dict) -> table_dict:
         """Return a subset of the original table_dict object, containing only videos belonging to the specified experimental condition.
 
@@ -2942,8 +2942,8 @@ class TableDict(dict):
 
 
         sampled_tabs = []
-                                            
-        with tqdm(total=len(table_temp.keys()), desc="Filtering     ", unit="table") as pbar:
+                                         
+        with tqdm(total=len(table_temp.keys()), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in table_temp.keys():
 
                 #pbar.set_postfix("Rescaling")
@@ -3009,8 +3009,8 @@ class TableDict(dict):
                 )
             else:
                 global_scaler = pretrained_scaler
-
-        with tqdm(total=len(table_temp.keys()), desc="Rescaling     ", unit="table") as pbar:
+        
+        with tqdm(total=len(table_temp.keys()), desc=f"{'Rescaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in table_temp.keys():
 
                 #pbar.set_postfix("Rescaling")
@@ -3090,6 +3090,7 @@ class TableDict(dict):
             window_step=window_step,
             save_as_paths=save_as_paths,
             shuffle=shuffle,
+            windows_desc = "Get training windows"
         )
 
         
@@ -3102,6 +3103,7 @@ class TableDict(dict):
                 window_step=window_step,
                 save_as_paths=save_as_paths,
                 shuffle=shuffle,
+                windows_desc="Get testing windows"
             )
         else:
             test_shape = (0,)
