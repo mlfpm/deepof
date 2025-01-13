@@ -9,11 +9,11 @@ from deepof.data import Coordinates
 def radians_to_degrees(radians):
     return np.degrees(radians)
 
-# Global variables
+
 current_frame_index = 0
-coords = None  # Placeholder for full coordinates
-df = None      # Placeholder for filtered data
-sampled_coords = None  # Placeholder for the filtered range
+coords = None  
+df = None  
+sampled_coords = None 
 start_frame = 0
 end_frame = 0
 
@@ -107,7 +107,7 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
             for point_name in x_coords.columns:
                 x, y = x_coords[point_name], y_coords[point_name]
                 ax.scatter(x, y, color="blue", s=20)
-                ax.text(x, y, point_name, color="green", fontsize=8, ha="center", va="center")
+                #ax.text(x, y, point_name, color="green", fontsize=8, ha="center", va="center")
             
             if main_dropdown.value == "angle" :
                 filtered_df=df[selected_columns]
@@ -174,6 +174,8 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
                 filtered_df = df[selected_columns]
 
                 for point, speed in filtered_df.iloc[[current_frame_index]].items():
+                    #print(current_frame_index)
+                    #print(filtered_df.iloc[[4]].items)
                     if point in x_coords.columns:
                         try:
                             # Safely access the coordinates of the point
@@ -185,7 +187,7 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
                             ax.text(
                                 x, y,
                                 f"{scalar_speed:.2f}",  # Display speed with 2 decimal places
-                                color="orange", fontsize=8, ha="center"
+                                color="purple", fontsize=8, ha="center"
                             )
                         except KeyError as e:
                             print(f"KeyError: Missing data for point {point}: {e}")
@@ -237,13 +239,18 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
 
     
     # Buttons
-    animate_button = widgets.Button(description="Animate", button_style="success")
-    next_button = widgets.Button(description="Next", button_style="primary")
-    prev_button = widgets.Button(description="Previous", button_style="warning")
+    animate_button = widgets.Button(description="Animate", button_style="")
+    next_button = widgets.Button(description="Next", button_style="")
+    prev_button = widgets.Button(description="Previous", button_style="")
+    controls = widgets.VBox([
+    widgets.HBox([main_dropdown, multiselect]),
+    range_selector,
+    widgets.HBox([prev_button,animate_button, next_button ]),
+    ])
 
     animate_button.on_click(on_animate_button_clicked)
     next_button.on_click(on_next_button_clicked)
     prev_button.on_click(on_prev_button_clicked)
 
     # Display UI
-    display(main_dropdown, multiselect, range_selector, animate_button, next_button, prev_button, output)
+    display(controls, output)
