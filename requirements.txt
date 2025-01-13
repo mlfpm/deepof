@@ -47,8 +47,8 @@ tensorboard>=2.11.2
 tensorflow-macos==2.12.0;platform_machine == 'arm64' and platform_system == 'Darwin'
 tensorflow==2.12.0;platform_machine != 'arm64' or platform_system != 'Darwin'
 tensorflow_probability==0.20.1
-tensorflow-io-gcs-filesystem==0.31.0;platform_system == 'Windows'
-tensorflow-io-gcs-filesystem==0.37.1;platform_system != 'Windows'
+tensorflow-io-gcs-filesystem==0.31.0;platform_system != 'Darwin'
+tensorflow-io-gcs-filesystem==0.37.1;platform_system == 'Darwin'
 torch==2.2.2
 torchvision==0.17.2
 tqdm==4.66.1
