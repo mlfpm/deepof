@@ -26,7 +26,10 @@ tensorflow = {version = "2.14.0", markers="platform_machine != 'arm64' or platfo
 keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and platform_system == 'Darwin'"}
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow-probability = "0.22.1"
-tensorflow-io-gcs-filesystem = "0.37.1"
+tensorflow-io-gcs-filesystem = [
+    {version = "0.31.0", markers="sys_platform == 'Windows'"},
+    {version = "0.37.1", markers="sys_platform != 'Windows'"}
+]
 tensorflow-addons = "0.22.0"
 tifffile = "^2022.8.12"
 umap-learn = "^0.5.3"
