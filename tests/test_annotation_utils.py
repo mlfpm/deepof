@@ -45,7 +45,7 @@ def test_close_single_contact(pos_dframe, tol):
     )
     pos_dframe.columns = idx
     close_contact = deepof.annotation_utils.close_single_contact(
-        pos_dframe, "bpart1", "bpart2", tol, 1, 1
+        pos_dframe, "bpart1", "bpart2", tol,
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -78,7 +78,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
     )
     pos_dframe.columns = idx
     close_contact = deepof.annotation_utils.close_double_contact(
-        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
+        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -96,8 +96,9 @@ def test_close_double_contact(pos_dframe, tol, rev):
     ),
     angle=st.floats(min_value=0, max_value=360),
     tol=st.data(),
+    mouse_len=st.floats(min_value=10,max_value=60),
 )
-def test_climb_wall(center, axes, angle, tol):
+def test_climb_wall(center, axes, angle, tol, mouse_len):
 
     arena = (center, axes, np.radians(angle))
     tol1 = tol.draw(st.floats(min_value=0.001, max_value=1))
@@ -123,18 +124,19 @@ def test_climb_wall(center, axes, angle, tol):
         .get_coords()
     )
 
-    climb1 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol1, ""
+    climb1 = deepof.annotation_utils.climb_arena(
+        "circular-autodetect", arena, prun["test"], tol1, "", mouse_len,
     )
-    climb2 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol2, ""
+    climb2 = deepof.annotation_utils.climb_arena(
+        "circular-autodetect", arena, prun["test"], tol2, "", mouse_len,
     )
-    climb3 = deepof.annotation_utils.climb_wall(
+    climb3 = deepof.annotation_utils.climb_arena(
         "polygonal-manual",
         [[-1, -1], [-1, 1], [1, 1], [1, -1]],
         prun["test"],
         tol1,
         "",
+        mouse_len,
     )
 
     rmtree(
@@ -149,7 +151,7 @@ def test_climb_wall(center, axes, angle, tol):
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, "")
+        deepof.annotation_utils.climb_arena("", arena, prun["test"], tol1, "", mouse_len)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -189,7 +191,7 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         huddle_clf = pickle.load(handle)
 
-    huddling = deepof.annotation_utils.huddle(
+    huddling = deepof.annotation_utils.cowering(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
     ).astype(int)
 
@@ -222,10 +224,18 @@ def test_single_animal_traits(animal_id):
             elements=st.floats(min_value=-20, max_value=20),
         ),
     ),
+    speeds_dframe=data_frames(
+        index=range_indexes(min_size=20, max_size=20),
+        columns=columns(
+            ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"],
+            dtype=float,
+            elements=st.floats(min_value=0, max_value=20),
+        ),
+    ),
     frames=st.integers(min_value=1, max_value=20),
     tol=st.floats(min_value=0.01, max_value=4.98),
 )
-def test_following_path(distance_dframe, position_dframe, frames, tol):
+def test_following_path(distance_dframe, position_dframe, speeds_dframe, frames, tol):
 
     bparts = ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"]
 
@@ -239,6 +249,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     follow = deepof.annotation_utils.following_path(
         distance_dframe,
         position_dframe,
+        speeds_dframe,
         follower="A",
         followed="B",
         frames=frames,

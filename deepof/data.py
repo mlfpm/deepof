@@ -13,6 +13,16 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # encoding: utf-8
 # module deepof
 
+#bug fix for linux cv2 issue
+import cv2
+
+#try:
+#    cv2.imshow("test",1)
+#    cv2.waitKey(1)
+#    cv2.destroyAllWindows()
+#except:
+#    pass
+
 
 import copy
 import os
@@ -296,7 +306,7 @@ class Project:
         if frames_max > 360000: #roughly 4 hour video at 25 fps
             self.very_large_project = True
 
-        # Set the rest of the init parameters
+        # Init the rest of the parameters
         self.angles = True
         self.animal_ids = animal_ids if animal_ids is not None else [""]
         self.areas = True

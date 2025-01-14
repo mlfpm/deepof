@@ -5,6 +5,7 @@
 """Functions and general utilities for supervised pose estimation. See documentation for details."""
 
 import os
+import copy
 import pickle
 import warnings
 from itertools import combinations
@@ -37,8 +38,6 @@ def close_single_contact(
     left: str,
     right: str,
     tol: float,
-    arena_abs: int,
-    arena_rel: int,
 ) -> np.array:
     """Return a boolean array that's True if the specified body parts are closer than tol.
 
@@ -47,8 +46,6 @@ def close_single_contact(
         left (string): First member of the potential contact
         right (string): Second member of the potential contact
         tol (float): maximum distance for which a contact is reported
-        arena_abs (int): length in mm of the diameter of the real arena
-        arena_rel (int): length in pixels of the diameter of the arena in the video
 
     Returns:
         contact_array (np.array): True if the distance between the two specified points is less than tol, False otherwise
@@ -57,16 +54,12 @@ def close_single_contact(
     close_contact = None
 
     if isinstance(right, str):
-        close_contact = (
-            np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) * arena_abs
-        ) / arena_rel < tol
+        close_contact = np.linalg.norm(pos_dframe[left] - pos_dframe[right], axis=1) < tol
 
     elif isinstance(right, list):
         close_contact = np.any(
             [
-                (np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) * arena_abs)
-                / arena_rel
-                < tol
+                np.linalg.norm(pos_dframe[left] - pos_dframe[r], axis=1) < tol
                 for r in right
             ],
             axis=0,
@@ -77,51 +70,50 @@ def close_single_contact(
 
 def close_double_contact(
     pos_dframe: pd.DataFrame,
+    #left_len: float,
     left1: str,
     left2: str,
+    #right_len: float,
     right1: str,
     right2: str,
-    tol: float,
-    arena_abs: int,
-    arena_rel: int,
+    rel_tol: float,
     rev: bool = False,
 ) -> np.array:
     """Return a boolean array that's True if the specified body parts are closer than tol.
 
     Parameters:
         pos_dframe (pandas.DataFrame): DLC output as pandas.DataFrame; only applicable to two-animal experiments.
+        #left_len (float): Length of animal 1
         left1 (string): First contact point of animal 1
         left2 (string): Second contact point of animal 1
+        #right_len (float): Length of animal 2
         right1 (string): First contact point of animal 2
         right2 (string): Second contact point of animal 2
-        tol (float): maximum distance for which a contact is reported
-        arena_abs (int): length in mm of the diameter of the real arena
-        arena_rel (int): length in pixels of the diameter of the arena in the video
+        rel_tol (float): relative shar which affects the maximum distance for which a contact is reported
         rev (bool): reverses the default behaviour (nose2tail contact for both mice)
 
     Returns:
         double_contact (np.array): True if the distance between the two specified points is less than tol, False otherwise
 
     """
+    #calculate absolute tolerance using areas
+    tol=rel_tol#(rel_tol*(left_len+right_len))/2
+    
     if rev:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right1] - pos_dframe[left2], axis=1)
             < tol
         ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right2] - pos_dframe[left1], axis=1)
             < tol
         )
 
     else:
         double_contact = (
-            (np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right1] - pos_dframe[left1], axis=1)
             < tol
         ) & (
-            (np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1) * arena_abs)
-            / arena_rel
+            np.linalg.norm(pos_dframe[right2] - pos_dframe[left2], axis=1)
             < tol
         )
 
@@ -161,12 +153,13 @@ def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
     return term_x + term_y > 1
 
 
-def climb_wall(
+def climb_arena(
     arena_type: str,
     arena: np.array,
     pos_dict: pd.DataFrame,
     rel_tol: float,
     id: str,
+    mouse_len: 50,
     centered_data: bool = False,
     run_numba: bool = False,
 ) -> np.array:
@@ -185,34 +178,17 @@ def climb_wall(
         climbing (np.array): boolean array. True if selected animal is climbing the walls of the arena
 
     """
-    
-    backbone=[id+"Nose",id+"Spine_1",id+"Center", id+"Spine_2", id+"Tail_base"]
-    nose = pos_dict[id+"Nose"]
+    nose = copy.deepcopy(pos_dict[id+"Nose"])
 
-    #remove mising bodyparts from backbone
-    for bp in backbone:
-        if not bp in pos_dict.keys():
-            backbone.remove(bp)
-
-    #calculate overall length of bodypart chain i.e. mouse length
-    mouse_lens=0
-    indices=np.random.choice(np.arange(0, len(pos_dict)), size=np.min([5000, len(pos_dict)]), replace=False)
-    if len(backbone)>1:
-        for bp_pos in range(0, len(backbone)-1):
-            mouse_lens+=np.apply_along_axis(
-                    np.linalg.norm, 1, (
-                        pos_dict[backbone[bp_pos+1]].iloc[indices]
-                        -pos_dict[backbone[bp_pos]].iloc[indices]
-                        )
-                    )
-        mouse_len=np.nanpercentile(mouse_lens,80)
-                
-    #assume default mouse length if body parts for length estimation are insufficient
-    else:
-        mouse_len=50
-    
     #absolute tolerance       
     tol=mouse_len*rel_tol
+
+    #interpolate nans (done only for climbing for reasons explained in the documentation) 
+    nose.interpolate(
+    method="linear",
+    limit_direction="both",
+    inplace=True,
+    )
 
     if arena_type.startswith("circular"):
         center = np.zeros(2) if centered_data else np.array(arena[0])
@@ -436,7 +412,7 @@ def _is_point_inside_numba(
     return inside
 
 
-def huddle(
+def cowering(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
@@ -500,7 +476,7 @@ def huddle(
     return y_huddle
 
 
-def look_around(
+def nose_activity(
     speed_dframe: pd.DataFrame,
     angles_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
@@ -554,12 +530,12 @@ def look_around(
         look_right=(angles_dframe[right_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[left_angle].to_numpy().squeeze())
 
         speed = (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
-    #nose_speed = (
-    #    speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
-    #)
-    #nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
+    nose_speed = (
+        tol_speed < speed_dframe[animal_id + "Nose"]   #speed_dframe[animal_id + center_name]
+    )
+    nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
 
-    lookaround = speed & (look_left | look_right)
+    lookaround = speed & nose_speed & nose_likelihood      #(look_left | look_right)
 
     return lookaround
 
@@ -567,10 +543,12 @@ def look_around(
 def following_path(
     distance_dframe: pd.DataFrame,
     position_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
     follower: str,
     followed: str,
     frames: int = 20,
     tol: float = 0,
+    tol_speed: float = 0,
 ) -> np.array:
     """Return True if 'follower' is closer than tol to the path that followed has walked over the last specified number of frames.
 
@@ -579,10 +557,13 @@ def following_path(
         Args:
             distance_dframe (pandas.DataFrame): distances between bodyparts; generated by the preprocess module
             position_dframe (pandas.DataFrame): position of bodyparts; generated by the preprocess module
+            speed_dframe (pandas.DataFrame): speed of body parts over time
             follower (str) identifier for the animal who's following
             followed (str) identifier for the animal who's followed
             frames (int) frames in which to track whether the process consistently occurs,
             tol (float) Maximum distance for which True is returned
+            tol_speed (float): Minimum speed for the following mouse
+
 
         Returns:
             follow (np.array): boolean sequence, True if conditions are fulfilled, False otherwise
@@ -618,8 +599,10 @@ def following_path(
     follow = np.all(
         np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]), axis=0
     )
+    speed = (speed_dframe[follower + "_Nose"] > tol_speed).to_numpy()
 
-    return follow
+
+    return follow & speed
 
 
 def max_behaviour(
@@ -659,15 +642,16 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
 
     """
     defaults = {
-        "speed_pause": 5,
-        "climb_tol": 0.1,
-        "sniff_tol": 10,
-        "close_contact_tol": 25,
-        "side_contact_tol": 45,
-        "follow_frames": int(coords._frame_rate/2),   # Half of a second, before: 10
-        "follow_tol": int(coords._frame_rate/4),      # Quarter of a second, before: 5
-        "huddle_speed": 2,
-        "nose_likelihood": 0.85,
+        "speed_pause": int(coords._frame_rate/4),       # Quarter of a second, before: 5, currently not used
+        "climb_tol": 0.15,                              # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
+        "sniff_tol": 12.5,                              # Noses need to be 12.5 mm apart or closer
+        "close_contact_tol": 25,                        # Body parts need to be 25 mm apart or closer
+        "side_contact_tol": 60,                         # Sides need to be 60 mm apart or closer
+        "follow_frames": int(coords._frame_rate/2),     # Frames over which following is considered, Half of a second, before: 10
+        "min_follow_frames": int(coords._frame_rate/4), # Minimum time mouse needs to follow, Quarter of a second
+        "follow_tol": 25,                               # 25 mm, before: 5
+        "cower_speed": 40,                              # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
+        "nose_likelihood": 0.85,                        # Minimum degree of certainty of the nose position prediction
     }
 
     for k, v in hparams.items():
@@ -753,13 +737,20 @@ def supervised_tagging(
     ) as est:
         huddle_estimator = pickle.load(est)
 
-    # Extract useful information from coordinates object
+    # Extract arena information from coordinates object
     arena_params = coord_object._arena_params[key]
+    to_mm_scaling = coord_object._scales[key][3]/coord_object._scales[key][2]
     arena_type = coord_object._arena
+    if arena_type.startswith("circular"):
+        # Multiply ellipse information (except angle) by scaling factor
+        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params[0:2]] + [arena_params[2]])
+    elif arena_type.startswith("polygon"):
+        # Multiply set of arena points by scaling factor
+        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params])
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
-
+               
     #extract various data tables from their Table dicts
     raw_coords = get_dt(raw_coords,key).reset_index(drop=True)
     coords = get_dt(coords,key).reset_index(drop=True)
@@ -767,8 +758,6 @@ def supervised_tagging(
     angles = get_dt(angles,key).reset_index(drop=True)
     speeds = get_dt(speeds,key).reset_index(drop=True)
     likelihoods = get_dt(coord_object.get_quality(),key).reset_index(drop=True)
-    arena_abs = coord_object._scales[key][-1]
-    arena_rel = coord_object._scales[key][-2]
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -791,9 +780,46 @@ def supervised_tagging(
         if any(body_part in col[0] for col in coords.columns)
     ]
 
+    #extract mouse normalization information from coordinates object
+    mouse_lens={}
+    mouse_areas={}
+    for _id in animal_ids:
+        if _id:
+         _id=_id+"_"
+        
+        #calculate mouse lengths
+        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
+
+        #remove missing bodyparts from backbone
+        for bp in backbone:
+            if not bp in raw_coords.keys():
+                backbone.remove(bp)
+
+        #calculate overall length of bodypart chain i.e. mouse length
+        indices=np.random.choice(np.arange(0, len(raw_coords)), size=np.min([5000, len(raw_coords)]), replace=False)
+        if len(backbone)>1:
+            mouse_lens_raw=0
+            for bp_pos in range(0, len(backbone)-1):
+                mouse_lens_raw+=np.apply_along_axis(
+                        np.linalg.norm, 1, (
+                            raw_coords[backbone[bp_pos+1]].iloc[indices]
+                            -raw_coords[backbone[bp_pos]].iloc[indices]
+                            )
+                        )
+            mouse_lens[_id]=np.nanpercentile(mouse_lens_raw,80)
+                    
+        #assume default mouse length if body parts for length estimation are insufficient
+        else:
+            mouse_lens[_id]=50
+        
+        if _id+"full_area" in coord_object._areas[key]:
+            mouse_areas[_id]=np.nanpercentile(
+                coord_object._areas[key][_id+"full_area"]
+                ,80)
+
     def onebyone_contact(interactors: List, bparts: List):
         """Return a smooth boolean array with 1to1 contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params
 
         try:
             left = interactors[0] + bparts[0]
@@ -811,27 +837,27 @@ def supervised_tagging(
                 (left if not isinstance(left, list) else right),
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
-                arena_abs,
-                arena_rel,
             )
         )
 
     def twobytwo_contact(interactors: List, rev: bool):
         """Return a smooth boolean array with side by side contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params, arena_abs, arena_params
+        nonlocal raw_coords, animal_ids, params, mouse_lens
+        
         return deepof.utils.smooth_boolean_array(
             close_double_contact(
-                raw_coords,
-                interactors[0] + "_Nose",
-                interactors[0] + "_Tail_base",
-                interactors[1] + "_Nose",
-                interactors[1] + "_Tail_base",
-                params["side_contact_tol"],
-                rev=rev,
-                arena_abs=arena_abs,
-                arena_rel=arena_rel,
+            raw_coords,
+            #mouse_lens[interactors[0]+"_"],
+            interactors[0] + "_Nose",
+            interactors[0] + "_Tail_base",
+            #mouse_lens[interactors[1]+"_"],
+            interactors[1] + "_Nose",
+            interactors[1] + "_Tail_base",
+            params["side_contact_tol"],
+            rev=rev,
             )
         )
+        
 
     @_suppress_warning(warn_messages=["All-NaN slice encountered"])
     def overall_speed(ovr_speeds, _id, ucond):
@@ -898,10 +924,12 @@ def supervised_tagging(
                     following_path(
                         dists,
                         raw_coords,
+                        speeds,
                         follower=animal_pair[0],
                         followed=animal_pair[1],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
+                        tol_speed=params["cower_speed"]
                     )
                 )
 
@@ -911,12 +939,31 @@ def supervised_tagging(
                     following_path(
                         dists,
                         raw_coords,
+                        speeds,
                         follower=animal_pair[1],
                         followed=animal_pair[0],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
+                        tol_speed=params["cower_speed"],
                     )
                 )
+
+                #filter out extremely short segments
+                if run_numba:
+                    tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"]=deepof.utils.filter_short_true_segments_numba(
+                        array=tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"], min_length=params["min_follow_frames"],
+                    )
+                    tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"]=deepof.utils.filter_short_true_segments_numba(
+                        array=tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"], min_length=params["min_follow_frames"],
+                    )        
+                else:
+                    tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"]=deepof.utils.filter_short_true_segments(
+                        array=tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"], min_length=params["min_follow_frames"],
+                    )
+                    tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"]=deepof.utils.filter_short_true_segments(
+                        array=tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"], min_length=params["min_follow_frames"],
+                    ) 
+
             except KeyError:
                 pass
 
@@ -927,23 +974,24 @@ def supervised_tagging(
         else:
             current_features=get_dt(full_features,key)
 
-        tag_dict[_id + undercond + "climb_wall"] = climb_wall(
+        tag_dict[_id + undercond + "climb_arena"] = climb_arena(
             arena_type,
-            arena_params,
+            arena_params_scaled,
             raw_coords,
             params["climb_tol"],
             _id + undercond,
+            mouse_lens[_id + undercond],
             run_numba=run_numba,
         )
 
 
-        tag_dict[_id + undercond + "sniff_wall"] = sniff_object(
+        tag_dict[_id + undercond + "sniff_arena"] = sniff_object(
             speed_dframe=speeds,
             arena_type=arena_type,
-            arena=arena_params,
+            arena=arena_params_scaled,
             pos_dict=raw_coords,
             tol=params["sniff_tol"],
-            tol_speed=params["huddle_speed"],
+            tol_speed=params["cower_speed"],
             nose=_id + undercond + "Nose",
             center_name=center,
             s_object="arena",
@@ -953,23 +1001,25 @@ def supervised_tagging(
 
 
         tag_dict[_id + undercond + "cowering"] = deepof.utils.smooth_boolean_array(
-            huddle(
+            cowering(
                 current_features,
                 huddle_estimator=huddle_estimator,
                 animal_id=_id + undercond,
             )
         )
-        tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
-            look_around(
-            speeds,
-            angles,
-            likelihoods,
-            params["huddle_speed"],
-            params["nose_likelihood"],
-            center_name=center,
-            animal_id=_id,
-            )
-        )
+        #tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
+        #    deepof.utils.filter_short_true_segments(
+        tag_dict[_id + undercond + "nose_activity"] = nose_activity(
+        speeds,
+        angles,
+        likelihoods,
+        params["cower_speed"],
+        params["nose_likelihood"],
+        center_name=center,
+        animal_id=_id,
+        )#, min_length=params["min_follow_frames"],
+        #    )
+        #)
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
         tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
@@ -1004,8 +1054,8 @@ def tagged_video_output(
         """Output a single annotated video. Enclosed in a function to enable parallelization."""
         deepof.visuals_utils.annotate_video(
             coordinates,
-            tag_dict=tag_dict[key],
-            vid_key=key,
+            supervised_annotations=tag_dict,
+            key=key,
             debug=debug,
             frame_limit=frame_limit,
             params=params,
