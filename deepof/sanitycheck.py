@@ -1,3 +1,4 @@
+
 import math
 from IPython.display import display, HTML
 import ipywidgets as widgets
@@ -44,22 +45,35 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
 
     # UI widgets
     main_dropdown = widgets.Dropdown(
-        options=["angle", "distance", "speed"],
-        value="distance",
-        description="Select:",
-        style={'description_width': 'initial'}
+    options=["angle", "distance", "speed"],
+    value="distance",
+    description="Select:",
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='200px')
     )
     multiselect = widgets.SelectMultiple(
         options=get_multi_select(),
         value=[],
         description="Values:",
         style={'description_width': 'initial'},
-        layout=widgets.Layout(width='400px', height='200px', display='')
+        layout=widgets.Layout(width='400px', height='200px')
     )
     start_box = widgets.IntText(value=0, description="Start Frame:", layout=widgets.Layout(width='150px'))
     end_box = widgets.IntText(value=10, description="End Frame:", layout=widgets.Layout(width='150px'))
-    range_selector = widgets.HBox([start_box, end_box])
-
+    range_selector = widgets.HBox(
+        [start_box, end_box],
+        layout=widgets.Layout(justify_content='space-between', width='400px')
+    )
+    frame_slider = widgets.IntSlider(
+        value=0,
+        min=0,
+        max=10,
+        step=1,
+        description="Frame:",
+        continuous_update=True,
+        layout=widgets.Layout(width='500px')
+    )
+    animate_button = widgets.Button(description="Animate", button_style="", layout=widgets.Layout(width='150px'))
     output = widgets.Output()
    
     def update_multiselect_visibility(change):
@@ -70,18 +84,18 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
     main_dropdown.observe(update_multiselect_visibility, names='value')
 
     # Plotting function
-    def plot_current_frame():
+    def plot_current_frame(change=None):
         global current_frame_index
         
-        if sampled_coords is None or sampled_coords.empty:
-            print("No frames to display. Please select a valid range.")
+        current_frame_index = frame_slider.value
+        if sampled_coords is None or sampled_coords.empty:            
             return
 
         if not (0 <= current_frame_index < len(sampled_coords)):
             print(f"Invalid frame index: {current_frame_index}. Skipping plot.")
             return
         with output:
-            output.clear_output()
+            output.clear_output(wait = True)
             fig, ax = plt.subplots(figsize=(8, 8))
             selected_columns = list(multiselect.value)
             
@@ -214,43 +228,33 @@ def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "are
 
             sampled_coords = coords.iloc[start_frame:end_frame]  # Filter frames
             current_frame_index = 0  # Start at the first frame in the range
-            
+            frame_slider.min = 0
+            frame_slider.max = len(sampled_coords) - 1
+            frame_slider.value = 0  # Reset slider
             plot_current_frame()
     
-    def on_next_button_clicked(_):
-        global current_frame_index
-        #sampled_coords = coords.iloc[start_frame:end_frame] 
-        if current_frame_index < len(sampled_coords) - 1:  # Prevent out-of-bounds
-            current_frame_index += 1
-            
-            plot_current_frame()
-        else:
-            print("Already at the last frame.")
-
-    def on_prev_button_clicked(_):
-        global current_frame_index
-        if current_frame_index > 0:  # Prevent out-of-bounds
-            current_frame_index -= 1
-            plot_current_frame()
-        else:
-            print("Already at the first frame.")
+    
 
 
 
     
     # Buttons
     animate_button = widgets.Button(description="Animate", button_style="")
-    next_button = widgets.Button(description="Next", button_style="")
-    prev_button = widgets.Button(description="Previous", button_style="")
+    
     controls = widgets.VBox([
-    widgets.HBox([main_dropdown, multiselect]),
+    widgets.HBox(
+        [main_dropdown, multiselect],
+        layout=widgets.Layout(justify_content='space-between', align_items='center')
+    ),
     range_selector,
-    widgets.HBox([prev_button,animate_button, next_button ]),
-    ])
-
+    widgets.HBox(
+        [animate_button],
+        layout=widgets.Layout(justify_content='flex-start', align_items='center', width='500px')
+    ),
+    frame_slider  
+    ], layout=widgets.Layout(spacing="20px")) 
+    
     animate_button.on_click(on_animate_button_clicked)
-    next_button.on_click(on_next_button_clicked)
-    prev_button.on_click(on_prev_button_clicked)
-
-    # Display UI
+    frame_slider.observe(lambda change: plot_current_frame(), names='value')
+   
     display(controls, output)
