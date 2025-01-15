@@ -1,4 +1,3 @@
-
 import math
 from IPython.display import display, HTML
 import ipywidgets as widgets
@@ -7,254 +6,200 @@ import numpy as np
 import pandas as pd
 from deepof.data import Coordinates
 
-def radians_to_degrees(radians):
-    return np.degrees(radians)
+class GUI:
+    def __init__(self, coordinates: Coordinates, experiment_id: str, center: str = "arena", align: str = None):
+        # Initialize data
+        self.coordinates = coordinates
+        self.experiment_id = experiment_id
+        self.center = center
+        self.align = align
+        self.coords = coordinates.get_coords_at_key(
+            center=center,
+            align=align,
+            scale=coordinates._scales[experiment_id],
+            key=experiment_id
+        )
+        self.df = None
+        self.sampled_coords = None
+        self.current_frame_index = 0
+        self.start_frame = 0
+        self.end_frame = 0
 
+        # Initialize widgets
+        self.main_dropdown = widgets.Dropdown(
+            options=["angle", "distance", "speed"],
+            value="distance",
+            description="Select:",
+            style={'description_width': 'initial'},
+            layout=widgets.Layout(width='200px')
+        )
 
-current_frame_index = 0
-coords = None  
-df = None  
-sampled_coords = None 
-start_frame = 0
-end_frame = 0
+        self.multiselect = widgets.SelectMultiple(
+            options=[],
+            value=[],
+            description="Values:",
+            style={'description_width': 'initial'},
+            layout=widgets.Layout(width='400px', height='200px')
+        )
 
-def display_GUI(coordinates: Coordinates, experiment_id: str, center: str = "arena", align: str = None):
-    global coords, df
-    
-    # Load coordinates
-    coords = coordinates.get_coords_at_key(
-        center=center,
-        align=align,
-        scale=coordinates._scales[experiment_id],
-        key=experiment_id
-    )
+        self.start_box = widgets.IntText(value=0, description="Start Frame:", layout=widgets.Layout(width='150px'))
+        self.end_box = widgets.IntText(value=10, description="End Frame:", layout=widgets.Layout(width='150px'))
 
-    def get_multi_select():
-        if main_dropdown.value == "angle":
-            plottingpoints = coordinates.get_angles()
-        elif main_dropdown.value == "distance":
-            plottingpoints = coordinates.get_distances()
-        elif main_dropdown.value == "speed":
-            plottingpoints = coordinates.get_coords(speed=1)
-        global df
-        df = plottingpoints[experiment_id]   
+        self.range_selector = widgets.HBox(
+            [self.start_box, self.end_box],
+            layout=widgets.Layout(justify_content='space-between', width='400px')
+        )
+
+        self.frame_slider = widgets.IntSlider(
+            value=0, min=0, max=10, step=1,
+            description="Frame:", continuous_update=True,
+            layout=widgets.Layout(width='500px')
+        )
+
+        self.animate_button = widgets.Button(description="Animate", button_style="", layout=widgets.Layout(width='150px'))
+        self.output = widgets.Output()
+
+        self.initialize_gui()
+
+    def get_multi_select(self):
+        if self.main_dropdown.value == "angle":
+            plottingpoints = self.coordinates.get_angles()
+        elif self.main_dropdown.value == "distance":
+            plottingpoints = self.coordinates.get_distances()
+        elif self.main_dropdown.value == "speed":
+            plottingpoints = self.coordinates.get_coords(speed=1)
         
-        columns = [(f"{col}", col) if isinstance(col, tuple) else (str(col), col) for col in df.columns]
+        self.df = plottingpoints[self.experiment_id]
+        return [(str(col), col) if isinstance(col, tuple) else (str(col), col) for col in self.df.columns]
 
-        return columns
-
-    # UI widgets
-    main_dropdown = widgets.Dropdown(
-    options=["angle", "distance", "speed"],
-    value="distance",
-    description="Select:",
-    style={'description_width': 'initial'},
-    layout=widgets.Layout(width='200px')
-    )
-    multiselect = widgets.SelectMultiple(
-        options=get_multi_select(),
-        value=[],
-        description="Values:",
-        style={'description_width': 'initial'},
-        layout=widgets.Layout(width='400px', height='200px')
-    )
-    start_box = widgets.IntText(value=0, description="Start Frame:", layout=widgets.Layout(width='150px'))
-    end_box = widgets.IntText(value=10, description="End Frame:", layout=widgets.Layout(width='150px'))
-    range_selector = widgets.HBox(
-        [start_box, end_box],
-        layout=widgets.Layout(justify_content='space-between', width='400px')
-    )
-    frame_slider = widgets.IntSlider(
-        value=0,
-        min=0,
-        max=10,
-        step=1,
-        description="Frame:",
-        continuous_update=True,
-        layout=widgets.Layout(width='500px')
-    )
-    animate_button = widgets.Button(description="Animate", button_style="", layout=widgets.Layout(width='150px'))
-    output = widgets.Output()
-   
-    def update_multiselect_visibility(change):
+    def update_multiselect_visibility(self, change):
         if change['new'] in ["angle", "distance", "speed"]:
-            multiselect.options = get_multi_select()
-            multiselect.layout.display = ''
+            self.multiselect.options = self.get_multi_select()
 
-    main_dropdown.observe(update_multiselect_visibility, names='value')
-
-    # Plotting function
-    def plot_current_frame(change=None):
-        global current_frame_index
-        
-        current_frame_index = frame_slider.value
-        if sampled_coords is None or sampled_coords.empty:            
+    def plot_current_frame(self, change=None):
+        if self.sampled_coords is None or self.sampled_coords.empty:
             return
 
-        if not (0 <= current_frame_index < len(sampled_coords)):
-            print(f"Invalid frame index: {current_frame_index}. Skipping plot.")
-            return
-        with output:
-            output.clear_output(wait = True)
+        frame_coords = self.sampled_coords.iloc[[self.current_frame_index]]
+
+        with self.output:
+            self.output.clear_output(wait=True)
             fig, ax = plt.subplots(figsize=(8, 8))
-            selected_columns = list(multiselect.value)
-            
+            selected_columns = list(self.multiselect.value)
 
-            # Use global sampled_coords for the current frame
-            
-            frame_coords = sampled_coords.iloc[[current_frame_index]]  # Ensure DataFrame output
-           
-            if isinstance(frame_coords, pd.Series):
-                x_coords = frame_coords['x']
-                y_coords = frame_coords['y']
-            else:
-                x_coords = frame_coords.xs('x', level=1, axis=1)
-                y_coords = frame_coords.xs('y', level=1, axis=1)
+            x_coords = frame_coords.xs('x', level=1, axis=1)
+            y_coords = frame_coords.xs('y', level=1, axis=1)
 
-            # Set plot limits and invert y-axis
             ax.set_xlim(x_coords.min().min(), x_coords.max().max())
             ax.set_ylim(y_coords.min().min(), y_coords.max().max())
             ax.set_aspect('equal', adjustable='datalim')
             ax.invert_yaxis()
 
-            # Plot points with labels
             for point_name in x_coords.columns:
                 x, y = x_coords[point_name], y_coords[point_name]
                 ax.scatter(x, y, color="blue", s=20)
-                #ax.text(x, y, point_name, color="green", fontsize=8, ha="center", va="center")
-            
-            if main_dropdown.value == "angle" :
-                filtered_df=df[selected_columns]
-                for (point1, point2, point3), angle in filtered_df.iloc[[current_frame_index]].items():
-                    
-                    
-                    # Check if all points exist in x_coords and y_coords
-                    if point1 in x_coords.columns and point2 in x_coords.columns and point3 in x_coords.columns:
-                        x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
-                        x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
-                        x3, y3 = x_coords.iloc[[0]][point3], y_coords.iloc[[0]][point3]
 
-                        # Draw connections
-                        ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
-                        ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+            if self.main_dropdown.value == "angle":
+                self.plot_angles(ax, x_coords, y_coords, selected_columns)
+            elif self.main_dropdown.value == "distance":
+                self.plot_distances(ax, x_coords, y_coords, selected_columns)
+            elif self.main_dropdown.value == "speed":
+                self.plot_speeds(ax, x_coords, y_coords, selected_columns)
 
-                        # Calculate angle offset
-                        dx1, dy1 = x1 - x2, y1 - y2
-                        dx3, dy3 = x3 - x2, y3 - y2
-                        offset_x = (dx1 + dx3) / 4
-                        offset_y = (dy1 + dy3) / 4
-
-                        # Display angle
-                        #print(radians_to_degrees(angle))
-                        if isinstance(angle, pd.Series):
-                            scalar_angle = angle.iloc[0]  # Extract the scalar value
-                        else:
-                            scalar_angle = angle
-                        ax.text(
-                            x2 + offset_x, y2 + offset_y,
-                            f"{radians_to_degrees(scalar_angle):.1f}°",
-                            color="red", fontsize=8, ha="center"
-                        )
-                    else:
-                        print(f"Skipping missing points for frame {current_frame_index}: {point1}, {point2}, {point3}")      
-            if main_dropdown.value == "distance":
-                filtered_df = df[selected_columns]
-                for (point1, point2), distance in filtered_df.iloc[[current_frame_index]].items():
-                    if point1 in x_coords.columns and point2 in x_coords.columns:
-                        try:
-                            x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
-                            x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
-
-                            # Draw line between the points
-                            ax.plot([x1, x2], [y1, y2], color="green", linewidth=2.5)
-
-                            # Display the distance at the midpoint
-                            midpoint_x = (x1 + x2) / 2
-                            midpoint_y = (y1 + y2) / 2
-                            scalar_distance = distance.iloc[0] if isinstance(distance, pd.Series) else distance
-                            ax.text(
-                                midpoint_x, midpoint_y,
-                                f"{scalar_distance:.2f}",
-                                color="purple", fontsize=8, ha="center"
-                            )
-                        except KeyError as e:
-                            print(f"KeyError: Missing data for points {point1}, {point2}: {e}")
-                        except Exception as e:
-                            print(f"Error while processing points {point1}, {point2}: {e}")
-                    else:
-                        print(f"Skipping missing points for frame {current_frame_index}: {point1}, {point2}")
-            if main_dropdown.value == "speed":
-                # Filter the DataFrame for the selected points
-                filtered_df = df[selected_columns]
-
-                for point, speed in filtered_df.iloc[[current_frame_index]].items():
-                    #print(current_frame_index)
-                    #print(filtered_df.iloc[[4]].items)
-                    if point in x_coords.columns:
-                        try:
-                            # Safely access the coordinates of the point
-                            x, y = x_coords.iloc[0][point], y_coords.iloc[0][point]
-
-                            # Display the speed value at the point
-                            scalar_speed = speed.iloc[0] if isinstance(speed, pd.Series) else speed
-                            ax.scatter(x, y, color="blue", s=20)  # Plot the point
-                            ax.text(
-                                x, y,
-                                f"{scalar_speed:.2f}",  # Display speed with 2 decimal places
-                                color="purple", fontsize=8, ha="center"
-                            )
-                        except KeyError as e:
-                            print(f"KeyError: Missing data for point {point}: {e}")
-                        except Exception as e:
-                            print(f"Error while processing point {point}: {e}")
-                    else:
-                        print(f"Skipping missing point for frame {current_frame_index}: {point}")
-
-            
-            plt.title(f"Frame {start_frame + current_frame_index}")
+            plt.title(f"Frame {self.start_frame + self.current_frame_index}")
             plt.show()
 
-    # Button handlers
-    def on_animate_button_clicked(_):
-        global current_frame_index, sampled_coords, start_frame, end_frame
-        with output:
-            output.clear_output()
-            start_frame = start_box.value
-            end_frame = end_box.value
+    def plot_angles(self, ax, x_coords, y_coords, selected_columns):
+        filtered_df = self.df[selected_columns]
+        for (point1, point2, point3), angle in filtered_df.iloc[[self.current_frame_index]].items():
+            if point1 in x_coords.columns and point2 in x_coords.columns and point3 in x_coords.columns:
+                x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
+                x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
+                x3, y3 = x_coords.iloc[[0]][point3], y_coords.iloc[[0]][point3]
 
-            if start_frame < 0 or end_frame > len(coords) or start_frame >= end_frame:
+                ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
+                ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+
+                dx1, dy1 = x1 - x2, y1 - y2
+                dx3, dy3 = x3 - x2, y3 - y2
+                offset_x = (dx1 + dx3) / 4
+                offset_y = (dy1 + dy3) / 4
+
+                scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
+                ax.text(
+                    x2 + offset_x, y2 + offset_y,
+                    f"{np.degrees(scalar_angle):.1f}°",
+                    color="red", fontsize=8, ha="center"
+                )
+
+    def plot_distances(self, ax, x_coords, y_coords, selected_columns):
+        filtered_df = self.df[selected_columns]
+        for (point1, point2), distance in filtered_df.iloc[[self.current_frame_index]].items():
+            if point1 in x_coords.columns and point2 in x_coords.columns:
+                x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
+                x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
+
+                ax.plot([x1, x2], [y1, y2], color="green", linewidth=2.5)
+                midpoint_x = (x1 + x2) / 2
+                midpoint_y = (y1 + y2) / 2
+
+                scalar_distance = distance.iloc[0] if isinstance(distance, pd.Series) else distance
+                ax.text(
+                    midpoint_x, midpoint_y,
+                    f"{scalar_distance:.2f}",
+                    color="purple", fontsize=8, ha="center"
+                )
+
+    def plot_speeds(self, ax, x_coords, y_coords, selected_columns):
+        filtered_df = self.df[selected_columns]
+        for point, speed in filtered_df.iloc[[self.current_frame_index]].items():
+            if point in x_coords.columns:
+                x, y = x_coords.iloc[0][point], y_coords.iloc[0][point]
+                scalar_speed = speed.iloc[0] if isinstance(speed, pd.Series) else speed
+                ax.scatter(x, y, color="blue", s=20)
+                ax.text(
+                    x, y,
+                    f"{scalar_speed:.2f}",
+                    color="purple", fontsize=8, ha="center"
+                )
+
+    def on_animate_button_clicked(self, _):
+        self.start_frame = self.start_box.value
+        self.end_frame = self.end_box.value
+
+        if self.start_frame < 0 or self.end_frame > len(self.coords) or self.start_frame >= self.end_frame:
+            with self.output:
+                self.output.clear_output()
                 print("Invalid frame range. Please adjust the start and end frame values.")
-                return
+            return
 
-            sampled_coords = coords.iloc[start_frame:end_frame]  # Filter frames
-            current_frame_index = 0  # Start at the first frame in the range
-            frame_slider.min = 0
-            frame_slider.max = len(sampled_coords) - 1
-            frame_slider.value = 0  # Reset slider
-            plot_current_frame()
-    
-    
+        self.sampled_coords = self.coords.iloc[self.start_frame:self.end_frame]
+        self.current_frame_index = 0
+        self.frame_slider.min = 0
+        self.frame_slider.max = len(self.sampled_coords) - 1
+        self.frame_slider.value = 0
+        self.plot_current_frame()
+        
+    def update_current_frame_index(self, change):
+        self.current_frame_index = change['new']
+        self.plot_current_frame()
 
 
+    def initialize_gui(self):
+        self.multiselect.options = self.get_multi_select()
+        self.main_dropdown.observe(self.update_multiselect_visibility, names='value')
+        self.frame_slider.observe(lambda change: self.update_current_frame_index(change), names='value')
+        self.animate_button.on_click(self.on_animate_button_clicked)
 
-    
-    # Buttons
-    animate_button = widgets.Button(description="Animate", button_style="")
-    
-    controls = widgets.VBox([
-    widgets.HBox(
-        [main_dropdown, multiselect],
-        layout=widgets.Layout(justify_content='space-between', align_items='center')
-    ),
-    range_selector,
-    widgets.HBox(
-        [animate_button],
-        layout=widgets.Layout(justify_content='flex-start', align_items='center', width='500px')
-    ),
-    frame_slider  
-    ], layout=widgets.Layout(spacing="20px")) 
-    
-    animate_button.on_click(on_animate_button_clicked)
-    frame_slider.observe(lambda change: plot_current_frame(), names='value')
-   
-    display(controls, output)
+        controls = widgets.VBox([
+            widgets.HBox([
+                self.main_dropdown, self.multiselect
+            ], layout=widgets.Layout(justify_content='space-between', align_items='center')),
+            self.range_selector,
+            widgets.HBox([
+                self.animate_button
+            ], layout=widgets.Layout(justify_content='flex-start', align_items='center', width='500px')),
+            self.frame_slider
+        ], layout=widgets.Layout(spacing="20px"))
+
+        display(controls, self.output)
