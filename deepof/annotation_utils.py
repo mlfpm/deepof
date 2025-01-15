@@ -476,7 +476,7 @@ def cowering(
     return y_huddle
 
 
-def nose_activity(
+def detect_activity(
     speed_dframe: pd.DataFrame,
     angles_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
@@ -484,6 +484,7 @@ def nose_activity(
     tol_likelihood: float,
     center_name: str = "Center",
     animal_id: str = "",
+    is_active: bool = True,
 ):
     """Return true when the mouse is looking around using simple rules.
 
@@ -495,49 +496,45 @@ def nose_activity(
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
         center_name (str): Body part to center coordinates on. "Center" by default.
         animal_id (str): ID of the current animal.
+        is_active (bool): Animal is active whilst being immobile
 
     Returns:
-        lookaround (np.array): True if the animal is standing still and looking around, False otherwise
+        immobile_in_activivity (np.array): True if the animal is standing still and is active / inactive, False otherwise
 
     """
     if animal_id != "":
         animal_id += "_"
 
 
-    spine_1_angles=[tup for tup 
-                    in angles_dframe.keys() 
-                    if animal_id + "Spine_1" 
-                    in tup]    
-    left_angle=[tup for tup 
-                in spine_1_angles 
-                if animal_id + "Left_ear" 
-                in tup
-                and animal_id + "Center"
-                in tup]
-    right_angle=[tup for tup 
-                 in spine_1_angles 
-                if animal_id + "Right_ear" 
-                in tup
-                and animal_id + "Center"
-                in tup]
+    #angle smaller than 45 deg (looking straight ahead corresponds to about 90 deg for this angle)
+        
+    immobile_in_activivity = np.array([False]*len(speed_dframe))
 
-    #angle smaller than 45 deg (looking straight ahead corresponds to about 90 deg for thsi angle)
-    look_left = False
-    look_right = False
-    speed = np.array([False]*len(speed_dframe))
-    if len(left_angle) > 0 and len(right_angle) > 0:
-        look_left=(angles_dframe[left_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[right_angle].to_numpy().squeeze())
-        look_right=(angles_dframe[right_angle].to_numpy().squeeze()+0.43633231 < angles_dframe[left_angle].to_numpy().squeeze())
+    immobile_in_activivity = deepof.utils.smooth_boolean_array(
+        (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
+        scale=1,
+    )
 
-        speed = (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
     nose_speed = (
         tol_speed < speed_dframe[animal_id + "Nose"]   #speed_dframe[animal_id + center_name]
     )
     nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
+    activity=nose_speed & nose_likelihood
 
-    lookaround = speed & nose_speed & nose_likelihood      #(look_left | look_right)
+    #get start and end indices of 1-blocks
+    start_indices=np.where(np.diff(immobile_in_activivity.astype(int), prepend=0) > 0)[0]
+    end_indices=np.where(np.diff(immobile_in_activivity.astype(int), append=0) < 0)[0]
 
-    return lookaround
+    if is_active:
+        for [start_index, end_index] in zip(start_indices,end_indices):     
+            if(np.sum(activity[start_index:end_index+1]) < 0.5*(end_index-start_index)):
+                immobile_in_activivity[start_index:end_index+1]=False
+    else:
+        for [start_index, end_index] in zip(start_indices,end_indices):     
+            if(np.sum(activity[start_index:end_index+1]) >= 0.5*(end_index-start_index)):
+                immobile_in_activivity[start_index:end_index+1]=False
+
+    return immobile_in_activivity
 
 
 def following_path(
@@ -1007,9 +1004,7 @@ def supervised_tagging(
                 animal_id=_id + undercond,
             )
         )
-        #tag_dict[_id + undercond + "lookaround"] = deepof.utils.smooth_boolean_array(
-        #    deepof.utils.filter_short_true_segments(
-        tag_dict[_id + undercond + "nose_activity"] = nose_activity(
+        tag_dict[_id + undercond + "immobile_active"] = detect_activity(
         speeds,
         angles,
         likelihoods,
@@ -1017,9 +1012,18 @@ def supervised_tagging(
         params["nose_likelihood"],
         center_name=center,
         animal_id=_id,
-        )#, min_length=params["min_follow_frames"],
-        #    )
-        #)
+        is_active=True,
+        )
+        tag_dict[_id + undercond + "immobile_inactive"] = detect_activity(
+        speeds,
+        angles,
+        likelihoods,
+        params["cower_speed"],
+        params["nose_likelihood"],
+        center_name=center,
+        animal_id=_id,
+        is_active=False,
+        )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
         tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
