@@ -513,6 +513,7 @@ def detect_activity(
     immobile_in_activivity = deepof.utils.smooth_boolean_array(
         (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
         scale=1,
+        sigma=1.2,
     )
 
     nose_speed = (

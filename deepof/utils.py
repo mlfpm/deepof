@@ -1235,7 +1235,7 @@ def scale_animal(feature_array: np.ndarray, scale: str):
 
 
 def kleinberg(
-    offsets: list, s: float = np.e, gamma: float = 1.0, n=None, T=None, k=None
+    offsets: list, s: float = 2.0, gamma: float = 1.0, n=None, T=None, k=None
 ):
     """Apply Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
 
@@ -1287,7 +1287,7 @@ def kleinberg(
         # number of hidden states. Changed to be not higher than 3
         k = np.min(
             [
-                3,
+                6,
                 int(
                     math.ceil(
                         float(
@@ -1421,7 +1421,7 @@ def kleinberg_core_numba(
 
 
 def smooth_boolean_array(
-    a: np.array, scale: int = 1, batch_size: int = 50000
+    a: np.array, scale: int = 1, sigma = 2.0, batch_size: int = 50000
 ) -> np.array:
     """Return a boolean array in which isolated appearances of a feature are smoothed.
 
@@ -1449,7 +1449,7 @@ def smooth_boolean_array(
             continue  # skip batch if tehre was no detected activity
 
         # Process the current batch
-        batch_bursts = kleinberg(offsets, gamma=0.01)
+        batch_bursts = kleinberg(offsets, gamma=0.3, s=sigma)
 
         # Apply calculated smoothing to current batch
         a_smooth_batch = np.zeros(np.size(batch), dtype=bool)
