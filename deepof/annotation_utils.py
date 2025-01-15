@@ -513,7 +513,7 @@ def detect_activity(
     immobile_in_activivity = deepof.utils.smooth_boolean_array(
         (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
         scale=1,
-        sigma=1.2,
+        sigma=1.5,
     )
 
     nose_speed = (
@@ -522,17 +522,17 @@ def detect_activity(
     nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
     activity=nose_speed & nose_likelihood
 
-    #get start and end indices of 1-blocks
+    #get start and end indices of True-blocks
     start_indices=np.where(np.diff(immobile_in_activivity.astype(int), prepend=0) > 0)[0]
     end_indices=np.where(np.diff(immobile_in_activivity.astype(int), append=0) < 0)[0]
 
     if is_active:
         for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) < 0.5*(end_index-start_index)):
+            if(np.sum(activity[start_index:end_index+1]) < 0.25*(end_index-start_index)):
                 immobile_in_activivity[start_index:end_index+1]=False
     else:
         for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) >= 0.5*(end_index-start_index)):
+            if(np.sum(activity[start_index:end_index+1]) >= 0.25*(end_index-start_index)):
                 immobile_in_activivity[start_index:end_index+1]=False
 
     return immobile_in_activivity
