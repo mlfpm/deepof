@@ -1021,7 +1021,7 @@ def supervised_tagging(
         animal_id=_id,
         is_active=True,
         )
-        tag_dict[_id + undercond + "immobile_inactive"] = detect_activity(
+        tag_dict[_id + undercond + "immobile_passive"] = detect_activity(
         speeds,
         angles,
         likelihoods,
