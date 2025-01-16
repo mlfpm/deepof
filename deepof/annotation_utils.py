@@ -482,6 +482,7 @@ def detect_activity(
     likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
+    min_length: int,
     center_name: str = "Center",
     animal_id: str = "",
     is_active: bool = True,
@@ -510,10 +511,14 @@ def detect_activity(
         
     immobile_in_activivity = np.array([False]*len(speed_dframe))
 
-    immobile_in_activivity = deepof.utils.smooth_boolean_array(
-        (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
-        scale=1,
-        sigma=1.5,
+    immobile_in_activivity = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy()).astype(bool)
+    #immobile_in_activivity = deepof.utils.smooth_boolean_array(
+    #    (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
+    #    scale=1,
+    #    sigma=1.2,
+    #)
+    immobile_in_activivity = deepof.utils.filter_short_true_segments(
+        array=immobile_in_activivity, min_length=min_length,
     )
 
     nose_speed = (
@@ -528,11 +533,11 @@ def detect_activity(
 
     if is_active:
         for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) < 0.25*(end_index-start_index)):
+            if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
                 immobile_in_activivity[start_index:end_index+1]=False
     else:
         for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) >= 0.25*(end_index-start_index)):
+            if(np.sum(activity[start_index:end_index+1]) >= 0.4*(end_index-start_index)):
                 immobile_in_activivity[start_index:end_index+1]=False
 
     return immobile_in_activivity
@@ -1011,6 +1016,7 @@ def supervised_tagging(
         likelihoods,
         params["cower_speed"],
         params["nose_likelihood"],
+        params["min_follow_frames"],
         center_name=center,
         animal_id=_id,
         is_active=True,
@@ -1021,6 +1027,7 @@ def supervised_tagging(
         likelihoods,
         params["cower_speed"],
         params["nose_likelihood"],
+        params["min_follow_frames"],
         center_name=center,
         animal_id=_id,
         is_active=False,
