@@ -505,7 +505,7 @@ def detect_activity(
 
     #detect immobility and smooth detections    
     immobile = np.array([False]*len(speed_dframe))
-    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy()).astype(bool)
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
     )
