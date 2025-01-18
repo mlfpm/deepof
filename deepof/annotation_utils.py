@@ -478,49 +478,41 @@ def cowering(
 
 def detect_activity(
     speed_dframe: pd.DataFrame,
-    angles_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
     min_length: int,
     center_name: str = "Center",
     animal_id: str = "",
-    is_active: bool = True,
 ):
-    """Return true when the mouse is looking around using simple rules.
+    """Return true when the mouse is standing still and either looking around (active) or not looking around (passive) using simple rules.
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
-        angles_dframe (pandas.DataFrame): angles of body parts relative to each other 
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
         center_name (str): Body part to center coordinates on. "Center" by default.
         animal_id (str): ID of the current animal.
-        is_active (bool): Animal is active whilst being immobile
 
     Returns:
-        immobile_in_activivity (np.array): True if the animal is standing still and is active / inactive, False otherwise
+        immobile_active (np.array): True if the animal is standing still and is active False otherwise
+        immobile_passive (np.array): True if the animal is standing still and is passive False otherwise
 
     """
     if animal_id != "":
         animal_id += "_"
 
-
-    #angle smaller than 45 deg (looking straight ahead corresponds to about 90 deg for this angle)
-        
-    immobile_in_activivity = np.array([False]*len(speed_dframe))
-
-    immobile_in_activivity = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy()).astype(bool)
-    #immobile_in_activivity = deepof.utils.smooth_boolean_array(
-    #    (speed_dframe[animal_id + center_name] < tol_speed).to_numpy(),
-    #    scale=1,
-    #    sigma=1.2,
-    #)
-    immobile_in_activivity = deepof.utils.filter_short_true_segments(
-        array=immobile_in_activivity, min_length=min_length,
+    #detect immobility and smooth detections    
+    immobile = np.array([False]*len(speed_dframe))
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy()).astype(bool)
+    immobile = deepof.utils.filter_short_true_segments(
+        array=immobile, min_length=min_length,
     )
+    immobile_active=copy.copy(immobile)
+    immobile_passive=copy.copy(immobile)
 
+    #detect activity when nose speed and likelyhood is above a threshold
     nose_speed = (
         tol_speed < speed_dframe[animal_id + "Nose"]   #speed_dframe[animal_id + center_name]
     )
@@ -528,19 +520,18 @@ def detect_activity(
     activity=nose_speed & nose_likelihood
 
     #get start and end indices of True-blocks
-    start_indices=np.where(np.diff(immobile_in_activivity.astype(int), prepend=0) > 0)[0]
-    end_indices=np.where(np.diff(immobile_in_activivity.astype(int), append=0) < 0)[0]
+    start_indices=np.where(np.diff(immobile.astype(int), prepend=0) > 0)[0]
+    end_indices=np.where(np.diff(immobile.astype(int), append=0) < 0)[0]
 
-    if is_active:
-        for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
-                immobile_in_activivity[start_index:end_index+1]=False
-    else:
-        for [start_index, end_index] in zip(start_indices,end_indices):     
-            if(np.sum(activity[start_index:end_index+1]) >= 0.4*(end_index-start_index)):
-                immobile_in_activivity[start_index:end_index+1]=False
+    #Mouse is immobile and active if it was rated active for 60% or more of teh duration of a True-Block,
+    #Mouse is immobile and passive otherwise
+    for [start_index, end_index] in zip(start_indices,end_indices):     
+        if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
+            immobile_active[start_index:end_index+1]=False
+        else:
+            immobile_passive[start_index:end_index+1]=False
 
-    return immobile_in_activivity
+    return immobile_active, immobile_passive
 
 
 def following_path(
@@ -1010,27 +1001,15 @@ def supervised_tagging(
                 animal_id=_id + undercond,
             )
         )
-        tag_dict[_id + undercond + "immobile_active"] = detect_activity(
+        #detect immobility and active / passive behavior
+        tag_dict[_id + undercond + "immobile_active"], tag_dict[_id + undercond + "immobile_passive"] = detect_activity(
         speeds,
-        angles,
         likelihoods,
         params["cower_speed"],
         params["nose_likelihood"],
         params["min_follow_frames"],
         center_name=center,
         animal_id=_id,
-        is_active=True,
-        )
-        tag_dict[_id + undercond + "immobile_passive"] = detect_activity(
-        speeds,
-        angles,
-        likelihoods,
-        params["cower_speed"],
-        params["nose_likelihood"],
-        params["min_follow_frames"],
-        center_name=center,
-        animal_id=_id,
-        is_active=False,
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
