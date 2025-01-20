@@ -10,7 +10,7 @@
    :alt: Documentation Status
 .. |CodeFactor| image:: https://www.codefactor.io/repository/github/lucasmiranda42/deepof/badge
    :target: https://www.codefactor.io/repository/github/lucasmiranda42/deepof
-.. |Version| image:: https://img.shields.io/badge/release-v0.7.2-informational
+.. |Version| image:: https://img.shields.io/badge/release-v0.8.0-informational
    :target: https://pypi.org/project/deepof/
 .. |MLFPM| image:: https://img.shields.io/badge/funding-MLFPM-informational
    :target: https://mlfpm.eu/
@@ -175,6 +175,7 @@ Supervised and unsupervised pipelines
 Advanced usage
 --------------
 * `Using custom labelling schemes <tutorial_notebooks/deepof_custom_labels_tutorial.ipynb>`_
+* `Working with big datasets <tutorial_notebooks/deepof_big_data_tutorial.ipynb>`_
 
 Cite us!
 ========

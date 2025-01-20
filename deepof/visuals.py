@@ -12,9 +12,8 @@ import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import chain, combinations, product
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Union
 
-import cv2
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -22,11 +21,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import shap
-import tensorflow as tf
 from matplotlib.animation import FFMpegWriter, FuncAnimation
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
-from matplotlib.patches import Ellipse, Patch
-from matplotlib.projections.polar import PolarAxes
+from matplotlib.patches import Patch
 from natsort import os_sorted
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.interpolate import interp1d
@@ -35,12 +32,21 @@ from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
-from deepof.utils import _suppress_warning
+import deepof.utils
+from deepof.data_loading import get_dt, load_dt, _suppress_warning
 from deepof.visuals_utils import (
-    calculate_average_arena,
+    _check_enum_inputs,
+    plot_arena,
+    heatmap,
     seconds_to_time,
     time_to_seconds,
-    _preprocess_time_bins
+    _preprocess_time_bins,
+    _filter_embeddings,
+    _process_animation_data,
+    _get_polygon_coords,
+    _scatter_embeddings,
+    output_unsupervised_annotated_video,
+    output_videos_per_cluster,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -52,188 +58,6 @@ table_dict = NewType("deepof_table_dict", Any)
 warnings.simplefilter("always", UserWarning)
 
 # PLOTTING FUNCTIONS #
-
-
-def plot_arena(
-    coordinates: coordinates, center: str, color: str, ax: Any, i: Union[int, str]
-):
-    """Plot the arena in the given canvas.
-
-    Args:
-        coordinates (coordinates): deepof Coordinates object.
-        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        color (str): color of the displayed arena.
-        ax (Any): axes where to plot the arena.
-        i (Union[int, str]): index of the animal to plot.
-
-    """
-    if isinstance(i, np.int64):
-        arena = coordinates._arena_params[i]
-
-    if "circular" in coordinates._arena:
-
-        if i == "average":
-            arena = [
-                np.mean(np.array([i[0] for i in coordinates._arena_params]), axis=0),
-                np.mean(np.array([i[1] for i in coordinates._arena_params]), axis=0),
-                np.mean(np.array([i[2] for i in coordinates._arena_params]), axis=0),
-            ]
-
-        ax.add_patch(
-            Ellipse(
-                xy=((0, 0) if center == "arena" else arena[0]),
-                width=arena[1][0] * 2,
-                height=arena[1][1] * 2,
-                angle=arena[2],
-                edgecolor=color,
-                fc="None",
-                lw=3,
-                ls="--",
-            )
-        )
-
-    elif "polygonal" in coordinates._arena:
-
-        if center == "arena" and i == "average":
-
-            arena = calculate_average_arena(coordinates._arena_params)
-            avg_scaling = np.mean(np.array(coordinates._scales[:, :2]), 0)
-            arena -= avg_scaling
-
-        elif center == "arena":
-            arena -= np.expand_dims(
-                np.array(coordinates._scales[i, :2]).astype(int), axis=1
-            ).T
-
-        # Repeat first element for the drawn polygon to be closed
-        arena_corners = np.array(list(arena) + [arena[0]])
-
-        ax.plot(
-            *arena_corners.T,
-            color=color,
-            lw=3,
-            ls="--",
-        )
-
-
-def heatmap(
-    dframe: pd.DataFrame,
-    bodyparts: List,
-    xlim: tuple = None,
-    ylim: tuple = None,
-    title: str = None,
-    mask: np.ndarray = None,
-    save: str = False,
-    dpi: int = 200,
-    ax: Any = None,
-    **kwargs,
-) -> plt.figure:
-    """Return a heatmap of the movement of a specific bodypart in the arena.
-
-    If more than one bodypart is passed, it returns one subplot for each.
-
-    Args:
-        dframe (pandas.DataFrame): table_dict value with info to plot bodyparts (List): bodyparts to represent (at least 1).
-        bodyparts (list): list of body parts to plot.
-        xlim (float): limits of the x-axis.
-        ylim (float): limits of the y-axis.
-        title (str): title of the figure.
-        mask (np.ndarray): mask to apply to the heatmap across time.
-        save (str): if provided, saves the figure to the specified file.
-        dpi (int): dots per inch of the figure to create.
-        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
-        kwargs: additional arguments to pass to the seaborn kdeplot function.
-
-    Returns:
-        heatmaps (plt.figure): figure with the specified characteristics
-
-    """
-    # noinspection PyTypeChecker
-    if ax is None:
-        heatmaps, ax = plt.subplots(
-            1,
-            len(bodyparts),
-            sharex=True,
-            sharey=True,
-            dpi=dpi,
-            figsize=(8 * len(bodyparts), 8),
-        )
-
-    if isinstance(dframe, dict):
-
-        if mask is not None:
-            assert isinstance(
-                mask, dict
-            ), "If dframe is a dictionary, mask must be one as well."
-
-            # Pad each mask in the dictionary with False values to match the length of each dataframe
-            mask = {
-                k: np.pad(
-                    v, (0, len(dframe[k]) - len(v)), "constant", constant_values=False
-                )
-                for k, v in mask.items()
-            }
-            mask = np.concatenate(list(mask.values()), axis=0)
-
-        # Concatenate all dataframes which are values of the dictionary into a single one
-        dframe = pd.concat(dframe.values(), axis=0).reset_index(drop=True)
-
-    if mask is None:
-        mask = np.ones(len(dframe), dtype=bool)
-
-    else:
-        # Pad the mask with False values to match the length of the dataframe
-        mask = np.pad(
-            mask, (0, len(dframe) - len(mask)), "constant", constant_values=False
-        )
-
-    for i, bpart in enumerate(bodyparts):
-        heatmap = dframe[bpart].loc[mask]
-
-        if len(bodyparts) > 1:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                alpha=1,
-                ax=ax[i],
-                **kwargs,
-            )
-        else:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                alpha=1,
-                ax=ax,
-                **kwargs,
-            )
-            ax = np.array([ax])
-
-    for x, bp in zip(ax, bodyparts):
-        if xlim is not None:
-            x.set_xlim(xlim)
-        if ylim is not None:
-            x.set_ylim(ylim)
-        if title is not None:
-            x.set_title(f"{bp} - {title}", fontsize=10)
-
-    if save:  # pragma: no cover
-        plt.savefig(
-            os.path.join(
-                coordinates._project_path,
-                coordinates._project_name,
-                "Figures",
-                "deepof_heatmaps{}_{}.pdf".format(
-                    (f"_{save}" if isinstance(save, str) else ""),
-                    calendar.timegm(time.gmtime()),
-                ),
-            )
-        )
-
-    return ax
 
 
 # noinspection PyTypeChecker
@@ -251,6 +75,8 @@ def plot_heatmaps(
     experiment_id: int = "average",
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int = 20000,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -272,6 +98,7 @@ def plot_heatmaps(
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
@@ -287,12 +114,12 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
     )
 
-    coords = coordinates.get_coords(center=center, align=align)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -305,28 +132,12 @@ def plot_heatmaps(
         )
 
     # preprocess information given for time binning
-    bin_size_int, bin_index_int, _, bin_starts, bin_ends = _preprocess_time_bins(
-        coordinates, bin_size, bin_index
+    e_id=None
+    if not experiment_id=="average":
+        e_id=experiment_id
+    bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, samples_max=samples_max
     )
-
-    # cut coords accordingly to given start and end points
-    if bin_starts is not None and bin_ends is not None:
-        # cut down coords to desired range
-        coords = {
-            key: coords[key].iloc[bin_starts[key] : np.minimum(coords[key].shape[0], bin_ends[key])]
-            for key in coords.keys()
-        }
-
-    elif bin_size_int is not None and bin_index_int is not None:
-        coords = {
-            key: val.iloc[
-                bin_size_int
-                * bin_index_int : np.minimum(
-                    val.shape[0], bin_size_int * (bin_index_int + 1)
-                )
-            ]
-            for key, val in coords.items()
-        }
 
     if not center:  # pragma: no cover
         warnings.warn(
@@ -342,15 +153,27 @@ def plot_heatmaps(
         title_suffix += f" - {condition_value}"
 
     if experiment_id != "average":
+        coords = coords.filter_videos([experiment_id])
 
-        i = np.argmax(np.array(list(coords.keys())) == experiment_id)
-        coords = coords[experiment_id]
+    # for all tables in coords:
+    # read tables one by one
+    # and cut them in shape according to time bins
+    sampled_tabs = []
+    for key in coords.keys():
 
-    else:
-        i = experiment_id
-        coords = pd.concat([val for val in coords.values()], axis=0).reset_index(
-            drop=True
-        )
+        #load table if not already loaded
+        tab = get_dt(coords, key)  
+        
+        #cut slice from table
+        tab=tab.iloc[bin_info[key]]
+
+        #append table
+        sampled_tabs.append(tab)
+
+    #concatenate table samples into one table for processing
+    coords = pd.concat([val for val in sampled_tabs], axis=0).reset_index(
+        drop=True
+    )
 
     heatmaps = heatmap(
         coords,
@@ -366,9 +189,12 @@ def plot_heatmaps(
     
     if display_arena:
         for hmap in heatmaps:
-            plot_arena(coordinates, center, "#ec5628", hmap, i)
+            plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
-    plt.gca().invert_yaxis()
+    if not ax:
+        plt.gca().invert_yaxis()
+    else:
+        ax.invert_yaxis()
 
     if show:
         plt.show()
@@ -378,10 +204,89 @@ def plot_heatmaps(
 
 def plot_gantt(
     coordinates: project,
+    instance_id: str,
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max=20000,
+    # Visualization parameters
+    soft_counts: table_dict = None,
+    supervised_annotations: table_dict = None,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    instances_to_plot: list = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        instance_id (str): Name of the instance to display (can either be an experiment or a behavior).
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+
+    #Check if inputs correspond to behavior or experiment subtypes, then call respective gantt function
+    if instance_id in list(coordinates._tables.keys()):
+
+        _plot_experiment_gantt(
+        coordinates=coordinates,
+        experiment_id=instance_id,
+        # Time selection parameters
+        bin_index=bin_index,
+        bin_size=bin_size,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        # Visualization parameters
+        soft_counts=soft_counts,
+        supervised_annotations=supervised_annotations,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        behaviors_to_plot=instances_to_plot,
+        ax=ax,
+        save=save)
+
+    else:
+
+        _plot_behavior_gantt(
+        coordinates=coordinates,
+        behavior_id=instance_id,
+        # Time selection parameters
+        bin_index=bin_index,
+        bin_size=bin_size,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        # Visualization parameters
+        soft_counts=soft_counts,
+        supervised_annotations=supervised_annotations,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        experiments_to_plot=instances_to_plot,
+        ax=ax,
+        save=save)
+
+
+
+def _plot_experiment_gantt(
+    coordinates: project,
     experiment_id: str,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max=20000,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -395,14 +300,16 @@ def plot_gantt(
 
     Args:
         coordinates (project): deepOF project where the data is stored.
-        experiment_id (str): Name of the experiment to display.
-        bin_size (Union[int,str]): bin size for time filtering.
+        experiment_id (str): Either name of the experiment to display or of a behavior.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
-        behaviors_to_plot (list): list of behaviors to plot. If None, all behaviors are plotted.
+        behaviors_to_plot (list): list of behaviors to plot.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -410,7 +317,10 @@ def plot_gantt(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        experiment_ids=experiment_id,
+        behaviors=behaviors_to_plot,
     )
 
     # set active axes if provided
@@ -420,40 +330,51 @@ def plot_gantt(
     # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
-        N_frames = supervised_annotations[experiment_id].shape[0]
+        data_frame=get_dt(supervised_annotations,experiment_id)
+        
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        experiment_id=experiment_id, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
+        )
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
-        N_frames = soft_counts[experiment_id].argmax(axis=1).shape[0]
+        data_frame=get_dt(soft_counts,experiment_id)
+
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        experiment_id=experiment_id, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
+        )
     else:
         plot_type = "mixed"
         raise NotImplementedError(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
-    # preprocess information given for time binning
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, experiment_id=experiment_id
-    )
 
-    # init start and end
-    bin_start = 0
-    bin_end = N_frames
-    # get start and end positions of outputs
-    if bin_size_int is not None and bin_index_int is not None:
-        bin_start = bin_size_int * bin_index_int
-        bin_end = np.min([bin_size_int * (bin_index_int + 1), N_frames])
-    elif precomputed_bins is not None:
-        bin_start = np.flatnonzero(precomputed_bins)[0]
-        bin_end = np.flatnonzero(precomputed_bins)[-1]
+    # get indices to be plotted
+    bin_indices=bin_info[experiment_id]
+
 
     # set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = soft_counts[experiment_id].argmax(axis=1)
+        hard_counts = get_dt(soft_counts,experiment_id).argmax(axis=1)
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
             col
-            for col in supervised_annotations[experiment_id].columns
+            for col in data_frame.columns
             if "speed" not in col
         ]
 
@@ -476,11 +397,11 @@ def plot_gantt(
     # set gantt matrix
     n_available_features = len(behavior_ids)
     n_features = len(behaviors_to_plot)
-    gantt = np.zeros([len(behaviors_to_plot), bin_end - bin_start])
+    gantt = np.zeros([len(behaviors_to_plot), len(bin_indices)])
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
-        additional_checkpoints = additional_checkpoints.iloc[:, bin_start:bin_end]
+        additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
         if behaviors_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -500,15 +421,235 @@ def plot_gantt(
 
         # fill gantt row
         if plot_type == "unsupervised":
-            gantt[rows] = hard_counts[bin_start:bin_end] == feature
+            gantt[rows] = hard_counts[bin_indices] == feature
         elif plot_type == "supervised":
-            gantt[rows] = supervised_annotations[experiment_id][
+            gantt[rows] = data_frame[
                 behavior_ids[feature]
-            ].iloc[bin_start:bin_end]
+            ].iloc[bin_indices]
+        gantt[rows][gantt[rows]>0]+=rows
 
-        # create gantt matrix for current feature map plot
-        gantt_cp = gantt.copy()
-        gantt_cp[[i for i in range(gantt.shape[0]) if i != rows]] = np.nan
+        rows+=1
+
+    gantt_plotter(
+        coordinates=coordinates,
+        gantt_matrix=gantt,
+        plot_type=plot_type,
+        instance_id=experiment_id,
+        n_available_instances=n_available_features,
+        instances_to_plot=behaviors_to_plot,
+        colors=colors,
+        bin_indices=bin_indices,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        ax=ax,
+        save=save,
+    )
+
+
+def _plot_behavior_gantt(
+    coordinates: project,
+    behavior_id: str,
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max=20000,
+    # Visualization parameters
+    soft_counts: table_dict = None,
+    supervised_annotations: table_dict = None,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    experiments_to_plot: list = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        behavior_id (str): Name of the behavior to display.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        experiments_to_plot (list): list of experiments to plot. If None, all experiments are plotted.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        behaviors=behavior_id,
+        experiment_ids=experiments_to_plot,
+    )
+
+    # set active axes if provided
+    if ax:
+        plt.sca(ax)
+
+    # Determine plot type and length of the whole dataset
+    if soft_counts is None and supervised_annotations is not None:
+        plot_type = "supervised"
+        all_experiments=list(supervised_annotations.keys())
+        
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
+        )
+    elif soft_counts is not None and supervised_annotations is None:
+        plot_type = "unsupervised"
+        all_experiments=list(soft_counts.keys())
+
+        # preprocess information given for time binning
+        bin_info = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
+        )
+    else:
+        plot_type = "mixed"
+        raise NotImplementedError(
+            "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        )
+
+
+    # only keep valid experiments
+    if experiments_to_plot is not None:
+        experiments_to_plot = np.unique(experiments_to_plot)
+        experiments_to_plot = [
+            experiments_to_plot[k]
+            for k in range(0, len(experiments_to_plot))
+            if experiments_to_plot[k] in all_experiments
+        ]
+    else:
+        experiments_to_plot = all_experiments
+
+    # get common indices between all selected experiments
+    bin_indices=bin_info[list(bin_info.keys())[0]]
+    max_index=np.max(bin_indices)
+    for exp_id in experiments_to_plot:
+        if max_index > np.max(bin_info[exp_id]):
+            max_index=np.max(bin_info[exp_id])
+            bin_indices=bin_info[exp_id][bin_info[exp_id]<max_index]
+
+    # set gantt matrix
+    n_available_experiments = len(all_experiments)
+    gantt = np.zeros([len(experiments_to_plot), len(bin_indices)])
+
+    # If available, add additional checkpoints to the Gantt matrix
+    if additional_checkpoints is not None:
+        additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if experiments_to_plot is not None:
+            gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
+
+    # set colors with number of available features to keep color consitent if only a subset is selected
+    colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()),
+        int(np.ceil(n_available_experiments / 20)),
+    )
+
+    # Iterate over experiments and plot
+    rows = 0
+    for exp_id in range(n_available_experiments):
+
+        # skip if feature is not selected for plotting
+        if all_experiments[exp_id] not in experiments_to_plot:
+            continue
+
+        # fill gantt row
+        if plot_type == "unsupervised":
+            hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
+            cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
+            gantt[rows] = hard_counts[bin_indices] == cluster_no
+        elif plot_type == "supervised":
+            gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
+        gantt[rows][gantt[rows]>0]+=rows
+        
+        rows += 1
+
+    gantt_plotter(
+        coordinates=coordinates,
+        gantt_matrix=gantt,
+        plot_type=plot_type,
+        instance_id=behavior_id,
+        n_available_instances=n_available_experiments,
+        instances_to_plot=experiments_to_plot,
+        colors=colors,
+        bin_indices=bin_indices,
+        additional_checkpoints=additional_checkpoints,
+        signal_overlay=signal_overlay,
+        ax=ax,
+        save=save,
+    )
+
+    
+def gantt_plotter(
+    coordinates: project,
+    gantt_matrix: np.ndarray,
+    plot_type: str,
+    instance_id: str,
+    n_available_instances: int, 
+    instances_to_plot: list,
+    colors: list,
+    # Time selection parameters
+    bin_indices: np.ndarray,
+    additional_checkpoints: pd.DataFrame = None,
+    signal_overlay: pd.Series = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Return a scatter plot of the passed projection. Allows for temporal and quality filtering, animal aggregation, and changepoint detection size visualization.
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        gantt_matrix (np.ndarray): 2D integer matrix denoting time sections with present or absent behavior
+        plot_type (str): type of plot, either "supervised" or "unsupervised"
+        behavior_id (str): Name of the experiment or behavior to display.
+        n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
+        instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
+        colors (list): list of color hexcodes for plotting
+        bin_indices (np.ndarray): indices to plot
+        additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
+        signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
+        ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
+  
+    #only add "white" as base color if there are frames with no behaviors
+    if (gantt_matrix==0).any():
+        colors=colors=['#FFFFFF'] + colors.tolist()
+
+    N_colors=int(np.nanmax(gantt_matrix))
+    #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
+    #N_colors=len(col_indices)
+    sns.heatmap(
+        data=gantt_matrix,
+        cbar=False,
+        cmap=ListedColormap(colors[0:N_colors+1], name="deepof", N=N_colors+1),
+        ax=ax,
+    )
+
+    n_instances=len(instances_to_plot)
+
+    rows = 0
+    for exp_id, color in zip(range(n_available_instances), colors):
 
         # overlay lineplot with normalized signal
         if signal_overlay is not None:
@@ -516,39 +657,25 @@ def plot_gantt(
                 signal_overlay.max() - signal_overlay.min()
             )
             sns.lineplot(
-                x=signal_overlay.index[0 : bin_end - bin_start],
-                y=standard_signal[bin_start:bin_end] + rows,
+                x=signal_overlay.index[0 : len(bin_indices)],
+                y=standard_signal[bin_indices] + rows,
                 color="black",
             )
 
         # plot line for axis to separate between features
         plt.axhline(y=rows, color="k", linewidth=0.5)
 
-        # workaround for cases in which the entire segment to plot is only 1s
-        # (would result in a white plot otherwise)
-        vals = np.unique(gantt_cp)
-        if not any(vals == 0):
-            colors = [color, "white"]
-        else:
-            colors = ["white", color]
-
-        # plot actual heatmap for current feature
-        sns.heatmap(
-            data=gantt_cp,
-            cbar=False,
-            cmap=LinearSegmentedColormap.from_list("deepof", colors, N=2),
-            ax=ax,
-        )
         rows += 1
+
 
     # Iterate over additional checkpoints and plot
     if additional_checkpoints is not None:
         for checkpoint in range(additional_checkpoints.shape[0]):
-            gantt_cp = gantt.copy()
+            gantt_cp = gantt_matrix.copy()
             gantt_cp[
-                [i for i in range(gantt.shape[0]) if i != n_features + checkpoint]
+                [i for i in range(gantt_matrix.shape[0]) if i != n_instances + checkpoint]
             ] = np.nan
-            plt.axhline(y=n_features + checkpoint, color="k", linewidth=0.5)
+            plt.axhline(y=n_instances + checkpoint, color="k", linewidth=0.5)
 
             sns.heatmap(
                 data=gantt_cp,
@@ -558,9 +685,6 @@ def plot_gantt(
                 ),
                 ax=ax,
             )
-
-    # Set behavior labels for y-axis
-    behavior_ticks = behavior_ids if behaviors_to_plot is None else behaviors_to_plot
 
     # set x-ticks
     plt.xticks([])
@@ -572,26 +696,35 @@ def plot_gantt(
             )
             N_x_ticks = int(bbox.width * 1.25)
         plt.xticks(
-            np.linspace(0, bin_end - bin_start, N_x_ticks),
+            np.linspace(0, len(bin_indices), N_x_ticks),
             [
                 seconds_to_time(t)
-                for t in np.linspace(
-                    bin_start / coordinates._frame_rate,
-                    bin_end / coordinates._frame_rate,
-                    N_x_ticks,
+                for t in np.round(
+                    np.linspace(
+                        np.min(bin_indices) / coordinates._frame_rate,
+                        np.max(bin_indices) / coordinates._frame_rate,
+                        N_x_ticks,
+                    )
                 )
             ],
             rotation=0,
         )
+        if np.max(np.diff(bin_indices))>1:
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! Since the provided time bins contain gaps, the time range below may be incorrectly displayed!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
 
     # set y-ticks
     # set y-ticks
     plt.yticks(
-        np.array(range(gantt.shape[0])) + 0.5,
+        np.array(range(gantt_matrix.shape[0])) + 0.5,
         # Concatenate cluster IDs and checkpoint names if they exist
         np.concatenate(
             [
-                behavior_ticks,
+                instances_to_plot,
                 np.array(additional_checkpoints.index)
                 if additional_checkpoints is not None
                 else [],
@@ -603,9 +736,9 @@ def plot_gantt(
 
     # plot stuff
     plt.axhline(y=0, color="k", linewidth=1)
-    plt.axhline(y=gantt.shape[0], color="k", linewidth=2)
+    plt.axhline(y=gantt_matrix.shape[0], color="k", linewidth=2)
     plt.axvline(x=0, color="k", linewidth=1)
-    plt.axvline(x=gantt.shape[1], color="k", linewidth=2)
+    plt.axvline(x=gantt_matrix.shape[1], color="k", linewidth=2)
     plt.xlabel("Time", fontsize=10)
     if coordinates._frame_rate is not None:
         plt.xlabel("Time in HH:MM:SS", fontsize=10)
@@ -626,7 +759,7 @@ def plot_gantt(
             )
         )
 
-    title = "deepOF - Gantt chart of {} behaviors - {}".format(plot_type, experiment_id)
+    title = "deepOF - Gantt chart of {} behaviors - {}".format(plot_type, instance_id)
     if ax is not None:
         ax.set_title(title, fontsize=8)
     else:
@@ -639,7 +772,6 @@ def plot_enrichment(
     coordinates: coordinates,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -648,6 +780,7 @@ def plot_enrichment(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=100000,
     # Visualization parameters
     exp_condition: str = None,
     exp_condition_order: list = None,
@@ -662,20 +795,20 @@ def plot_enrichment(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
-        normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
 
     """
     # initial check if enum-like inputs were given correctly
@@ -690,7 +823,8 @@ def plot_enrichment(
         )
     # Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
-        [embeddings is not None, soft_counts is not None, breaks is not None]
+        [embeddings is not None, 
+         soft_counts is not None]
     ):
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
@@ -712,50 +846,39 @@ def plot_enrichment(
     if exp_condition_order is None:
         exp_condition_order = np.unique(list(exp_conditions.values())).astype(str)
 
-    # Specific case
-    if supervised_annotations is not None:
-        if not plot_speed:
-            supervised_annotations = {
-                key: val.loc[:, [col for col in val.columns if "speed" not in col]]
-                for key, val in supervised_annotations.items()
-            }
-        else:
-            supervised_annotations = {
-                key: val.loc[:, [col for col in val.columns if "speed" in col]]
-                for key, val in supervised_annotations.items()
-            }
 
     # Preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
-    )
+    if supervised_annotations is not None:
+        bin_info = _preprocess_time_bins(
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
+        )
+    else:
+        bin_info = _preprocess_time_bins(
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=embeddings, samples_max=samples_max,
+        )
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
-        embedding=embeddings,
         soft_counts=soft_counts,
-        breaks=breaks,
         supervised_annotations=supervised_annotations,
         exp_conditions=exp_conditions,
         plot_speed=plot_speed,
-        bin_size=(bin_size_int if bin_size is not None else None),
-        bin_index=bin_index_int,
-        precomputed=precomputed_bins,
+        bin_info = bin_info,
         normalize=normalize,
     )
-
+    #extract unique behavior names
+    indices=np.unique(enrichment["cluster"], return_index=True)[1]
+    behavior_names = [enrichment["cluster"][idx] for idx in sorted(indices)]
     # Sort experiment conditions
     enrichment["exp condition"] = pd.Categorical(
         enrichment["exp condition"], exp_condition_order
     )
     if supervised_annotations is not None and not plot_speed:
         # this assumes that all entries in supervised_annotations always have the same keys
-        first_key = next(iter(supervised_annotations))
-        cluster_categories = supervised_annotations[first_key].columns
         enrichment["cluster"] = pd.Categorical(
-            enrichment["cluster"], categories=cluster_categories
+            enrichment["cluster"], categories=behavior_names
         )
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
     enrichment["cluster"] = enrichment["cluster"].astype(str)
@@ -765,12 +888,12 @@ def plot_enrichment(
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed in pixel / s"
+        y_axis_label = "average speed [mm/s]"
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100
     elif coordinates._frame_rate is not None:
-        y_axis_label = "time on cluster in s"
+        y_axis_label = "time on cluster [s]"
         enrichment["time on cluster"] = (
             enrichment["time on cluster"] / coordinates._frame_rate
         )
@@ -940,11 +1063,7 @@ def plot_enrichment(
         pairs = list(
             product(
                 set(
-                    np.concatenate(list(soft_counts.values()))
-                    .argmax(axis=1)
-                    .astype(str)
-                    if supervised_annotations is None
-                    else list(supervised_annotations.values())[0].columns
+                    behavior_names,
                 ),
                 set(exp_conditions.values()),
             )
@@ -1101,11 +1220,11 @@ def plot_transitions(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=20000,
     # Visualization parameters
     exp_condition: str = None,
     visualization="networks",
@@ -1120,14 +1239,13 @@ def plot_transitions(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
-
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         kwargs: additional arguments to pass to the seaborn kdeplot function.
@@ -1153,20 +1271,16 @@ def plot_transitions(
     }
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+
+
+    bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
 
     grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
-        embeddings,
         soft_counts,
-        breaks,
         exp_conditions,
-        bin_size=(bin_size_int if bin_size is not None else None),
-        bin_index=bin_index_int,
-        precomputed=precomputed_bins,
+        bin_info=bin_info,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
         normalize=True,
@@ -1278,12 +1392,12 @@ def plot_stationary_entropy(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    breaks: table_dict = None,
     add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=20000,
     # Visualization parameters
     exp_condition: str = None,
     verbose: bool = False,
@@ -1296,12 +1410,12 @@ def plot_stationary_entropy(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -1326,32 +1440,20 @@ def plot_stationary_entropy(
         }
 
     soft_counts = soft_counts.filter_videos(embeddings.keys())
-    breaks = breaks.filter_videos(embeddings.keys())
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
+    bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
 
-    if (
-        precomputed_bins is not None
-        and np.sum(precomputed_bins) < 2
-        or bin_size_int is not None
-        and bin_size_int < 2
-    ):
+    if (any([np.sum(bin_info[key]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
 
     # Get ungrouped entropy scores for the full videos
     ungrouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
-        embeddings,
         soft_counts,
-        breaks,
         exp_conditions,
-        bin_size=(bin_size_int if bin_size is not None else None),
-        bin_index=bin_index_int,
-        precomputed=precomputed_bins,
+        bin_info=bin_info,
         aggregate=False,
         normalize=True,
     )
@@ -1428,103 +1530,6 @@ def plot_stationary_entropy(
 
     if ax is None:
         plt.show()
-
-
-def _filter_embeddings(
-    coordinates,
-    embeddings,
-    soft_counts,
-    breaks,
-    supervised_annotations,
-    exp_condition,
-    bin_size,
-    bin_index,
-    precomputed_bins,
-):
-    """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
-    # Get experimental conditions per video
-    if embeddings is None and supervised_annotations is None:
-        raise ValueError(
-            "Either embeddings, soft_counts, and breaks or supervised_annotations must be provided."
-        )
-
-    try:
-        if exp_condition is None:
-            exp_condition = list(embeddings._exp_conditions.values())[0].columns[0]
-
-        concat_hue = [
-            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
-            for i in list(embeddings.keys())
-        ]
-        soft_counts = soft_counts.filter_videos(embeddings.keys())
-        breaks = breaks.filter_videos(embeddings.keys())
-
-    except AttributeError:
-        if exp_condition is None:
-            exp_condition = list(supervised_annotations._exp_conditions.values())[
-                0
-            ].columns[0]
-
-        concat_hue = [
-            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
-            for i in list(supervised_annotations.keys())
-        ]
-
-    # Restrict embeddings, soft_counts and breaks to the selected time bin
-    if precomputed_bins is not None:
-        if embeddings is not None:
-            embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
-                embeddings,
-                soft_counts,
-                breaks,
-                precomputed=precomputed_bins,
-            )
-        elif supervised_annotations is not None:
-            _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations,
-                precomputed=precomputed_bins,
-            )
-    elif bin_size is not None:
-        if embeddings is not None:
-            embeddings, soft_counts, breaks, _ = deepof.post_hoc.select_time_bin(
-                embeddings,
-                soft_counts,
-                breaks,
-                bin_size=bin_size,
-                bin_index=bin_index,
-            )
-        elif supervised_annotations is not None:
-            _, _, _, supervised_annotations = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations,
-                bin_size=bin_size,
-                bin_index=bin_index,
-            )
-
-        # Keep only those experiments for which we have an experimental condition assigned
-        if embeddings is not None:
-            embeddings = {
-                key: val
-                for key, val in embeddings.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-            soft_counts = {
-                key: val
-                for key, val in soft_counts.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-            breaks = {
-                key: val
-                for key, val in breaks.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-        elif supervised_annotations is not None:
-            supervised_annotations = {
-                key: val
-                for key, val in supervised_annotations.items()
-                if key in coordinates.get_exp_conditions.keys()
-            }
-
-    return embeddings, soft_counts, breaks, supervised_annotations, concat_hue
 
 
 def plot_normative_log_likelihood(
@@ -1659,14 +1664,14 @@ def plot_embeddings(
     coordinates: coordinates,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
-    # Quality selection parameters
-    min_confidence: float = 0.0,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    samples_max=20000,
+    # Quality selection parameters
+    min_confidence: float = 0.0,
     # Normative modelling
     normative_model: str = None,
     add_stats: str = "Mann-Whitney",
@@ -1677,7 +1682,6 @@ def plot_embeddings(
     samples: int = 500,
     show_aggregated_density: bool = True,
     colour_by: str = "exp_condition",
-    show_break_size_as_radius: bool = False,
     ax: Any = None,
     save: bool = False,
 ):
@@ -1687,21 +1691,20 @@ def plot_embeddings(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
-        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
+        normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.    
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
-        show_break_size_as_radius (bool): Only usable when embeddings come from a model using changepoint detection. If True, the size of each chunk is depicted as the radius of each dot.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -1728,84 +1731,102 @@ def plot_embeddings(
         )
     # Checks to throw errors or warn about conflicting inputs
     if supervised_annotations is not None and any(
-        [embeddings is not None, soft_counts is not None, breaks is not None]
+        [embeddings is not None, soft_counts is not None]
     ):
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
-        )
+        )      
 
     # preprocess information given for time binning
-    bin_index_int = None
-    bin_size_int = None
-    bin_size_int, bin_index_int, precomputed_bins, _, _ = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins
-    )
+    if supervised_annotations is not None:
+        bin_info = _preprocess_time_bins(
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
+        )
+    else:
+        bin_info = _preprocess_time_bins(
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=embeddings, samples_max=samples_max,
+        )
 
-    # Filter embeddings, soft_counts, breaks and supervised_annotations based on the provided keys and experimental condition
+    # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
     (
         emb_to_plot,
         counts_to_plot,
-        breaks_to_plot,
         sup_annots_to_plot,
         concat_hue,
     ) = _filter_embeddings(
         coordinates,
         copy.deepcopy(embeddings),
         copy.deepcopy(soft_counts),
-        copy.deepcopy(breaks),
         copy.deepcopy(supervised_annotations),
         exp_condition,
-        bin_size_int,
-        bin_index_int,
-        precomputed_bins,
     )
     show = True
 
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
 
-        if samples is not None:
+        samples_dict={}
 
-            # make sure that not more samples are drawn than are available
-            shortest = samples
-            for key in emb_to_plot.keys():
-                if emb_to_plot[key].shape[0] < shortest:
-                    shortest = emb_to_plot[key].shape[0]
-            if samples > shortest:
-                samples = shortest
-                print(
-                    "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
-                        samples
-                    )
+        #set samples to a maximum of samples_max
+        if samples is None:
+            samples=samples_max
+
+        # make sure that not more samples are drawn than are available
+        shortest = samples
+        for key in bin_info.keys():
+
+            num_rows=len(bin_info[key])
+
+            if num_rows < shortest:
+                shortest = num_rows
+        if samples > shortest:
+            samples = shortest
+            print(
+                "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
+                    samples
                 )
+            )
 
-            # Sample per animal, to avoid alignment issues
-            for key in emb_to_plot.keys():
+        # Sample per animal, to avoid alignment issues
+        for key in emb_to_plot.keys():
 
-                sample_ids = np.random.choice(
-                    range(emb_to_plot[key].shape[0]), samples, replace=False
-                )
-                emb_to_plot[key] = emb_to_plot[key][sample_ids]
-                counts_to_plot[key] = counts_to_plot[key][sample_ids]
-                breaks_to_plot[key] = breaks_to_plot[key][sample_ids]
+            #get correct section of current embedding 
+            current_emb=get_dt(emb_to_plot,key)[bin_info[key]]
+
+            sample_ids = np.random.choice(
+                range(current_emb.shape[0]), samples, replace=False
+            )
+            samples_dict[key] = sample_ids
+            #reduced section is kept in memory
+            emb_to_plot[key] = current_emb[sample_ids]
+               
 
         # Concatenate experiments and align experimental conditions
-        concat_embeddings = np.concatenate(list(emb_to_plot.values()), 0)
-
-        # Concatenate breaks
-        concat_breaks = tf.concat(list(breaks_to_plot.values()), 0)
+        concat_embeddings = np.concatenate(
+            [get_dt(emb_to_plot,key) 
+                for key in emb_to_plot],
+            axis=0
+        )
 
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
-            np.concatenate(list(counts_to_plot.values()), 0), axis=1
+            np.concatenate(
+                [get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
+                for key in counts_to_plot], 
+                axis=0
+            ), 
+            axis=1
         )
 
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
-            [np.max(val, axis=1) for val in counts_to_plot.values()]
+            [
+                np.max(get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
+                for key in counts_to_plot
+            ]
         )
-
-        break_lens = tf.stack([len(i) for i in list(breaks_to_plot.values())], 0)
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
@@ -1817,15 +1838,19 @@ def plot_embeddings(
         # Generate unifier dataset using the reduced embeddings, experimental conditions
         # and the corresponding break lengths and cluster assignments
 
+        
+        lens = np.zeros(len(emb_to_plot), dtype=int)
+        for i, key in enumerate(emb_to_plot.keys()):
+            lens[i] = len(emb_to_plot[key])
+
         embedding_dataset = pd.DataFrame(
             {
                 "UMAP-1": reduced_embeddings[:, 0],
                 "UMAP-2": reduced_embeddings[:, 1],
-                "exp_id": np.repeat(list(range(len(emb_to_plot))), break_lens),
-                "breaks": concat_breaks,
+                "exp_id": np.repeat(list(range(len(emb_to_plot))), lens),
                 "confidence": confidence,
                 "cluster": cluster_assignments,
-                "experimental condition": np.repeat(concat_hue, break_lens),
+                "experimental condition": np.repeat(concat_hue, lens),
             }
         )
 
@@ -1848,17 +1873,17 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, breaks_to_plot, reduce_dim=True
+                counts_to_plot, reduce_dim=True, bin_info=bin_info
             )
 
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info 
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -1905,11 +1930,7 @@ def plot_embeddings(
         y="{}-2".format("PCA" if aggregate_experiments else "UMAP"),
         ax=ax,
         hue=hue,
-        size=(
-            "breaks"
-            if show_break_size_as_radius and not aggregate_experiments
-            else None
-        ),
+        size=None,
         s=(50 if not aggregate_experiments else 100),
         edgecolor="black",
         palette=(
@@ -1985,252 +2006,47 @@ def plot_embeddings(
         plt.show()
 
 
-def _scatter_embeddings(
-    embeddings: np.ndarray,
-    cluster_assignments: np.ndarray = None,
-    ax: Any = None,
-    save: str = False,
-    show: bool = True,
-    dpi: int = 200,
-) -> plt.figure:
-    """Return a scatter plot of the passed projection. Each dot represents the trajectory of an entire animal.
-
-    If labels are propagated, it automatically colours all data points with their respective condition.
-
-    Args:
-        embeddings (tuple): sequence embeddings obtained with the unsupervised pipeline within deepof
-        cluster_assignments (tuple): labels of the clusters. If None, aggregation method should be provided.
-        ax: axes where to plot the arena.
-        save (str): if provided, saves the figure to the specified file.
-        show (bool): if True, displays the current figure. If not, returns the given axes.
-        dpi (int): dots per inch of the figure to create.
-
-    Returns:
-        projection_scatter (plt.figure): figure with the specified characteristics
-
-    """
-    if ax is None:
-        fig, ax = plt.subplots(1, 1, dpi=dpi)
-
-    # Plot entire UMAP
-    ax.scatter(
-        embeddings[:, 0],
-        embeddings[:, 1],
-        c=(cluster_assignments if cluster_assignments is not None else None),
-        cmap=("tab20" if cluster_assignments is not None else None),
-        edgecolor="black",
-        linewidths=0.25,
-    )
-
-    plt.tight_layout()
-
-    if save:
-        plt.savefig(save)
-
-    if not show:
-        return ax
-
-    plt.show()
-
-
-def _get_polygon_coords(data, animal_id=""):
-    """Generate polygons to animate for the indicated animal in the provided dataframe."""
-    if animal_id:
-        animal_id += "_"
-
-    elif animal_id is None:
-        animal_id = ""
-
-    head = np.concatenate(
-        [
-            data.xs(f"{animal_id}Nose", 1).values,
-            data.xs(f"{animal_id}Left_ear", 1).values,
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Right_ear", 1).values,
-        ],
-        axis=1,
-    )
-
-    body = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Left_fhip", 1).values,
-            data.xs(f"{animal_id}Left_bhip", 1).values,
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Right_bhip", 1).values,
-            data.xs(f"{animal_id}Right_fhip", 1).values,
-        ],
-        axis=1,
-    )
-
-    tail = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Tail_base", 1).values,
-        ],
-        axis=1,
-    )
-
-    return [head, body, tail]
-
-
-def _process_animation_data(
-    coordinates,
-    experiment_id,
-    animal_id,
-    center,
-    align,
-    min_confidence,
-    min_bout_duration,
-    cluster_assignments,
-    embedding,
-    selected_cluster,
-):
-    """Auxiliary function to process data for animation outputs."""
-    data = coordinates.get_coords(center=center, align=align)
-    cluster_embedding, concat_embedding = None, None
-
-    # Filter requested animals
-    if animal_id:
-        data = data.filter_id(animal_id)
-
-    # Select requested experiment and frames
-    data = data[experiment_id]
-
-    # Sort column index to allow for multiindex slicing
-    data = data.sort_index(ascending=True, inplace=False, axis=1)
-
-    # Get output scale
-    x_dv = np.maximum(
-        np.abs(data.loc[:, (slice("x"), ["x"])].min().mean()),
-        np.abs(data.loc[:, (slice("x"), ["x"])].max().mean()),
-    )
-    y_dv = np.maximum(
-        np.abs(data.loc[:, (slice("x"), ["y"])].min().mean()),
-        np.abs(data.loc[:, (slice("x"), ["y"])].max().mean()),
-    )
-
-    # Filter assignments and embeddings
-    if isinstance(cluster_assignments, dict):
-        cluster_confidence = cluster_assignments[experiment_id].max(axis=1)
-        cluster_assignments = cluster_assignments[experiment_id].argmax(axis=1)
-        confidence_indices = np.ones(cluster_assignments.shape[0], dtype=bool)
-
-        # Compute bout lengths, and filter out bouts shorter than min_bout_duration
-        full_confidence_indices = deepof.utils.filter_short_bouts(
-            cluster_assignments,
-            cluster_confidence,
-            confidence_indices,
-            min_confidence,
-            min_bout_duration,
-        )
-        confidence_indices = full_confidence_indices.copy()
-
-    if isinstance(embedding, dict):
-
-        embedding = embedding[experiment_id]
-        reducers = deepof.post_hoc.compute_UMAP(embedding, cluster_assignments)
-        embedding = reducers[1].transform(reducers[0].transform(embedding))
-
-    # Checks that all shapes and passed parameters are correct
-    if embedding is not None:
-
-        # Center sliding window instances
-        try:
-            win_size = data.shape[0] - embedding.shape[0]
-        except AttributeError:
-            win_size = data.shape[0] - embedding[0].shape[1]
-        data = data[win_size // 2 : -win_size // 2]
-
-        if isinstance(embedding, np.ndarray):
-            assert (
-                embedding.shape[0] == data.shape[0]
-            ), "there should be one embedding per row in data"
-
-            concat_embedding = embedding
-            embedding = [embedding]
-
-        elif isinstance(embedding, list):
-
-            assert len(embedding) == len(coordinates._animal_ids)
-
-            for emb in embedding:
-                assert (
-                    emb.shape[0] == data.shape[0]
-                ), "there should be one embedding per row in data"
-
-            concat_embedding = np.concatenate(embedding)
-
-        if selected_cluster is not None:
-            cluster_embedding = [embedding[0][cluster_assignments == selected_cluster]]
-            confidence_indices = confidence_indices[
-                cluster_assignments == selected_cluster
-            ]
-
-        else:
-            cluster_embedding = embedding
-
-    if cluster_assignments is not None:
-
-        assert (
-            len(cluster_assignments) == data.shape[0]
-        ), "there should be one cluster assignment per row in data"
-
-        # Filter data to keep only those instances assigned to a given cluster
-        if selected_cluster is not None:
-
-            assert selected_cluster in set(
-                cluster_assignments
-            ), "selected cluster should be in the clusters provided"
-
-            data = data.loc[cluster_assignments == selected_cluster, :]
-            data = data.loc[confidence_indices, :]
-            cluster_embedding = [cluster_embedding[0][confidence_indices]]
-            concat_embedding = concat_embedding[full_confidence_indices]
-            cluster_assignments = cluster_assignments[full_confidence_indices]
-
-    return (
-        data,
-        x_dv,
-        y_dv,
-        embedding,
-        cluster_embedding,
-        concat_embedding,
-        cluster_assignments,
-    )
-
-
 # noinspection PyTypeChecker
 def animate_skeleton(
     coordinates: coordinates,
     experiment_id: str,
+    embeddings: table_dict = None,
+    soft_counts: table_dict = None,
     animal_id: list = None,
     center: str = "arena",
     align: str = None,
-    frame_limit: int = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =20000,  
+    sampling_rate: float = None, 
+    #otehr parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
-    cluster_assignments: np.ndarray = None,
-    embedding: Union[List, np.ndarray] = None,
     selected_cluster: np.ndarray = None,
     display_arena: bool = True,
     legend: bool = True,
     save: bool = None,
-    dpi: int = 300,
+    dpi: int = 100,
 ):
     """Render a FuncAnimation object with embeddings and/or motion trajectories over time.
 
     Args:
         coordinates (coordinates): deepof Coordinates object.
         experiment_id (str): Name of the experiment to display.
+        embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
+        soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
         animal_id (list): ID list of animals to display. If None (default) it shows all animals.
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
-        frame_limit (int): Number of frames to plot. If None, the entire video is rendered.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        cluster_assignments (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        embedding (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
@@ -2241,51 +2057,80 @@ def animate_skeleton(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
         animal_id=animal_id,
         center=center,
     )
 
-    # Get and process data to plot from coordinates object
-    (
-        data,
-        x_dv,
-        y_dv,
-        embedding,
-        cluster_embedding,
-        concat_embedding,
-        cluster_assignments,
-    ) = _process_animation_data(
-        coordinates,
-        experiment_id,
-        animal_id,
-        center,
-        align,
-        min_confidence,
-        min_bout_duration,
-        cluster_assignments,
-        embedding,
-        selected_cluster,
+    bin_info = _preprocess_time_bins(
+    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
+    )
+    if sampling_rate is None:
+        sampling_rate=coordinates._frame_rate
+
+    if embeddings is not None:
+        #Get data for requested experiment
+        cur_embeddings=get_dt(embeddings, experiment_id)
+        cur_soft_counts=get_dt(soft_counts, experiment_id)
+    else:
+        cur_embeddings=None
+        cur_soft_counts=None
+
+    #for legacy reasons scales is not a dictionary which complicates things
+    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
+
+    # Sort column index to allow for multiindex slicing
+    coords = coords.sort_index(ascending=True, inplace=False, axis=1)
+
+    # Filter requested animals
+    if animal_id:
+        coords = coords.filter_id(animal_id)
+
+    # Get output scale
+    x_dv = np.maximum(
+        np.abs(coords.loc[:, (slice("x"), ["x"])].min().mean()),
+        np.abs(coords.loc[:, (slice("x"), ["x"])].max().mean()),
+    )
+    y_dv = np.maximum(
+        np.abs(coords.loc[:, (slice("x"), ["y"])].min().mean()),
+        np.abs(coords.loc[:, (slice("x"), ["y"])].max().mean()),
     )
 
+    if embeddings is not None:
+        # Get and process data to plot from coordinates object
+        (
+            coords,
+            cur_embeddings,
+            cluster_embedding,
+            concat_embedding,
+            hard_counts,
+        ) = _process_animation_data(
+            coords,
+            cur_embeddings,
+            cur_soft_counts,
+            min_confidence,
+            min_bout_duration,
+            selected_cluster,
+        )
+
     # Define canvas
-    fig = plt.figure(figsize=((16 if embedding is not None else 8), 8), dpi=dpi)
+    fig = plt.figure(figsize=((16 if cur_embeddings is not None else 8), 8), dpi=dpi)
 
     # If embeddings are provided, add projection plot to the left
-    if embedding is not None:
+    if cur_embeddings is not None:
         ax1 = fig.add_subplot(121)
 
-        _scatter_embeddings(concat_embedding, cluster_assignments, ax1, show=False)
+        _scatter_embeddings(concat_embedding, hard_counts, ax1, show=False)
 
         # Plot current position
         umap_scatter = {}
-        for i, emb in enumerate(embedding):
+        for i, emb in enumerate(cur_embeddings):
             umap_scatter[i] = ax1.scatter(
                 emb[0, 0],
                 emb[0, 1],
                 color=(
                     "red"
-                    if len(embedding) == 1
+                    if len(cur_embeddings) == 1
                     else list(sns.color_palette("tab10"))[i]
                 ),
                 s=200,
@@ -2298,11 +2143,11 @@ def animate_skeleton(
         ax1.set_ylabel("UMAP-2")
 
     # Add skeleton animation
-    ax2 = fig.add_subplot((122 if embedding is not None else 111))
+    ax2 = fig.add_subplot((122 if cur_embeddings is not None else 111))
 
     # Plot!
-    init_x = data.loc[:, (slice("x"), ["x"])].iloc[0, :]
-    init_y = data.loc[:, (slice("x"), ["y"])].iloc[0, :]
+    init_x = coords.loc[:, (slice("x"), ["x"])].iloc[0, :]
+    init_y = coords.loc[:, (slice("x"), ["y"])].iloc[0, :]
 
     # If there are more than one animal in the representation, display each in a different color
     hue = None
@@ -2314,13 +2159,13 @@ def animate_skeleton(
     else:
         animal_ids = [animal_id]
 
-    polygons = [_get_polygon_coords(data, aid) for aid in animal_ids]
+    polygons = [_get_polygon_coords(coords, aid) for aid in animal_ids]
 
     if animal_id is None:
         hue = np.zeros(len(np.array(init_x)))
         for i, id in enumerate(coordinates._animal_ids):
 
-            hue[data.columns.levels[0].str.startswith(id)] = i
+            hue[coords.columns.levels[0].str.startswith(id)] = i
 
             # Set a custom legend outside the plot, with the color of each animal
 
@@ -2367,13 +2212,12 @@ def animate_skeleton(
         tail_lines.append(ax2.plot(*aid[2][0, :].reshape(-1, 2).T))
 
     if display_arena and center in [False, "arena"] and align is None:
-        i = np.argmax(np.array(list(coordinates.get_coords().keys())) == experiment_id)
-        plot_arena(coordinates, center, "black", ax2, i)
+        plot_arena(coordinates, center, "black", ax2, key=experiment_id)
 
     # Update data in main plot
     def animation_frame(i):
 
-        if embedding is not None:
+        if cur_embeddings is not None:
             # Update umap scatter
             for j, xy in umap_scatter.items():
                 umap_x = cluster_embedding[j][i, 0]
@@ -2382,8 +2226,8 @@ def animate_skeleton(
                 umap_scatter[j].set_offsets(np.c_[umap_x, umap_y])
 
         # Update skeleton scatter plot
-        x = data.loc[:, (slice("x"), ["x"])].iloc[i, :]
-        y = data.loc[:, (slice("x"), ["y"])].iloc[i, :]
+        x = coords.loc[:, (slice("x"), ["x"])].iloc[i, :]
+        y = coords.loc[:, (slice("x"), ["y"])].iloc[i, :]
 
         skeleton_scatter.set_offsets(np.c_[x, y])
 
@@ -2396,7 +2240,7 @@ def animate_skeleton(
             tail_lines[p][0].set_xdata(aid[2][i, :].reshape(-1, 2)[:, 0])
             tail_lines[p][0].set_ydata(aid[2][i, :].reshape(-1, 2)[:, 1])
 
-        if embedding is not None:
+        if cur_embeddings is not None:
             return umap_scatter, skeleton_scatter
 
         return skeleton_scatter
@@ -2404,8 +2248,8 @@ def animate_skeleton(
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=np.minimum(data.shape[0], frame_limit),
-        interval=int(np.round(2000 // coordinates._frame_rate)),
+        frames=bin_info[experiment_id],
+        interval=int(np.round(1000 // sampling_rate)),
     )
 
     ax2.set_title(
@@ -2420,6 +2264,8 @@ def animate_skeleton(
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
+    ax2.invert_yaxis()
+
     plt.tight_layout()
 
     if save is not None:
@@ -2427,18 +2273,20 @@ def animate_skeleton(
             coordinates._project_path,
             coordinates._project_name,
             "Out_videos",
-            "deepof_embedding_animation{}_{}_{}.mp4".format(
+            "deepof_embedding_animation{}_{}_start{}-duration{}_{}.mp4".format(
                 (f"_{save}" if isinstance(save, str) else ""),
                 (
                     "cluster={}".format(selected_cluster)
                     if selected_cluster is not None
                     else experiment_id
                 ),
+                str(bin_index) if bin_index is not None else "",
+                str(bin_size) if bin_size is not None else "",
                 calendar.timegm(time.gmtime()),
             ),
         )
 
-        writevideo = FFMpegWriter(fps=15)
+        writevideo = FFMpegWriter(fps=sampling_rate)
         animation.save(save, writer=writevideo)
 
     return animation.to_html5_video()
@@ -2470,7 +2318,7 @@ def plot_cluster_detection_performance(
         hard_counts (np.ndarray): cluster assignments for the corresponding 'chunk_stats' table.
         groups (list): cross-validation indices. Data from the same animal are never shared between train and test sets.
         save (bool): name of the file where to save the produced figure.
-        matrix_visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
+        visualization (str): plot to render. Must be one of 'confusion_matrix', or 'balanced_accuracy'.
         ax (plt.Axes): axis where to plot the figure. If None, a new figure is created.
 
     """
@@ -2641,230 +2489,9 @@ def plot_shap_swarm_per_cluster(
         plt.show()
 
 
-def output_cluster_video(
-    cap: Any,
-    out: Any,
-    frame_mask: list,
-    v_width: int,
-    v_height: int,
-    path: str,
-    frame_limit: int = np.inf,
-):
-    """Output a video with the frames corresponding to the cluster.
-
-    Args:
-        cap: video capture object
-        out: video writer object
-        frame_mask: list of booleans indicating whether a frame should be written
-        v_width: video width
-        v_height: video height
-        path: path to the video file
-        frame_limit: maximum number of frames to render
-
-    """
-    frame_idx = np.where(frame_mask)[0]
-    frame_limit = np.min([frame_limit, len(frame_idx)])
-    i = 0
-    while cap.isOpened() and i < frame_limit:
-        if i == 0 or (i > 0 and frame_idx[i] - frame_idx[i - 1] > 1):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx[i])
-        ret, frame = cap.read()
-        if ret == False:
-            break
-
-        try:
-
-            res_frame = cv2.resize(frame, [v_width, v_height])
-            re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
-
-            if path is not None:
-                cv2.putText(
-                    res_frame,
-                    re_path,
-                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                    cv2.FONT_HERSHEY_DUPLEX,
-                    0.75,
-                    (255, 255, 255),
-                    2,
-                )
-
-            out.write(res_frame)
-            i += 1
-
-        except IndexError:
-            ret = False
-            i += 1
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-def output_videos_per_cluster(
-    video_paths: list,
-    breaks: list,
-    soft_counts: list,
-    frame_rate: float = 25,
-    frame_limit_per_video: int = np.inf,
-    single_output_resolution: tuple = None,
-    window_length: int = None,
-    min_confidence: float = 0.0,
-    min_bout_duration: int = None,
-    out_path: str = ".",
-):
-    """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
-
-    Args:
-        video_paths: list of paths to the videos
-        breaks: list of breaks between videos
-        soft_counts: list of soft counts per video
-        frame_rate: frame rate of the videos
-        frame_limit_per_video: number of frames to render per video.
-        single_output_resolution: if single_output is provided, this is the resolution of the output video.
-        window_length: window length used to compute the soft counts.
-        min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
-        min_bout_duration: minimum duration of a bout to be considered.
-        out_path: path to the output directory.
-
-    """
-    # Iterate over all clusters, and output a masked video for each
-    for cluster_id in range(soft_counts[0].shape[1]):
-
-        out = cv2.VideoWriter(
-            os.path.join(
-                out_path,
-                "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
-                    cluster_id, min_confidence, calendar.timegm(time.gmtime())
-                ),
-            ),
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            frame_rate,
-            single_output_resolution,
-        )
-
-        for i, path in enumerate(video_paths):
-
-            # Get hard counts and confidence estimates per cluster
-            hard_counts = np.argmax(soft_counts[i], axis=1)
-            confidence = np.max(soft_counts[i], axis=1)
-            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
-
-            # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
-            cap = cv2.VideoCapture(path)
-            v_width, v_height = single_output_resolution
-
-            # Compute confidence mask, filtering out also bouts that are too short
-            confidence_indices = deepof.utils.filter_short_bouts(
-                hard_counts,
-                confidence,
-                confidence_indices,
-                min_confidence,
-                min_bout_duration,
-            )
-            confidence_mask = (hard_counts == cluster_id) & confidence_indices
-
-            # Extend confidence mask using the corresponding breaks, to select and output all relevant video frames
-            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            frame_mask = np.repeat(confidence_mask, breaks[i])
-            frame_mask = np.concatenate(
-                (np.zeros(window_length, dtype=bool), frame_mask)
-            )
-
-            output_cluster_video(
-                cap,
-                out,
-                frame_mask,
-                v_width,
-                v_height,
-                path,
-                frame_limit_per_video,
-            )
-
-        out.release()
-
-
-def output_unsupervised_annotated_video(
-    video_path: str,
-    breaks: list,
-    soft_counts: np.ndarray,
-    frame_rate: float = 25,
-    frame_limit: int = np.inf,
-    window_length: int = None,
-    cluster_names: dict = {},
-    out_path: str = ".",
-):
-    """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
-
-    Args:
-        video_path: full path to the video
-        breaks: dictionary with break lengths for each video
-        soft_counts: soft cluster assignments for a specific video
-        frame_rate: frame rate of the video
-        frame_limit: maximum number of frames to output.
-        window_length: window length used to compute the soft counts.
-        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
-        out_path: out_path: path to the output directory.
-
-    """
-    # Get cluster assignment per frame
-    hard_counts = np.argmax(soft_counts, axis=1)
-    assignments_per_frame = np.repeat(hard_counts, breaks)
-
-    # Name clusters, and update names using the provided dictionary
-    cluster_labels = {i: str(i) for i in set(hard_counts)}
-    cluster_labels.update(cluster_names)
-
-    # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
-    cap = cv2.VideoCapture(video_path)
-
-    # Get width and height of current video
-    v_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    v_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    video_out = os.path.join(
-        out_path,
-        video_path[:-4].split("/")[-1]
-        + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
-    )
-
-    out = cv2.VideoWriter(
-        video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
-    )
-
-    i, j = 0, 0
-    while cap.isOpened() and i < frame_limit:
-        if j >= window_length:
-            j += 1
-
-        else:
-            ret, frame = cap.read()
-            if ret == False:
-                break
-
-            try:
-                cv2.putText(
-                    frame,
-                    "Cluster {}".format(cluster_labels[assignments_per_frame[i]]),
-                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                    cv2.FONT_HERSHEY_DUPLEX,
-                    0.75,
-                    (255, 255, 255),
-                    2,
-                )
-                out.write(frame)
-
-                i += 1
-
-            except IndexError:
-                ret = False
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
 def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
-    breaks: dict = None,
     experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
@@ -2877,7 +2504,6 @@ def export_annotated_video(
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
-        breaks (dict): dictionary with break lengths for each video.r
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
@@ -2889,7 +2515,7 @@ def export_annotated_video(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
-        experiment_id=experiment_id,
+        experiment_ids=experiment_id,
     )
 
     # Create output directory if it doesn't exist
@@ -2905,8 +2531,8 @@ def export_annotated_video(
     # Compute sliding window lenth, to determine the frame/annotation offset
     first_key = list(coordinates.get_quality().keys())[0]
     window_length = (
-        coordinates.get_quality()[first_key].shape[0]
-        - soft_counts[first_key].shape[0]
+        coordinates.get_table_lengths()[first_key]
+        - get_dt(soft_counts, first_key, only_metainfo=True)['num_rows']
         + 1
     )
 
@@ -2935,18 +2561,12 @@ def export_annotated_video(
     if soft_counts is not None:
         if experiment_id is not None:
             # If experiment_id is provided, only output a video for that experiment
+            cur_soft_counts=get_dt(soft_counts, experiment_id)
+            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
+
             deepof.visuals.output_unsupervised_annotated_video(
-                os.path.join(
-                    proj_path,
-                    "Videos",
-                    [
-                        video
-                        for video in coordinates.get_videos()
-                        if experiment_id in video
-                    ][0],
-                ),
-                breaks[experiment_id],
-                soft_counts[experiment_id],
+                video_path,                
+                cur_soft_counts,
                 frame_rate=coordinates._frame_rate,
                 window_length=window_length,
                 cluster_names=cluster_names,
@@ -2956,30 +2576,12 @@ def export_annotated_video(
         else:
             # If experiment_id is not provided, output a video per cluster for each experiment
             filtered_videos = filter_experimental_conditions(
-                coordinates, coordinates.get_videos(), exp_conditions
+                coordinates, coordinates.get_videos(full_paths=True), exp_conditions
             )
 
             deepof.visuals.output_videos_per_cluster(
-                [
-                    os.path.join(
-                        proj_path,
-                        "Videos",
-                        video,
-                    )
-                    for video in filtered_videos
-                ],
-                [
-                    val
-                    for key, val in breaks.items()
-                    if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
-                ],
-                [
-                    val
-                    for key, val in soft_counts.items()
-                    if key
-                    in [re.findall("(.+)DLC", video)[0] for video in filtered_videos]
-                ],
+                filtered_videos,
+                soft_counts,
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
                 window_length=window_length // 2,
@@ -2999,7 +2601,6 @@ def plot_distance_between_conditions(
     coordinates: coordinates,
     embedding: dict,
     soft_counts: dict,
-    breaks: dict,
     exp_condition: str,
     embedding_aggregation_method: str = "median",
     distance_metric: str = "wasserstein",
@@ -3016,7 +2617,6 @@ def plot_distance_between_conditions(
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         embedding (dict): embedding object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
-        breaks (dict): dictionary with break lengths for each video.
         exp_condition (str): experimental condition to use for the distance calculation.
         embedding_aggregation_method (str): method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
         distance_metric (str): distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
@@ -3031,17 +2631,18 @@ def plot_distance_between_conditions(
         exp_condition=exp_condition,
     )
 
+    min_len=np.min([get_dt(soft_counts, key, only_metainfo=True)['num_rows'] for key in soft_counts.keys()])
+
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        breaks,
         {
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
         },
         int(np.round(10 * coordinates._frame_rate)),
-        np.min([val.shape[0] for val in soft_counts.values()]),
+        min_len,
         int(np.round(coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         metric=distance_metric,
@@ -3054,13 +2655,12 @@ def plot_distance_between_conditions(
     distance_per_bin = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        breaks,
         {
             key: val[exp_condition].values[0]
             for key, val in coordinates.get_exp_conditions.items()
         },
         int(np.round(10 * coordinates._frame_rate)),
-        np.min([val.shape[0] for val in soft_counts.values()]),
+        min_len,
         int(np.round(optimal_bin * coordinates._frame_rate)),
         agg=embedding_aggregation_method,
         scan_mode="per-bin",
@@ -3074,7 +2674,7 @@ def plot_distance_between_conditions(
             exp_condition: distance_array,
             "Time": np.linspace(
                 10,
-                np.min([val.shape[0] for val in soft_counts.values()]),
+                min_len,
                 len(distance_array),
             )
             / coordinates._frame_rate,
@@ -3092,7 +2692,7 @@ def plot_distance_between_conditions(
                 [
                     optimal_bin * np.arange(1, len(distance_per_bin)),
                     [
-                        np.min([val.shape[0] for val in soft_counts.values()])
+                        min_len
                         / coordinates._frame_rate
                     ],
                 ]
@@ -3153,470 +2753,10 @@ def plot_distance_between_conditions(
         )
 
 
-def tag_annotated_frames(
-    frame,
-    font,
-    frame_speeds,
-    animal_ids,
-    corners,
-    tag_dict,
-    fnum,
-    undercond,
-    hparams,
-    arena,
-    arena_type,
-    debug,
-    coords,
-):
-    """Annotate a given frame with on-screen information about the recognised patterns.
-
-    Helper function for annotate_video. No public use intended.
-
-    """
-    arena, w, h = arena
-
-    def write_on_frame(text, pos, col=(255, 255, 255)):
-        """Partial closure over cv2.putText to avoid code repetition."""
-        return cv2.putText(frame, text, pos, font, 0.75, col, 2)
-
-    def conditional_flag():
-        """Return a tag depending on a condition."""
-        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-            return left_flag
-        return right_flag
-
-    def conditional_pos():
-        """Return a position depending on a condition."""
-        if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-            return corners["downleft"]
-        return corners["downright"]
-
-    def conditional_col(cond=None):
-        """Return a colour depending on a condition."""
-        if cond is None:
-            cond = frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]
-        if cond:
-            return 150, 255, 150
-        return 150, 150, 255
-
-    # Keep track of space usage in the output video
-    # The flags are set to False as soon as the lower
-    # corners are occupied with text
-    left_flag, right_flag = True, True
-
-    if debug:
-
-        if arena_type.startswith("circular"):
-            # Print arena for debugging
-            cv2.ellipse(
-                img=frame,
-                center=arena[0],
-                axes=arena[1],
-                angle=arena[2],
-                startAngle=0,
-                endAngle=360,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-        elif arena_type.startswith("polygonal"):
-
-            # Draw polygon
-            cv2.polylines(
-                img=frame,
-                pts=[np.array(arena, dtype=np.int32)],
-                isClosed=True,
-                color=(40, 86, 236),
-                thickness=3,
-            )
-
-        # Print body parts for debuging
-        for bpart in coords.columns.levels[0]:
-            if not np.isnan(coords[bpart]["x"][fnum]):
-                cv2.circle(
-                    frame,
-                    (int(coords[bpart]["x"][fnum]), int(coords[bpart]["y"][fnum])),
-                    radius=3,
-                    color=(
-                        (255, 0, 0) if bpart.startswith(animal_ids[0]) else (0, 0, 255)
-                    ),
-                    thickness=-1,
-                )
-        # Print frame number
-        write_on_frame("Frame " + str(fnum), (int(w * 0.3 / 10), int(h / 1.15)))
-
-    if len(animal_ids) > 1:
-
-        if tag_dict["nose2nose"][fnum]:
-            write_on_frame("Nose-Nose", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-        if tag_dict[animal_ids[0] + "_nose2body"][fnum] and left_flag:
-            write_on_frame("nose2body", corners["downleft"])
-            left_flag = False
-
-        if tag_dict[animal_ids[1] + "_nose2body"][fnum] and right_flag:
-            write_on_frame("nose2body", corners["downright"])
-            right_flag = False
-
-        if tag_dict[animal_ids[0] + "_nose2tail"][fnum] and left_flag:
-            write_on_frame("Nose-Tail", corners["downleft"])
-            left_flag = False
-
-        if tag_dict[animal_ids[1] + "_nose2tail"][fnum] and right_flag:
-            write_on_frame("Nose-Tail", corners["downright"])
-            right_flag = False
-
-        if tag_dict["sidebyside"][fnum] and left_flag and conditional_flag():
-            write_on_frame("Side-side", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-        if tag_dict["sidereside"][fnum] and left_flag and conditional_flag():
-            write_on_frame("Side-Rside", conditional_pos())
-            if frame_speeds[animal_ids[0]] > frame_speeds[animal_ids[1]]:
-                left_flag = False
-            else:
-                right_flag = False
-
-    zipped_pos = list(
-        zip(
-            animal_ids,
-            [corners["downleft"], corners["downright"]],
-            [corners["upleft"], corners["upright"]],
-            [left_flag, right_flag],
-        )
-    )
-
-    for _id, down_pos, up_pos, flag in zipped_pos:
-
-        if flag:
-
-            if tag_dict[_id + undercond + "climbing"][fnum]:
-                write_on_frame("climbing", down_pos)
-            elif tag_dict[_id + undercond + "huddle"][fnum]:
-                write_on_frame("huddling", down_pos)
-            elif tag_dict[_id + undercond + "sniffing"][fnum]:
-                write_on_frame("sniffing", down_pos)
-
-        # Define the condition controlling the colour of the speed display
-        if len(animal_ids) > 1:
-            colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
-        else:
-            colcond = hparams["huddle_speed"] < frame_speeds
-
-        write_on_frame(
-            str(
-                np.round(
-                    (frame_speeds if len(animal_ids) == 1 else frame_speeds[_id]), 2
-                )
-            )
-            + " mmpf",
-            up_pos,
-            conditional_col(cond=colcond),
-        )
-
-
-# noinspection PyProtectedMember,PyDefaultArgument
-def annotate_video(
-    coordinates: coordinates,
-    tag_dict: pd.DataFrame,
-    vid_index: int,
-    frame_limit: int = np.inf,
-    debug: bool = False,
-    params: dict = {},
-) -> True:
-    """Render a version of the input video with all supervised taggings in place.
-
-    Args:
-        coordinates (deepof.preprocessing.coordinates): coordinates object containing the project information.
-        debug (bool): if True, several debugging attributes (such as used body parts and arena) are plotted in the output video.
-        vid_index: for internal usage only; index of the video to tag in coordinates._videos.
-        frame_limit (float): limit the number of frames to output. Generates all annotated frames by default.
-        params (dict): dictionary to overwrite the default values of the hyperparameters of the functions that the supervised pose estimation utilizes.
-
-    """
-    # Extract useful information from coordinates object
-    tracks = list(coordinates._tables.keys())
-    videos = coordinates._videos
-    path = os.path.join(coordinates._project_path, coordinates._project_name, "Videos")
-
-    animal_ids = coordinates._animal_ids
-    undercond = "_" if len(animal_ids) > 1 else ""
-
-    try:
-        vid_name = re.findall("(.*)DLC", tracks[vid_index])[0]
-    except IndexError:
-        vid_name = tracks[vid_index]
-
-    arena_params = coordinates._arena_params[vid_index]
-    h, w = coordinates._video_resolution[vid_index]
-    corners = deepof.annotation_utils.frame_corners(h, w)
-
-    cap = cv2.VideoCapture(os.path.join(path, videos[vid_index]))
-    # Keep track of the frame number, to align with the tracking data
-    fnum = 0
-    writer = None
-    frame_speeds = (
-        {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
-    )
-
-    # Loop over the frames in the video
-    while cap.isOpened() and fnum < frame_limit:
-
-        ret, frame = cap.read()
-        # if frame is read correctly ret is True
-        if not ret:  # pragma: no cover
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
-
-        font = cv2.FONT_HERSHEY_DUPLEX
-
-        # Capture speeds
-        try:
-            if (
-                list(frame_speeds.values())[0] == -np.inf
-                or fnum % params["speed_pause"] == 0
-            ):
-                for _id in animal_ids:
-                    frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
-        except AttributeError:
-            if frame_speeds == -np.inf or fnum % params["speed_pause"] == 0:
-                frame_speeds = tag_dict["speed"][fnum]
-
-        # Display all annotations in the output video
-        tag_annotated_frames(
-            frame,
-            font,
-            frame_speeds,
-            animal_ids,
-            corners,
-            tag_dict,
-            fnum,
-            undercond,
-            params,
-            (arena_params, h, w),
-            coordinates._arena,
-            debug,
-            coordinates.get_coords(center=False)[vid_name],
-        )
-
-        if writer is None:
-            # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
-            # Define the FPS. Also frame size is passed.
-            writer = cv2.VideoWriter()
-            writer.open(
-                os.path.join(
-                    coordinates._project_path,
-                    coordinates._project_name,
-                    "Out_videos",
-                    vid_name + "_supervised_tagged.avi",
-                ),
-                cv2.VideoWriter_fourcc(*"MJPG"),
-                coordinates._frame_rate,
-                (frame.shape[1], frame.shape[0]),
-                True,
-            )
-
-        writer.write(frame)
-        fnum += 1
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-    return True
-
-
-def _check_enum_inputs(
-    coordinates: coordinates,
-    origin: object = None,
-    experiment_id: str = None,
-    exp_condition: str = None,
-    exp_condition_order: list = None,
-    condition_values: list = None,
-    bodyparts: list = None,
-    animal_id: str = None,
-    center: str = None,
-    visualization: str = None,
-    normative_model: str = None,
-    aggregate_experiments: str = None,
-    colour_by: str = None,
-):
-    """
-    Checks and validates enum-like input parameters for the different plot functions.
-
-    Args:
-        coordinates (coordinates): deepof Coordinates object.
-        center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
-        exp_condition (str): Experimental condition to plot.
-        exp_condition_order (list): Order in which to plot experimental conditions.
-        condition_values (list): Experimental condition value to plot.
-        experiment_id (str): data set name of the animal to plot.
-        bodyparts (list): list of body parts to plot.
-        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
-        normative_model (str): Name of the cohort to use as controls.
-        aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
-        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
-
-    """
-    # activate warnings (again, because just putting it at the beginning of the skript
-    # appears to yield inconsitent results)
-    warnings.simplefilter("always", UserWarning)
-
-    # Generate lists of possible options for all enum-likes (solution will be improved in the future)
-    if origin == "plot_heatmaps":
-        experiment_id_options_list = ["average"] + os_sorted(
-            list(coordinates._tables.keys())
-        )
-    else:
-        experiment_id_options_list = os_sorted(list(coordinates._tables.keys()))
-
-    if coordinates.get_exp_conditions is not None:
-        exp_condition_options_list = np.unique(
-            np.concatenate(
-                [
-                    condition.columns.values[:]
-                    for condition in coordinates.get_exp_conditions.values()
-                ]
-            )
-        )
-    else:
-        exp_condition_options_list = []
-    if exp_condition is not None and exp_condition in exp_condition_options_list:
-        condition_value_options_list = np.unique(
-            np.concatenate(
-                [
-                    condition[exp_condition].values.astype(str)
-                    for condition in coordinates.get_exp_conditions.values()
-                ]
-            )
-        )
-    else:
-        condition_value_options_list = []
-    bodyparts_options_list = np.unique(
-        np.concatenate(
-            [
-                coordinates._tables[key].columns.levels[0]
-                for key in coordinates._tables.keys()
-            ]
-        )
-    )
-    bodyparts_options_list = [
-        item for item in bodyparts_options_list if item not in coordinates._excluded
-    ]
-    animal_id_options_list = coordinates._animal_ids
-    # fixed option lists
-    center_options_list = ["arena"]
-    if origin == "plot_transitions":
-        visualization_options_list = ["networks", "heatmaps"]
-    else:
-        visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
-    aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
-    colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
-
-    # check if given values are valid. Throw exception and suggest correct values if not
-    if experiment_id is not None and experiment_id not in experiment_id_options_list:
-        raise ValueError(
-            '"experiment_id" needs to be one of the following: {} ... '.format(
-                str(experiment_id_options_list[0:4])[1:-1]
-            )
-        )
-    if exp_condition is not None and exp_condition not in exp_condition_options_list:
-        if len(exp_condition_options_list) > 0:
-            raise ValueError(
-                '"exp_condition" needs to be one of the following: {}'.format(
-                    str(exp_condition_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
-        condition_value_options_list
-    ).issubset(set(condition_value_options_list)):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                'One or more conditions in "exp_condition_order" are not part of: {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
-        set(condition_value_options_list)
-    ):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                'One or more condition values in "condition_value(s)" are not part of {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-    if (
-        normative_model is not None
-        and normative_model not in condition_value_options_list
-    ):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                '"normative_model" needs to be one of the following: {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
-        set(bodyparts_options_list)
-    ):
-        raise ValueError(
-            'One or more bodyparts in "bodyparts" are not part of: {}'.format(
-                str(bodyparts_options_list)[1:-1]
-            )
-        )
-    if animal_id is not None and animal_id not in animal_id_options_list:
-        raise ValueError(
-            '"animal_id" needs to be one of the following: {}'.format(
-                str(animal_id_options_list)
-            )
-        )
-    if center is not None and center not in center_options_list:
-        raise ValueError(
-            'For input "center" currently only {} is supported'.format(
-                str(center_options_list)
-            )
-        )
-    if visualization is not None and visualization not in visualization_options_list:
-        raise ValueError(
-            '"visualization" needs to be one of the following: {}'.format(
-                str(visualization_options_list)
-            )
-        )
-    if (
-        aggregate_experiments is not None
-        and aggregate_experiments not in aggregate_experiments_options_list
-    ):
-        raise ValueError(
-            '"aggregate_experiments" needs to be one of the following: {}'.format(
-                str(aggregate_experiments_options_list)
-            )
-        )
-    if colour_by is not None and colour_by not in colour_by_options_list:
-        raise ValueError(
-            '"colour_by" needs to be one of the following: {}'.format(
-                str(colour_by_options_list)
-            )
-        )
-
-
 def plot_behavior_trends(
     coordinates: coordinates,
     embedding: table_dict = None,
     soft_counts: table_dict = None,
-    breaks: table_dict = None,
     supervised_annotations: table_dict = None,
     polar_depiction: bool = True,
     show_histogram: bool = True,
@@ -3636,29 +2776,34 @@ def plot_behavior_trends(
     Creates a polar plot or histogram of behavioral data over time.
 
     Args:
-        coordinates (coordinates): deepOF project containing the stored data.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
-        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        breaks (table_dict): table dict with changepoint detection breaks per experiment.
-        supervised_annotations (table_dict): Table dict with supervised annotations per video.
-        polar_depiction (bool): if True, display as polar plot. Defaults to True.
-        show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
-        exp_condition (str): Experimental condition to compare.
-        condition_values (list): List of two strings containing the condition values to compare.
-        behavior_to_plot (str): Behavior to compare for selected condition.
-        normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
-        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-        custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
-        ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
-        save (bool): If True, saves the plot to a file. Defaults to False.
-
+    coordinates (coordinates): deepOF project containing the stored data.
+    embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+    soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+    supervised_annotations (table_dict): Table dict with supervised annotations per video.
+    polar_depiction (bool): if True, display as polar plot. Defaults to True.
+    show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
+    exp_condition (str): Experimental condition to compare.
+    condition_values (list): List of two strings containing the condition values to compare.
+    behavior_to_plot (str): Behavior to compare for selected condition.
+    normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.
+    add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+    error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+    ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
+    save (bool): If True, saves the plot to a file. Defaults to False.
     """
+
+
     # Initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         exp_condition=exp_condition,
         condition_values=condition_values,
+        behaviors=behavior_to_plot,
     )
 
     #####
@@ -3691,21 +2836,22 @@ def plot_behavior_trends(
 
     # Init plot type based on inputs
     if (
-        any([embedding is None, soft_counts is None, breaks is None])
+        any([embedding is None, soft_counts is None])
         and supervised_annotations is not None
     ):
         plot_type = "supervised"
         L_shortest = min(
-            len(supervised_annotations[key]) for key in supervised_annotations.keys()
+            get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
         )
     elif (
         embedding is not None
         and soft_counts is not None
-        and breaks is not None
         and supervised_annotations is None
     ):
         plot_type = "unsupervised"
-        L_shortest = min(len(soft_counts[key]) for key in soft_counts.keys())
+        L_shortest = min(
+            get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
+        )
     else:
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
@@ -3727,15 +2873,14 @@ def plot_behavior_trends(
 
     # Set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = soft_counts[next(iter(soft_counts))].argmax(axis=1)
-        behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
+        keys=list(soft_counts.keys())
+        num_clusters=get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
+        behavior_ids = [f"Cluster {str(k)}" for k in range(0, num_clusters)]
+        
     elif plot_type == "supervised":
-        behavior_ids = [
-            col
-            for col in supervised_annotations[
-                next(iter(supervised_annotations))
-            ].columns
-        ]
+        keys=list(supervised_annotations.keys())
+        behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
+
 
     #####
     # Some validity checks and more formatting
@@ -3803,56 +2948,48 @@ def plot_behavior_trends(
     # Initialize table
     columns = ["time_bin", "exp_condition", behavior_to_plot]
     df = pd.DataFrame(columns=columns)
-    z = 0
 
-    # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
-    for bin_start, bin_end in custom_time_bins:
+    # Iterate over all experiments via keys
+    for key in keys:
 
-        # Create precomputed boolean snippet for time bin extraction
-        precomputed = np.array([False] * L_shortest)
-        precomputed[bin_start:bin_end] = True
-
-        # Extract time bin from data based on type of input
         if plot_type == "unsupervised":
-            _, data_snippet, _, _ = deepof.post_hoc.select_time_bin(
-                embedding=embedding,
-                soft_counts=soft_counts,
-                breaks=breaks,
-                precomputed=precomputed,
-            )
+            data_set=get_dt(soft_counts,key)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
-            _, _, _, data_snippet = deepof.post_hoc.select_time_bin(
-                supervised_annotations=supervised_annotations, precomputed=precomputed
-            )
+            data_set=get_dt(supervised_annotations,key)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
 
-        # Iterate over all samples in the current snippet
-        for key in data_snippet.keys():
-            behavior_timebin = np.sum(index_dict_fn(data_snippet[key]))
-            # Normalize if required
+        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+
+        # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
+        for i, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+            #get current snippet
+            data_snippet=data_set[bin_start:bin_end]
+
+            behavior_timebin = np.sum(index_dict_fn(data_snippet))
             if normalize or behavior_to_plot == "speed":
                 behavior_timebin = behavior_timebin / len(
-                    index_dict_fn(data_snippet[key])
+                    index_dict_fn(data_snippet)
                 )
-
-            # Collect data in datatable
-            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+            
             new_row = pd.DataFrame(
                 [
                     {
-                        "time_bin": z,
+                        "time_bin": i,
                         "exp_condition": str(cond),
                         behavior_to_plot: behavior_timebin,
                     }
                 ]
             )
             df = pd.concat([df, new_row], ignore_index=True)
-        z += 1
+
+    # Normalize frames to reflect seconds
+    df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
 
     # Calculate mean values and errors accross samples
     time_bin_means = (
@@ -4129,6 +3266,10 @@ def plot_behavior_trends(
         # Start position of histograms on y axis
         top = ax.get_ylim()[0]
 
+        # Add axis labels
+        ax.set_xlabel("Time Bins", fontsize=12)
+        ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
+
         # Add legend
         legend_1 = ax.legend(
             handles=[marker_handles[0][0], marker_handles[1][0]],
@@ -4249,10 +3390,6 @@ def plot_behavior_trends(
                 fontsize=8,
             )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
 
-    # If no axes are given, show plot
-    if show:
-        plt.show()
-
     # Save plot if required
     if save:
         plt.savefig(
@@ -4269,3 +3406,7 @@ def plot_behavior_trends(
                 ),
             )
         )
+
+    # If no axes are given, show plot
+    if show:
+        plt.show()

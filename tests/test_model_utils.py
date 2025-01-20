@@ -20,6 +20,8 @@ from hypothesis.extra.numpy import arrays
 
 import deepof.data
 import deepof.model_utils
+from deepof.data import TableDict
+
 
 
 def test_find_learning_rate():
@@ -96,15 +98,20 @@ def test_model_embedding_fitting(
         arena="circular-autodetect",
         video_scale=380,
         video_format=".mp4",
-    ).create(force=True)
+    ).create(force=True, test=True)
 
     X_train = np.random.uniform(-1, 1, [20, 5, 6]).astype(float)
-    y_train = np.array([20, 1]).astype(float)
+    X_edges = np.random.uniform(-1, 1, [20, 5, 6]).astype(float)
+
 
     if not use_graph:
-        preprocessed_data = (X_train, y_train, X_train, y_train)
+        preprocessed_data = (TableDict({'A': (X_train), 'B': (X_train)}, typ='train'),
+                             TableDict({'A': (X_train), 'B': (X_train)}, typ='test'))                                   
+                                    
     else:
-        preprocessed_data = (X_train, X_train, y_train, X_train, X_train, y_train)
+        preprocessed_data = (TableDict({'A': (X_train, X_edges), 'B': (X_train, X_edges)},typ='train'),
+                             TableDict({'A': (X_train, X_edges), 'B': (X_train, X_edges)},typ='test'))
+                                      
 
     prun.deep_unsupervised_embedding(
         preprocessed_data,
@@ -145,12 +152,15 @@ def test_model_embedding_fitting(
 def test_tune_search(hpt_type, encoder_type, embedding_model, use_graph):
 
     X_train = np.ones([20, 5, 6]).astype(float)
-    y_train = np.array([20, 1]).astype(float)
+    X_edges = np.ones([20, 5, 6]).astype(float)
 
     if not use_graph:
-        preprocessed_data = (X_train, y_train, X_train, y_train)
+        preprocessed_data = (TableDict({'A': (X_train), 'B': (X_train)}, typ='train'),
+                             TableDict({'A': (X_train), 'B': (X_train)}, typ='test'))                                   
+                                    
     else:
-        preprocessed_data = (X_train, X_train, y_train, X_train, X_train, y_train)
+        preprocessed_data = (TableDict({'A': (X_train, X_edges), 'B': (X_train, X_edges)},typ='train'),
+                             TableDict({'A': (X_train, X_edges), 'B': (X_train, X_edges)},typ='test'))
 
     callbacks = list(
         deepof.model_utils.get_callbacks(

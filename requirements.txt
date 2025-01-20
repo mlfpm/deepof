@@ -1,9 +1,6 @@
-PIMS>=0.6.1
 POT>=0.8.2
 Shapely>=1.8.5.post1
 catboost>=1.1.1
-dask==2024.5.1
-dask_image==2022.9.0
 imageio-ffmpeg>=0.4.8
 imbalanced_learn>=0.10.1
 imblearn>=0.0
@@ -24,15 +21,13 @@ pandas~=1.5
 pomegranate>=1.0.0
 regex>=2022.10.31
 regex>=2022.3.15
-ruptures>=1.1.7
 scikit_learn==1.2.0
-scipy>=1.7.3
+scipy==1.9.3
 seaborn>=0.11.2
 seglearn>=1.2.5
 segment-anything==1.0
 setuptools<72.0.0
 shap>=0.41.0
-sktime==0.24.0
 sleap-io==0.0.9
 spektral>=1.2.0
 sphinx-press-theme==0.8.0
@@ -52,7 +47,10 @@ tensorboard>=2.11.2
 tensorflow-macos==2.12.0;platform_machine == 'arm64' and platform_system == 'Darwin'
 tensorflow==2.12.0;platform_machine != 'arm64' or platform_system != 'Darwin'
 tensorflow_probability==0.20.1
+tensorflow-io-gcs-filesystem==0.31.0;platform_system != 'Darwin'
+tensorflow-io-gcs-filesystem==0.37.1;platform_system == 'Darwin'
 torch==2.2.2
 torchvision==0.17.2
 tqdm==4.66.1
 umap_learn==0.5.4
+pyarrow>=17.0.0

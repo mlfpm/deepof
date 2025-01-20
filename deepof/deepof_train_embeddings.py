@@ -18,6 +18,8 @@ import time
 import deepof.data
 import deepof.model_utils
 import deepof.utils
+from deepof.data_loading import get_dt, load_dt
+
 
 if __name__ == "__main__":
 
@@ -306,12 +308,11 @@ if __name__ == "__main__":
             center="Center",
             align="Spine_1",
             align_inplace=True,
-            propagate_labels=False,
-            propagate_annotations=False,
             selected_id=animal_to_preprocess,
         )
 
         preprocessed_object, global_scaler = to_preprocess.preprocess(
+            coordinates=project_coords,
             window_size=window_size,
             window_step=window_step,
             automatic_changepoints=automatic_changepoints,
@@ -375,8 +376,8 @@ if __name__ == "__main__":
             run=run,
         )
 
-        # Get embeddings, soft_counts, and breaks per video
-        embeddings, soft_counts, breaks = deepof.model_utils.embedding_per_video(
+        # Get embeddings and soft_counts per video
+        embeddings, soft_counts = deepof.model_utils.embedding_per_video(
             coordinates=my_deepof_project,
             to_preprocess=to_preprocess,
             model=trained_model,
@@ -405,7 +406,6 @@ if __name__ == "__main__":
                 [
                     deep_encodings_per_video,
                     deep_assignments_per_video,
-                    deep_breaks_per_video,
                 ],
                 x,
                 protocol=pickle.HIGHEST_PROTOCOL,

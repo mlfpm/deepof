@@ -8,7 +8,9 @@ import os
 from datetime import date, datetime
 from typing import Any, List, NewType, Tuple, Union
 
+from IPython.display import clear_output
 import matplotlib.pyplot as plt
+import psutil
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -29,6 +31,8 @@ import deepof.data
 import deepof.hypermodels
 import deepof.models
 import deepof.post_hoc
+from deepof.data_loading import get_dt, load_dt, save_dt
+
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -53,7 +57,6 @@ def select_contrastive_loss(
     tau=0.1,
     beta=0.1,
     elimination_topk=0.1,
-    attraction=False,
 ):  # pragma: no cover
     """Select and applies the contrastive loss function to be used in the Contrastive embedding models.
 
@@ -66,7 +69,6 @@ def select_contrastive_loss(
         tau: Float indicating the tau value to be used if DCL or hard DLC are selected.
         beta: Float indicating the beta value to be used if hard DLC is selected.
         elimination_topk: Float indicating the top-k value to be used if FC is selected.
-        attraction: Boolean indicating whether to use attraction in FC.
 
     """
     similarity_dict = {
@@ -1131,6 +1133,7 @@ def log_hyperparameters():
     return logparams, metrics
 
 
+
 def embedding_model_fitting(
     preprocessed_object: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     adjacency_matrix: np.ndarray,
@@ -1143,11 +1146,13 @@ def embedding_model_fitting(
     log_hparams: bool,
     n_components: int,
     output_path: str,
+    data_path: str,
     kmeans_loss: float,
     pretrained: str,
     save_checkpoints: bool,
     save_weights: bool,
     input_type: str,
+    bin_info: dict,
     # VaDE Model specific parameters
     kl_annealing_mode: str,
     kl_warmup: int,
@@ -1168,7 +1173,6 @@ def embedding_model_fitting(
     Trains the specified embedding model on the preprocessed data.
 
     Args:
-        coordinates (np.ndarray): Coordinates of the data.
         preprocessed_object (tuple): Tuple containing the preprocessed data.
         adjacency_matrix (np.ndarray): adjacency_matrix (np.ndarray): adjacency matrix of the connectivity graph to use.
         embedding_model (str): Model to use to embed and cluster the data. Must be one of VQVAE (default), VaDE, and contrastive.
@@ -1180,13 +1184,13 @@ def embedding_model_fitting(
         log_hparams (bool): Whether to log the hyperparameters used for training.
         n_components (int): Number of components to fit to the data.
         output_path (str): Path to the output directory.
+        data_path (str): Path to the directory where intermediate data is saved
         kmeans_loss (float): Weight of the gram loss, which adds a regularization term to VQVAE models which penalizes the correlation between the dimensions in the latent space.
         pretrained (str): Path to the pretrained weights to use for the autoencoder.
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
-        interaction_regularization (float): Weight of the interaction regularization term (L1 penalization to all features not related to interactions).
-        run (int): Run number to use for logging.
+        bin_info (dict): Dictionary containing numpy integer arrays for each experiment. Each array denotes the samples to be sampled from teh respective experiment.
 
         # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
@@ -1200,6 +1204,10 @@ def embedding_model_fitting(
         contrastive_loss_function (str): contrastive loss function. Must be one of 'nce' (default), 'dcl', 'fc', and 'hard_dcl'. See specific documentation for details.
         beta (float): Beta (concentration) parameter for the hard_dcl contrastive loss. Higher values lead to 'harder' negative samples.
         tau (float): Tau parameter for the dcl and hard_dcl contrastive losses, indicating positive class probability.
+        interaction_regularization (float): Weight of the interaction regularization term (L1 penalization to all features not related to interactions).
+        run (int): Run number to use for logging.
+
+
 
     Returns:
         List of trained models corresponding to the selected model class. The full trained model is last.
@@ -1218,15 +1226,14 @@ def embedding_model_fitting(
     with tf.device("CPU"):
 
         # Load data
-        try:
-            X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
-        except ValueError:
-            X_train, y_train, X_val, y_val = preprocessed_object
-            a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
+        preprocessed_train, preprocessed_validation= preprocessed_object
+        
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(bin_info=bin_info, return_edges=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(bin_info=bin_info, return_edges=True)
 
         # Make sure that batch_size is not larger than training set
-        if batch_size > preprocessed_object[0].shape[0]:
-            batch_size = preprocessed_object[0].shape[0]
+        if batch_size > X_train.shape[0]:
+            batch_size = X_train.shape[0]
 
         # Set options for tf.data.Datasets
         options = tf.data.Options()
@@ -1257,6 +1264,10 @@ def embedding_model_fitting(
 
         Xs, ys = X_train, [X_train]
         Xvals, yvals = X_val, [X_val]
+        
+        train_shape=X_train.shape
+        a_train_shape=a_train.shape
+
 
         # Cast to float32
         ys = tuple([tf.cast(dat, tf.float32) for dat in ys])
@@ -1268,7 +1279,7 @@ def embedding_model_fitting(
                 (tf.cast(Xs, tf.float32), tf.cast(a_train, tf.float32), tuple(ys))
             )
             .batch(batch_size * strategy.num_replicas_in_sync, drop_remainder=True)
-            .shuffle(buffer_size=X_train.shape[0])
+            .shuffle(buffer_size=train_shape[0])
             .with_options(options)
             .prefetch(tf.data.AUTOTUNE)
         )
@@ -1281,16 +1292,34 @@ def embedding_model_fitting(
             .prefetch(tf.data.AUTOTUNE)
         )
 
+
+        embed_x={}
+        train_path = os.path.join(data_path, 'embed_x')
+        embed_x['embed_x'] = save_dt(Xs,train_path,True)
+        embed_a={}
+        train_path = os.path.join(data_path, 'embed_a')
+        embed_a['embed_a'] = save_dt(a_train,train_path,True) 
+
+        del Xs
+        del X_train
+        del a_train
+        del X_val
+        del Xvals
+        del a_val
+        del ys
+        del yvals
+
+
     # Build model
     with strategy.scope():
 
         if embedding_model == "VQVAE":
             ae_full_model = deepof.models.VQVAE(
-                input_shape=X_train.shape,
-                edge_feature_shape=a_train.shape,
+                input_shape=train_shape,
+                edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(get_dt(embed_a, 'embed_a')) < 10e-10),
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
                 encoder_type=encoder_type,
@@ -1302,12 +1331,12 @@ def embedding_model_fitting(
 
         elif embedding_model == "VaDE":
             ae_full_model = deepof.models.VaDE(
-                input_shape=X_train.shape,
-                edge_feature_shape=a_train.shape,
+                input_shape=train_shape,
+                edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(get_dt(embed_a, 'embed_a')) < 10e-10),
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup_epochs=kl_warmup,
                 montecarlo_kl=100,
@@ -1319,11 +1348,11 @@ def embedding_model_fitting(
 
         elif embedding_model == "Contrastive":
             ae_full_model = deepof.models.Contrastive(
-                input_shape=X_train.shape,
-                edge_feature_shape=a_train.shape,
+                input_shape=train_shape,
+                edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
-                use_gnn=len(preprocessed_object) == 6,
+                use_gnn=not np.all(np.abs(get_dt(embed_a, 'embed_a')) < 10e-10),
                 encoder_type=encoder_type,
                 temperature=temperature,
                 similarity_function=contrastive_similarity_function,
@@ -1357,12 +1386,13 @@ def embedding_model_fitting(
         if embedding_model == "VaDE":
             ae_full_model.pretrain(
                 train_dataset,
-                embed_x=Xs,
-                embed_a=a_train,
+                embed_x=embed_x,
+                embed_a=embed_a,
                 epochs=(np.minimum(10, epochs) if not pretrained else 0),
                 **kwargs,
             )
             ae_full_model.optimizer._iterations.assign(0)
+
 
         ae_full_model.fit(
             x=train_dataset,
@@ -1374,12 +1404,21 @@ def embedding_model_fitting(
 
         if embedding_model == "VaDE" and recluster == True:  # pragma: no cover
             ae_full_model.pretrain(
-                train_dataset, embed_x=Xs, embed_a=a_train, epochs=0, **kwargs
+                train_dataset, embed_x=embed_x, embed_a=embed_a, epochs=0, **kwargs
             )
 
     else:  # pragma: no cover
         # If pretrained models are specified, load weights and return
-        ae_full_model.build([X_train.shape, a_train.shape])
+        if embedding_model != "Contrastive":
+            ae_full_model.build([train_shape, a_train_shape])
+        else:
+            ae_full_model.build(
+                [
+                    (train_shape[0], train_shape[1] // 2, train_shape[2]),
+                    (a_train_shape[0], a_train_shape[1] // 2, a_train_shape[2]),
+                ]
+            )
+
         ae_full_model.load_weights(pretrained)
         return ae_full_model
 
@@ -1463,58 +1502,66 @@ def embedding_per_video(
     model: tf.keras.models.Model,
     scale: str = "standard",
     animal_id: str = None,
-    ruptures: bool = False,
     global_scaler: Any = None,
+	pretrained: bool = False,
+	samples_max: int = 227272,
     **kwargs,
 ):  # pragma: no cover
-    """Use a previously trained model to produce embeddings, soft_counts and breaks per experiment in table_dict format.
+    """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
+        model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        pretrained (bool): whether to use the specified pretrained model to recluster the data.
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
-        ruptures (bool): Whether to compute the breaks based on ruptures (with the length of all retrieved chunks per experiment) or not (an all-ones vector per experiment is returned).
         global_scaler (Any): trained global scaler produced when processing the original dataset.
-        model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
         soft_counts (table_dict): soft_counts per experiment.
-        breaks (table_dict): breaks per experiment.
 
     """
     embeddings = {}
     soft_counts = {}
-    breaks = {}
+    #interim
+    file_name='unsup'
 
-    graph, contrastive = False, False
+
+    graph = False
+    contrastive = isinstance(model, deepof.models.Contrastive)
     try:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
             graph = True
     except AttributeError:
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
-            graph, contrastive = True, True
+            graph = True
 
     window_size = model.layers[0].input_shape[0][1]
-    for key in tqdm.tqdm(to_preprocess.keys()):
+    for key in tqdm.tqdm(to_preprocess.keys(), desc="Computing embeddings", unit="table"):
+
+        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
+        print("")
 
         if graph:
-            processed_exp, _, _, _ = coordinates.get_graph_dataset(
+            processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
                 precomputed_tab_dict=to_preprocess.filter_videos([key]),
                 preprocess=True,
                 scale=scale,
                 window_size=window_size,
                 window_step=1,
-                shuffle=False,
                 pretrained_scaler=global_scaler,
+                samples_max=samples_max,
             )
 
         else:
 
-            processed_exp, _ = to_preprocess.filter_videos([key]).preprocess(
+            processed_exp, _, _ = to_preprocess.filter_videos([key]).preprocess(
+                coordinates=coordinates,
                 scale=scale,
                 window_size=window_size,
                 window_step=1,
@@ -1522,34 +1569,45 @@ def embedding_per_video(
                 pretrained_scaler=global_scaler,
             )
 
-        embeddings[key] = model.encoder([processed_exp[0], processed_exp[1]]).numpy()
-        if ruptures:
-            breaks[key] = (~np.all(processed_exp[0] == 0, axis=2)).sum(axis=1)
-        else:
-            breaks[key] = np.ones(embeddings[key].shape[0]).astype(int)
+        tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
+
+        emb = model.encoder([tab_tuple[0], tab_tuple[1]]).numpy()
 
         if not contrastive:
-            soft_counts[key] = model.grouper(
-                [processed_exp[0], processed_exp[1]]
+            sc = model.grouper(
+                [tab_tuple[0], tab_tuple[1]]
             ).numpy()
+            # save paths for modified tables
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
+            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
+
+        # save paths for modified tables
+        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
+        embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
+
+        #to not flood the output with loading bars
+        clear_output()
 
     if contrastive:
-        soft_counts = deepof.post_hoc.recluster(coordinates, embeddings, **kwargs)
+        soft_counts = deepof.post_hoc.recluster(
+            coordinates, embeddings, pretrained=pretrained, **kwargs
+        )
+    if isinstance(soft_counts, tuple):
+        soft_counts = soft_counts[0]
 
+
+    table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
     return (
         deepof.data.TableDict(
             embeddings,
             typ="unsupervised_embedding",
+            table_path=table_path, 
             exp_conditions=coordinates.get_exp_conditions,
         ),
         deepof.data.TableDict(
             soft_counts,
             typ="unsupervised_counts",
-            exp_conditions=coordinates.get_exp_conditions,
-        ),
-        deepof.data.TableDict(
-            breaks,
-            typ="unsupervised_breaks",
+            table_path=table_path, 
             exp_conditions=coordinates.get_exp_conditions,
         ),
     )
@@ -1580,7 +1638,6 @@ def tune_search(
         hypertun_trials (int): Number of hypertuning trials to run.
         hpt_type (str): Type of hypertuning to run. Must be one of "hyperband" or "bayesian".
         k (int): Number of clusters on the latent space.
-        kmeans_loss (float): Weight of the kmeans loss, which enforces disentanglement by penalizing the correlation between dimensions in the latent space.
         project_name (str): Name of the project.
         callbacks (List): List of callbacks to use.
         batch_size (int): Batch size to use.
@@ -1593,16 +1650,25 @@ def tune_search(
         best_run (str): Name of the best run.
 
     """
-    # Load data
-    try:
-        X_train, a_train, y_train, X_val, a_val, y_val = preprocessed_object
-    except ValueError:
-        X_train, y_train, X_val, y_val = preprocessed_object
-        a_train, a_val = np.zeros(X_train.shape), np.zeros(X_val.shape)
+
+    # extract from Tuple
+    preprocessed_train, preprocessed_validation= preprocessed_object
+    pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
+
+    #get available memory -10% as buffer
+    available_mem=psutil.virtual_memory().available*0.9
+    #calculate maximum number of rows that fit in memory based on table info 
+    N_windows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
+
+    # Sample up to N_windows_max windows from processed_train and processed_validation
+    N_windows_tab=int(N_windows_max/(len(preprocessed_train)+len(preprocessed_validation)))
+    
+    X_train, a_train, _ = preprocessed_train.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
+    X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(N_windows_tab=N_windows_tab, return_edges=True)
 
     # Make sure that batch_size is not larger than training set
-    if batch_size > preprocessed_object[0].shape[0]:
-        batch_size = preprocessed_object[0].shape[0]
+    if batch_size > X_train.shape[0]:
+        batch_size = X_train.shape[0]
 
     # Set options for tf.data.Datasets
     options = tf.data.Options()

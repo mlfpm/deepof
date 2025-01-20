@@ -45,7 +45,7 @@ def test_close_single_contact(pos_dframe, tol):
     )
     pos_dframe.columns = idx
     close_contact = deepof.annotation_utils.close_single_contact(
-        pos_dframe, "bpart1", "bpart2", tol, 1, 1
+        pos_dframe, "bpart1", "bpart2", tol,
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -78,7 +78,7 @@ def test_close_double_contact(pos_dframe, tol, rev):
     )
     pos_dframe.columns = idx
     close_contact = deepof.annotation_utils.close_double_contact(
-        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, 1, 1, rev
+        pos_dframe, "bpart1", "bpart2", "bpart3", "bpart4", tol, rev
     )
     assert close_contact.dtype == bool
     assert np.array(close_contact).shape[0] <= pos_dframe.shape[0]
@@ -96,12 +96,13 @@ def test_close_double_contact(pos_dframe, tol, rev):
     ),
     angle=st.floats(min_value=0, max_value=360),
     tol=st.data(),
+    mouse_len=st.floats(min_value=10,max_value=60),
 )
-def test_climb_wall(center, axes, angle, tol):
+def test_climb_wall(center, axes, angle, tol, mouse_len):
 
     arena = (center, axes, np.radians(angle))
-    tol1 = tol.draw(st.floats(min_value=0.001, max_value=10))
-    tol2 = tol.draw(st.floats(min_value=tol1, max_value=10))
+    tol1 = tol.draw(st.floats(min_value=0.001, max_value=1))
+    tol2 = tol.draw(st.floats(min_value=tol1, max_value=1))
 
     prun = (
         deepof.data.Project(
@@ -119,36 +120,38 @@ def test_climb_wall(center, axes, angle, tol):
             video_format=".mp4",
             table_format=".h5",
         )
-        .create(force=True)
+        .create(force=True, test=True)
         .get_coords()
     )
+
+    climb1 = deepof.annotation_utils.climb_arena(
+        "circular-autodetect", arena, prun["test"], tol1, "", mouse_len,
+    )
+    climb2 = deepof.annotation_utils.climb_arena(
+        "circular-autodetect", arena, prun["test"], tol2, "", mouse_len,
+    )
+    climb3 = deepof.annotation_utils.climb_arena(
+        "polygonal-manual",
+        [[-1, -1], [-1, 1], [1, 1], [1, -1]],
+        prun["test"],
+        tol1,
+        "",
+        mouse_len,
+    )
+
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
-
-    climb1 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol1, nose="Nose"
-    )
-    climb2 = deepof.annotation_utils.climb_wall(
-        "circular-autodetect", arena, prun["test"], tol2, nose="Nose"
-    )
-    climb3 = deepof.annotation_utils.climb_wall(
-        "polygonal-manual",
-        [[-1, -1], [-1, 1], [1, 1], [1, -1]],
-        prun["test"],
-        tol1,
-        nose="Nose",
-    )
-
+    
     assert climb1.dtype == bool
     assert climb2.dtype == bool
     assert climb3.dtype == bool
     assert np.sum(climb1) >= np.sum(climb2)
 
     with pytest.raises(NotImplementedError):
-        deepof.annotation_utils.climb_wall("", arena, prun["test"], tol1, nose="Nose")
+        deepof.annotation_utils.climb_arena("", arena, prun["test"], tol1, "", mouse_len)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -169,12 +172,7 @@ def test_single_animal_traits(animal_id):
         video_format=".mp4",
         table_format=".h5",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(force=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
-        )
-    )
+    ).create(force=True, test=True)
 
     features = {
         _id: deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -193,9 +191,15 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         huddle_clf = pickle.load(handle)
 
-    huddling = deepof.annotation_utils.huddle(
-        features, huddle_estimator=huddle_clf
+    huddling = deepof.annotation_utils.cowering(
+        features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
     ).astype(int)
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "deepof_project"
+        )
+    )
 
     assert huddling.dtype == int
     assert np.array(huddling).shape[0] == pos_dframe.shape[0]
@@ -220,10 +224,18 @@ def test_single_animal_traits(animal_id):
             elements=st.floats(min_value=-20, max_value=20),
         ),
     ),
+    speeds_dframe=data_frames(
+        index=range_indexes(min_size=20, max_size=20),
+        columns=columns(
+            ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"],
+            dtype=float,
+            elements=st.floats(min_value=0, max_value=20),
+        ),
+    ),
     frames=st.integers(min_value=1, max_value=20),
     tol=st.floats(min_value=0.01, max_value=4.98),
 )
-def test_following_path(distance_dframe, position_dframe, frames, tol):
+def test_following_path(distance_dframe, position_dframe, speeds_dframe, frames, tol):
 
     bparts = ["A_Nose", "B_Nose", "A_Tail_base", "B_Tail_base"]
 
@@ -237,6 +249,7 @@ def test_following_path(distance_dframe, position_dframe, frames, tol):
     follow = deepof.annotation_utils.following_path(
         distance_dframe,
         position_dframe,
+        speeds_dframe,
         follower="A",
         followed="B",
         frames=frames,
@@ -279,9 +292,16 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 
 def test_get_hparameters():
-    assert isinstance(deepof.annotation_utils.get_hparameters(), dict)
+    #create fake coords 
+    class FakeCoords:
+        def __init__(self, frame_rate):
+            self._frame_rate = frame_rate
+        
+    fake_coords=FakeCoords(25)
+
+    assert isinstance(deepof.annotation_utils.get_hparameters(fake_coords), dict)
     assert (
-        deepof.annotation_utils.get_hparameters({"speed_pause": 20})["speed_pause"]
+        deepof.annotation_utils.get_hparameters(fake_coords,{"speed_pause": 20})["speed_pause"]
         == 20
     )
 
@@ -323,15 +343,16 @@ def test_rule_based_tagging(multi_animal, video_output):
         table_format=".h5",
         animal_ids=(["B", "W"] if multi_animal else [""]),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(force=True)
-    rmtree(os.path.join(path, "deepof_project"))
+    ).create(force=True, test=True)
 
     hardcoded_tags = prun.supervised_annotation(
         video_output=video_output, frame_limit=50, debug=True
     )
 
+    rmtree(os.path.join(path, "deepof_project"))
+
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (22 if multi_animal else 6)
+    assert list(hardcoded_tags.values())[0].shape[1] == (24 if multi_animal else 7)
 
 
 # list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations

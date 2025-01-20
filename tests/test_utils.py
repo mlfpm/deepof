@@ -15,7 +15,6 @@ from shutil import rmtree
 import networkx as nx
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -120,8 +119,6 @@ def test_compute_dist(pair_array, arena_abs, arena_rel):
     assert np.allclose(
         deepof.utils.compute_dist(pair_array, arena_abs, arena_rel),
         pd.DataFrame(distance.cdist(pair_array[:, :2], pair_array[:, 2:]).diagonal())
-        * arena_abs
-        / arena_rel,
     )
 
 
@@ -243,24 +240,20 @@ def test_smooth_boolean_array(a):
 @settings(deadline=None)
 @given(
     window=st.data(),
-    automatic_changepoints=st.one_of(st.just(False), st.just("linear")),
 )
-def test_rolling_window(window, automatic_changepoints):
+def test_rolling_window(window):
     window_step = window.draw(st.integers(min_value=1, max_value=5))
     window_size = 5 * window_step
 
     a = np.random.uniform(-10, 10, size=(100, 4))
 
-    rolled_a, breakpoints = deepof.utils.rolling_window(
-        a, window_size, window_step, automatic_changepoints
+    rolled_a = deepof.utils.rolling_window(
+        a, window_size, window_step
     )
 
-    if not automatic_changepoints:
-        assert len(rolled_a.shape) == len(a.shape) + 1
-        assert rolled_a.shape[1] == window_size
 
-    else:
-        assert rolled_a.shape[0] == len(breakpoints)
+    assert len(rolled_a.shape) == len(a.shape) + 1
+    assert rolled_a.shape[1] == window_size
 
 
 @settings(deadline=None)
@@ -306,62 +299,66 @@ def test_remove_outliers(mode):
         table_format=".csv",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
         iterative_imputation="full",
-    ).create(force=True)
+    ).create(force=True, test=True)
+
+    coords = prun.get_coords()
+    lkhood = prun.get_quality()
+    coords_name = list(coords.keys())[0]
+
+    high_std_sum=deepof.utils.full_outlier_mask(
+                    coords[coords_name],
+                    lkhood[coords_name],
+                    likelihood_tolerance=0.9,
+                    exclude="Center",
+                    lag=5,
+                    n_std=3,
+                    mode=mode,
+                    ).sum().sum()
+    
+    low_std_sum=deepof.utils.full_outlier_mask(
+                    coords[coords_name],
+                    lkhood[coords_name],
+                    likelihood_tolerance=0.9,
+                    exclude="Center",
+                    lag=5,
+                    n_std=1,
+                    mode=mode,
+                    ).sum().sum()
+
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
-    coords = prun.get_coords()
-    lkhood = prun.get_quality()
-    coords_name = list(coords.keys())[0]
 
-    assert (
-        deepof.utils.full_outlier_mask(
-            coords[coords_name],
-            lkhood[coords_name],
-            likelihood_tolerance=0.9,
-            exclude="Center",
-            lag=5,
-            n_std=3,
-            mode=mode,
-        )
-        .sum()
-        .sum()
-        < deepof.utils.full_outlier_mask(
-            coords[coords_name],
-            lkhood[coords_name],
-            likelihood_tolerance=0.9,
-            exclude="Center",
-            lag=5,
-            n_std=1,
-            mode=mode,
-        )
-        .sum()
-        .sum()
-    )
+    assert (high_std_sum < low_std_sum)
 
 
 @settings(deadline=None, max_examples=10)
 @given(
-    indexes=st.data(),
     detection_mode=st.one_of(
-        st.just("circular-autodetect"), st.just("polygonal-autodetect")
+        st.just("polygonal-autodetect"), st.just("circular-autodetect")
+    ),
+    video_key=st.one_of(
+        st.just("test"), st.just("test2")
     ),
 )
-def test_recognize_arena_and_subfunctions(indexes, detection_mode):
+def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
-    path = os.path.join(".", "tests", "test_examples", "test_single_topview", "Videos")
-    videos = [i for i in os.listdir(path) if i.endswith("mp4")]
-    vid_index = indexes.draw(st.integers(min_value=0, max_value=len(videos) - 1))
+    if detection_mode=="circular-autodetect":
+        arena_type="test_single_topview"
+    else:
+        arena_type="test_square_arena_topview"
+
+    path = os.path.join(".", "tests", "test_examples", arena_type, "Videos")
 
     prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
         video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
+            ".", "tests", "test_examples", arena_type, "Videos"
         ),
         table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
+            ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
         video_scale=380,
@@ -370,26 +367,106 @@ def test_recognize_arena_and_subfunctions(indexes, detection_mode):
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
         iterative_imputation="partial",
     )
-    tables = prun.create(force=True, test=True).get_coords()
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
+    #get pre-defined arenas with test-setting
+    coords = prun.create(force=True, test=True)
 
-    arena = deepof.utils.automatically_recognize_arena(
+    #actually detect arenas 
+    arena_parameters, h, w = deepof.utils.automatically_recognize_arena(
         coordinates=prun,
-        videos=videos,
-        tables=tables,
-        vid_index=vid_index,
+        videos=coords.get_videos(),
+        tables=coords._tables,
+        vid_key=video_key,
         path=path,
         segmentation_model=deepof.utils.load_segmentation_model(None),
-        arena_type="circular-autodetect",
+        arena_type=detection_mode,
     )
-    assert len(arena) == 3
-    assert len(arena[0]) == 3
-    assert isinstance(arena[1], int)
-    assert isinstance(arena[2], int)
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", arena_type, "deepof_project"
+        )
+    )
+    #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
+    tolerance=0.1
+    assert prun.video_resolution[video_key][0]<(h*(1+tolerance))
+    assert prun.video_resolution[video_key][0]>(h*(1-tolerance))
+    assert prun.video_resolution[video_key][1]<(w*(1+tolerance))
+    assert prun.video_resolution[video_key][1]>(w*(1-tolerance))
+
+
+    if detection_mode=="circular-autodetect":
+
+        #check if the detected circular areas are sufficiently similar
+        for i in range(3):
+            assert np.linalg.norm(
+                np.array(coords._arena_params[video_key][i]) - np.array(arena_parameters[i])
+                ) < 1
+
+        pass
+    else:
+        #roughly checks if the ideal corner points are somewhat close to the detected edges
+        dist_min=np.inf
+        predefined_arena=coords._arena_params[video_key]
+        detected_arena =np.array(arena_parameters)
+        for point in predefined_arena:
+            for k in range(len(detected_arena)):
+                dist=np.linalg.norm(point-detected_arena[k,:])
+                if dist<dist_min:
+                    dist_min=dist
+            assert dist_min<25
+
+
+@settings(deadline=None, max_examples=3)
+@given(
+    detection_mode=st.one_of(
+        st.just("polygonal-autodetect"), st.just("circular-autodetect")
+    ),
+)
+def test_detection_modes(detection_mode):
+
+    if detection_mode=="circular-autodetect":
+        arena_type="test_single_topview"
+    else:
+        arena_type="test_square_arena_topview"
+
+    path = os.path.join(".", "tests", "test_examples", arena_type, "Videos")
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Tables"
+        ),
+        arena=detection_mode,
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        iterative_imputation="partial",
+    )
+    #get arenas with actual detection
+    coords = prun.create(force=True, test="detect_arena")
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", arena_type, "deepof_project"
+        )
+    )
+    
+    #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
+    assert len(coords._arena_params)==2
+    if detection_mode=="polygonal-autodetect":
+        assert isinstance(coords._arena_params['test'], np.ndarray)
+        assert isinstance(coords._arena_params['test2'], np.ndarray)
+    else:
+        assert isinstance(coords._arena_params['test'], tuple)
+        assert isinstance(coords._arena_params['test2'], tuple)
+    assert (coords._video_resolution['test'][0]<coords._video_resolution['test'][1])
+    assert (coords._video_resolution['test2'][0]<coords._video_resolution['test2'][1])
+    assert (len(coords._scales['test'])==4)
+    assert (len(coords._scales['test2'])==4)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -418,8 +495,8 @@ def test_rolling_speed(dframe, sampler):
     )
     dframe.columns = idx
 
-    speeds1 = deepof.utils.rolling_speed(dframe, 5, 10, order1)
-    speeds2 = deepof.utils.rolling_speed(dframe, 5, 10, order2)
+    speeds1 = deepof.utils.rolling_speed(dframe, 10, 5, 10, order1)
+    speeds2 = deepof.utils.rolling_speed(dframe, 10, 5, 10, order2)
 
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
