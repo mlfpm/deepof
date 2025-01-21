@@ -123,13 +123,17 @@ class GUI:
     def plot_current_frame(self, change=None):
         """Plot the current frame based on user selection."""
         frame_coords = self.sampled_coords.iloc[[self.current_frame_index]]
+        if change and self.current_frame_index == change['new']:
+            return
+        if change:
+            self.current_frame_index = change['new']
         with self.output:
-            self.output.clear_output(wait=True)
+            
             selected_columns = list(self.multiselect.value)
             if not selected_columns:
                 print("Error: No columns selected.")
                 return
-            print("Total number of Frames:", len(self.coords))
+            
             fig, ax = plt.subplots(figsize=(8, 8))
 
             x_coords = frame_coords.xs('x', level=1, axis=1)
@@ -145,7 +149,9 @@ class GUI:
                 self.plot_speeds(ax, x_coords, y_coords, selected_columns)
 
             ax.set_aspect('equal', adjustable='datalim')
-            ax.invert_yaxis()
+            ax.invert_yaxis()  
+            self.output.clear_output(wait=True)   
+            print("Total number of Frames:", len(self.coords))       
             plt.show()
 
     def plot_angles(self, ax, x_coords, y_coords, selected_columns):
@@ -159,15 +165,19 @@ class GUI:
                 x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
                 x3, y3 = x_coords.iloc[0][point3], y_coords.iloc[0][point3]
 
-                x_min, x_max, y_min, y_max = self.update_limits(x1, y1, x_min, x_max, y_min, y_max)
-                x_min, x_max, y_min, y_max = self.update_limits(x2, y2, x_min, x_max, y_min, y_max)
-                x_min, x_max, y_min, y_max = self.update_limits(x3, y3, x_min, x_max, y_min, y_max)
+                for x, y in [(x1, y1), (x2, y2), (x3, y3)]:
+                    x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)                
 
                 ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
                 ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+                
+                dx1, dy1 = x1 - x2, y1 - y2
+                dx3, dy3 = x3 - x2, y3 - x2
+                offset_x = (dx1 + dx3) / 5
+                offset_y = (dy1 + dy3) / 5
 
                 scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
-                ax.text(x2, y2, f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center")
+                ax.text(x2  , y2  , f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center")
                 self.add_annotation(ax, x1, y1, f"{point1}")
                 self.add_annotation(ax, x2, y2, f"{point2}")
                 self.add_annotation(ax, x3, y3, f"{point3}")
