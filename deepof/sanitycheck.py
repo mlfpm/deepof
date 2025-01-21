@@ -5,10 +5,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from deepof.data import Coordinates
+from functools import lru_cache
+
+
+def validate_data(func):
+    """Decorator to validate if data is present before plotting."""
+    def wrapper(self, *args, **kwargs):
+        if self.sampled_coords is None or self.sampled_coords.empty:
+            with self.output:
+                self.output.clear_output()
+                print("No data to plot.")
+            return
+        return func(self, *args, **kwargs)
+    return wrapper
+
 
 class GUI:
     def __init__(self, coordinates: Coordinates, experiment_id: str, center: str = "arena", align: str = None):
-        # Initialize data
+        """Initialize the GUI with experiment data and widgets."""
         self.coordinates = coordinates
         self.experiment_id = experiment_id
         self.center = center
@@ -25,7 +39,6 @@ class GUI:
         self.start_frame = 0
         self.end_frame = 0
 
-        # Initialize widgets
         self.main_dropdown = widgets.Dropdown(
             options=["angle", "distance", "speed"],
             value="distance",
@@ -57,47 +70,72 @@ class GUI:
         )
 
         self.animate_button = widgets.Button(description="Animate", button_style="", layout=widgets.Layout(width='150px'))
-        self.output = widgets.Output()
+        self.toggle_annotations = widgets.Checkbox(
+            value=True,
+            description="Plot Points",
+            layout=widgets.Layout(width='200px')
+        )
 
+        self.output = widgets.Output()
         self.initialize_gui()
 
+    @lru_cache(maxsize=10)
+    def get_angles_cached(self):
+        """Cache angles data."""
+        return self.coordinates.get_angles()
+
+    @lru_cache(maxsize=10)
+    def get_distances_cached(self):
+        """Cache distances data."""
+        return self.coordinates.get_distances()
+
+    @lru_cache(maxsize=10)
+    def get_speed_cached(self, speed=1):
+        """Cache speed data."""
+        return self.coordinates.get_coords(speed=speed)
+
     def get_multi_select(self):
-        if self.main_dropdown.value == "angle":
-            plottingpoints = self.coordinates.get_angles()
-        elif self.main_dropdown.value == "distance":
-            plottingpoints = self.coordinates.get_distances()
-        elif self.main_dropdown.value == "speed":
-            plottingpoints = self.coordinates.get_coords(speed=1)
-        
+        """Populate multiselect options based on the dropdown selection."""
+        plotting_methods = {
+            "angle": self.get_angles_cached,
+            "distance": self.get_distances_cached,
+            "speed": lambda: self.get_speed_cached(speed=1)
+        }
+        plottingpoints = plotting_methods[self.main_dropdown.value]()
         self.df = plottingpoints[self.experiment_id]
-        return [(str(col), col) if isinstance(col, tuple) else (str(col), col) for col in self.df.columns]
+        return [(str(col), col) for col in self.df.columns]
 
     def update_multiselect_visibility(self, change):
+        """Update multiselect options when the dropdown selection changes."""
         if change['new'] in ["angle", "distance", "speed"]:
             self.multiselect.options = self.get_multi_select()
 
+    def update_limits(self, x, y, x_min, x_max, y_min, y_max):
+        """Update axis limits dynamically."""
+        return min(x_min, x), max(x_max, x), min(y_min, y), max(y_max, y)
+
+    def add_annotation(self, ax, x, y, text, color="green"):
+        """Add annotation to the plot if toggled on."""
+        if self.toggle_annotations.value:
+            ax.text(x, y, text, color=color, fontsize=8, ha="center", va="center")
+
+    @validate_data
     def plot_current_frame(self, change=None):
-        if self.sampled_coords is None or self.sampled_coords.empty:
-            return
-
+        """Plot the current frame based on user selection."""
         frame_coords = self.sampled_coords.iloc[[self.current_frame_index]]
-
         with self.output:
             self.output.clear_output(wait=True)
-            fig, ax = plt.subplots(figsize=(8, 8))
             selected_columns = list(self.multiselect.value)
+            if not selected_columns:
+                print("Error: No columns selected.")
+                return
+            print("Total number of Frames:", len(self.coords))
+            fig, ax = plt.subplots(figsize=(8, 8))
 
             x_coords = frame_coords.xs('x', level=1, axis=1)
             y_coords = frame_coords.xs('y', level=1, axis=1)
 
-            ax.set_xlim(x_coords.min().min(), x_coords.max().max())
-            ax.set_ylim(y_coords.min().min(), y_coords.max().max())
-            ax.set_aspect('equal', adjustable='datalim')
-            ax.invert_yaxis()
-
-            for point_name in x_coords.columns:
-                x, y = x_coords[point_name], y_coords[point_name]
-                ax.scatter(x, y, color="blue", s=20)
+            plt.title(f"Frame {self.start_frame + self.current_frame_index}")
 
             if self.main_dropdown.value == "angle":
                 self.plot_angles(ax, x_coords, y_coords, selected_columns)
@@ -106,67 +144,87 @@ class GUI:
             elif self.main_dropdown.value == "speed":
                 self.plot_speeds(ax, x_coords, y_coords, selected_columns)
 
-            plt.title(f"Frame {self.start_frame + self.current_frame_index}")
+            ax.set_aspect('equal', adjustable='datalim')
+            ax.invert_yaxis()
             plt.show()
 
     def plot_angles(self, ax, x_coords, y_coords, selected_columns):
+        """Plot angles for the current frame."""
         filtered_df = self.df[selected_columns]
+        x_min, x_max, y_min, y_max = float('inf'), float('-inf'), float('inf'), float('-inf')
+
         for (point1, point2, point3), angle in filtered_df.iloc[[self.current_frame_index]].items():
             if point1 in x_coords.columns and point2 in x_coords.columns and point3 in x_coords.columns:
-                x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
-                x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
-                x3, y3 = x_coords.iloc[[0]][point3], y_coords.iloc[[0]][point3]
+                x1, y1 = x_coords.iloc[0][point1], y_coords.iloc[0][point1]
+                x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
+                x3, y3 = x_coords.iloc[0][point3], y_coords.iloc[0][point3]
+
+                x_min, x_max, y_min, y_max = self.update_limits(x1, y1, x_min, x_max, y_min, y_max)
+                x_min, x_max, y_min, y_max = self.update_limits(x2, y2, x_min, x_max, y_min, y_max)
+                x_min, x_max, y_min, y_max = self.update_limits(x3, y3, x_min, x_max, y_min, y_max)
 
                 ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
                 ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
 
-                dx1, dy1 = x1 - x2, y1 - y2
-                dx3, dy3 = x3 - x2, y3 - y2
-                offset_x = (dx1 + dx3) / 4
-                offset_y = (dy1 + dy3) / 4
-
                 scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
-                ax.text(
-                    x2 + offset_x, y2 + offset_y,
-                    f"{np.degrees(scalar_angle):.1f}°",
-                    color="red", fontsize=8, ha="center"
-                )
+                ax.text(x2, y2, f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center")
+                self.add_annotation(ax, x1, y1, f"{point1}")
+                self.add_annotation(ax, x2, y2, f"{point2}")
+                self.add_annotation(ax, x3, y3, f"{point3}")
+
+        margin = 10
+        ax.set_xlim(x_min - margin, x_max + margin)
+        ax.set_ylim(y_min - margin, y_max + margin)
 
     def plot_distances(self, ax, x_coords, y_coords, selected_columns):
+        """Plot distances for the current frame."""
         filtered_df = self.df[selected_columns]
+        x_min, x_max, y_min, y_max = float('inf'), float('-inf'), float('inf'), float('-inf')
+
         for (point1, point2), distance in filtered_df.iloc[[self.current_frame_index]].items():
             if point1 in x_coords.columns and point2 in x_coords.columns:
-                x1, y1 = x_coords.iloc[[0]][point1], y_coords.iloc[[0]][point1]
-                x2, y2 = x_coords.iloc[[0]][point2], y_coords.iloc[[0]][point2]
+                x1, y1 = x_coords.iloc[0][point1], y_coords.iloc[0][point1]
+                x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
+
+                x_min, x_max, y_min, y_max = self.update_limits(x1, y1, x_min, x_max, y_min, y_max)
+                x_min, x_max, y_min, y_max = self.update_limits(x2, y2, x_min, x_max, y_min, y_max)
 
                 ax.plot([x1, x2], [y1, y2], color="green", linewidth=2.5)
+
                 midpoint_x = (x1 + x2) / 2
                 midpoint_y = (y1 + y2) / 2
-
                 scalar_distance = distance.iloc[0] if isinstance(distance, pd.Series) else distance
-                ax.text(
-                    midpoint_x, midpoint_y,
-                    f"{scalar_distance:.2f}",
-                    color="purple", fontsize=8, ha="center"
-                )
+                ax.text(midpoint_x, midpoint_y, f"{scalar_distance:.2f}", color="purple", fontsize=8, ha="center")
+                self.add_annotation(ax, x1, y1, f"{point1}")
+                self.add_annotation(ax, x2, y2, f"{point2}")
+
+        margin = 10
+        ax.set_xlim(x_min - margin, x_max + margin)
+        ax.set_ylim(y_min - margin, y_max + margin)
 
     def plot_speeds(self, ax, x_coords, y_coords, selected_columns):
+        """Plot speeds for the current frame."""
         filtered_df = self.df[selected_columns]
+        x_min, x_max, y_min, y_max = float('inf'), float('-inf'), float('inf'), float('-inf')
+
         for point, speed in filtered_df.iloc[[self.current_frame_index]].items():
             if point in x_coords.columns:
                 x, y = x_coords.iloc[0][point], y_coords.iloc[0][point]
+                x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)
+
                 scalar_speed = speed.iloc[0] if isinstance(speed, pd.Series) else speed
                 ax.scatter(x, y, color="blue", s=20)
-                ax.text(
-                    x, y,
-                    f"{scalar_speed:.2f}",
-                    color="purple", fontsize=8, ha="center"
-                )
+                ax.text(x, y, f"{scalar_speed:.2f}", color="purple", fontsize=8, ha="center")
+                self.add_annotation(ax, x, y, f"{point}")
+
+        margin = 10
+        ax.set_xlim(x_min - margin, x_max + margin)
+        ax.set_ylim(y_min - margin, y_max + margin)
 
     def on_animate_button_clicked(self, _):
+        """Handle animate button click."""
         self.start_frame = self.start_box.value
         self.end_frame = self.end_box.value
-
         if self.start_frame < 0 or self.end_frame > len(self.coords) or self.start_frame >= self.end_frame:
             with self.output:
                 self.output.clear_output()
@@ -179,13 +237,14 @@ class GUI:
         self.frame_slider.max = len(self.sampled_coords) - 1
         self.frame_slider.value = 0
         self.plot_current_frame()
-        
+
     def update_current_frame_index(self, change):
+        """Update the current frame index and replot."""
         self.current_frame_index = change['new']
         self.plot_current_frame()
 
-
     def initialize_gui(self):
+        """Initialize and display the GUI."""
         self.multiselect.options = self.get_multi_select()
         self.main_dropdown.observe(self.update_multiselect_visibility, names='value')
         self.frame_slider.observe(lambda change: self.update_current_frame_index(change), names='value')
@@ -197,7 +256,7 @@ class GUI:
             ], layout=widgets.Layout(justify_content='space-between', align_items='center')),
             self.range_selector,
             widgets.HBox([
-                self.animate_button
+                self.animate_button, self.toggle_annotations
             ], layout=widgets.Layout(justify_content='flex-start', align_items='center', width='500px')),
             self.frame_slider
         ], layout=widgets.Layout(spacing="20px"))
