@@ -170,18 +170,20 @@ class GUI:
 
                 ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
                 ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+
+                mid_x = (x1 + x3) / 2
+                mid_y = (y1 + y3) / 2
+                alpha = 0.5
+                adjusted_x = mid_x + alpha * (x2 - mid_x)
+                adjusted_y = mid_y + alpha * (y2 - mid_y)
                 
-                dx1, dy1 = x1 - x2, y1 - y2
-                dx3, dy3 = x3 - x2, y3 - x2
-                offset_x = (dx1 + dx3) / 5
-                offset_y = (dy1 + dy3) / 5
 
                 scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
-                ax.text(x2  , y2  , f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center")
+                ax.text(adjusted_x , adjusted_y, f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center",bbox=dict(facecolor='yellow', edgecolor='black', boxstyle='round,pad=0.3'))
+                
                 self.add_annotation(ax, x1, y1, f"{point1}")
                 self.add_annotation(ax, x2, y2, f"{point2}")
                 self.add_annotation(ax, x3, y3, f"{point3}")
-
         margin = 10
         ax.set_xlim(x_min - margin, x_max + margin)
         ax.set_ylim(y_min - margin, y_max + margin)
