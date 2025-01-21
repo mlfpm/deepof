@@ -509,8 +509,8 @@ def detect_activity(
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
     )
-    immobile_active=copy.copy(immobile)
-    immobile_passive=copy.copy(immobile)
+    stationary_active=copy.copy(immobile)
+    stationary_passive=copy.copy(immobile)
 
     #detect activity when nose speed and likelyhood is above a threshold
     nose_speed = (
@@ -523,15 +523,38 @@ def detect_activity(
     start_indices=np.where(np.diff(immobile.astype(int), prepend=0) > 0)[0]
     end_indices=np.where(np.diff(immobile.astype(int), append=0) < 0)[0]
 
+
+    stationary_active = deepof.utils.moving_average(immobile & activity, lag=min_length).astype(bool)
+    stationary_passive = deepof.utils.moving_average(immobile & ~activity, lag=min_length).astype(bool)
+    stationary_active_avg = deepof.utils.moving_average(stationary_active, lag=min_length*4).astype(float)
+    stationary_passive_avg = deepof.utils.moving_average(stationary_passive, lag=min_length*4).astype(float)
+
+
+    for i in range(len(stationary_active)):
+        if stationary_active[i] == stationary_passive[i] and stationary_active[i] == True:
+            if stationary_active_avg[i]>=stationary_passive_avg[i]:
+                stationary_passive[i]=False
+            elif stationary_active_avg[i]<stationary_passive_avg[i]:
+                stationary_active[i]=False
+
+    stationary_active=stationary_active & immobile
+    stationary_passive=stationary_passive & immobile
+    stationary_active = deepof.utils.filter_short_true_segments(
+        array=stationary_active, min_length=min_length,
+    )
+    stationary_passive = deepof.utils.filter_short_true_segments(
+        array=stationary_passive, min_length=min_length,
+    )
+
     #Mouse is immobile and active if it was rated active for 60% or more of teh duration of a True-Block,
     #Mouse is immobile and passive otherwise
-    for [start_index, end_index] in zip(start_indices,end_indices):     
-        if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
-            immobile_active[start_index:end_index+1]=False
-        else:
-            immobile_passive[start_index:end_index+1]=False
+    #for [start_index, end_index] in zip(start_indices,end_indices):     
+    #    if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
+    #        immobile_active[start_index:end_index+1]=False
+    #    else:
+    #        immobile_passive[start_index:end_index+1]=False
 
-    return immobile_active, immobile_passive
+    return stationary_active, stationary_passive
 
 
 def following_path(
@@ -1002,7 +1025,7 @@ def supervised_tagging(
             )
         )
         #detect immobility and active / passive behavior
-        tag_dict[_id + undercond + "immobile_active"], tag_dict[_id + undercond + "immobile_passive"] = detect_activity(
+        tag_dict[_id + undercond + "stationary_active"], tag_dict[_id + undercond + "stationary_passive"] = detect_activity(
         speeds,
         likelihoods,
         params["cower_speed"],
