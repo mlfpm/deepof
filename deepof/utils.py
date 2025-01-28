@@ -26,7 +26,7 @@ import requests
 import sleap_io as sio
 import torch
 from joblib import Parallel, delayed
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, medfilt
 from scipy.spatial.distance import cdist
 from segment_anything import SamPredictor, sam_model_registry
 from shapely.geometry import Polygon
@@ -1600,6 +1600,21 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
     moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
 
     return moving_avg
+
+def moving_median(time_series: np.array, lag: int = 5) -> pd.Series:
+    """Fast implementation of a moving median function.
+
+    Args:
+        time_series (np.array): Uni-variate time series to take the moving median of.
+        lag (int): size of the window used to compute the moving average.
+
+    Returns:
+        moving_avg (pd.Series): Uni-variate moving median over time_series.
+
+    """
+    moving_med = medfilt(time_series.astype(float), kernel_size=lag)
+
+    return moving_med
 
 
 def mask_outliers(
