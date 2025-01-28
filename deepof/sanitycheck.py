@@ -38,9 +38,13 @@ class GUI:
         self.start_frame = 0
         self.end_frame = 0
 
+        self.angle_data = self.get_angles_cached()
+        self.distance_data = self.get_distances_cached()
+        self.speed_data = self.get_speed_cached()
+
         self.main_dropdown = widgets.Dropdown(
             options=["angle", "distance", "speed"],
-            value="distance",
+            value="angle",
             description="Select:",
             style={'description_width': 'initial'},
             layout=widgets.Layout(width='200px')
@@ -95,13 +99,12 @@ class GUI:
 
     def get_multi_select(self):
         """Populate multiselect options based on the dropdown selection."""
-        plotting_methods = {
-            "angle": self.get_angles_cached,
-            "distance": self.get_distances_cached,
-            "speed": lambda: self.get_speed_cached(speed=1)
-        }
-        plottingpoints = plotting_methods[self.main_dropdown.value]()
-        self.df = plottingpoints[self.experiment_id]
+        if self.main_dropdown.value == "angle":
+            self.df = self.angle_data[self.experiment_id]
+        elif self.main_dropdown.value == "distance":
+            self.df = self.distance_data[self.experiment_id]
+        elif self.main_dropdown.value == "speed":
+            self.df = self.speed_data[self.experiment_id]        
         return [(str(col), col) for col in self.df.columns]
 
     def update_multiselect_visibility(self, change):
