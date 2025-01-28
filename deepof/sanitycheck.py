@@ -11,7 +11,7 @@ from functools import lru_cache
 def validate_data(func):
     """Decorator to validate if data is present before plotting."""
     def wrapper(self, *args, **kwargs):
-        if self.sampled_coords is None or self.sampled_coords.empty:
+        if self.coords is None or self.coords.empty:            
             with self.output:
                 self.output.clear_output()
                 print("No data to plot.")
@@ -34,7 +34,6 @@ class GUI:
             key=experiment_id
         )
         self.df = None
-        self.sampled_coords = None
         self.current_frame_index = 0
         self.start_frame = 0
         self.end_frame = 0
@@ -122,11 +121,13 @@ class GUI:
     @validate_data
     def plot_current_frame(self, change=None):
         """Plot the current frame based on user selection."""
-        frame_coords = self.sampled_coords.iloc[[self.current_frame_index]]
-        if change and self.current_frame_index == change['new']:
-            return
         if change:
             self.current_frame_index = change['new']
+
+      
+        frame_coords = self.coords.iloc[[self.current_frame_index]]
+
+        
         with self.output:
             
             selected_columns = list(self.multiselect.value)
@@ -139,7 +140,8 @@ class GUI:
             x_coords = frame_coords.xs('x', level=1, axis=1)
             y_coords = frame_coords.xs('y', level=1, axis=1)
 
-            plt.title(f"Frame {self.start_frame + self.current_frame_index}")
+            plt.title(f"Frame { self.current_frame_index}")
+            self.output.clear_output(wait=True)
 
             if self.main_dropdown.value == "angle":
                 self.plot_angles(ax, x_coords, y_coords, selected_columns)
@@ -150,7 +152,7 @@ class GUI:
 
             ax.set_aspect('equal', adjustable='datalim')
             ax.invert_yaxis()  
-            self.output.clear_output(wait=True)   
+               
             print("Total number of Frames:", len(self.coords))       
             plt.show()
 
@@ -158,35 +160,44 @@ class GUI:
         """Plot angles for the current frame."""
         filtered_df = self.df[selected_columns]
         x_min, x_max, y_min, y_max = float('inf'), float('-inf'), float('inf'), float('-inf')
-
         for (point1, point2, point3), angle in filtered_df.iloc[[self.current_frame_index]].items():
             if point1 in x_coords.columns and point2 in x_coords.columns and point3 in x_coords.columns:
-                x1, y1 = x_coords.iloc[0][point1], y_coords.iloc[0][point1]
-                x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
-                x3, y3 = x_coords.iloc[0][point3], y_coords.iloc[0][point3]
+                    x1, y1 = x_coords.iloc[0][point1], y_coords.iloc[0][point1]
+                    x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
+                    x3, y3 = x_coords.iloc[0][point3], y_coords.iloc[0][point3]
 
-                for x, y in [(x1, y1), (x2, y2), (x3, y3)]:
-                    x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)                
+                    
+                    for x, y in [(x1, y1), (x2, y2), (x3, y3)]:
+                        if not (math.isfinite(x) and math.isfinite(y)):
+                            print(f"Invalid coordinates: ({x}, {y}) for points {point1}, {point2}, {point3}")
+                            return
+                        x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)
 
-                ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
-                ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+                    ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
+                    ax.plot([x2, x3], [y2, y3], color="blue", linewidth=2.5)
+                    mid_x = (x1 + x3) / 2
+                    mid_y = (y1 + y3) / 2
+                    alpha = 0.5
+                    adjusted_x = mid_x + alpha * (x2 - mid_x)
+                    adjusted_y = mid_y + alpha * (y2 - mid_y)    
+                    scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
+                    ax.text(
+                        adjusted_x, adjusted_y,
+                        f"{np.degrees(scalar_angle):.1f}°",
+                        color="red", fontsize=8, ha="center",
+                        bbox=dict(facecolor='yellow', edgecolor='black', boxstyle='round,pad=0.3')
+                    )
 
-                mid_x = (x1 + x3) / 2
-                mid_y = (y1 + y3) / 2
-                alpha = 0.5
-                adjusted_x = mid_x + alpha * (x2 - mid_x)
-                adjusted_y = mid_y + alpha * (y2 - mid_y)
-                
-
-                scalar_angle = angle.iloc[0] if isinstance(angle, pd.Series) else angle
-                ax.text(adjusted_x , adjusted_y, f"{np.degrees(scalar_angle):.1f}°", color="red", fontsize=8, ha="center",bbox=dict(facecolor='yellow', edgecolor='black', boxstyle='round,pad=0.3'))
-                
-                self.add_annotation(ax, x1, y1, f"{point1}")
-                self.add_annotation(ax, x2, y2, f"{point2}")
-                self.add_annotation(ax, x3, y3, f"{point3}")
+                    
+                    self.add_annotation(ax, x1, y1, f"{point1}")
+                    self.add_annotation(ax, x2, y2, f"{point2}")
+                    self.add_annotation(ax, x3, y3, f"{point3}")
         margin = 10
         ax.set_xlim(x_min - margin, x_max + margin)
         ax.set_ylim(y_min - margin, y_max + margin)
+        
+        
+            
 
     def plot_distances(self, ax, x_coords, y_coords, selected_columns):
         """Plot distances for the current frame."""
@@ -197,9 +208,11 @@ class GUI:
             if point1 in x_coords.columns and point2 in x_coords.columns:
                 x1, y1 = x_coords.iloc[0][point1], y_coords.iloc[0][point1]
                 x2, y2 = x_coords.iloc[0][point2], y_coords.iloc[0][point2]
-
-                x_min, x_max, y_min, y_max = self.update_limits(x1, y1, x_min, x_max, y_min, y_max)
-                x_min, x_max, y_min, y_max = self.update_limits(x2, y2, x_min, x_max, y_min, y_max)
+                for x, y in [(x1, y1), (x2, y2)]:
+                        if not (math.isfinite(x) and math.isfinite(y)):
+                            print(f"Invalid coordinates: ({x}, {y}) for points {point1}, {point2}")
+                            return
+                        x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)                
 
                 ax.plot([x1, x2], [y1, y2], color="green", linewidth=2.5)
 
@@ -222,7 +235,12 @@ class GUI:
         for point, speed in filtered_df.iloc[[self.current_frame_index]].items():
             if point in x_coords.columns:
                 x, y = x_coords.iloc[0][point], y_coords.iloc[0][point]
-                x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)
+                if not (math.isfinite(x) and math.isfinite(y)):
+                            print(f"Invalid coordinates: ({x}, {y}) for points {point}")
+                            return
+                x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)               
+
+                
 
                 scalar_speed = speed.iloc[0] if isinstance(speed, pd.Series) else speed
                 ax.scatter(x, y, color="blue", s=20)
@@ -242,11 +260,13 @@ class GUI:
                 self.output.clear_output()
                 print("Invalid frame range. Please adjust the start and end frame values.")
             return
+        
+       
+        
+        self.current_frame_index = self.start_frame
+        self.frame_slider.min = self.start_frame
+        self.frame_slider.max = self.end_frame
 
-        self.sampled_coords = self.coords.iloc[self.start_frame:self.end_frame]
-        self.current_frame_index = 0
-        self.frame_slider.min = 0
-        self.frame_slider.max = len(self.sampled_coords) - 1
         self.frame_slider.value = 0
         self.plot_current_frame()
 
