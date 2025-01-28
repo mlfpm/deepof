@@ -352,7 +352,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     rmtree(os.path.join(path, "deepof_project"))
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (30 if multi_animal else 13)
+    assert list(hardcoded_tags.values())[0].shape[1] == (35 if multi_animal else 13)
 
 
 # list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations

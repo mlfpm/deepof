@@ -2076,7 +2076,7 @@ def animate_skeleton(
         cur_embeddings=None
         cur_soft_counts=None
 
-    #for legacy reasons scales is not a dictionary which complicates things
+    #scales is now a dictionary which simplifies things
     coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
 
     # Sort column index to allow for multiindex slicing

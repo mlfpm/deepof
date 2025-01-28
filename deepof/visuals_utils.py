@@ -1376,7 +1376,7 @@ def annotate_video(
             font = cv2.FONT_HERSHEY_DUPLEX
 
             # Capture speeds
-            if len(animal_ids) == 1 or fnum % params["speed_pause"] == 0:
+            if len(animal_ids) == 1: #or fnum % params["speed_pause"] == 0:
                 frame_speeds = tag_dict["speed"][fnum]
             else:
                 for _id in animal_ids:
@@ -1397,7 +1397,7 @@ def annotate_video(
                 (arena_params, h, w),
                 coordinates._arena,
                 debug,
-                coordinates.get_coords(center=False)[key],
+                coordinates.get_coords_at_key(center=None, to_video=True, scale=coordinates._scales[key], key=key), #coordinates.get_coords(center="arena")[key],  
             )
 
             if writer is None:

@@ -1385,6 +1385,7 @@ class Coordinates:
     speed: int = 0,
     align: str = False,
     align_inplace: bool = True,
+    to_video: bool = False,
     selected_id: str = None,
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
@@ -1398,6 +1399,7 @@ class Coordinates:
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
+            to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             
         Returns:
@@ -1437,6 +1439,17 @@ class Coordinates:
 
             tab.loc[:, (slice("x"), [coord_2])] = (
                 tab.loc[:, (slice("x"), [coord_2])] - scale[1]
+            )
+
+        #undo mm conversion, if video export is required
+        if to_video:
+
+            tab.loc[:, (slice("x"), [coord_1])] = (
+                tab.loc[:, (slice("x"), [coord_1])] * scale[2]/scale[3]
+            )
+
+            tab.loc[:, (slice("x"), [coord_2])] = (
+                tab.loc[:, (slice("x"), [coord_2])] * scale[2]/scale[3]
             )
 
         elif isinstance(center, str) and center != "arena":
