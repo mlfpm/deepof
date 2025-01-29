@@ -36,7 +36,7 @@ class GUI:
         self.df = None
         self.current_frame_index = 0
         self.start_frame = 0
-        self.end_frame = 0
+        self.end_frame = len(self.coords)-1
 
         self.angle_data = self.get_angles_cached()
         self.distance_data = self.get_distances_cached()
@@ -67,7 +67,9 @@ class GUI:
         )
 
         self.frame_slider = widgets.IntSlider(
-            value=0, min=0, max=10, step=1,
+            value=self.start_frame, 
+            min=self.start_frame,
+            max=self.end_frame, step=1,
             description="Frame:", continuous_update=True,
             layout=widgets.Layout(width='500px')
         )
@@ -155,8 +157,7 @@ class GUI:
 
             ax.set_aspect('equal', adjustable='datalim')
             ax.invert_yaxis()  
-               
-            print("Total number of Frames:", len(self.coords))       
+            print(f"Total number of Frames: {len(self.coords)} (Range: 0 to {len(self.coords) - 1})")                   
             plt.show()
 
     def plot_angles(self, ax, x_coords, y_coords, selected_columns):
@@ -258,7 +259,7 @@ class GUI:
         """Handle animate button click."""
         self.start_frame = self.start_box.value
         self.end_frame = self.end_box.value
-        if self.start_frame < 0 or self.end_frame > len(self.coords) or self.start_frame >= self.end_frame:
+        if self.start_frame < 0 or self.end_frame > (len(self.coords)-1) or self.start_frame >= self.end_frame:
             with self.output:
                 self.output.clear_output()
                 print("Invalid frame range. Please adjust the start and end frame values.")
@@ -267,10 +268,10 @@ class GUI:
        
         
         self.current_frame_index = self.start_frame
-        self.frame_slider.min = self.start_frame
         self.frame_slider.max = self.end_frame
-
-        self.frame_slider.value = 0
+        self.frame_slider.min = self.start_frame
+        
+        self.frame_slider.value = self.start_frame        
         self.plot_current_frame()
 
     def update_current_frame_index(self, change):
