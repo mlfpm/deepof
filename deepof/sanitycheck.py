@@ -218,14 +218,16 @@ class GUI:
                             return
                         x_min, x_max, y_min, y_max = self.update_limits(x, y, x_min, x_max, y_min, y_max)                
 
-                ax.plot([x1, x2], [y1, y2], color="green", linewidth=2.5)
+                ax.plot([x1, x2], [y1, y2], color="blue", linewidth=2.5)
 
                 midpoint_x = (x1 + x2) / 2
                 midpoint_y = (y1 + y2) / 2
                 scalar_distance = distance.iloc[0] if isinstance(distance, pd.Series) else distance
-                ax.text(midpoint_x, midpoint_y, f"{scalar_distance:.2f}", color="purple", fontsize=8, ha="center")
+                ax.text(midpoint_x, midpoint_y, f"{scalar_distance:.2f}", color="red", fontsize=8, ha="center",
+                        bbox=dict(facecolor='yellow', edgecolor='black', boxstyle='round,pad=0.3'))
                 self.add_annotation(ax, x1, y1, f"{point1}")
                 self.add_annotation(ax, x2, y2, f"{point2}")
+                
 
         margin = 10
         ax.set_xlim(x_min - margin, x_max + margin)
@@ -248,7 +250,10 @@ class GUI:
 
                 scalar_speed = speed.iloc[0] if isinstance(speed, pd.Series) else speed
                 ax.scatter(x, y, color="blue", s=20)
-                ax.text(x, y, f"{scalar_speed:.2f}", color="purple", fontsize=8, ha="center")
+                text_offset_x = 1  
+                text_offset_y = 1 
+                ax.text(x + text_offset_x, y + text_offset_y, f"{scalar_speed:.2f}", color="red", fontsize=8, ha="center")
+                
                 self.add_annotation(ax, x, y, f"{point}")
 
         margin = 10
@@ -268,8 +273,14 @@ class GUI:
        
         
         self.current_frame_index = self.start_frame
-        self.frame_slider.max = self.end_frame
-        self.frame_slider.min = self.start_frame
+
+        
+        if(self.end_frame < self.frame_slider.min) :
+            self.frame_slider.min = self.start_frame
+            self.frame_slider.min = self.start_frame
+        else :
+            self.frame_slider.max = self.end_frame
+            self.frame_slider.min = self.start_frame        
         
         self.frame_slider.value = self.start_frame        
         self.plot_current_frame()
