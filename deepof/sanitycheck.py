@@ -65,6 +65,7 @@ class GUI:
             [self.start_box, self.end_box],
             layout=widgets.Layout(justify_content='space-between', width='400px')
         )
+        
 
         self.frame_slider = widgets.IntSlider(
             value=self.start_frame, 
@@ -264,20 +265,22 @@ class GUI:
         """Handle animate button click."""
         self.start_frame = self.start_box.value
         self.end_frame = self.end_box.value
-        if self.start_frame < 0 or self.end_frame > (len(self.coords)-1) or self.start_frame >= self.end_frame:
+        if self.start_frame < 0 or self.end_frame > (len(self.coords)-1) or self.start_frame > self.end_frame:
             with self.output:
                 self.output.clear_output()
+                self.frame_slider.disabled = True
                 print("Invalid frame range. Please adjust the start and end frame values.")
             return
+        else:
+            self.frame_slider.disabled = False
         
        
         
-        self.current_frame_index = self.start_frame
+        self.current_frame_index = self.start_frame        
 
-        
         if(self.end_frame < self.frame_slider.min) :
             self.frame_slider.min = self.start_frame
-            self.frame_slider.min = self.start_frame
+            self.frame_slider.max = self.end_frame
         else :
             self.frame_slider.max = self.end_frame
             self.frame_slider.min = self.start_frame        
