@@ -2336,7 +2336,7 @@ class Coordinates:
             if len(self._animal_ids) <= 1:
                 features_dict = (
                     deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
-                        self, center=center, align=align, include_angles=False, return_path=self._very_large_project
+                        self, center=center, align=align, include_angles=True, return_path=self._very_large_project
                     )
                 )
                 pbar.update() 
@@ -2348,7 +2348,7 @@ class Coordinates:
                         center=center,
                         align=align,
                         animal_id=_id,
-                        include_angles=False,
+                        include_angles=True,
                         file_name='kinematics_'+_id,
                         return_path=self._very_large_project
                     )
