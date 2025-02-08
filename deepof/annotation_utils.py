@@ -25,6 +25,7 @@ import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
 from deepof.data_loading import get_dt, load_dt, _suppress_warning
+import xgboost #as xgb
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -468,11 +469,11 @@ def cowering(
         return np.full(X_huddle.shape[0], np.nan)
 
     # Concatenate all relevant data frames and predict using the pre-trained estimator
-    X_mask = np.isnan(X_huddle).mean(axis=1) == 1
+    X_mask = np.isnan(X_huddle).mean(axis=1) > 0.1
     y_huddle = huddle_estimator.predict(
         StandardScaler().fit_transform(np.nan_to_num(X_huddle))
-    )
-    y_huddle[X_mask] = np.nan
+    ).astype(float)
+    y_huddle[X_mask] = False#np.nan
     return y_huddle
 
 
@@ -759,6 +760,8 @@ def detect_activity4(
 
     #detect immobility and smooth detections    
     immobile = np.array([False]*len(speed_dframe))
+    nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+    speed_dframe.interpolate(method='linear', inplace=True)
     immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
@@ -780,10 +783,6 @@ def detect_activity4(
         for part in bodyparts
     ]).any(axis=0)
 
-    #get start and end indices of True-blocks
-    start_indices=np.where(np.diff(immobile.astype(int), prepend=0) > 0)[0]
-    end_indices=np.where(np.diff(immobile.astype(int), append=0) < 0)[0]
-
 
     stationary_active = deepof.utils.moving_average(immobile & activity, lag=min_length).astype(bool)
     stationary_passive = deepof.utils.moving_average(immobile & ~activity, lag=min_length).astype(bool)
@@ -800,7 +799,6 @@ def detect_activity4(
 
     stationary_active=stationary_active & immobile
     stationary_passive=stationary_passive & immobile
-    min_length_odd = min_length + 1 if min_length % 2 == 0 else min_length
     stationary_active = deepof.utils.moving_median(
         stationary_active, lag=min_length*4+1,
     )
@@ -811,6 +809,10 @@ def detect_activity4(
     stationary_passive = deepof.utils.filter_short_true_segments(
         array=stationary_passive, min_length=min_length,
     )
+
+    #reset detected behavior in frames that were broken
+    stationary_active[nan_pos] = False
+    stationary_passive[nan_pos] = False
     
     #deepof.utils.filter_short_true_segments(
     #    array=stationary_passive, min_length=min_length,

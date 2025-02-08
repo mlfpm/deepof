@@ -65,6 +65,7 @@ statsmodels = "^0.14.2"
 twine = "5.1.1"
 pyarrow = "^17.0.0"
 pot = "^0.8.2"
+xgboost = "2.1.4"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

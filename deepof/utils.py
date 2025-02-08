@@ -2642,7 +2642,7 @@ def rolling_speed(
 
 
 
-    return speeds.fillna(0.0)
+    return speeds#.fillna(0.0)
 
 
 def filter_short_bouts(
