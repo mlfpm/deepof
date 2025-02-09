@@ -431,24 +431,24 @@ def cowering(
     """
     # Keep only body parts that are relevant for huddling
     required_features = [
-        "('{}Spine_1', '{}Right_ear', '{}Nose')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Right_ear', '{}Spine_1', '{}Left_ear')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Right_ear', '{}Spine_1', '{}Center')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_ear', '{}Spine_1', '{}Center')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Right_ear', '{}Nose', '{}Left_ear')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_bhip', '{}Spine_2', '{}Right_bhip')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_bhip', '{}Spine_2', '{}Center')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_bhip', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Right_bhip', '{}Spine_2', '{}Center')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Right_bhip', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Center', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Spine_1', '{}Left_ear', '{}Nose')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Spine_1', '{}Center', '{}Left_fhip')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Spine_1', '{}Center', '{}Spine_2')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Spine_1', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_fhip', '{}Center', '{}Spine_2')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Left_fhip', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
-        "('{}Spine_2', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_1', '{}Right_ear', '{}Nose')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Right_ear', '{}Spine_1', '{}Left_ear')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Right_ear', '{}Spine_1', '{}Center')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_ear', '{}Spine_1', '{}Center')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Right_ear', '{}Nose', '{}Left_ear')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_bhip', '{}Spine_2', '{}Right_bhip')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_bhip', '{}Spine_2', '{}Center')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_bhip', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Right_bhip', '{}Spine_2', '{}Center')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Right_bhip', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Center', '{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_1', '{}Left_ear', '{}Nose')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_1', '{}Center', '{}Left_fhip')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_1', '{}Center', '{}Spine_2')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_1', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_fhip', '{}Center', '{}Spine_2')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Left_fhip', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
+        #"('{}Spine_2', '{}Center', '{}Right_fhip')_raw".format(animal_id, animal_id, animal_id),
         "('{}Right_bhip', '{}Spine_2')_raw".format(animal_id, animal_id),
         "('{}Spine_2', '{}Tail_base')_raw".format(animal_id, animal_id),
         "('{}Left_bhip', '{}Spine_2')_raw".format(animal_id, animal_id),
@@ -605,6 +605,8 @@ def detect_activity2(
 
     #detect immobility and smooth detections    
     immobile = np.array([False]*len(speed_dframe))
+    nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+    speed_dframe.interpolate(method='linear', inplace=True)
     immobile = deepof.utils.moving_average(
         (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
         , lag=min_length).astype(bool)
@@ -655,6 +657,10 @@ def detect_activity2(
         array=stationary_passive, min_length=min_length,
     )
 
+    #reset detected behavior in frames that were broken
+    stationary_active[nan_pos] = False
+    stationary_passive[nan_pos] = False
+
     #Mouse is immobile and active if it was rated active for 60% or more of teh duration of a True-Block,
     #Mouse is immobile and passive otherwise
     #for [start_index, end_index] in zip(start_indices,end_indices):     
@@ -695,6 +701,8 @@ def detect_activity3(
 
     #detect immobility and smooth detections    
     immobile = np.array([False]*len(speed_dframe))
+    nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+    speed_dframe.interpolate(method='linear', inplace=True)
     immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
@@ -741,6 +749,10 @@ def detect_activity3(
         array=stationary_passive, min_length=min_length,
     )
     
+    #reset detected behavior in frames that were broken
+    stationary_active[nan_pos] = False
+    stationary_passive[nan_pos] = False
+
     #deepof.utils.filter_short_true_segments(
     #    array=stationary_passive, min_length=min_length,
     #)
