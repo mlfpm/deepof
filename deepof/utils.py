@@ -36,6 +36,7 @@ from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm
 
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
 from deepof.data_loading import get_dt, load_dt, save_dt, _suppress_warning
 
@@ -1496,6 +1497,7 @@ def extract_windows(
     window_step: int,
     save_as_paths: bool = False,
     shuffle: bool = False,
+    windows_desc : str = "Get windows"
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
 
@@ -1518,9 +1520,9 @@ def extract_windows(
     # Iterate over all experiments and populate them
     out_len=0
 
-    with tqdm(total=len(to_window.keys()), desc="Get windows   ", unit="table") as pbar:
+    with tqdm(total=len(to_window.keys()), desc=f"{windows_desc:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
         for key in to_window.keys():
-                
+                            
             #load tab from disk if not already loaded
             tab, tab_path = get_dt(to_window, key, True)  
             tab=np.array(tab)
@@ -1934,7 +1936,8 @@ def get_arenas(
         display_message(multi_line_message)
         
         propagate_last = False
-        with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
+        
+        with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
             for vid_idx, key in enumerate(videos.keys()):
 
                 if not propagate_last:
@@ -2028,8 +2031,8 @@ def get_arenas(
 
 
         # Load SAM 
-        segmentation_model = load_segmentation_model(segmentation_model_path)                             
-        with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
+        segmentation_model = load_segmentation_model(segmentation_model_path)                           
+        with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
             for key in videos.keys():
                 arena_parameters, h, w = automatically_recognize_arena(
                     coordinates=coordinates,
