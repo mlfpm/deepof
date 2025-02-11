@@ -683,7 +683,7 @@ class Project:
             tab_dict (table_dict): Scaled table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
         """
 
-        with tqdm(total=len(tab_dict), desc="Rescaling tables    ", unit="table") as pbar:
+        with tqdm(total=len(tab_dict), desc=f"{'Rescaling tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for i, (key, tab) in enumerate(tab_dict.items()):
 
                 #load active table
