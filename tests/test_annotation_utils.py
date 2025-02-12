@@ -320,7 +320,7 @@ def test_frame_corners(w, h):
 
 
 @settings(deadline=None)
-@given(multi_animal=st.just(False), video_output=st.booleans())
+@given(multi_animal=st.booleans(), video_output=st.booleans())
 def test_rule_based_tagging(multi_animal, video_output):
 
     if video_output:
@@ -352,7 +352,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     rmtree(os.path.join(path, "deepof_project"))
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (35 if multi_animal else 13)
+    assert list(hardcoded_tags.values())[0].shape[1] == (37 if multi_animal else 14)
 
 
 # list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations

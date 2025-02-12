@@ -585,7 +585,13 @@ def detect_activity2(
     center_name: str = "Center",
     animal_id: str = "",
 ):
-    """Return true when the mouse is standing still and either looking around (active) or not looking around (passive) using simple rules.
+    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
+
+    Design considerations:
+        Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
+        The main problem arises from getting a lot of "flickering" out of the detections, as bodyparts from frame to frame may be
+        just above or below that threshold. Respectively most of the detect_activity algorithm is a series of filtering steps to
+        alternatingly smooth the predictions and sharpening the edges of predicted behavior. 
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
@@ -596,33 +602,47 @@ def detect_activity2(
         animal_id (str): ID of the current animal.
 
     Returns:
-        immobile_active (np.array): True if the animal is standing still and is active False otherwise
-        immobile_passive (np.array): True if the animal is standing still and is passive False otherwise
+        stationary_active (np.array): True if the animal is standing still and is active, False otherwise
+        stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
 
     """
     if animal_id != "":
         animal_id += "_"
 
-    #detect immobility and smooth detections    
-    immobile = np.array([False]*len(speed_dframe))
+    # Get frames with undefined speed
     nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+
+    # Detect and smooth frames with mouse being immobile    
+    immobile = np.array([False]*len(speed_dframe))
     speed_dframe.interpolate(method='linear', inplace=True)
-    immobile = deepof.utils.moving_average(
-        (speed_dframe[animal_id + center_name] < tol_speed).to_numpy()
-        , lag=min_length).astype(bool)
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
     )
+
+    # Init stationary active and passive subsets with immobile frames
     stationary_active=copy.copy(immobile)
     stationary_passive=copy.copy(immobile)
 
-    #detect activity when nose speed and likelyhood is above a threshold for all available bodyparts from the list
-    bodyparts=[animal_id+"Nose",animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
+    # Detect activity when speed and likelyhood is above a threshold for any of the available bodyparts from the list
+    bodyparts=[animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
-    #remove missing bodyparts
+    # Remove missing bodyparts from list
     for bp in bodyparts:
         if not bp in speed_dframe.keys():
             bodyparts.remove(bp)
+
+    # Frame is "active" if any bodyprt from the list is reliably detected and faster than the immobility threshold 
+    for part in bodyparts:
+        if part == animal_id+"Nose":
+            (tol_speed >= speed_dframe[part]).to_numpy() & (likelihood_dframe[part] > tol_likelihood).to_numpy()
+        else:
+            (tol_speed < speed_dframe[part]).to_numpy() & (likelihood_dframe[part] > tol_likelihood).to_numpy()
+
+    
+    nose_activity = (tol_speed < speed_dframe[animal_id+"Nose"]).to_numpy() & (likelihood_dframe[animal_id+"Nose"] > tol_likelihood).to_numpy()
+
+    bodyparts = bodyparts + [animal_id+"Nose"]
 
     activity = np.array([
         (tol_speed < speed_dframe[part]).to_numpy() & 
@@ -630,17 +650,19 @@ def detect_activity2(
         for part in bodyparts
     ]).any(axis=0)
 
-    #get start and end indices of True-blocks
-    start_indices=np.where(np.diff(immobile.astype(int), prepend=0) > 0)[0]
-    end_indices=np.where(np.diff(immobile.astype(int), append=0) < 0)[0]
 
 
-    stationary_active = deepof.utils.moving_average(immobile & activity, lag=min_length).astype(bool)
+    # Frames are Stationary active when immobile and active, stationary passive when immobile and not active + smoothing
+    stationary_active = deepof.utils.moving_average(immobile & nose_activity, lag=min_length).astype(bool)
     stationary_passive = deepof.utils.moving_average(immobile & ~activity, lag=min_length).astype(bool)
+    
+    # Due to the smoothing step before it may happen that frames are simutaneously active and passive.
+    # To circumvent that, run a larger moving average giving float values as a "percentage" of activeness / passiveness
     stationary_active_avg = deepof.utils.moving_average(stationary_active, lag=min_length*4).astype(float)
     stationary_passive_avg = deepof.utils.moving_average(stationary_passive, lag=min_length*4).astype(float)
 
-
+    # Then iterate all frames and that are labeld as active and passive and set the frame to eitehr only active or passive 
+    # dependent on the percentage of "activeness / passiveness" 
     for i in range(len(stationary_active)):
         if stationary_active[i] == stationary_passive[i] and stationary_active[i] == True:
             if stationary_active_avg[i]>=stationary_passive_avg[i]:
@@ -648,8 +670,18 @@ def detect_activity2(
             elif stationary_active_avg[i]<stationary_passive_avg[i]:
                 stationary_active[i]=False
 
+    # Also set all frames outside of the immobile frames to False
     stationary_active=stationary_active & immobile
     stationary_passive=stationary_passive & immobile
+
+    # To ensure that sections are labeled more consistently as either active or passive (with less passive blips during active behavior), 
+    # use a moving median to get rid of very short passive behavior detections in active sections, then adjust passive Frames accordingly
+    stationary_active = deepof.utils.moving_median(
+        stationary_active, lag=min_length*4+1,
+    )
+    stationary_passive[stationary_passive.astype(bool) & stationary_active.astype(bool)]=False
+    
+    # Filter short segments
     stationary_active = deepof.utils.filter_short_true_segments(
         array=stationary_active, min_length=min_length,
     )
@@ -657,17 +689,13 @@ def detect_activity2(
         array=stationary_passive, min_length=min_length,
     )
 
-    #reset detected behavior in frames that were broken
+    # Set True-Frames leaking into immobile range to False again
+    stationary_active=stationary_active & immobile
+    stationary_passive=stationary_passive & immobile
+
+    # Set all Frames that had no speed information in the beginning to False
     stationary_active[nan_pos] = False
     stationary_passive[nan_pos] = False
-
-    #Mouse is immobile and active if it was rated active for 60% or more of teh duration of a True-Block,
-    #Mouse is immobile and passive otherwise
-    #for [start_index, end_index] in zip(start_indices,end_indices):     
-    #    if(np.sum(activity[start_index:end_index+1]) < 0.4*(end_index-start_index)):
-    #        immobile_active[start_index:end_index+1]=False
-    #    else:
-    #        immobile_passive[start_index:end_index+1]=False
 
     return stationary_active, stationary_passive
 
@@ -681,7 +709,13 @@ def detect_activity3(
     center_name: str = "Center",
     animal_id: str = "",
 ):
-    """Return true when the mouse is standing still and either looking around (active) or not looking around (passive) using simple rules.
+    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
+
+    Design considerations:
+        Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
+        The main problem arises from getting a lot of "flickering" out of the detections, as bodyparts from frame to frame may be
+        just above or below that threshold. Respectively most of the detect_activity algorithm is a series of filtering steps to
+        alternatingly smooth the predictions and sharpening the edges of predicted behavior. 
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
@@ -692,42 +726,75 @@ def detect_activity3(
         animal_id (str): ID of the current animal.
 
     Returns:
-        immobile_active (np.array): True if the animal is standing still and is active False otherwise
-        immobile_passive (np.array): True if the animal is standing still and is passive False otherwise
+        stationary_active (np.array): True if the animal is standing still and is active, False otherwise
+        stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
 
     """
     if animal_id != "":
         animal_id += "_"
 
-    #detect immobility and smooth detections    
-    immobile = np.array([False]*len(speed_dframe))
+    # Get frames with undefined speed
     nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+
+    # Detect and smooth frames with mouse being immobile    
+    immobile = np.array([False]*len(speed_dframe))
     speed_dframe.interpolate(method='linear', inplace=True)
-    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] < tol_speed).to_numpy(), lag=min_length).astype(bool)
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] <= tol_speed*2).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
     )
+
+    # Init stationary active and passive subsets with immobile frames
     stationary_active=copy.copy(immobile)
     stationary_passive=copy.copy(immobile)
 
-    #detect activity when nose speed and likelyhood is above a threshold
-    nose_speed = (
-        tol_speed < speed_dframe[animal_id + "Nose"]   #speed_dframe[animal_id + center_name]
-    )
-    nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
-    activity=nose_speed & nose_likelihood
+    # Detect activity when speed and likelyhood is above a threshold for any of the available bodyparts from the list
+    bodyparts=[animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
-    #get start and end indices of True-blocks
-    start_indices=np.where(np.diff(immobile.astype(int), prepend=0) > 0)[0]
-    end_indices=np.where(np.diff(immobile.astype(int), append=0) < 0)[0]
+    # Remove missing bodyparts from list
+    for bp in bodyparts:
+        if not bp in speed_dframe.keys():
+            bodyparts.remove(bp)
+
+    # Frame is "active" if any bodyprt from the list is reliably detected and faster than the immobility threshold 
+    for part in bodyparts:
+        if part == animal_id+"Nose":
+            (tol_speed >= speed_dframe[part]).to_numpy() & (likelihood_dframe[part] > tol_likelihood).to_numpy()
+        else:
+            (tol_speed < speed_dframe[part]).to_numpy() & (likelihood_dframe[part] > tol_likelihood).to_numpy()
+
+    
+    nose_activity = (tol_speed < speed_dframe[animal_id+"Nose"]).to_numpy() & (likelihood_dframe[animal_id+"Nose"] > tol_likelihood).to_numpy()
+
+    bparts=[animal_id+"Left_bhip", animal_id+"Right_bhip"]
+
+    body_inactivity = np.array([
+        (tol_speed*2 >= speed_dframe[part]).to_numpy() & 
+        (likelihood_dframe[part] > tol_likelihood).to_numpy()
+        for part in bparts
+    ]).all(axis=0)
+
+    bodyparts = bodyparts + [animal_id+"Nose"]
+
+    activity = np.array([
+        (tol_speed < speed_dframe[part]).to_numpy() & 
+        (likelihood_dframe[part] > tol_likelihood).to_numpy()
+        for part in bodyparts
+    ]).any(axis=0)
 
 
-    stationary_active = deepof.utils.moving_average(immobile & activity, lag=min_length).astype(bool)
+
+    # Frames are Stationary active when immobile and active, stationary passive when immobile and not active + smoothing
+    stationary_active = deepof.utils.moving_average(immobile & nose_activity & body_inactivity, lag=min_length).astype(bool)
     stationary_passive = deepof.utils.moving_average(immobile & ~activity, lag=min_length).astype(bool)
+    
+    # Due to the smoothing step before it may happen that frames are simutaneously active and passive.
+    # To circumvent that, run a larger moving average giving float values as a "percentage" of activeness / passiveness
     stationary_active_avg = deepof.utils.moving_average(stationary_active, lag=min_length*4).astype(float)
     stationary_passive_avg = deepof.utils.moving_average(stationary_passive, lag=min_length*4).astype(float)
 
-
+    # Then iterate all frames and that are labeld as active and passive and set the frame to eitehr only active or passive 
+    # dependent on the percentage of "activeness / passiveness" 
     for i in range(len(stationary_active)):
         if stationary_active[i] == stationary_passive[i] and stationary_active[i] == True:
             if stationary_active_avg[i]>=stationary_passive_avg[i]:
@@ -735,30 +802,70 @@ def detect_activity3(
             elif stationary_active_avg[i]<stationary_passive_avg[i]:
                 stationary_active[i]=False
 
+    # Also set all frames outside of the immobile frames to False
     stationary_active=stationary_active & immobile
     stationary_passive=stationary_passive & immobile
-    min_length_odd = min_length + 1 if min_length % 2 == 0 else min_length
+
+    # To ensure that sections are labeled more consistently as either active or passive (with less passive blips during active behavior), 
+    # use a moving median to get rid of very short passive behavior detections in active sections, then adjust passive Frames accordingly
     stationary_active = deepof.utils.moving_median(
         stationary_active, lag=min_length*4+1,
     )
     stationary_passive[stationary_passive.astype(bool) & stationary_active.astype(bool)]=False
+    
+    # Filter short segments
     stationary_active = deepof.utils.filter_short_true_segments(
         array=stationary_active, min_length=min_length,
     )
     stationary_passive = deepof.utils.filter_short_true_segments(
         array=stationary_passive, min_length=min_length,
     )
-    
-    #reset detected behavior in frames that were broken
+
+    # Set True-Frames leaking into immobile range to False again
+    stationary_active=stationary_active & immobile
+    stationary_passive=stationary_passive & immobile
+
+    # Set all Frames that had no speed information in the beginning to False
     stationary_active[nan_pos] = False
     stationary_passive[nan_pos] = False
 
-    #deepof.utils.filter_short_true_segments(
-    #    array=stationary_passive, min_length=min_length,
-    #)
-
     return stationary_active, stationary_passive
 
+
+def look_around(
+    speed_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
+    tol_speed: float,
+    tol_likelihood: float,
+    center_name: str = "Center",
+    animal_id: str = "",
+):
+    """Return true when the mouse is looking around using simple rules.
+
+    Args:
+        speed_dframe (pandas.DataFrame): speed of body parts over time
+        likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        tol_speed (float): Maximum tolerated speed for the center of the mouse
+        tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        center_name (str): Body part to center coordinates on. "Center" by default.
+        animal_id (str): ID of the current animal.
+
+    Returns:
+        lookaround (np.array): True if the animal is standing still and looking around, False otherwise
+
+    """
+    if animal_id != "":
+        animal_id += "_"
+
+    speed = speed_dframe[animal_id + center_name] < tol_speed
+    nose_speed = (
+        speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
+    )
+    nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
+
+    lookaround = speed & nose_likelihood & nose_speed
+
+    return lookaround
 
 
 def detect_activity4(
@@ -1350,7 +1457,7 @@ def supervised_tagging(
         animal_id=_id,
         )
         #detect immobility and active / passive behavior
-        tag_dict[_id + undercond + "stationary_active2"], tag_dict[_id + undercond + "stationary_passive2"] = detect_activity2(
+        tag_dict[_id + undercond + "stationary_messaround"], tag_dict[_id + undercond + "stationary_passive2"] = detect_activity2(
         speeds,
         likelihoods,
         params["cower_speed"],
@@ -1360,7 +1467,7 @@ def supervised_tagging(
         animal_id=_id,
         )
         #detect immobility and active / passive behavior
-        tag_dict[_id + undercond + "stationary_active3"], tag_dict[_id + undercond + "stationary_passive3"] = detect_activity3(
+        tag_dict[_id + undercond + "stationary_lookaround"], tag_dict[_id + undercond + "stationary_passive3"] = detect_activity3(
         speeds,
         likelihoods,
         params["cower_speed"],
@@ -1378,9 +1485,21 @@ def supervised_tagging(
         center_name=center,
         animal_id=_id,
         )
+
+        tag_dict[_id + undercond + "lookaround"] = look_around(
+            speeds,
+            likelihoods,
+            params["cower_speed"],
+            params["nose_likelihood"],
+            center_name=center,
+            animal_id=_id,
+        )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
         tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
+
+
+
 
     tag_df = pd.DataFrame(tag_dict).fillna(0).astype(float)
 
