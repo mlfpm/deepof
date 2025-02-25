@@ -1352,7 +1352,7 @@ def supervised_tagging(
             )
         )
         #detect immobility and active / passive behavior
-        tag_dict[_id + undercond + "stationary_lookaround"] = stationary_lookaround(
+        tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
         speeds,
         likelihoods,
         params["cower_speed"],
@@ -1361,7 +1361,7 @@ def supervised_tagging(
         center_name=center,
         animal_id=_id,
         )
-        tag_dict[_id + undercond + "stationary_active"], tag_dict[_id + undercond + "stationary_passive"] = detect_activity(
+        tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"] = detect_activity(
         speeds,
         likelihoods,
         params["cower_speed"],
