@@ -1297,8 +1297,8 @@ def _tag_annotated_frames(
 
             if tag_dict[_id + undercond + "climb_arena"][fnum]:
                 write_on_frame("climb_arena", down_pos)
-            elif tag_dict[_id + undercond + "cowering"][fnum]:
-                write_on_frame("cowering", down_pos)
+            elif tag_dict[_id + undercond + "freezing_like"][fnum]:
+                write_on_frame("freezing_like", down_pos)
             elif tag_dict[_id + undercond + "sniff_arena"][fnum]:
                 write_on_frame("sniff_arena", down_pos)
 
