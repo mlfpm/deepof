@@ -1170,12 +1170,19 @@ def plot_enrichment(
     else:
         # set x-ticks
         if ax:
-            bbox = ax.get_window_extent().transformed(plt.gcf().dpi_scale_trans.inverted())
+            bbox = ax.get_window_extent().transformed(
+                plt.gcf().dpi_scale_trans.inverted()
+            )
             X_size = bbox.width
             N_X_ticks = len(ax.xaxis.get_ticklabels())
             rotation_angle = int(np.clip((N_X_ticks / X_size - 1) * 30, 0, 90))
             ha = 'right' if rotation_angle != 0 else 'center'
-            ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(), rotation=rotation_angle, ha=ha)
+            ax.set_xticks(
+                ax.get_xticks(), 
+                ax.get_xticklabels(), 
+                rotation=rotation_angle, 
+                ha=ha
+            )
         else:
             X_size = plt.gcf().get_size_inches()[1]
             N_X_ticks = len(plt.xticks()[0])
