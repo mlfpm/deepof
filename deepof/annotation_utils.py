@@ -798,12 +798,14 @@ def detect_activity(
     stationary_passive = deepof.utils.moving_average(immobile & ~activity, lag=min_length).astype(bool)
     
     stationary_active, stationary_passive = multi_step_paired_smoothing(stationary_active, stationary_passive, immobile, min_length)
+    mobile=~(stationary_active + stationary_passive).astype(bool)
 
     # Set all Frames that had no speed information in the beginning to False
     stationary_active[nan_pos] = False
     stationary_passive[nan_pos] = False
+    mobile[nan_pos] = False
     
-    return stationary_active, stationary_passive
+    return stationary_active, stationary_passive, mobile
 
 
 def multi_step_paired_smoothing(active_behavior, passive_behavior, immobile, min_length):
@@ -875,7 +877,7 @@ def look_around(
 
     speed = speed_dframe[animal_id + center_name] < tol_speed
     nose_speed = (
-        speed_dframe[animal_id + center_name] < speed_dframe[animal_id + "Nose"]
+        tol_speed < speed_dframe[animal_id + "Nose"]
     )
     nose_likelihood = likelihood_dframe[animal_id + "Nose"] > tol_likelihood
 
@@ -990,12 +992,13 @@ def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
         "climb_tol": 0.15,                              # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
         "sniff_tol": 12.5,                              # Noses need to be 12.5 mm apart or closer
         "close_contact_tol": 25,                        # Body parts need to be 25 mm apart or closer
-        "side_contact_tol": 60,                         # Sides need to be 60 mm apart or closer
+        "side_contact_tol": 50,                         # Sides need to be 60 mm apart or closer
         "follow_frames": int(coords._frame_rate/2),     # Frames over which following is considered, Half of a second, before: 10
         "min_follow_frames": int(coords._frame_rate/4), # Minimum time mouse needs to follow, Quarter of a second
         "follow_tol": 25,                               # 25 mm, before: 5
         "cower_speed": 40,                              # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
         "nose_likelihood": 0.85,                        # Minimum degree of certainty of the nose position prediction
+        "min_immobility": int(coords._frame_rate), 
     }
 
     for k, v in hparams.items():
@@ -1343,13 +1346,15 @@ def supervised_tagging(
             run_numba=run_numba,
         )
 
-
-        tag_dict[_id + undercond + "freezing_like"] = deepof.utils.smooth_boolean_array(
-            cowering(
-                current_features,
-                huddle_estimator=huddle_estimator,
-                animal_id=_id + undercond,
-            )
+        tag_dict[_id + undercond + "immobility"] = deepof.utils.filter_short_true_segments(
+            array=deepof.utils.smooth_boolean_array(
+                cowering(
+                    current_features,
+                    huddle_estimator=huddle_estimator,
+                    animal_id=_id + undercond,
+                )
+            ),
+            min_length=params["min_immobility"]
         )
         #detect immobility and active / passive behavior
         tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
@@ -1361,7 +1366,7 @@ def supervised_tagging(
         center_name=center,
         animal_id=_id,
         )
-        tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"] = detect_activity(
+        tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"], tag_dict[_id + undercond + "moving"] = detect_activity(
         speeds,
         likelihoods,
         params["cower_speed"],
@@ -1371,7 +1376,7 @@ def supervised_tagging(
         animal_id=_id,
         )
 
-        tag_dict[_id + undercond + "lookaround"] = look_around(
+        tag_dict[_id + undercond + "sniffing"] = look_around(
             speeds,
             likelihoods,
             params["cower_speed"],
