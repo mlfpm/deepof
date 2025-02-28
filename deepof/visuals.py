@@ -45,7 +45,7 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
-    output_unsupervised_annotated_video,
+    output_annotated_video,
     output_videos_per_cluster,
 )
 
@@ -2492,19 +2492,23 @@ def plot_shap_swarm_per_cluster(
 
 def export_annotated_video(
     coordinates: coordinates,
+    supervised_annotations: table_dict = None,
     soft_counts: dict = None,
+    behavior: str = None,
     experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
     frame_limit_per_video: int = np.inf,
     exp_conditions: dict = {},
-    cluster_names: dict = {},
+    cluster_names: str = None,
 ):
     """Export annotated videos from both supervised and unsupervised pipelines.
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         soft_counts (dict): dictionary with soft_counts per experiment.
+        behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
@@ -2528,14 +2532,6 @@ def export_annotated_video(
     # If no bout duration is provided, use half the frame rate
     if min_bout_duration is None:
         min_bout_duration = int(np.round(coordinates._frame_rate // 2))
-
-    # Compute sliding window lenth, to determine the frame/annotation offset
-    first_key = list(coordinates.get_quality().keys())[0]
-    window_length = (
-        coordinates.get_table_lengths()[first_key]
-        - get_dt(soft_counts, first_key, only_metainfo=True)['num_rows']
-        + 1
-    )
 
     def filter_experimental_conditions(
         coordinates: coordinates, videos: list, conditions: list
@@ -2562,15 +2558,17 @@ def export_annotated_video(
     if soft_counts is not None:
         if experiment_id is not None:
             # If experiment_id is provided, only output a video for that experiment
-            cur_soft_counts=get_dt(soft_counts, experiment_id)
+            cur_soft_counts=copy.deepcopy(get_dt(soft_counts, experiment_id))
             video_path=coordinates.get_videos(full_paths=True)[experiment_id]
+            if cluster_names is None or len(cluster_names) != cur_soft_counts.shape[1]:
+                cluster_names = ["Cluster "+ str(k) for k in range(cur_soft_counts.shape[1])]
+            cur_soft_counts=pd.DataFrame(cur_soft_counts,columns=cluster_names)
 
-            deepof.visuals.output_unsupervised_annotated_video(
+            deepof.visuals.output_annotated_video(
                 video_path,                
                 cur_soft_counts,
+                behavior,
                 frame_rate=coordinates._frame_rate,
-                window_length=window_length,
-                cluster_names=cluster_names,
                 out_path=out_path,
                 frame_limit=frame_limit_per_video,
             )
@@ -2583,9 +2581,9 @@ def export_annotated_video(
             deepof.visuals.output_videos_per_cluster(
                 filtered_videos,
                 soft_counts,
+                behavior,
                 frame_rate=coordinates._frame_rate,
                 single_output_resolution=(500, 500),
-                window_length=window_length // 2,
                 frame_limit_per_video=frame_limit_per_video,
                 min_confidence=min_confidence,
                 min_bout_duration=min_bout_duration,
@@ -2593,8 +2591,44 @@ def export_annotated_video(
             )
 
     # Supervised annotation output
-    else:
-        raise NotImplementedError
+    elif supervised_annotations is not None:
+        if experiment_id is not None:
+            cur_supervised_annotations=copy.deepcopy(get_dt(supervised_annotations, experiment_id))
+            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
+            if not (cluster_names is None or len(cluster_names) != cur_supervised_annotations.shape[1]):
+                cur_supervised_annotations.columns = cluster_names
+            if behavior is None:
+                behavior = next(iter(cur_supervised_annotations))
+
+            deepof.visuals.output_annotated_video(
+                video_path,                
+                cur_supervised_annotations,
+                behavior,
+                frame_rate=coordinates._frame_rate,
+                out_path=out_path,
+                frame_limit=frame_limit_per_video,
+            )
+        else:
+            # If experiment_id is not provided, output a video per behavior for each experiment
+            filtered_videos = filter_experimental_conditions(
+                coordinates, coordinates.get_videos(full_paths=True), exp_conditions
+            )
+
+            deepof.visuals.output_videos_per_cluster(
+                filtered_videos,
+                supervised_annotations,
+                behavior,
+                frame_rate=coordinates._frame_rate,
+                single_output_resolution=(500, 500),
+                frame_limit_per_video=frame_limit_per_video,
+                min_confidence=min_confidence,
+                min_bout_duration=min_bout_duration,
+                out_path=out_path,
+            ) 
+        
+        
+        
+            #raise NotImplementedError
 
 
 def plot_distance_between_conditions(

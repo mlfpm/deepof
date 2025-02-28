@@ -1489,11 +1489,11 @@ def output_cluster_video(
 
 def output_videos_per_cluster(
     video_paths: dict,
-    soft_counts: table_dict,
+    behavior_dict: table_dict,
+    behavior: str,
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
     single_output_resolution: tuple = None,
-    window_length: int = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     out_path: str = ".",
@@ -1506,21 +1506,29 @@ def output_videos_per_cluster(
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
-        window_length: window length used to compute the soft counts.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
         out_path: path to the output directory.
 
     """
-    N_clusters=get_dt(soft_counts,list(soft_counts.keys())[0],only_metainfo=True)['num_cols']
+
+    meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
+    if behavior is not None:
+        behaviors = [behavior]
+    elif meta_info.get('columns') is not None:
+        behaviors=meta_info['columns']
+    else:
+        behaviors = np.array(range(meta_info['num_cols']))
+
+
     # Iterate over all clusters, and output a masked video for each
-    for cluster_id in range(N_clusters):
+    for cur_behavior in behaviors:
 
         out = cv2.VideoWriter(
             os.path.join(
                 out_path,
                 "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
-                    cluster_id, min_confidence, calendar.timegm(time.gmtime())
+                    cur_behavior, min_confidence, calendar.timegm(time.gmtime())
                 ),
             ),
             cv2.VideoWriter_fourcc(*"mp4v"),
@@ -1528,12 +1536,25 @@ def output_videos_per_cluster(
             single_output_resolution,
         )
 
-        for key in soft_counts.keys():
+        for key in behavior_dict.keys():
 
-            cur_soft_counts = get_dt(soft_counts,key)
+            cur_soft_counts = get_dt(behavior_dict,key)
+
+            #If a specific behavior is requested, annotate that behavior
+            if type(cur_soft_counts)==np.ndarray:
+                hard_counts = cur_soft_counts[:, cur_behavior]>0.1
+                idx = cur_soft_counts[:, cur_behavior]>0.1
+                confidence = cur_soft_counts[:, cur_behavior]
+            else:
+                hard_counts = cur_soft_counts[cur_behavior]>0.1
+                idx = cur_soft_counts[cur_behavior]>0.1
+                confidence = cur_soft_counts[cur_behavior]
+            
+            hard_counts[idx]=cur_behavior
+            hard_counts[~idx]=""
+
+            
             # Get hard counts and confidence estimates per cluster
-            hard_counts = np.argmax(cur_soft_counts, axis=1)
-            confidence = np.max(cur_soft_counts, axis=1)
             confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
             # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
@@ -1542,23 +1563,23 @@ def output_videos_per_cluster(
 
             # Compute confidence mask, filtering out also bouts that are too short
             confidence_indices = deepof.utils.filter_short_bouts(
-                hard_counts,
+                idx.astype(float),
                 confidence,
                 confidence_indices,
                 min_confidence,
                 min_bout_duration,
             )
-            confidence_mask = (hard_counts == cluster_id) & confidence_indices
+            confidence_mask = (hard_counts == cur_behavior) & confidence_indices
 
             # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            frame_mask = np.concatenate(
-                (np.zeros(window_length, dtype=bool), confidence_mask)
-            )
+            #frame_mask = np.concatenate(
+            #    (np.zeros(10, dtype=bool), confidence_mask)
+            #)
 
             output_cluster_video(
                 cap,
                 out,
-                frame_mask,
+                confidence_mask,
                 v_width,
                 v_height,
                 video_paths[key],
@@ -1568,13 +1589,12 @@ def output_videos_per_cluster(
         out.release()
 
 
-def output_unsupervised_annotated_video(
+def output_annotated_video(
     video_path: str,
     soft_counts: np.ndarray,
+    behavior: str,
     frame_rate: float = 25,
     frame_limit: int = np.inf,
-    window_length: int = None,
-    cluster_names: dict = {},
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
@@ -1582,19 +1602,29 @@ def output_unsupervised_annotated_video(
     Args:
         video_path: full path to the video
         soft_counts: soft cluster assignments for a specific video
+        behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
         frame_rate: frame rate of the video
         frame_limit: maximum number of frames to output.
-        window_length: window length used to compute the soft counts.
         cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
         out_path: out_path: path to the output directory.
 
     """
-    # Get cluster assignment per frame
-    hard_counts = np.argmax(soft_counts, axis=1)
-
-    # Name clusters, and update names using the provided dictionary
-    cluster_labels = {i: str(i) for i in set(hard_counts)}
-    cluster_labels.update(cluster_names)
+    #If a specific behavior is requested, annotate that behavior
+    if behavior is not None:
+        hard_counts = soft_counts[behavior]>0.1
+        idx = soft_counts[behavior]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
+        hard_counts[idx]=behavior
+        hard_counts[~idx]=""
+    # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
+    elif not (np.sum(soft_counts, 1)>1.9).any():
+        hard_counts = soft_counts.idxmax(axis=1)
+    else:
+        raise ValueError(
+            "Cannot accept no behavior for supervised annotations!"
+        )
+    
+    if frame_limit > len(hard_counts):
+        frame_limit = len(hard_counts)
 
     # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
     cap = cv2.VideoCapture(video_path)
@@ -1613,32 +1643,29 @@ def output_unsupervised_annotated_video(
         video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
     )
 
-    i, j = 0, 0
+    i = 0
     while cap.isOpened() and i < frame_limit:
-        if j >= window_length:
-            j += 1
 
-        else:
-            ret, frame = cap.read()
-            if ret == False:
-                break
+        ret, frame = cap.read()
+        if ret == False:
+            break
 
-            try:
-                cv2.putText(
-                    frame,
-                    "Cluster {}".format(cluster_labels[hard_counts[i]]),
-                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                    cv2.FONT_HERSHEY_DUPLEX,
-                    0.75,
-                    (255, 255, 255),
-                    2,
-                )
-                out.write(frame)
+        try:
+            cv2.putText(
+                frame,
+                str(hard_counts[i]),
+                (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                cv2.FONT_HERSHEY_DUPLEX,
+                0.75,
+                (255, 255, 255),
+                2,
+            )
+            out.write(frame)
 
-                i += 1
+            i += 1
 
-            except IndexError:
-                ret = False
+        except IndexError:
+            ret = False
 
     cap.release()
     cv2.destroyAllWindows()
