@@ -1542,60 +1542,57 @@ def output_videos_per_cluster(
             single_output_resolution,
         )
       
-        with tqdm(total=len(behavior_dict.keys()), desc=f"{'Collecting experiments':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="experiment", leave=False) as pbar:
-            for key in behavior_dict.keys():
-                
-                pbar.set_postfix(step="fuck")
-                pbar.update()
-                cur_soft_counts = get_dt(behavior_dict,key)
+        #with tqdm(total=len(behavior_dict.keys()), desc=f"{'Collecting experiments':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="experiment", leave=False) as pbar:
+        for key in behavior_dict.keys():
+            
+            cur_soft_counts = get_dt(behavior_dict,key)
 
-                #If a specific behavior is requested, annotate that behavior
-                if type(cur_soft_counts)==np.ndarray:
-                    hard_counts = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
-                    idx = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
-                    confidence = pd.Series(cur_soft_counts[:, cur_behavior])
-                else:
-                    hard_counts = cur_soft_counts[cur_behavior]>0.1
-                    idx = cur_soft_counts[cur_behavior]>0.1
-                    confidence = cur_soft_counts[cur_behavior]
-                
-                hard_counts = hard_counts.astype(str)
-                hard_counts[idx]=str(cur_behavior)
-                hard_counts[~idx]=""
+            #If a specific behavior is requested, annotate that behavior
+            if type(cur_soft_counts)==np.ndarray:
+                hard_counts = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
+                idx = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
+                confidence = pd.Series(cur_soft_counts[:, cur_behavior])
+            else:
+                hard_counts = cur_soft_counts[cur_behavior]>0.1
+                idx = cur_soft_counts[cur_behavior]>0.1
+                confidence = cur_soft_counts[cur_behavior]
+            
+            hard_counts = hard_counts.astype(str)
+            hard_counts[idx]=str(cur_behavior)
+            hard_counts[~idx]=""
 
-                
-                # Get hard counts and confidence estimates per cluster
-                confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
+            
+            # Get hard counts and confidence estimates per cluster
+            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
-                # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
-                cap = cv2.VideoCapture(video_paths[key])
-                v_width, v_height = single_output_resolution
+            # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+            cap = cv2.VideoCapture(video_paths[key])
+            v_width, v_height = single_output_resolution
 
-                # Compute confidence mask, filtering out also bouts that are too short
-                confidence_indices = deepof.utils.filter_short_bouts(
-                    idx.astype(float),
-                    confidence,
-                    confidence_indices,
-                    min_confidence,
-                    min_bout_duration,
-                )
-                confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
+            # Compute confidence mask, filtering out also bouts that are too short
+            confidence_indices = deepof.utils.filter_short_bouts(
+                idx.astype(float),
+                confidence,
+                confidence_indices,
+                min_confidence,
+                min_bout_duration,
+            )
+            confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
 
-                # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-                #frame_mask = np.concatenate(
-                #    (np.zeros(10, dtype=bool), confidence_mask)
-                #)
+            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
+            #frame_mask = np.concatenate(
+            #    (np.zeros(10, dtype=bool), confidence_mask)
+            #)
 
-                output_cluster_video(
-                    cap,
-                    out,
-                    confidence_mask,
-                    v_width,
-                    v_height,
-                    video_paths[key],
-                    frame_limit_per_video,
-                )
-                pbar.update()
+            output_cluster_video(
+                cap,
+                out,
+                confidence_mask,
+                v_width,
+                v_height,
+                video_paths[key],
+                frame_limit_per_video,
+            )
         
 
         out.release()

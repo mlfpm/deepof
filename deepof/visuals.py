@@ -2566,7 +2566,7 @@ def export_annotated_video(
             if frame_limit_per_video is None:
                 frame_limit_per_video = np.inf
 
-            deepof.visuals.output_annotated_video(
+            output_annotated_video(
                 video_path,                
                 cur_soft_counts,
                 behavior,
@@ -2582,7 +2582,7 @@ def export_annotated_video(
             if frame_limit_per_video is None:
                 frame_limit_per_video = 250
 
-            deepof.visuals.output_videos_per_cluster(
+            output_videos_per_cluster(
                 filtered_videos,
                 soft_counts,
                 behavior,
@@ -2606,7 +2606,7 @@ def export_annotated_video(
             if frame_limit_per_video is None:
                 frame_limit_per_video = np.inf
 
-            deepof.visuals.output_annotated_video(
+            output_annotated_video(
                 video_path,                
                 cur_supervised_annotations,
                 behavior,
@@ -2622,7 +2622,7 @@ def export_annotated_video(
             if frame_limit_per_video is None:
                 frame_limit_per_video = 250
 
-            deepof.visuals.output_videos_per_cluster(
+            output_videos_per_cluster(
                 filtered_videos,
                 supervised_annotations,
                 behavior,
