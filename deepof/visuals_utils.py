@@ -16,12 +16,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from IPython.display import clear_output
 from matplotlib.patches import Ellipse
 from natsort import os_sorted
 
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, load_dt
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -1522,12 +1525,15 @@ def output_videos_per_cluster(
 
 
     # Iterate over all clusters, and output a masked video for each
-    for cur_behavior in behaviors:
+    for cur_behavior in tqdm(behaviors, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="video"):
+    
+        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner one
+        print("")
 
         out = cv2.VideoWriter(
             os.path.join(
                 out_path,
-                "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
+                "Behavior={}_threshold={}_{}.mp4".format(
                     cur_behavior, min_confidence, calendar.timegm(time.gmtime())
                 ),
             ),
@@ -1535,58 +1541,67 @@ def output_videos_per_cluster(
             frame_rate,
             single_output_resolution,
         )
+      
+        with tqdm(total=len(behavior_dict.keys()), desc=f"{'Collecting experiments':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="experiment", leave=False) as pbar:
+            for key in behavior_dict.keys():
+                
+                pbar.set_postfix(step="fuck")
+                pbar.update()
+                cur_soft_counts = get_dt(behavior_dict,key)
 
-        for key in behavior_dict.keys():
+                #If a specific behavior is requested, annotate that behavior
+                if type(cur_soft_counts)==np.ndarray:
+                    hard_counts = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
+                    idx = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
+                    confidence = pd.Series(cur_soft_counts[:, cur_behavior])
+                else:
+                    hard_counts = cur_soft_counts[cur_behavior]>0.1
+                    idx = cur_soft_counts[cur_behavior]>0.1
+                    confidence = cur_soft_counts[cur_behavior]
+                
+                hard_counts = hard_counts.astype(str)
+                hard_counts[idx]=str(cur_behavior)
+                hard_counts[~idx]=""
 
-            cur_soft_counts = get_dt(behavior_dict,key)
+                
+                # Get hard counts and confidence estimates per cluster
+                confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
-            #If a specific behavior is requested, annotate that behavior
-            if type(cur_soft_counts)==np.ndarray:
-                hard_counts = cur_soft_counts[:, cur_behavior]>0.1
-                idx = cur_soft_counts[:, cur_behavior]>0.1
-                confidence = cur_soft_counts[:, cur_behavior]
-            else:
-                hard_counts = cur_soft_counts[cur_behavior]>0.1
-                idx = cur_soft_counts[cur_behavior]>0.1
-                confidence = cur_soft_counts[cur_behavior]
-            
-            hard_counts[idx]=cur_behavior
-            hard_counts[~idx]=""
+                # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
+                cap = cv2.VideoCapture(video_paths[key])
+                v_width, v_height = single_output_resolution
 
-            
-            # Get hard counts and confidence estimates per cluster
-            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
+                # Compute confidence mask, filtering out also bouts that are too short
+                confidence_indices = deepof.utils.filter_short_bouts(
+                    idx.astype(float),
+                    confidence,
+                    confidence_indices,
+                    min_confidence,
+                    min_bout_duration,
+                )
+                confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
 
-            # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
-            cap = cv2.VideoCapture(video_paths[key])
-            v_width, v_height = single_output_resolution
+                # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
+                #frame_mask = np.concatenate(
+                #    (np.zeros(10, dtype=bool), confidence_mask)
+                #)
 
-            # Compute confidence mask, filtering out also bouts that are too short
-            confidence_indices = deepof.utils.filter_short_bouts(
-                idx.astype(float),
-                confidence,
-                confidence_indices,
-                min_confidence,
-                min_bout_duration,
-            )
-            confidence_mask = (hard_counts == cur_behavior) & confidence_indices
-
-            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            #frame_mask = np.concatenate(
-            #    (np.zeros(10, dtype=bool), confidence_mask)
-            #)
-
-            output_cluster_video(
-                cap,
-                out,
-                confidence_mask,
-                v_width,
-                v_height,
-                video_paths[key],
-                frame_limit_per_video,
-            )
+                output_cluster_video(
+                    cap,
+                    out,
+                    confidence_mask,
+                    v_width,
+                    v_height,
+                    video_paths[key],
+                    frame_limit_per_video,
+                )
+                pbar.update()
+        
 
         out.release()
+        #to not flood the output with loading bars
+        clear_output()
+
 
 
 def output_annotated_video(
@@ -1613,7 +1628,8 @@ def output_annotated_video(
     if behavior is not None:
         hard_counts = soft_counts[behavior]>0.1
         idx = soft_counts[behavior]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
-        hard_counts[idx]=behavior
+        hard_counts = hard_counts.astype(str)
+        hard_counts[idx]=str(behavior)
         hard_counts[~idx]=""
     # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
     elif not (np.sum(soft_counts, 1)>1.9).any():
@@ -1636,7 +1652,7 @@ def output_annotated_video(
     video_out = os.path.join(
         out_path,
         os.path.split(video_path)[-1].split(".")[0] 
-        + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
+        + "_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
     )
 
     out = cv2.VideoWriter(

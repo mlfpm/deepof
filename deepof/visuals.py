@@ -2498,7 +2498,7 @@ def export_annotated_video(
     experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
-    frame_limit_per_video: int = np.inf,
+    frame_limit_per_video: int = None,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -2563,6 +2563,8 @@ def export_annotated_video(
             if cluster_names is None or len(cluster_names) != cur_soft_counts.shape[1]:
                 cluster_names = ["Cluster "+ str(k) for k in range(cur_soft_counts.shape[1])]
             cur_soft_counts=pd.DataFrame(cur_soft_counts,columns=cluster_names)
+            if frame_limit_per_video is None:
+                frame_limit_per_video = np.inf
 
             deepof.visuals.output_annotated_video(
                 video_path,                
@@ -2577,6 +2579,8 @@ def export_annotated_video(
             filtered_videos = filter_experimental_conditions(
                 coordinates, coordinates.get_videos(full_paths=True), exp_conditions
             )
+            if frame_limit_per_video is None:
+                frame_limit_per_video = 250
 
             deepof.visuals.output_videos_per_cluster(
                 filtered_videos,
@@ -2599,6 +2603,8 @@ def export_annotated_video(
                 cur_supervised_annotations.columns = cluster_names
             if behavior is None:
                 behavior = next(iter(cur_supervised_annotations))
+            if frame_limit_per_video is None:
+                frame_limit_per_video = np.inf
 
             deepof.visuals.output_annotated_video(
                 video_path,                
@@ -2613,6 +2619,8 @@ def export_annotated_video(
             filtered_videos = filter_experimental_conditions(
                 coordinates, coordinates.get_videos(full_paths=True), exp_conditions
             )
+            if frame_limit_per_video is None:
+                frame_limit_per_video = 250
 
             deepof.visuals.output_videos_per_cluster(
                 filtered_videos,
