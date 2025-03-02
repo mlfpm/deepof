@@ -1466,7 +1466,7 @@ def output_cluster_video(
         try:
 
             res_frame = cv2.resize(frame, [v_width, v_height])
-            re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
+            re_path = re.findall(r".+[/\\]([^/.]+?)(?=\.|DLC)", path)[0]
 
             if path is not None:
                 cv2.putText(

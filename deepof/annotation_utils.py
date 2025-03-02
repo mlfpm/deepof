@@ -643,6 +643,9 @@ def detect_activity2(
 
 def stationary_lookaround(
     speed_dframe: pd.DataFrame,
+    dist_dframe: pd.DataFrame,
+    mouse_identity: str,
+    close_range: np.ndarray,
     likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
@@ -717,9 +720,28 @@ def stationary_lookaround(
     ]).any(axis=0)
 
 
+    #helper function to check if distance exists
+    def check_distance(mouse_id, ear_part):
+        """Returns the correct tuple (ear, nose) or (nose, ear) if present."""
+        col1 = (f"{mouse_id}{ear_part}", f"{mouse_id}Nose")
+        col2 = (f"{mouse_id}Nose", f"{mouse_id}{ear_part}")
+        return col1 if col1 in dist_dframe.columns else col2 if col2 in dist_dframe.columns else None
+
+    # Left ear logic
+    left_dist = check_distance(mouse_identity, 'Left_ear')
+    if left_dist:
+        left_min_dist = np.nanpercentile(dist_dframe[left_dist], 20)
+        left_dist = dist_dframe[left_dist] > left_min_dist
+
+    # Right ear logic
+    right_dist = check_distance(mouse_identity, 'Right_ear')
+    if right_dist:
+        right_min_dist = np.nanpercentile(dist_dframe[right_dist], 20)
+        right_dist = dist_dframe[right_dist] > right_min_dist
+
     # Frames are Stationary active when immobile and active, stationary passive when immobile and not active + smoothing
-    stationary_lookaround = deepof.utils.moving_average(immobile & nose_activity & body_inactivity, lag=min_length).astype(bool)
-    stationary_nonlookaround = deepof.utils.moving_average(immobile & ~(nose_activity & body_inactivity), lag=min_length).astype(bool)
+    stationary_lookaround = deepof.utils.moving_average(immobile & nose_activity & body_inactivity & right_dist & left_dist & ~close_range, lag=min_length).astype(bool)
+    stationary_nonlookaround = deepof.utils.moving_average(immobile & ~(nose_activity & body_inactivity & right_dist & left_dist & ~close_range), lag=min_length).astype(bool)
 
     stationary_lookaround, stationary_nonlookaround = multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
 
@@ -1317,9 +1339,12 @@ def supervised_tagging(
     for _id in animal_ids:
         
         if _id:
-            current_features=get_dt(full_features[_id],key) 
+            current_features=get_dt(full_features[_id],key)
+            close_range = calculate_close_range(dists, _id + undercond, 'Nose', params["side_contact_tol"]) 
         else:
             current_features=get_dt(full_features,key)
+            close_range = np.zeros(len(dists), dtype=int)
+        
 
         tag_dict[_id + undercond + "climb_arena"] = climb_arena(
             arena_type,
@@ -1359,6 +1384,9 @@ def supervised_tagging(
         #detect immobility and active / passive behavior
         tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
         speeds,
+        dists,
+        _id + undercond,
+        close_range,
         likelihoods,
         params["cower_speed"],
         params["nose_likelihood"],
@@ -1395,6 +1423,26 @@ def supervised_tagging(
 
     return tag_df
 
+
+def calculate_close_range(df, mouse_id, bodypart, threshold):
+    target = f"{mouse_id}{bodypart}"
+    relevant_cols = []
+    
+    for col in df.columns:
+        part1, part2 = col
+        if part1 == target or part2 == target:
+            # Determine which part is the other one
+            other_part = part2 if part1 == target else part1
+            if not (mouse_id in other_part):
+                relevant_cols.append(col)
+    
+    if not relevant_cols:
+        return np.zeros(len(df), dtype=int)
+    
+    # Check rows where any relevant column is below the threshold
+    proximity_mask = (df[relevant_cols] < threshold).any(axis=1)
+    return proximity_mask.astype(int).to_numpy()
+    
 
 def tagged_video_output(
     coordinates: coordinates,
