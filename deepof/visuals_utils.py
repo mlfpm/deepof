@@ -1657,10 +1657,10 @@ def output_annotated_video(
     )
 
     i = 0
-    while cap.isOpened() and i < frame_limit:
+    for i in tqdm(range(frame_limit), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
 
         ret, frame = cap.read()
-        if ret == False:
+        if ret == False or cap.isOpened() == False:
             break
 
         try:
@@ -1674,8 +1674,6 @@ def output_annotated_video(
                 2,
             )
             out.write(frame)
-
-            i += 1
 
         except IndexError:
             ret = False
