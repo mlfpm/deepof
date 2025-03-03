@@ -309,11 +309,11 @@ def test_get_hparameters():
     exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
     ).create(force=True, test=True)
 
-    prun.reset_hparameters()
-    assert isinstance(prun.get_hparameters(), dict)
-    prun.set_hparameters({"speed_pause": 20})
+    prun.reset_supervised_parameters()
+    assert isinstance(prun.get_supervised_parameters(), dict)
+    prun.set_supervised_parameters({"speed_pause": 20})
     assert (
-        prun.get_hparameters()["speed_pause"]
+        prun.get_supervised_parameters()["speed_pause"]
         == 20
     )
 
@@ -364,7 +364,7 @@ def test_rule_based_tagging(multi_animal, video_output):
     rmtree(os.path.join(path, "deepof_project"))
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (29 if multi_animal else 10)
+    assert list(hardcoded_tags.values())[0].shape[1] == (31 if multi_animal else 11)
 
 
 # list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations

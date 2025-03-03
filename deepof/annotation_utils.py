@@ -641,6 +641,112 @@ def detect_activity2(
     return stationary_active, stationary_passive
 
 
+def digging(
+    speed_dframe: pd.DataFrame,
+    dist_dframe: pd.DataFrame,
+    mouse_identity: str,
+    close_range: np.ndarray,
+    likelihood_dframe: pd.DataFrame,
+    tol_speed: float,
+    tol_likelihood: float,
+    min_length: int,
+    center_name: str = "Center",
+    animal_id: str = "",
+):
+    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
+
+    Design considerations:
+        Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
+        The main problem arises from getting a lot of "flickering" out of the detections, as bodyparts from frame to frame may be
+        just above or below that threshold. Respectively most of the detect_activity algorithm is a series of filtering steps to
+        alternatingly smooth the predictions and sharpening the edges of predicted behavior. 
+
+    Args:
+        speed_dframe (pandas.DataFrame): speed of body parts over time
+        likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        tol_speed (float): Maximum tolerated speed for the center of the mouse
+        tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        center_name (str): Body part to center coordinates on. "Center" by default.
+        animal_id (str): ID of the current animal.
+
+    Returns:
+        stationary_active (np.array): True if the animal is standing still and is active, False otherwise
+        stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
+
+    """
+    if animal_id != "":
+        animal_id += "_"
+
+    # Get frames with undefined speed
+    nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+
+    # Detect and smooth frames with mouse being immobile    
+    immobile = np.array([False]*len(speed_dframe))
+    speed_dframe.interpolate(method='linear', inplace=True)
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] <= tol_speed*2).to_numpy(), lag=min_length).astype(bool)
+    immobile = deepof.utils.filter_short_true_segments(
+        array=immobile, min_length=min_length,
+    )
+
+    # Init stationary active and passive subsets with immobile frames
+    stationary_lookaround=copy.copy(immobile)
+    stationary_nonlookaround=copy.copy(immobile)
+
+    # Detect activity when speed and likelyhood is above a threshold for any of the available bodyparts from the list
+    bodyparts=[animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
+
+    # Remove missing bodyparts from list
+    for bp in bodyparts:
+        if not bp in speed_dframe.keys():
+            bodyparts.remove(bp)
+
+    
+    nose_activity = (tol_speed < speed_dframe[animal_id+"Nose"]).to_numpy() & (likelihood_dframe[animal_id+"Nose"] > tol_likelihood).to_numpy()
+
+    bparts=[animal_id+"Left_bhip", animal_id+"Right_bhip"]
+
+    body_inactivity = np.array([
+        (tol_speed*2 >= speed_dframe[part]).to_numpy() & 
+        (likelihood_dframe[part] > tol_likelihood).to_numpy()
+        for part in bparts
+    ]).all(axis=0)
+
+    bodyparts = bodyparts + [animal_id+"Nose"]
+
+    #helper function to check if distance exists
+    def check_distance(mouse_id, ear_part):
+        """Returns the correct tuple (ear, nose) or (nose, ear) if present."""
+        col1 = (f"{mouse_id}{ear_part}", f"{mouse_id}Nose")
+        col2 = (f"{mouse_id}Nose", f"{mouse_id}{ear_part}")
+        return col1 if col1 in dist_dframe.columns else col2 if col2 in dist_dframe.columns else None
+
+    # Left ear logic
+    left_dist = check_distance(mouse_identity, 'Left_ear')
+    if left_dist:
+        left_max_dist = 0.9*np.nanmedian(dist_dframe[left_dist])
+        left_dist = dist_dframe[left_dist] < left_max_dist
+
+    # Right ear logic
+    right_dist = check_distance(mouse_identity, 'Right_ear')
+    if right_dist:
+        right_max_dist = 0.9*np.nanmedian(dist_dframe[right_dist])
+        right_dist = dist_dframe[right_dist] < right_max_dist
+
+    # Frames are Stationary active when immobile and active, stationary passive when immobile and not active + smoothing
+    stationary_lookaround = deepof.utils.moving_average(immobile & nose_activity & right_dist & left_dist & ~close_range, lag=min_length).astype(bool)
+    stationary_nonlookaround = deepof.utils.moving_average(immobile & ~(nose_activity & right_dist & left_dist & ~close_range), lag=min_length).astype(bool)
+
+    stationary_lookaround, stationary_nonlookaround = multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
+
+     # Set all Frames that had no speed information in the beginning to False
+    stationary_lookaround[nan_pos] = False
+    stationary_nonlookaround[nan_pos] = False
+    
+    return stationary_lookaround
+
+
+
+
 def stationary_lookaround(
     speed_dframe: pd.DataFrame,
     dist_dframe: pd.DataFrame,
@@ -713,13 +819,6 @@ def stationary_lookaround(
 
     bodyparts = bodyparts + [animal_id+"Nose"]
 
-    activity = np.array([
-        (tol_speed < speed_dframe[part]).to_numpy() & 
-        (likelihood_dframe[part] > tol_likelihood).to_numpy()
-        for part in bodyparts
-    ]).any(axis=0)
-
-
     #helper function to check if distance exists
     def check_distance(mouse_id, ear_part):
         """Returns the correct tuple (ear, nose) or (nose, ear) if present."""
@@ -730,13 +829,13 @@ def stationary_lookaround(
     # Left ear logic
     left_dist = check_distance(mouse_identity, 'Left_ear')
     if left_dist:
-        left_min_dist = np.nanpercentile(dist_dframe[left_dist], 20)
+        left_min_dist = 0.9*np.nanmedian(dist_dframe[left_dist])
         left_dist = dist_dframe[left_dist] > left_min_dist
 
     # Right ear logic
     right_dist = check_distance(mouse_identity, 'Right_ear')
     if right_dist:
-        right_min_dist = np.nanpercentile(dist_dframe[right_dist], 20)
+        right_min_dist = 0.9*np.nanmedian(dist_dframe[right_dist])
         right_dist = dist_dframe[right_dist] > right_min_dist
 
     # Frames are Stationary active when immobile and active, stationary passive when immobile and not active + smoothing
@@ -1363,6 +1462,20 @@ def supervised_tagging(
         center_name=center,
         animal_id=_id,
         )
+
+        tag_dict[_id + undercond + "digging"] = digging(
+        speeds,
+        dists,
+        _id + undercond,
+        close_range,
+        likelihoods,
+        params["cower_speed"],
+        params["nose_likelihood"],
+        params["min_follow_frames"],
+        center_name=center,
+        animal_id=_id,
+        )
+        
         tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"], tag_dict[_id + undercond + "moving"] = detect_activity(
         speeds,
         likelihoods,
