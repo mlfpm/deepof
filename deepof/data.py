@@ -1078,6 +1078,9 @@ class Project:
             version=self.version,
         )
 
+        #set supervised parameters via initial reset (sets values to defaults)
+        coords.reset_supervised_parameters()
+
         # Save created coordinates to the project directory
         coords.save(timestamp=False)
 
@@ -2262,11 +2265,85 @@ class Coordinates:
             return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
 
     # noinspection PyDefaultArgument
+    def get_supervised_parameters(self) -> dict:
+        """Return the most frequent behaviour in a window of window_size frames.
+
+        Args:
+            hparams (dict): dictionary containing hyperparameters to overwrite
+
+        Returns:
+            defaults (dict): dictionary with overwritten parameters. Those not specified in the input retain their default values
+
+        """
+        if not hasattr(self, '_supervised_parameters'):
+            self.reset_supervised_parameters()
+
+
+        return self._supervised_parameters
+
+
+    # noinspection PyDefaultArgument
+    def reset_supervised_parameters(self) -> dict:
+        """Return the most frequent behaviour in a window of window_size frames.
+
+        Args:
+            hparams (dict): dictionary containing hyperparameters to overwrite
+
+        Returns:
+            defaults (dict): dictionary with overwritten parameters. Those not specified in the input retain their default values
+
+        """
+        defaults = {
+            "speed_pause": int(self._frame_rate/4),       # Quarter of a second, before: 5, currently not used
+            "climb_tol": 0.15,                              # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
+            "sniff_tol": 12.5,                              # Noses need to be 12.5 mm apart or closer
+            "close_contact_tol": 25,                        # Body parts need to be 25 mm apart or closer
+            "side_contact_tol": 50,                         # Sides need to be 60 mm apart or closer
+            "follow_frames": int(self._frame_rate/2),     # Frames over which following is considered, Half of a second, before: 10
+            "min_follow_frames": int(self._frame_rate/4), # Minimum time mouse needs to follow, Quarter of a second
+            "follow_tol": 25,                               # 25 mm, before: 5
+            "cower_speed": 40,                              # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
+            "nose_likelihood": 0.85,                        # Minimum degree of certainty of the nose position prediction
+            "min_immobility": int(self._frame_rate), 
+        }
+
+        self._supervised_parameters = defaults 
+        self.save(timestamp=False)   
+
+
+    # noinspection PyDefaultArgument
+    def set_supervised_parameters(self, hparams: dict = {}):
+        """Return the most frequent behaviour in a window of window_size frames.
+
+        Args:
+            hparams (dict): dictionary containing hyperparameters to overwrite
+
+        Returns:
+            defaults (dict): dictionary with overwritten parameters. Those not specified in the input retain their default values
+
+        """
+        params = self.get_supervised_parameters()
+
+        for k, v in hparams.items():
+            if k in list(params.keys()):
+                params[k] = v
+            else:
+                warning_message = (
+                "\033[38;5;208m\n"
+                "Warning! At least one of the given parameter names does not match any supervised parameter names!"
+                "\nPlease check if you spelled the parameter name correctly!"
+                "\033[0m"
+            )
+                warnings.warn(warning_message)
+
+        self._supervised_parameters = params
+        self.save(timestamp=False)  
+
+    # noinspection PyDefaultArgument
     #from memory_profiler import profile
     #@profile
     def supervised_annotation(
         self,
-        params: Dict = {},
         center: str = "Center",
         align: str = "Spine_1",
         video_output: bool = False,
@@ -2277,7 +2354,6 @@ class Coordinates:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
         Args:
-            params (Dict): A dictionary with the parameters to use for the pipeline. If unsure, leave empty.
             center (str): Body part to center coordinates on. "Center" by default.
             align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
             video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to "all", it will output all videos. False by default.
@@ -2304,7 +2380,7 @@ class Coordinates:
             pbar.set_postfix(step="Loading raw coords")
 
             tag_dict = {}
-            params = deepof.annotation_utils.get_hparameters(self, params)
+            params = self.get_supervised_parameters()
 
             #get all kinds of tables
             raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._very_large_project)

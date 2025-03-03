@@ -293,15 +293,27 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 def test_get_hparameters():
     #create fake coords 
-    class FakeCoords:
-        def __init__(self, frame_rate):
-            self._frame_rate = frame_rate
-        
-    fake_coords=FakeCoords(25)
+    prun = deepof.data.Project(
+    project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+    video_path=os.path.join(
+        ".", "tests", "test_examples", "test_multi_topview", "Videos"
+    ),
+    table_path=os.path.join(
+        ".", "tests", "test_examples", "test_multi_topview", "Tables"
+    ),
+    arena="circular-autodetect",
+    animal_ids=["B", "W"],
+    video_scale=380,
+    video_format=".mp4",
+    table_format=".h5",
+    exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+    ).create(force=True, test=True)
 
-    assert isinstance(deepof.annotation_utils.get_hparameters(fake_coords), dict)
+    prun.reset_hparameters()
+    assert isinstance(prun.get_hparameters(), dict)
+    prun.set_hparameters({"speed_pause": 20})
     assert (
-        deepof.annotation_utils.get_hparameters(fake_coords,{"speed_pause": 20})["speed_pause"]
+        prun.get_hparameters()["speed_pause"]
         == 20
     )
 

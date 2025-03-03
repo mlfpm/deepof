@@ -999,37 +999,6 @@ def max_behaviour(
 
 
 # noinspection PyDefaultArgument
-def get_hparameters(coords: coordinates, hparams: dict = {}) -> dict:
-    """Return the most frequent behaviour in a window of window_size frames.
-
-    Args:
-        hparams (dict): dictionary containing hyperparameters to overwrite
-
-    Returns:
-        defaults (dict): dictionary with overwritten parameters. Those not specified in the input retain their default values
-
-    """
-    defaults = {
-        "speed_pause": int(coords._frame_rate/4),       # Quarter of a second, before: 5, currently not used
-        "climb_tol": 0.15,                              # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
-        "sniff_tol": 12.5,                              # Noses need to be 12.5 mm apart or closer
-        "close_contact_tol": 25,                        # Body parts need to be 25 mm apart or closer
-        "side_contact_tol": 50,                         # Sides need to be 60 mm apart or closer
-        "follow_frames": int(coords._frame_rate/2),     # Frames over which following is considered, Half of a second, before: 10
-        "min_follow_frames": int(coords._frame_rate/4), # Minimum time mouse needs to follow, Quarter of a second
-        "follow_tol": 25,                               # 25 mm, before: 5
-        "cower_speed": 40,                              # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
-        "nose_likelihood": 0.85,                        # Minimum degree of certainty of the nose position prediction
-        "min_immobility": int(coords._frame_rate), 
-    }
-
-    for k, v in hparams.items():
-        defaults[k] = v
-
-    return defaults
-
-
-# noinspection PyDefaultArgument
 def frame_corners(w, h, corners: dict = {}):
     """Return a dictionary with the corner positions of the video frame.
 
