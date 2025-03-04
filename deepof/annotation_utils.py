@@ -612,7 +612,7 @@ def digging(
     stationary_lookaround = immobile & nose_activity & right_dist & left_dist & ~close_range
     stationary_nonlookaround = immobile & ~(nose_activity & right_dist & left_dist & ~close_range)
 
-    stationary_lookaround = multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
+    stationary_lookaround = deepof.utils.multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
 
      # Set all Frames that had no speed information in the beginning to False
     stationary_lookaround[nan_pos] = False
@@ -717,7 +717,7 @@ def stationary_lookaround(
     stationary_lookaround = immobile & nose_activity & body_inactivity & right_dist & left_dist & ~close_range
     stationary_nonlookaround = immobile & ~(nose_activity & body_inactivity & right_dist & left_dist & ~close_range)
 
-    stationary_lookaround = multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
+    stationary_lookaround = deepof.utils.multi_step_paired_smoothing(stationary_lookaround, stationary_nonlookaround, immobile, min_length)
 
      # Set all Frames that had no speed information in the beginning to False
     stationary_lookaround[nan_pos] = False
@@ -792,7 +792,7 @@ def detect_activity(
     stationary_active = immobile & activity
     stationary_passive = immobile & ~activity
     
-    stationary_active, stationary_passive = multi_step_paired_smoothing(stationary_active, stationary_passive, immobile, min_length, get_both=True)
+    stationary_active, stationary_passive = deepof.utils.multi_step_paired_smoothing(stationary_active, stationary_passive, immobile, min_length, get_both=True)
     mobile=~(stationary_active + stationary_passive).astype(bool)
 
     # Set all Frames that had no speed information in the beginning to False
@@ -801,210 +801,6 @@ def detect_activity(
     mobile[nan_pos] = False
     
     return stationary_active, stationary_passive, mobile
-
-
-def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, min_length=6, get_both=False):
-    
-    if exclude is None:
-        exclude=np.ones(len(behavior_in)).astype(np.bool_)
-   
-    if not_behavior is None:
-        behavior = exclude & behavior_in.astype(np.bool_)
-        not_behavior = exclude & ~(behavior_in.astype(np.bool_))
-    else:
-        behavior = behavior_in.astype(np.bool_)
-
-    # Type corrections
-    if type(behavior) == pd.core.series.Series:
-        behavior = behavior.to_numpy()
-    if type(not_behavior) == pd.core.series.Series:
-        not_behavior = not_behavior.to_numpy()
-    if type(exclude) == pd.core.series.Series:
-        exclude = exclude.to_numpy()
-
-    #widens all behavior detections
-    behavior = deepof.utils.moving_average(behavior, lag=min_length).astype(np.bool_)
-    not_behavior = deepof.utils.moving_average(not_behavior, lag=min_length).astype(np.bool_)
-
-    # Due to the widening step before it may happen that frames are simutaneously bheavior and not behavior.
-    # To circumvent that, run a larger moving average giving float values as a "percentage" of activeness / passiveness
-    behavior_avg = deepof.utils.moving_average(behavior, lag=min_length*4).astype(float)
-    not_behavior_avg = deepof.utils.moving_average(not_behavior, lag=min_length*4).astype(float)
-
-    # Resolve conflicting frames
-    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg)
-    
-    # Apply exclude mask
-    behavior &= exclude
-    not_behavior &= exclude
-    
-    # To ensure that sections are labeled more consistently as either active or passive (with less passive blips during active behavior), 
-    # use a moving median to get rid of very short passive behavior detections in active sections, then adjust passive Frames accordingly
-    behavior_med = binary_moving_median(behavior.astype(np.float64), lag=min_length * 4 + 1)
-    behavior = (behavior_med >= 0.5).astype(np.bool_)
-    
-    # Remove overlaps
-    overlap = not_behavior & behavior
-    not_behavior[overlap] = False
-    
-    # Filter short segments
-    behavior = deepof.utils.filter_short_true_segments_numba(behavior, min_length)
-    not_behavior = deepof.utils.filter_short_true_segments_numba(not_behavior, min_length)
-    
-    # Final exclude mask
-    behavior &= exclude
-    not_behavior &= exclude
-    
-    if get_both:
-        return behavior, not_behavior
-    else:
-        return behavior
-
-
-@nb.njit
-def filter_short_true_segments(array: np.ndarray, min_length: int) -> np.ndarray:
-    n = len(array)
-    output_array = np.zeros(n, dtype=np.bool_)
-    count = 0
-    in_segment = False
-    
-    for i in range(n):
-        if array[i]:
-            count += 1
-            in_segment = True
-        else:
-            if in_segment:
-                if count >= min_length:
-                    start = i - count
-                    end = i
-                    for j in range(start, end):
-                        output_array[j] = True
-                count = 0
-                in_segment = False
-    
-    if in_segment and count >= min_length:
-        start = n - count
-        end = n
-        for j in range(start, end):
-            output_array[j] = True
-    
-    return output_array
-
-@nb.njit
-def moving_average(time_series: np.ndarray, lag: int = 5) -> np.ndarray:
-    if lag == 0:
-        return time_series.copy()
-    window = np.ones(lag) / np.float64(lag)
-    if lag == 1:
-        return np.convolve(time_series, window)[lag/2:]
-    elif np.mod(np.float64(lag),2)==1:
-        return np.convolve(time_series, window)[lag/2:-lag/2]
-    else: 
-        return np.convolve(time_series, window)[lag/2-1:-lag/2]
-
-@nb.njit
-def moving_median(time_series: np.ndarray, lag: int = 5) -> np.ndarray:
-    pad = (lag - 1) // 2
-    padded_size = len(time_series) + 2 * pad
-    padded = np.zeros(padded_size, dtype=np.float64)
-    for i in range(len(time_series)):
-        padded[i + pad] = time_series[i]
-    n = len(time_series)
-    moving_med = np.empty(n, dtype=np.float64)
-    for i in range(n):
-        window = padded[i : i + lag]
-        moving_med[i] = np.median(window)
-    return moving_med
-
-@nb.njit
-def binary_moving_median(time_series, lag):
-    pad = (lag - 1) // 2
-    padded = np.zeros(len(time_series), dtype=np.bool_)
-    for i in range(pad,len(time_series)-pad):
-        s = 0
-        for k in time_series[i-pad:i+pad+1]:
-            if k:
-                s += 1
-        padded[i] = s > pad
-
-    return padded
-
-@nb.njit
-def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg):
-    n = len(behavior)
-    for i in range(n):
-        if behavior[i] and not_behavior[i]:
-            if behavior_avg[i] >= not_behavior_avg[i]:
-                not_behavior[i] = False
-            else:
-                behavior[i] = False
-    return behavior, not_behavior
-
-
-#from memory_profiler import profile
-#@profile
-def multi_step_paired_smoothing_bev(
-    behavior_in: np.ndarray,
-    not_behavior: np.ndarray = None,
-    exclude: np.ndarray = None,
-    min_length: int = 6,
-    get_both: bool = False
-):
-    if exclude is None:
-        exclude = np.ones(len(behavior_in), dtype=np.bool_)
-    
-    if not_behavior is None:
-        behavior = exclude & behavior_in.astype(np.bool_)
-        not_behavior = exclude & (~behavior_in.astype(np.bool_))
-    else:
-        behavior = behavior_in.astype(np.bool_)
-
-    # Type corrections
-    if type(behavior) == pd.core.series.Series:
-        behavior = behavior.to_numpy()
-    if type(not_behavior) == pd.core.series.Series:
-        not_behavior = not_behavior.to_numpy()
-    if type(exclude) == pd.core.series.Series:
-        exclude = exclude.to_numpy()
-    
-    # Apply moving average and threshold
-    behavior_ma = deepof.utils.moving_average(behavior.astype(np.float64), lag=min_length)
-    behavior = (behavior_ma >= 0.5).astype(np.bool_)
-    not_behavior_ma = deepof.utils.moving_average(not_behavior.astype(np.float64), lag=min_length)
-    not_behavior = (not_behavior_ma >= 0.5).astype(np.bool_)
-    
-    # Compute larger moving averages
-    behavior_avg = deepof.utils.moving_average(behavior.astype(np.float64), lag=min_length * 4)
-    not_behavior_avg = deepof.utils.moving_average(not_behavior.astype(np.float64), lag=min_length * 4)
-    
-    # Resolve conflicting frames
-    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg)
-    
-    # Apply exclude mask
-    behavior &= exclude
-    not_behavior &= exclude
-    
-    # Apply moving median
-    behavior_med = binary_moving_median(behavior.astype(np.float64), lag=min_length * 4 + 1)
-    behavior = (behavior_med >= 0.5).astype(np.bool_)
-    
-    # Remove overlaps
-    overlap = not_behavior & behavior
-    not_behavior[overlap] = False
-    
-    # Filter short segments
-    behavior = deepof.utils.filter_short_true_segments_numba(behavior, min_length)
-    not_behavior = deepof.utils.filter_short_true_segments_numba(not_behavior, min_length)
-    
-    # Final exclude mask
-    behavior &= exclude
-    not_behavior &= exclude
-    
-    if get_both:
-        return behavior, not_behavior
-    else:
-        return behavior
-
 
 
 def sniff_around(
@@ -1304,7 +1100,7 @@ def supervised_tagging(
         except TypeError:
             right = [interactors[1] + "_" + suffix for suffix in bparts[-1]]
 
-        return multi_step_paired_smoothing(
+        return deepof.utils.multi_step_paired_smoothing(
             close_single_contact(
                 raw_coords,
                 (left if not isinstance(left, list) else right),
@@ -1318,7 +1114,7 @@ def supervised_tagging(
         """Return a smooth boolean array with side by side contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, mouse_lens
         
-        return multi_step_paired_smoothing(
+        return deepof.utils.multi_step_paired_smoothing(
             close_double_contact(
             raw_coords,
             #mouse_lens[interactors[0]+"_"],
@@ -1395,7 +1191,7 @@ def supervised_tagging(
             try:
                 tag_dict[
                     f"{animal_pair[0]}_{animal_pair[1]}_following"
-                ] = multi_step_paired_smoothing(
+                ] = deepof.utils.multi_step_paired_smoothing(
                     following_path(
                         dists,
                         raw_coords,
@@ -1411,7 +1207,7 @@ def supervised_tagging(
 
                 tag_dict[
                     f"{animal_pair[1]}_{animal_pair[0]}_following"
-                ] = multi_step_paired_smoothing(
+                ] = deepof.utils.multi_step_paired_smoothing(
                     following_path(
                         dists,
                         raw_coords,
@@ -1474,7 +1270,7 @@ def supervised_tagging(
         )
 
         tag_dict[_id + undercond + "immobility"] = deepof.utils.filter_short_true_segments(
-            array=multi_step_paired_smoothing(
+            array=deepof.utils.multi_step_paired_smoothing(
                 cowering(
                     current_features,
                     huddle_estimator=huddle_estimator,

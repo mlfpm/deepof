@@ -1424,7 +1424,8 @@ def kleinberg_core_numba(
 def smooth_boolean_array(
     a: np.array, scale: int = 1, sigma = 2.0, batch_size: int = 50000
 ) -> np.array:
-    """Return a boolean array in which isolated appearances of a feature are smoothed.
+    """LEGACY FILTER FOR BEHAVIORAL ANALYSIS. REPLACED BY multi_step_paired_smoothing 
+    Return a boolean array in which isolated appearances of a feature are smoothed.
 
         Args:
             a (numpy.ndarray): Boolean instances.
@@ -1463,6 +1464,76 @@ def smooth_boolean_array(
         a_smooth[start:end] = a_smooth_batch
 
     return a_smooth
+
+
+def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, min_length=6, get_both=False):
+    
+    if exclude is None:
+        exclude=np.ones(len(behavior_in)).astype(np.bool_)
+   
+    if not_behavior is None:
+        behavior = exclude & behavior_in.astype(np.bool_)
+        not_behavior = exclude & ~(behavior_in.astype(np.bool_))
+    else:
+        behavior = behavior_in.astype(np.bool_)
+
+    # Type corrections
+    if type(behavior) == pd.core.series.Series:
+        behavior = behavior.to_numpy()
+    if type(not_behavior) == pd.core.series.Series:
+        not_behavior = not_behavior.to_numpy()
+    if type(exclude) == pd.core.series.Series:
+        exclude = exclude.to_numpy()
+
+    #widens all behavior detections
+    behavior = moving_average(behavior, lag=min_length).astype(np.bool_)
+    not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
+
+    # Due to the widening step before it may happen that frames are simutaneously bheavior and not behavior.
+    # To circumvent that, run a larger moving average giving float values as a "percentage" of activeness / passiveness
+    behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
+    not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
+
+    # Resolve conflicting frames
+    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg)
+    
+    # Apply exclude mask
+    behavior &= exclude
+    not_behavior &= exclude
+    
+    # To ensure that sections are labeled more consistently as either active or passive (with less passive blips during active behavior), 
+    # use a moving median to get rid of very short passive behavior detections in active sections, then adjust passive Frames accordingly
+    behavior_med = binary_moving_median_numba(behavior.astype(np.float64), lag=min_length * 4 + 1)
+    behavior = (behavior_med >= 0.5).astype(np.bool_)
+    
+    # Remove overlaps
+    overlap = not_behavior & behavior
+    not_behavior[overlap] = False
+    
+    # Filter short segments
+    behavior = filter_short_true_segments_numba(behavior, min_length)
+    not_behavior = filter_short_true_segments_numba(not_behavior, min_length)
+    
+    # Final exclude mask
+    behavior &= exclude
+    not_behavior &= exclude
+    
+    if get_both:
+        return behavior, not_behavior
+    else:
+        return behavior
+    
+
+@nb.njit
+def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg):
+    n = len(behavior)
+    for i in range(n):
+        if behavior[i] and not_behavior[i]:
+            if behavior_avg[i] >= not_behavior_avg[i]:
+                not_behavior[i] = False
+            else:
+                behavior[i] = False
+    return behavior, not_behavior
 
 
 def rolling_window(
@@ -1603,20 +1674,18 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
 
     return moving_avg
 
-def moving_median(time_series: np.array, lag: int = 5) -> pd.Series:
-    """Fast implementation of a moving median function.
+@nb.njit
+def binary_moving_median_numba(time_series, lag):
+    pad = (lag - 1) // 2
+    padded = np.zeros(len(time_series), dtype=np.bool_)
+    for i in range(pad,len(time_series)-pad):
+        s = 0
+        for k in time_series[i-pad:i+pad+1]:
+            if k:
+                s += 1
+        padded[i] = s > pad
 
-    Args:
-        time_series (np.array): Uni-variate time series to take the moving median of.
-        lag (int): size of the window used to compute the moving average.
-
-    Returns:
-        moving_avg (pd.Series): Uni-variate moving median over time_series.
-
-    """
-    moving_med = medfilt(time_series.astype(float), kernel_size=lag)
-
-    return moving_med
+    return padded
 
 
 def mask_outliers(
