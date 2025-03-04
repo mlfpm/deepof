@@ -2297,15 +2297,15 @@ class Coordinates:
             "close_contact_tol": 25,                           # Body parts need to be 25 mm apart or closer
             "side_contact_tol": 50,                            # Sides need to be 50 mm apart or closer
             "median_filter_width": int(self._frame_rate/2),    # Width of median filter, determins smoothing degree of behavior signals
-            "follow_frames": int(self._frame_rate/2),          # Frames over which following is considered, Half of a second, before: 10
+            "follow_frames": int(self._frame_rate/2),          # Frames over which following is considered, Half of a second
             "min_follow_frames": int(self._frame_rate/4),      # Minimum time mouse needs to follow, Quarter of a second
-            "follow_tol": 25,                                  # Tail base of followed mouse needs to be 25 mm or closer to Nose of following mouse up to follow_frames in teh past, before: 5
+            "follow_tol": 25,                                  # Tail base of followed mouse needs to be 25 mm or closer to Nose of following mouse up to follow_frames in the past
             "climb_tol": 0.15,                                 # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
-            "sniff_arena_tol": 12.5,                           # Noses need to be 12.5 mm apart or closer
+            "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from teh arena edge or closer
             "min_immobility": int(self._frame_rate),           # Min Time interval the mouse needs to be immobile to be counted as immobility, 1 second 
-            "max_immobility": 120*int(self._frame_rate),       # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes                               
+            "max_immobility": 120*int(self._frame_rate),       # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
             "stationary_threshold": 40,                        # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
-            "nose_likelihood": 0.85,                           # Minimum degree of certainty of the nose position prediction
+            "nose_likelihood": 0.85,                           # Minimum degree of certainty of the Nose position prediction, relevant for lookaround and sniffing
         }
 
         self._supervised_parameters = defaults 
