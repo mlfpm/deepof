@@ -417,6 +417,9 @@ def cowering(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
+    median_filter_width: int = 11,
+    min_immobility: int = 25,
+    max_immobility: int = 3000,
 ) -> np.array:
     """Return true when the mouse is huddling a pretrained model.
 
@@ -424,6 +427,9 @@ def cowering(
         X_huddle (pandas.DataFrame): mouse features over time.
         huddle_estimator (sklearn.pipeline.Pipeline): pre-trained model to predict feature occurrence.
         animal_id (str): indicates the animal to sniff. Must be one of animal_ids.
+        median_filter_width (int): width of median filter for smoothing results
+        min_immobility (int): minimum length of behavior to be considered immobility
+        max_immobility (int): maximum length of behavior to be considered immobility (longer is labeled as "sleeping")
 
     Returns:
         y_huddle (np.array): 1 if the animal is huddling, 0 otherwise
@@ -475,7 +481,11 @@ def cowering(
         StandardScaler().fit_transform(np.nan_to_num(X_huddle))
     ).astype(float)
     y_huddle[X_mask] = False#np.nan
-    return y_huddle
+    y_huddle = deepof.utils.binary_moving_median_numba(y_huddle, lag=median_filter_width)
+    y_huddle = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=min_immobility)
+    y_sleep = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=max_immobility)
+    y_huddle[y_sleep] = False
+    return y_huddle, y_sleep
 
 
 def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
@@ -1100,21 +1110,21 @@ def supervised_tagging(
         except TypeError:
             right = [interactors[1] + "_" + suffix for suffix in bparts[-1]]
 
-        return deepof.utils.multi_step_paired_smoothing(
+        return deepof.utils.binary_moving_median_numba(
             close_single_contact(
                 raw_coords,
                 (left if not isinstance(left, list) else right),
                 (right if not isinstance(left, list) else left),
                 params["close_contact_tol"],
             ),
-            min_length=3,
+            lag=params["median_filter_width"],
         )
 
     def twobytwo_contact(interactors: List, rev: bool):
         """Return a smooth boolean array with side by side contacts between two mice."""
         nonlocal raw_coords, animal_ids, params, mouse_lens
         
-        return deepof.utils.multi_step_paired_smoothing(
+        return deepof.utils.binary_moving_median_numba(
             close_double_contact(
             raw_coords,
             #mouse_lens[interactors[0]+"_"],
@@ -1126,7 +1136,7 @@ def supervised_tagging(
             params["side_contact_tol"],
             rev=rev,
             ),
-            min_length=3,
+            lag=params["median_filter_width"],
         )
         
 
@@ -1191,7 +1201,7 @@ def supervised_tagging(
             try:
                 tag_dict[
                     f"{animal_pair[0]}_{animal_pair[1]}_following"
-                ] = deepof.utils.multi_step_paired_smoothing(
+                ] = deepof.utils.binary_moving_median_numba(
                     following_path(
                         dists,
                         raw_coords,
@@ -1200,14 +1210,14 @@ def supervised_tagging(
                         followed=animal_pair[1],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
-                        tol_speed=params["cower_speed"]
+                        tol_speed=params["stationary_threshold"]
                     ),
-                    min_length=3,
+                    lag=params["median_filter_width"],
                 )
 
                 tag_dict[
                     f"{animal_pair[1]}_{animal_pair[0]}_following"
-                ] = deepof.utils.multi_step_paired_smoothing(
+                ] = deepof.utils.binary_moving_median_numba(
                     following_path(
                         dists,
                         raw_coords,
@@ -1216,9 +1226,9 @@ def supervised_tagging(
                         followed=animal_pair[0],
                         frames=params["follow_frames"],
                         tol=params["follow_tol"],
-                        tol_speed=params["cower_speed"],
+                        tol_speed=params["stationary_threshold"],
                     ),
-                    min_length=3,
+                    lag=params["median_filter_width"],
                 )
 
                 # Filter out extremely short segments (Always use numba version, since function is called very often 
@@ -1260,8 +1270,8 @@ def supervised_tagging(
             arena_type=arena_type,
             arena=arena_params_scaled,
             pos_dict=raw_coords,
-            tol=params["sniff_tol"],
-            tol_speed=params["cower_speed"],
+            tol=params["sniff_arena_tol"],
+            tol_speed=params["stationary_threshold"],
             nose=_id + undercond + "Nose",
             center_name=center,
             s_object="arena",
@@ -1269,15 +1279,13 @@ def supervised_tagging(
             run_numba=run_numba,
         )
 
-        tag_dict[_id + undercond + "immobility"] = deepof.utils.filter_short_true_segments(
-            array=deepof.utils.multi_step_paired_smoothing(
-                cowering(
-                    current_features,
-                    huddle_estimator=huddle_estimator,
-                    animal_id=_id + undercond,
-                )
-            ),
-            min_length=params["min_immobility"]
+        tag_dict[_id + undercond + "immobility"], tag_dict[_id + undercond + "sleeping"] = cowering(
+            current_features,
+            huddle_estimator=huddle_estimator,
+            animal_id=_id + undercond,
+            median_filter_width = params["median_filter_width"],
+            min_immobility = params["min_immobility"],
+            max_immobility = params["max_immobility"],
         )
         #detect immobility and active / passive behavior
         tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
@@ -1286,7 +1294,7 @@ def supervised_tagging(
         _id + undercond,
         close_range,
         likelihoods,
-        params["cower_speed"],
+        params["stationary_threshold"],
         params["nose_likelihood"],
         params["min_follow_frames"],
         center_name=center,
@@ -1299,7 +1307,7 @@ def supervised_tagging(
         _id + undercond,
         close_range,
         likelihoods,
-        params["cower_speed"],
+        params["stationary_threshold"],
         params["nose_likelihood"],
         params["min_follow_frames"],
         center_name=center,
@@ -1309,7 +1317,7 @@ def supervised_tagging(
         tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"], tag_dict[_id + undercond + "moving"] = detect_activity(
         speeds,
         likelihoods,
-        params["cower_speed"],
+        params["stationary_threshold"],
         params["nose_likelihood"],
         params["min_follow_frames"],
         center_name=center,
@@ -1319,7 +1327,7 @@ def supervised_tagging(
         tag_dict[_id + undercond + "sniffing"] = sniff_around(
             speeds,
             likelihoods,
-            params["cower_speed"],
+            params["stationary_threshold"],
             params["nose_likelihood"],
             center_name=center,
             animal_id=_id,
