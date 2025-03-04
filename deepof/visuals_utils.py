@@ -1309,7 +1309,7 @@ def _tag_annotated_frames(
         if len(animal_ids) > 1:
             colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
         else:
-            colcond = hparams["cower_speed"] < frame_speeds
+            colcond = hparams["stationary_threshold"] < frame_speeds
 
         write_on_frame(
             str(

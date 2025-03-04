@@ -191,9 +191,10 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         huddle_clf = pickle.load(handle)
 
-    huddling = deepof.annotation_utils.cowering(
+    huddling, sleeping = deepof.annotation_utils.cowering(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
-    ).astype(int)
+    )
+    huddling = huddling.astype(int)
 
     rmtree(
         os.path.join(
@@ -311,9 +312,9 @@ def test_get_hparameters():
 
     prun.reset_supervised_parameters()
     assert isinstance(prun.get_supervised_parameters(), dict)
-    prun.set_supervised_parameters({"speed_pause": 20})
+    prun.set_supervised_parameters({"close_contact_tol": 20})
     assert (
-        prun.get_supervised_parameters()["speed_pause"]
+        prun.get_supervised_parameters()["close_contact_tol"]
         == 20
     )
 
