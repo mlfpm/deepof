@@ -1431,7 +1431,7 @@ def smooth_boolean_array(
             a (numpy.ndarray): Boolean instances.
             scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
             batch_size (int): Batch size for input processing
-    :+
+    
         Returns:
             a (numpy.ndarray): Smoothened boolean instances.
 
@@ -1466,7 +1466,31 @@ def smooth_boolean_array(
     return a_smooth
 
 
-def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, min_length=6, get_both=False):
+def multi_step_paired_smoothing(
+        behavior_in: np.array,
+        not_behavior: np.array = None,
+        exclude: np.array =None,
+        min_length: int =6,
+        get_both: bool =False
+        ) -> np.array:
+    """This filtering approach will first gradually merge together very close behavioral instances (how close is regulated by min_length), 
+    then filter out remaining short instances. In this way multiple instances close to each other are kept and united and isolated very 
+    short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea but without the drawback of potentially 
+    mashing multiple single and relatively far away behavior instances together into one big single behavior occurence, that is often mostly 
+    false positive (as the merging distance is limted by min_length and not only by window length).
+
+        Args:
+            behavior_in (numpy.ndarray): Boolean instances of detected raw behavior.
+            not_behavior (numpy.ndarray): Boolean instances of raw behavior not occuring.
+            exclude (numpy.ndarray): Additional boolean instances that will always be rated as "no behavior".
+            min_length (int): Determines the degree of smoothing. The smaller, the more short behavioral instances are kept and the sharper the behavioral edges remain.
+            get_both (bool): If True, will also return the not_behavior instances that get smoothed along with the behavior instances.
+    
+        Returns:
+            behavior (numpy.ndarray): Smoothened boolean instances.
+            not_behavior (numpy.ndarray): Smoothened boolean not-behavior instances.
+
+    """
     
     if exclude is None:
         exclude=np.ones(len(behavior_in)).astype(np.bool_)
@@ -1489,20 +1513,20 @@ def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, mi
     behavior = moving_average(behavior, lag=min_length).astype(np.bool_)
     not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
 
-    # Due to the widening step before it may happen that frames are simutaneously bheavior and not behavior.
-    # To circumvent that, run a larger moving average giving float values as a "percentage" of activeness / passiveness
+    # Due to the widening step, it may happen that frames are simutaneously beheavior and not behavior.
+    # To resolve tehse conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
     behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
     not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
 
-    # Resolve conflicting frames
+    # Then resolve these conflicting frames based on their surrounding frames
     behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg)
     
-    # Apply exclude mask
+    # Re-apply exclude mask to re-sharpen edges
     behavior &= exclude
     not_behavior &= exclude
     
-    # To ensure that sections are labeled more consistently as either active or passive (with less passive blips during active behavior), 
-    # use a moving median to get rid of very short passive behavior detections in active sections, then adjust passive Frames accordingly
+    # To ensure that sections are labeled more consistently as either behavior or not_behavior (with less not_behavior blips during behavior), 
+    # use a moving median to get rid of very short not_behavior detections in behavior sections, then adjust not_behavior Frames accordingly
     behavior_med = binary_moving_median_numba(behavior.astype(np.float64), lag=min_length * 4 + 1)
     behavior = (behavior_med >= 0.5).astype(np.bool_)
     
@@ -1510,7 +1534,7 @@ def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, mi
     overlap = not_behavior & behavior
     not_behavior[overlap] = False
     
-    # Filter short segments
+    # Filter short segments.
     behavior = filter_short_true_segments_numba(behavior, min_length)
     not_behavior = filter_short_true_segments_numba(not_behavior, min_length)
     
@@ -1526,6 +1550,8 @@ def multi_step_paired_smoothing(behavior_in, not_behavior=None, exclude=None, mi
 
 @nb.njit
 def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg):
+    """Determines if conflicting frames (behavior and not_behavior are True) are eitehr one or the other
+    based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
     n = len(behavior)
     for i in range(n):
         if behavior[i] and not_behavior[i]:
