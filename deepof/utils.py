@@ -1513,13 +1513,13 @@ def multi_step_paired_smoothing(
     behavior = moving_average(behavior, lag=min_length).astype(np.bool_)
     not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
 
-    # Due to the widening step, it may happen that frames are simutaneously beheavior and not behavior.
+    # Due to the widening step, it will happen that frames are simutaneously beheavior and not behavior.
     # To resolve tehse conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
     behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
     not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
 
     # Then resolve these conflicting frames based on their surrounding frames
-    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg)
+    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg) #merges close blcoks and narrows blocks
     
     # Re-apply exclude mask to re-sharpen edges
     behavior &= exclude
@@ -1527,7 +1527,7 @@ def multi_step_paired_smoothing(
     
     # To ensure that sections are labeled more consistently as either behavior or not_behavior (with less not_behavior blips during behavior), 
     # use a moving median to get rid of very short not_behavior detections in behavior sections, then adjust not_behavior Frames accordingly
-    behavior_med = binary_moving_median_numba(behavior.astype(np.float64), lag=min_length * 4 + 1)
+    behavior_med = binary_moving_median_numba(behavior.astype(np.float64), lag=min_length * 4 + 1) #widens blocks
     behavior = (behavior_med >= 0.5).astype(np.bool_)
     
     # Remove overlaps
@@ -1536,7 +1536,7 @@ def multi_step_paired_smoothing(
     
     # Filter short segments.
     behavior = filter_short_true_segments_numba(behavior, min_length)
-    not_behavior = filter_short_true_segments_numba(not_behavior, min_length)
+    not_behavior = filter_short_true_segments_numba(not_behavior, min_length) #removes short blocks
     
     # Final exclude mask
     behavior &= exclude
@@ -1702,6 +1702,9 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
 
 @nb.njit
 def binary_moving_median_numba(time_series, lag):
+    """will applay a moving emdian like filter on a binary signal, i.e. if a window of size lag 
+    has more 1s than 0s set the frame to 1 for that window, set it to 0 otherwise. 
+    Will only work for windows of uneven length N i.e. returns the same for lag=N and lag=N+1"""
     pad = (lag - 1) // 2
     padded = np.zeros(len(time_series), dtype=np.bool_)
     for i in range(pad,len(time_series)-pad):
