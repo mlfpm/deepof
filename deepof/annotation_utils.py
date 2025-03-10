@@ -669,12 +669,12 @@ def stationary_lookaround(
         animal_id += "_"
 
     # Get frames with undefined speed
-    nan_pos = speed_dframe[speed_dframe[animal_id + center_name].isnull()].index.tolist()
+    nan_pos = speed_dframe[speed_dframe[animal_id + 'Tail_base'].isnull()].index.tolist()
 
     # Detect and smooth frames with mouse being immobile    
     immobile = np.array([False]*len(speed_dframe))
     speed_dframe.interpolate(method='linear', inplace=True)
-    immobile = deepof.utils.moving_average((speed_dframe[animal_id + center_name] <= tol_speed*2).to_numpy(), lag=min_length).astype(bool)
+    immobile = deepof.utils.moving_average((speed_dframe[animal_id + 'Tail_base'] <= tol_speed*2).to_numpy(), lag=min_length).astype(bool)
     immobile = deepof.utils.filter_short_true_segments(
         array=immobile, min_length=min_length,
     )
