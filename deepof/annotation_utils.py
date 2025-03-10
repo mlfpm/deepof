@@ -1279,7 +1279,7 @@ def supervised_tagging(
             run_numba=run_numba,
         )
 
-        tag_dict[_id + undercond + "immobility"], tag_dict[_id + undercond + "sleeping"] = cowering(
+        tag_dict[_id + undercond + "immobility"], _ = cowering(
             current_features,
             huddle_estimator=huddle_estimator,
             animal_id=_id + undercond,
@@ -1301,18 +1301,18 @@ def supervised_tagging(
         animal_id=_id,
         )
 
-        tag_dict[_id + undercond + "digging"] = digging(
-        speeds,
-        dists,
-        _id + undercond,
-        close_range,
-        likelihoods,
-        params["stationary_threshold"],
-        params["nose_likelihood"],
-        params["min_follow_frames"],
-        center_name=center,
-        animal_id=_id,
-        )
+        #tag_dict[_id + undercond + "digging"] = digging(
+        #speeds,
+        #dists,
+        #_id + undercond,
+        #close_range,
+        #likelihoods,
+        #params["stationary_threshold"],
+        #params["nose_likelihood"],
+        #params["min_follow_frames"],
+        #center_name=center,
+        #animal_id=_id,
+        #)
         
         tag_dict[_id + undercond + "stat_active"], tag_dict[_id + undercond + "stat_passive"], tag_dict[_id + undercond + "moving"] = detect_activity(
         speeds,
