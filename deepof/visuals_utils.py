@@ -8,6 +8,7 @@ import os
 import re
 import time
 import warnings
+import itertools
 from typing import Any, List, NewType, Tuple, Union
 from tqdm import tqdm
 
@@ -75,6 +76,138 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
         time_string = time_string[0:l_max]
 
     return time_string
+
+
+def hex_to_BGR(hex_color):
+    color = hex_color.lstrip('#')
+    return tuple(int(color[i:i+2], 16) for i in (4, 2, 0))
+
+
+def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None):
+    """
+    Gets corresponding colors for all supervised behaviors or clusters within behaviors list.
+
+    Args:
+        behaviors (list): List of strings containing behaviors
+        animal_ids Union[list,pd.DataFrame]: Either list of strings representing animal ids or supervised dataframe from which said list can be automatically extracted.
+
+    Returns:
+        list: A list of strings that contain hex color codes for each behavior. Will return None and display a warning for unknown behaviors.
+    """    
+
+
+    # Organize input
+    if type(behaviors)==str:
+        behaviors=[behaviors]
+    if type(animal_ids)==pd.DataFrame:
+        animal_ids_raw=animal_ids.columns
+        animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
+        # in case of only one animal what is found is only behavior names
+        if "speed" in animal_ids_raw:
+            animal_ids=None
+        else:
+            animal_ids=list(np.sort(np.unique(animal_ids_raw)))
+    else:
+        animal_ids=list(np.sort(animal_ids))
+        
+    #######
+    # Set cluster colors
+    #######
+
+    # Find all cluster behaviors if any
+    clusters=[re.search(r'Cluster \d+', behavior)[0] 
+                for behavior 
+                in behaviors
+                if (re.search(r'Cluster \d+', behavior)) is not None
+    ]
+    # Find maximum Cluster
+    Cluster_max=1
+    if len(clusters) > 0:
+        Cluster_max=np.max([int(re.search(r'\d+', cluster)[0]) for cluster in clusters])
+    # Generate color map of appropriate length
+    cluster_colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()),
+        int(np.ceil(Cluster_max / 20)),
+    )
+
+    #######
+    # Set supervised colors
+    #######
+
+    # Behavior name lists. Should ideally be imported from elsewhere in the future
+    single_behaviors=["climb_arena", "sniff_arena", "immobility", "stat_lookaround", "stat_active", "stat_passive", "moving", "sniffing", "missing"]
+    symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
+    asymmetric_behaviors=["nose2tail","nose2body","following"]
+
+    # create names of supervised behaviors from animal ids and raw behavior names in correct order
+    if animal_ids is None:
+        supervised = single_behaviors
+    else:
+        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
+
+    supervised_max = 1
+    if len(supervised) > 0:
+        supervised_max = len(supervised)
+    # Generate color map of appropriate length
+    supervised_colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()),
+        int(np.ceil(supervised_max / 20)),
+    )
+
+    # Select appropriate color for all given behaviors
+    colors=[]
+    for behavior in behaviors:
+        if behavior in clusters:
+            colors.append(cluster_colors[int(re.search(r'\d+', behavior)[0])])
+        elif behavior in supervised:
+            colors.append(supervised_colors[supervised.index(behavior)])
+        else:
+            colors.append(None)
+
+    return colors
+
+
+def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_behaviors, single_behaviors):
+    """
+    Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
+
+    Args:
+        animal_ids (list): List of strings representing animal IDs.
+        symmetric_behaviors (list): List of symmetric paired behaviors.
+        asymmetric_behaviors (list): List of asymmetric paired behaviors.
+        single_behaviors (list): List of single mouse behaviors.
+
+    Returns:
+        list: A list of strings with the combined animal IDs and behaviors.
+    """
+    result = []
+    
+    # Process symmetric paired behaviors
+    for behavior in symmetric_behaviors:
+        for pair in itertools.combinations(animal_ids, 2):
+            # Sort the pair to ensure consistent order and avoid duplicates
+            sorted_pair = sorted(pair)
+            combined = f"{sorted_pair[0]}_{sorted_pair[1]}_{behavior}"
+            result.append(combined)
+    
+    # Process asymmetric paired behaviors
+    for behavior in asymmetric_behaviors:
+        for pair in itertools.permutations(animal_ids, 2):
+            combined = f"{pair[0]}_{pair[1]}_{behavior}"
+            result.append(combined)
+    
+    # Process single mouse behaviors
+    for animal_id in animal_ids:
+        for behavior in single_behaviors:
+            if behavior != "missing":
+                combined = f"{animal_id}_{behavior}"
+                result.append(combined)
+    
+    # Add missing
+    if "missing" in single_behaviors:            
+        result + [id + "_missing" for id in animal_ids]            
+    
+    return result
 
 
 def calculate_average_arena(
@@ -1441,6 +1574,8 @@ def output_cluster_video(
     path: str,
     frame_limit: int = np.inf,
     frames: np.array = None,
+    display_time: bool = False,
+
 ): # pragma: no cover
     """Output a video with the frames corresponding to the cluster.
 
@@ -1453,7 +1588,7 @@ def output_cluster_video(
         path: path to the video file
         frame_limit: maximum number of frames to render
         frames: frames that can be selected from for export.
-
+        display_time (bool): Displays current time in top left corner of the video frame
 
     """
     # if no frames are specified, take all of them
@@ -1466,6 +1601,15 @@ def output_cluster_video(
     #ensure that no frames are requested that are outside of the provided data
     if len(valid_frames) >= frame_limit:
         valid_frames = valid_frames[0:frame_limit]
+
+    # Prepare text
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.75
+    thickness = 2
+    (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
+    x = 10  # 10 pixels from left
+    y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
+    frame_rate = cap.get(cv2.CAP_PROP_FPS)
 
     for i in range(len(valid_frames)):
         if i == 0 or diff_frames[i-1] != 1:
@@ -1490,6 +1634,14 @@ def output_cluster_video(
                     2,
                 )
 
+            if display_time:
+
+                disp_time = "time: "  + seconds_to_time(valid_frames[i]/frame_rate)
+                # Draw black outline
+                cv2.putText(res_frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
+                # Draw white main text
+                cv2.putText(res_frame, disp_time, (x, y), font, font_scale, (255, 255, 255), thickness)
+
             out.write(res_frame)
 
         except IndexError:
@@ -1509,6 +1661,7 @@ def output_videos_per_cluster(
     single_output_resolution: tuple = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
+    display_time: bool = False,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
@@ -1522,9 +1675,21 @@ def output_videos_per_cluster(
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
+        display_time (bool): Displays current time in top left corner of the video frame
         out_path: path to the output directory.
 
     """
+
+    #manual laoding bar for inner loop
+    def _loading_basic(current, total, bar_length=68):
+        progress = (current + 1) / total
+        filled_length = int(bar_length * progress)
+        arrow = '>' if filled_length < bar_length else ''
+        bar = '[' + '=' * filled_length + arrow + ' ' * (bar_length - filled_length - len(arrow)) + ']'
+        percent = f' {progress:.0%}'
+        print(bar + percent, end='\r')
+        if current == total - 1:
+            print()  # Newline when complete
 
     meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
     if behavior is not None:
@@ -1553,8 +1718,11 @@ def output_videos_per_cluster(
             single_output_resolution,
         )
       
-        #with tqdm(total=len(behavior_dict.keys()), desc=f"{'Collecting experiments':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="experiment", leave=False) as pbar:
-        for key in behavior_dict.keys():
+        bar_len=len(behavior_dict.keys())
+        #this loop uses a manual loading bar as tqdm does not work here for some reason
+        for i, key in enumerate(behavior_dict.keys()):
+
+            _loading_basic(i, bar_len)
             
             cur_soft_counts = get_dt(behavior_dict,key)
 
@@ -1611,6 +1779,7 @@ def output_videos_per_cluster(
                 video_paths[key],
                 frame_limit_per_video,
                 frames,
+                display_time,
             )
         
 
@@ -1626,6 +1795,7 @@ def output_annotated_video(
     behavior: str,
     frame_rate: float = 25,
     frames: np.array = None,
+    display_time: bool = False,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
@@ -1633,14 +1803,14 @@ def output_annotated_video(
     Args:
         video_path: full path to the video
         soft_counts: soft cluster assignments for a specific video
-        behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
+        behavior (str): Behavior or Cluster to that gets exported. If none is given, all Clusters get exported for softcounts and only nose2nose gets exported for supervised annotations.
         frame_rate: frame rate of the video
         frames: frames that should be exported.
-        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+        display_time (bool): Displays current time in top left corner of the video frame
         out_path: out_path: path to the output directory.
 
     """
-    #If a specific behavior is requested, annotate that behavior
+    # If a specific behavior is requested, annotate that behavior
     if behavior is not None:
         hard_counts = soft_counts[behavior]>0.1
         idx = soft_counts[behavior]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
@@ -1655,7 +1825,7 @@ def output_annotated_video(
             "Cannot accept no behavior for supervised annotations!"
         )
     
-    #ensure that no frames are requested that are outside of the provided data
+    # Ensure that no frames are requested that are outside of the provided data
     if np.max(frames) >= len(hard_counts):
         frames = np.where(frames<len(hard_counts))[0]
 
@@ -1676,6 +1846,17 @@ def output_annotated_video(
         video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
     )
 
+    # Prepare text
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.75
+    thickness = 2
+    (text_width, text_height), baseline = cv2.getTextSize(np.max(np.unique(hard_counts)), font, font_scale, thickness)
+    (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
+    x = 10  # 10 pixels from left
+    y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
+    padding = 5
+    bg_color = get_behavior_colors(list(hard_counts), soft_counts)
+
     first_run=True
     for i in tqdm(frames, desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
 
@@ -1688,17 +1869,27 @@ def output_annotated_video(
             break
 
         try:
-            cv2.putText(
-                frame,
-                str(hard_counts[i]),
-                (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                cv2.FONT_HERSHEY_DUPLEX,
-                0.75,
-                (255, 255, 255),
-                2,
-            )
-            out.write(frame)
+            if bg_color[i] is not None:
+                cv2.rectangle(frame, 
+                    (v_width - text_width - x , y - text_height - padding),  # Top-left corner
+                    (v_width - padding, y + baseline),  # Bottom-right corner
+                    hex_to_BGR(bg_color[i]),  # Blue color (BGR format)
+                    -1)  # Filled rectangle
 
+                # Draw black outline
+                cv2.putText(frame, str(hard_counts[i]), (v_width - text_width - padding, y), font, font_scale, (0, 0, 0), thickness + 2)
+                # Draw white main text
+                cv2.putText(frame, str(hard_counts[i]), (v_width - text_width - padding, y), font, font_scale, (255, 255, 255), thickness)
+            
+            if display_time:
+
+                disp_time = "time: "  + seconds_to_time(i/frame_rate)
+                # Draw black outline
+                cv2.putText(frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
+                # Draw white main text
+                cv2.putText(frame, disp_time, (x, y), font, font_scale, (255, 255, 255), thickness)
+
+            out.write(frame)
         except IndexError:
             ret = False
 

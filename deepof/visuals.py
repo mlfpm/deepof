@@ -47,6 +47,7 @@ from deepof.visuals_utils import (
     _scatter_embeddings,
     output_annotated_video,
     output_videos_per_cluster,
+    get_behavior_colors,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -405,11 +406,9 @@ def _plot_experiment_gantt(
         if behaviors_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
+    animal_ids = coordinates._animal_ids
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = np.tile(
-        list(sns.color_palette("tab20").as_hex()),
-        int(np.ceil(n_available_features / 20)),
-    )
+    colors = get_behavior_colors(behaviors_to_plot, animal_ids)
 
     # Iterate over features and plot
     rows = 0
@@ -2504,6 +2503,7 @@ def export_annotated_video(
     #others
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
+    display_time: bool = False,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -2521,6 +2521,7 @@ def export_annotated_video(
         frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
+        display_time (bool): Displays current time in top left corner of teh video frame
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -2602,8 +2603,8 @@ def export_annotated_video(
         # handle defaults
         if frame_limit_per_video is None:
             frame_limit_per_video = np.inf
-        if behavior is None:
-            behavior = cur_tab.columns[0]
+        if behavior is None and supervised_annotations is not None:
+            behavior = cur_tab.columns
         if len(frames) >= frame_limit_per_video:
                 frames = frames[0:frame_limit_per_video]
 
@@ -2613,7 +2614,8 @@ def export_annotated_video(
             behavior,
             frame_rate=coordinates._frame_rate,
             out_path=out_path,
-            frames=frames
+            frames=frames,
+            display_time=display_time,
         )
 
     else:
@@ -2635,6 +2637,7 @@ def export_annotated_video(
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
+            display_time=display_time,
         )
 
 
