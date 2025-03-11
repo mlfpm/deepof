@@ -2496,9 +2496,14 @@ def export_annotated_video(
     soft_counts: dict = None,
     behavior: str = None,
     experiment_id: str = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    frame_limit_per_video: int = None,
+    #others
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
-    frame_limit_per_video: int = None,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -2510,9 +2515,12 @@ def export_annotated_video(
         soft_counts (dict): dictionary with soft_counts per experiment.
         behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -2553,90 +2561,81 @@ def export_annotated_video(
             ]
 
         return filtered_videos
-
-    # Unsupervised annotation output
+    
+    
+    # set cluster names dependend on tab dict type (supervised or soft counts)
     if soft_counts is not None:
-        if experiment_id is not None:
-            # If experiment_id is provided, only output a video for that experiment
-            cur_soft_counts=copy.deepcopy(get_dt(soft_counts, experiment_id))
-            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
-            if cluster_names is None or len(cluster_names) != cur_soft_counts.shape[1]:
-                cluster_names = ["Cluster "+ str(k) for k in range(cur_soft_counts.shape[1])]
-            cur_soft_counts=pd.DataFrame(cur_soft_counts,columns=cluster_names)
-            if frame_limit_per_video is None:
-                frame_limit_per_video = np.inf
 
-            output_annotated_video(
-                video_path,                
-                cur_soft_counts,
-                behavior,
-                frame_rate=coordinates._frame_rate,
-                out_path=out_path,
-                frame_limit=frame_limit_per_video,
-            )
-        else:
-            # If experiment_id is not provided, output a video per cluster for each experiment
-            filtered_videos = filter_experimental_conditions(
-                coordinates, coordinates.get_videos(full_paths=True), exp_conditions
-            )
-            if frame_limit_per_video is None:
-                frame_limit_per_video = 250
+        first_key=list(soft_counts.keys())[0]
+        if cluster_names is None or len(cluster_names) != soft_counts[first_key].shape[1]:
+            cluster_names = ["Cluster "+ str(k) for k in range(soft_counts[first_key].shape[1])]
+        #unify tab_dict name
+        tab_dict=soft_counts
+ 
+    else:
+        first_key=list(supervised_annotations.keys())[0]
+        if cluster_names is None or len(cluster_names) != supervised_annotations[first_key].shape[1]:
+                cluster_names=supervised_annotations[first_key].columns
+        tab_dict=supervised_annotations
 
-            output_videos_per_cluster(
-                filtered_videos,
-                soft_counts,
-                behavior,
-                frame_rate=coordinates._frame_rate,
-                single_output_resolution=(500, 500),
-                frame_limit_per_video=frame_limit_per_video,
-                min_confidence=min_confidence,
-                min_bout_duration=min_bout_duration,
-                out_path=out_path,
-            )
+    #preprocess time bins            
+    bin_info = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict,
+        )
+    
+    # special case: an experiment id was given
+    if experiment_id is not None:
 
-    # Supervised annotation output
-    elif supervised_annotations is not None:
-        if experiment_id is not None:
-            cur_supervised_annotations=copy.deepcopy(get_dt(supervised_annotations, experiment_id))
-            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
-            if not (cluster_names is None or len(cluster_names) != cur_supervised_annotations.shape[1]):
-                cur_supervised_annotations.columns = cluster_names
-            if behavior is None:
-                behavior = next(iter(cur_supervised_annotations))
-            if frame_limit_per_video is None:
-                frame_limit_per_video = np.inf
+        # get frames for this experiment id
+        frames=bin_info[experiment_id]
+        # get current tab and video path
+        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+        video_path=coordinates.get_videos(full_paths=True)[experiment_id]
 
-            output_annotated_video(
-                video_path,                
-                cur_supervised_annotations,
-                behavior,
-                frame_rate=coordinates._frame_rate,
-                out_path=out_path,
-                frame_limit=frame_limit_per_video,
-            )
-        else:
-            # If experiment_id is not provided, output a video per behavior for each experiment
-            filtered_videos = filter_experimental_conditions(
-                coordinates, coordinates.get_videos(full_paths=True), exp_conditions
-            )
-            if frame_limit_per_video is None:
-                frame_limit_per_video = 250
-
-            output_videos_per_cluster(
-                filtered_videos,
-                supervised_annotations,
-                behavior,
-                frame_rate=coordinates._frame_rate,
-                single_output_resolution=(500, 500),
-                frame_limit_per_video=frame_limit_per_video,
-                min_confidence=min_confidence,
-                min_bout_duration=min_bout_duration,
-                out_path=out_path,
-            ) 
         
-        
-        
-            #raise NotImplementedError
+        # reformat current tab into data table with cluster names as column names
+        if soft_counts is not None:
+            cur_tab=pd.DataFrame(cur_tab,columns=cluster_names)
+        else: 
+            cur_tab.columns = cluster_names
+
+        # handle defaults
+        if frame_limit_per_video is None:
+            frame_limit_per_video = np.inf
+        if behavior is None:
+            behavior = cur_tab.columns[0]
+        if len(frames) >= frame_limit_per_video:
+                frames = frames[0:frame_limit_per_video]
+
+        output_annotated_video(
+            video_path,                
+            cur_tab,
+            behavior,
+            frame_rate=coordinates._frame_rate,
+            out_path=out_path,
+            frames=frames
+        )
+
+    else:
+        # If experiment_id is not provided, output a video per cluster for each experiment
+        filtered_videos = filter_experimental_conditions(
+            coordinates, coordinates.get_videos(full_paths=True), exp_conditions
+        )
+        if frame_limit_per_video is None:
+            frame_limit_per_video = 250
+
+        output_videos_per_cluster(
+            filtered_videos,
+            tab_dict,
+            behavior,
+            frame_rate=coordinates._frame_rate,
+            single_output_resolution=(500, 500),
+            frame_limit_per_video=frame_limit_per_video,
+            bin_info=bin_info,
+            min_confidence=min_confidence,
+            min_bout_duration=min_bout_duration,
+            out_path=out_path,
+        )
 
 
 def plot_distance_between_conditions(

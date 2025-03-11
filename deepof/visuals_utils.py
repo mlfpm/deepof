@@ -1440,6 +1440,7 @@ def output_cluster_video(
     v_height: int,
     path: str,
     frame_limit: int = np.inf,
+    frames: np.array = None,
 ): # pragma: no cover
     """Output a video with the frames corresponding to the cluster.
 
@@ -1451,16 +1452,26 @@ def output_cluster_video(
         v_height: video height
         path: path to the video file
         frame_limit: maximum number of frames to render
+        frames: frames that can be selected from for export.
+
 
     """
-    frame_idx = np.where(frame_mask)[0]
-    frame_limit = np.min([frame_limit, len(frame_idx)])
-    i = 0
-    while cap.isOpened() and i < frame_limit:
-        if i == 0 or (i > 0 and frame_idx[i] - frame_idx[i - 1] > 1):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx[i])
+    # if no frames are specified, take all of them
+    if frames is None:
+        frames = np.array(range(0,len(frame_mask)))
+
+    valid_frames = frames[frame_mask[frames]]
+    diff_frames=np.diff(valid_frames)
+
+    #ensure that no frames are requested that are outside of the provided data
+    if len(valid_frames) >= frame_limit:
+        valid_frames = valid_frames[0:frame_limit]
+
+    for i in range(len(valid_frames)):
+        if i == 0 or diff_frames[i-1] != 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, valid_frames[i])
         ret, frame = cap.read()
-        if ret == False:
+        if not cap.isOpened() or ret == False:
             break
 
         try:
@@ -1480,11 +1491,9 @@ def output_cluster_video(
                 )
 
             out.write(res_frame)
-            i += 1
 
         except IndexError:
             ret = False
-            i += 1
 
     cap.release()
     cv2.destroyAllWindows()
@@ -1496,6 +1505,7 @@ def output_videos_per_cluster(
     behavior: str,
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
+    bin_info: dict = None,
     single_output_resolution: tuple = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
@@ -1508,6 +1518,7 @@ def output_videos_per_cluster(
         soft_counts: table_dict of soft counts per video
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
+        bin_info (dict): dictionary containing indices to plot for all experiments
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
@@ -1547,11 +1558,18 @@ def output_videos_per_cluster(
             
             cur_soft_counts = get_dt(behavior_dict,key)
 
-            #If a specific behavior is requested, annotate that behavior
+            # If a specific behavior is requested, annotate that behavior
             if type(cur_soft_counts)==np.ndarray:
-                hard_counts = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
-                idx = pd.Series(cur_soft_counts[:, cur_behavior]>0.1)
-                confidence = pd.Series(cur_soft_counts[:, cur_behavior])
+
+                # Get Cluster number from behavior input
+                if type(cur_behavior) == str:
+                    cur_behavior_idx=int(re.search(r'\d+', cur_behavior)[0])
+                else:
+                    cur_behavior_idx = cur_behavior
+
+                hard_counts = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
+                idx = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
+                confidence = pd.Series(cur_soft_counts[:, cur_behavior_idx])
             else:
                 hard_counts = cur_soft_counts[cur_behavior]>0.1
                 idx = cur_soft_counts[cur_behavior]>0.1
@@ -1579,10 +1597,10 @@ def output_videos_per_cluster(
             )
             confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
 
-            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            #frame_mask = np.concatenate(
-            #    (np.zeros(10, dtype=bool), confidence_mask)
-            #)
+            # get frames for current video
+            frames = None
+            if bin_info is not None:
+                frames = bin_info[key]
 
             output_cluster_video(
                 cap,
@@ -1592,6 +1610,7 @@ def output_videos_per_cluster(
                 v_height,
                 video_paths[key],
                 frame_limit_per_video,
+                frames,
             )
         
 
@@ -1606,7 +1625,7 @@ def output_annotated_video(
     soft_counts: np.ndarray,
     behavior: str,
     frame_rate: float = 25,
-    frame_limit: int = np.inf,
+    frames: np.array = None,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
@@ -1616,7 +1635,7 @@ def output_annotated_video(
         soft_counts: soft cluster assignments for a specific video
         behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
         frame_rate: frame rate of the video
-        frame_limit: maximum number of frames to output.
+        frames: frames that should be exported.
         cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
         out_path: out_path: path to the output directory.
 
@@ -1636,8 +1655,9 @@ def output_annotated_video(
             "Cannot accept no behavior for supervised annotations!"
         )
     
-    if frame_limit > len(hard_counts):
-        frame_limit = len(hard_counts)
+    #ensure that no frames are requested that are outside of the provided data
+    if np.max(frames) >= len(hard_counts):
+        frames = np.where(frames<len(hard_counts))[0]
 
     # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
     cap = cv2.VideoCapture(video_path)
@@ -1656,8 +1676,12 @@ def output_annotated_video(
         video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
     )
 
-    i = 0
-    for i in tqdm(range(frame_limit), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
+    first_run=True
+    for i in tqdm(frames, desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
+
+        if first_run:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+            first_run=False
 
         ret, frame = cap.read()
         if ret == False or cap.isOpened() == False:
