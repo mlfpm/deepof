@@ -558,9 +558,11 @@ def _plot_behavior_gantt(
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = np.tile(
-        list(sns.color_palette("tab20").as_hex()),
-        int(np.ceil(n_available_experiments / 20)),
+    colors = list(
+        np.tile(
+            list(sns.color_palette("tab20").as_hex()),
+            int(np.ceil(n_available_experiments / 20)),
+        )
     )
 
     # Iterate over experiments and plot
@@ -633,7 +635,9 @@ def gantt_plotter(
   
     #only add "white" as base color if there are frames with no behaviors
     if (gantt_matrix==0).any():
-        colors=colors=['#FFFFFF'] + colors.tolist()
+        colors=colors=['#FFFFFF'] + colors
+    
+    colors = [color for color in colors if color is not None]
 
     N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
@@ -2608,7 +2612,7 @@ def export_annotated_video(
         if len(frames) >= frame_limit_per_video:
                 frames = frames[0:frame_limit_per_video]
 
-        output_annotated_video(
+        video = output_annotated_video(
             video_path,                
             cur_tab,
             behavior,
@@ -2617,6 +2621,8 @@ def export_annotated_video(
             frames=frames,
             display_time=display_time,
         )
+
+        return video
 
     else:
         # If experiment_id is not provided, output a video per cluster for each experiment
@@ -2639,6 +2645,8 @@ def export_annotated_video(
             out_path=out_path,
             display_time=display_time,
         )
+
+        return None
 
 
 def plot_distance_between_conditions(

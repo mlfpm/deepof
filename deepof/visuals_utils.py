@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 import cv2
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter, FuncAnimation
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -1895,3 +1896,8 @@ def output_annotated_video(
 
     cap.release()
     cv2.destroyAllWindows()
+
+    #writevideo = FFMpegWriter(fps=frame_rate)
+    #animation.save(save, writer=writevideo)
+
+    return None
