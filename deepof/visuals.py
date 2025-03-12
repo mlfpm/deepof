@@ -2495,8 +2495,8 @@ def plot_shap_swarm_per_cluster(
 
 def export_annotated_video(
     coordinates: coordinates,
-    supervised_annotations: table_dict = None,
     soft_counts: dict = None,
+    supervised_annotations: table_dict = None,
     behavior: str = None,
     experiment_id: str = None,
     # Time selection parameters
