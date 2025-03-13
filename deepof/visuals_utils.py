@@ -206,7 +206,7 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
     
     # Add missing
     if "missing" in single_behaviors:            
-        result + [id + "_missing" for id in animal_ids]            
+        result = result + [id + "_missing" for id in animal_ids]            
     
     return result
 

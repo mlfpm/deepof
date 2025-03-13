@@ -484,7 +484,7 @@ def cowering(
     y_huddle = deepof.utils.binary_moving_median_numba(y_huddle, lag=median_filter_width)
     y_huddle = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=min_immobility)
     y_sleep = y_huddle #deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=max_immobility)
-    y_huddle[y_sleep] = False
+    #y_huddle[y_sleep] = False
     return y_huddle, y_sleep
 
 
