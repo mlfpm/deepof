@@ -483,7 +483,7 @@ def cowering(
     y_huddle[X_mask] = False#np.nan
     y_huddle = deepof.utils.binary_moving_median_numba(y_huddle, lag=median_filter_width)
     y_huddle = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=min_immobility)
-    y_sleep = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=max_immobility)
+    y_sleep = y_huddle #deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=max_immobility)
     y_huddle[y_sleep] = False
     return y_huddle, y_sleep
 
@@ -1254,29 +1254,35 @@ def supervised_tagging(
             close_range = np.zeros(len(dists), dtype=int)
         
 
-        tag_dict[_id + undercond + "climb_arena"] = climb_arena(
-            arena_type,
-            arena_params_scaled,
-            raw_coords,
-            params["climb_tol"],
-            _id + undercond,
-            mouse_lens[_id + undercond],
-            run_numba=run_numba,
+        tag_dict[_id + undercond + "climb_arena"] = deepof.utils.binary_moving_median_numba(
+            climb_arena(
+                arena_type,
+                arena_params_scaled,
+                raw_coords,
+                params["climb_tol"],
+                _id + undercond,
+                mouse_lens[_id + undercond],
+                run_numba=run_numba,
+            ).to_numpy(),
+            lag=params["median_filter_width"]
         )
 
 
-        tag_dict[_id + undercond + "sniff_arena"] = sniff_object(
-            speed_dframe=speeds,
-            arena_type=arena_type,
-            arena=arena_params_scaled,
-            pos_dict=raw_coords,
-            tol=params["sniff_arena_tol"],
-            tol_speed=params["stationary_threshold"],
-            nose=_id + undercond + "Nose",
-            center_name=center,
-            s_object="arena",
-            animal_id=_id,
-            run_numba=run_numba,
+        tag_dict[_id + undercond + "sniff_arena"] = deepof.utils.binary_moving_median_numba(
+            sniff_object(
+                speed_dframe=speeds,
+                arena_type=arena_type,
+                arena=arena_params_scaled,
+                pos_dict=raw_coords,
+                tol=params["sniff_arena_tol"],
+                tol_speed=params["stationary_threshold"],
+                nose=_id + undercond + "Nose",
+                center_name=center,
+                s_object="arena",
+                animal_id=_id,
+                run_numba=run_numba,
+            ).to_numpy(),
+            lag=params["median_filter_width"]
         )
 
         tag_dict[_id + undercond + "immobility"], _ = cowering(
@@ -1285,7 +1291,7 @@ def supervised_tagging(
             animal_id=_id + undercond,
             median_filter_width = params["median_filter_width"],
             min_immobility = params["min_immobility"],
-            max_immobility = params["max_immobility"],
+            max_immobility = 0,#params["max_immobility"],
         )
         #detect immobility and active / passive behavior
         tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
