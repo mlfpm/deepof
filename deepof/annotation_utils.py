@@ -202,7 +202,7 @@ def climb_arena(
             e_axes=axes,
             e_angle=-angle,
             threshold=tol,
-        )
+        ).to_numpy()
 
     elif arena_type.startswith("polygon"):
 
@@ -1263,7 +1263,7 @@ def supervised_tagging(
                 _id + undercond,
                 mouse_lens[_id + undercond],
                 run_numba=run_numba,
-            ).to_numpy(),
+            ),
             lag=params["median_filter_width"]
         )
 
