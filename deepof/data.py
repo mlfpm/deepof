@@ -919,6 +919,9 @@ class Project:
                             # special case full area: Use all bodyparts in that list that are available
                             if bp_pattern_key == "full_area":
                                 bp_pattern = [bp for bp in bp_pattern if bp in current_animal_table.columns.levels[0]]
+                                #skip, if no area can be calculated
+                                if len(bp_pattern) < 3:
+                                    continue
 
                             # create list of keys containing all table columns relevant for the current area
                             bp_x_keys = [(body_part, "x") for body_part in bp_pattern]
