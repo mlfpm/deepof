@@ -804,11 +804,11 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
                     try:
                         cur_kin = deepof_project.get_coords_at_key(
-                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Spine_1"
+                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Spine_1", speed=der
                         )
                     except AssertionError:
                         cur_kin = deepof_project.get_coords_at_key(
-                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Nose"
+                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Nose", speed=der
                         )
 
 

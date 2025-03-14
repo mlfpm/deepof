@@ -469,10 +469,12 @@ def cowering(
     except KeyError:
         # Return an array of NaNs if the required features are not present, and raise a warning
         warnings.warn(
+            "\033[38;5;208m"
             "Skipping huddle annotation as not all required body parts are present. At the moment, huddle annotation "
-            "requires the deepof_14 labelling scheme. Read the full documentation for further details."
+            "requires the deepof_11 or deepof_14 labelling scheme. Read the full documentation for further details."
+            "\033[0m"
         )
-        return np.full(X_huddle.shape[0], np.nan)
+        return np.full(X_huddle.shape[0], np.nan), np.full(X_huddle.shape[0], np.nan)
 
     X_huddle=augment_with_neighbors(X_huddle)
     # Concatenate all relevant data frames and predict using the pre-trained estimator
@@ -582,7 +584,7 @@ def digging(
     bodyparts=[animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
     # Remove missing bodyparts from list
-    for bp in bodyparts:
+    for bp in bodyparts.copy():
         if not bp in speed_dframe.keys():
             bodyparts.remove(bp)
 
@@ -687,7 +689,7 @@ def stationary_lookaround(
     bodyparts=[animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
     # Remove missing bodyparts from list
-    for bp in bodyparts:
+    for bp in bodyparts.copy():
         if not bp in speed_dframe.keys():
             bodyparts.remove(bp)
 
@@ -696,11 +698,14 @@ def stationary_lookaround(
 
     bparts=[animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
-    body_inactivity = np.array([
-        (tol_speed*2 >= speed_dframe[part]).to_numpy() & 
-        (likelihood_dframe[part] > tol_likelihood).to_numpy()
-        for part in bparts
-    ]).all(axis=0)
+    if bparts[0] in speed_dframe.columns and bparts[1] in speed_dframe.columns:
+        body_inactivity = np.array([
+            (tol_speed*2 >= speed_dframe[part]).to_numpy() & 
+            (likelihood_dframe[part] > tol_likelihood).to_numpy()
+            for part in bparts
+        ]).all(axis=0)
+    else: 
+        body_inactivity = np.full(speed_dframe.shape[0], True)
 
     bodyparts = bodyparts + [animal_id+"Nose"]
 
@@ -787,7 +792,7 @@ def detect_activity(
     bodyparts=[animal_id+"Nose",animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
     # Remove missing bodyparts from list
-    for bp in bodyparts:
+    for bp in bodyparts.copy():
         if not bp in speed_dframe.keys():
             bodyparts.remove(bp)
 

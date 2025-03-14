@@ -511,7 +511,7 @@ class Project:
 
                 pbar.set_postfix(step="Updating bodypart graphs")
 
-                # reinstate "vanilla" bodyparts without animal ids in case animal ids were already was fused with the bp list
+                # reinstate "vanilla" bodyparts without animal ids in case animal ids were already fused with the bp list
                 reinstated_bodyparts = list(
                     set(
                         [
@@ -574,6 +574,31 @@ class Project:
                                         table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
                                         animal_ids=self.animal_ids)
 
+                # Collect irrelevant bodyparts (either got excluded or are not part of the selected connectivity graph)
+                all_bodyparts=list(loaded_tab.columns.levels[0])
+                relevant_bodyparts=[]
+                for aid in self.animal_ids:
+                    relevant_bodyparts=relevant_bodyparts+list(self.connectivity[aid].nodes)
+
+                
+                relevant_bodyparts = set(relevant_bodyparts) - set(self.exclude_bodyparts)
+                irrelevant_bodyparts = list(set(all_bodyparts) - relevant_bodyparts)
+                
+                # Remove irrelevant bodyparts (this sentence sounds very unsetteling without context)
+                if len(irrelevant_bodyparts) > 0:
+
+                    temp = loaded_tab.drop(irrelevant_bodyparts, axis=1, level="bodyparts")
+                    temp.sort_index(axis=1, inplace=True)
+                    temp.columns = pd.MultiIndex.from_product(
+                        [
+                            os_sorted(list(set([i[j] for i in temp.columns])))
+                            for j in range(2)
+                        ]
+                    )
+                    loaded_tab = temp.sort_index(axis=1)
+                
+                table_dict={key:loaded_tab}
+
                 if self.smooth_alpha:
 
                     pbar.set_postfix(step="Smoothing trajectories")
@@ -588,20 +613,6 @@ class Project:
                     smooth.columns = cur_cols
                     smooth.index = cur_idx
                     loaded_tab = smooth
-
-                if self.exclude_bodyparts != tuple([""]):
-
-                    temp = loaded_tab.drop(self.exclude_bodyparts, axis=1, level="bodyparts")
-                    temp.sort_index(axis=1, inplace=True)
-                    temp.columns = pd.MultiIndex.from_product(
-                        [
-                            os_sorted(list(set([i[j] for i in temp.columns])))
-                            for j in range(2)
-                        ]
-                    )
-                    loaded_tab = temp.sort_index(axis=1)
-                
-                table_dict={key:loaded_tab}
 
                 if self.remove_outliers:
 
@@ -869,10 +880,8 @@ class Project:
             ],
         }
 
-        #if verbose:
-        #    print("Computing areas...")
-
         all_areas_dict = {}
+        not_all_area_warn = False
 
         # iterate over all tables
         with tqdm(total=len(tab_dict),desc=f"{'Computing areas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
@@ -906,6 +915,10 @@ class Project:
                                     "_".join([animal_id, body_part])
                                     for body_part in bp_pattern
                                 ]
+
+                            # special case full area: Use all bodyparts in that list that are available
+                            if bp_pattern_key == "full_area":
+                                bp_pattern = [bp for bp in bp_pattern if bp in current_animal_table.columns.levels[0]]
 
                             # create list of keys containing all table columns relevant for the current area
                             bp_x_keys = [(body_part, "x") for body_part in bp_pattern]
@@ -941,9 +954,7 @@ class Project:
                         ]
 
                     if areas_table.shape[1] != 4:
-                        warnings.warn(
-                            "It seems you're using a custom labelling scheme which is missing key body parts. You can proceed, but not all areas will be computed."
-                        )
+                        not_all_area_warn = True
 
                     # collect area tables for all animals
                     current_table = pd.concat([current_table, areas_table], axis=1)
@@ -952,6 +963,13 @@ class Project:
                 all_areas_dict[key] = save_dt(current_table,area_path,self.very_large_project)
                 pbar.update()
 
+        if not_all_area_warn:
+            warnings.warn(
+                "\033[38;5;208m"
+                "It seems you're using deepof_8 or a custom labelling scheme which is missing key body parts.\n"
+                "You can proceed, but not all areas will be computed.\n"
+                "\033[0m"
+            )    
 
         return all_areas_dict
 
@@ -1870,6 +1888,9 @@ class Coordinates:
 
             if aid == "":
                 aid = None
+            
+            if tab is None:
+                tab = pd.DataFrame()
 
             # get the current table for the current animal
             current_table = tab.loc[
