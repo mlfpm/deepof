@@ -237,6 +237,19 @@ def test_smooth_boolean_array(a):
     assert trans(a) >= trans(smooth)
 
 
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
+def test_multi_step_paired_smoothing(a):
+    a[0] = True  # make sure we have at least one True
+    smooth = deepof.utils.multi_step_paired_smoothing(a)
+
+    def trans(x):
+        """In situ function for computing boolean transitions"""
+        return sum([i + 1 != i for i in range(x.shape[0] - 1)])
+
+    assert trans(a) >= trans(smooth)
+
+
 @settings(deadline=None)
 @given(
     window=st.data(),
