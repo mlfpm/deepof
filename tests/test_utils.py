@@ -238,16 +238,50 @@ def test_smooth_boolean_array(a):
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
-def test_multi_step_paired_smoothing(a):
-    a[0] = True  # make sure we have at least one True
-    smooth = deepof.utils.multi_step_paired_smoothing(a)
+@given(
+    pos_in=st.lists(elements=st.integers(min_value=1, max_value=4), min_size=3, max_size=100),
+    min_length=st.integers(min_value=3,max_value=100),
+    get_both=st.booleans(),
+)
+def test_multi_step_paired_smoothing(pos_in,min_length,get_both):
+    pos_in[0] = 1  # make sure we have at least one True
+
+    if min_length > len(pos_in):
+        min_length = len(pos_in)
+
+    #construct non-overlapping oolean arrays from input integers
+    a=np.zeros(len(pos_in)).astype(bool)
+    b=np.zeros(len(pos_in)).astype(bool)
+    c=np.zeros(len(pos_in)).astype(bool)
+    f=np.array(pos_in)
+    a[f==1]=True
+    b[f==2]=True
+    c[f==3]=True
+    if not b.any()==True:
+        b=None
+    if not c.any()==True:
+        c=None
+
+    non_behavior=None
+    if get_both:
+        behavior, non_behavior = deepof.utils.multi_step_paired_smoothing(behavior_in=a, not_behavior=b, exclude=c, min_length=min_length, get_both=get_both)
+    else:
+        behavior = deepof.utils.multi_step_paired_smoothing(behavior_in=a, not_behavior=b, exclude=c, min_length=min_length, get_both=get_both)
 
     def trans(x):
         """In situ function for computing boolean transitions"""
         return sum([i + 1 != i for i in range(x.shape[0] - 1)])
 
-    assert trans(a) >= trans(smooth)
+    # make sure all arrays are smoothed
+    assert trans(a) >= trans(behavior)
+    if b is not None:
+        assert trans(b) >= trans(behavior)
+    if c is not None:
+        assert trans(c) >= trans(behavior)
+
+    # make sure behaviors and non_behaviors do not overlap
+    if get_both:
+        assert np.sum(non_behavior) + np.sum(behavior) <= len(pos_in)
 
 
 @settings(deadline=None)
