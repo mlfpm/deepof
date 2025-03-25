@@ -518,13 +518,19 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
         for k in range(window_out):
             start, end = ranges_list[k]
             mean_series = shifted_df.iloc[:, start:end].mean(axis=1, skipna=False)
-            col_features[f'{col}_{k}'] = mean_series
+            col_features[f'{col}_{k-int(window_out/2)}'] = mean_series
         
         # Append the features as a DataFrame to the list
         augmented_dfs.append(pd.DataFrame(col_features))
     
     # Concatenate all DataFrames at once
     X_augmented = pd.concat(augmented_dfs, axis=1)
+
+    # Filter columns that contain '0' or 'speed'
+    #filtered_columns = [col for col in X_augmented.columns if '0' in col or 'speed' in col]
+
+    # Select only the filtered columns
+    #X_augmented = X_augmented[filtered_columns]
     
     return X_augmented
 
