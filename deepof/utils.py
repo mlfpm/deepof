@@ -1491,6 +1491,19 @@ def multi_step_paired_smoothing(
             not_behavior (numpy.ndarray): Smoothened boolean not-behavior instances.
 
     """
+
+    @nb.njit
+    def _resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg): # pragma: no cover
+        """Determines if conflicting frames (behavior and not_behavior are True) are either one or the other
+        based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
+        n = len(behavior)
+        for i in range(n):
+            if behavior[i] and not_behavior[i]:
+                if behavior_avg[i] >= not_behavior_avg[i]:
+                    not_behavior[i] = False
+                else:
+                    behavior[i] = False
+        return behavior, not_behavior
     
     if exclude is None:
         exclude=np.ones(len(behavior_in)).astype(np.bool_)
@@ -1519,7 +1532,7 @@ def multi_step_paired_smoothing(
     not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
 
     # Then resolve these conflicting frames based on their surrounding frames
-    behavior, not_behavior = resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg) #merges close blcoks and narrows blocks
+    behavior, not_behavior = _resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg) #merges close blcoks and narrows blocks
     
     # Re-apply exclude mask to re-sharpen edges
     behavior &= exclude
@@ -1547,20 +1560,6 @@ def multi_step_paired_smoothing(
     else:
         return behavior
     
-
-@nb.njit
-def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg): # pragma: no cover
-    """Determines if conflicting frames (behavior and not_behavior are True) are eitehr one or the other
-    based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
-    n = len(behavior)
-    for i in range(n):
-        if behavior[i] and not_behavior[i]:
-            if behavior_avg[i] >= not_behavior_avg[i]:
-                not_behavior[i] = False
-            else:
-                behavior[i] = False
-    return behavior, not_behavior
-
 
 def rolling_window(
     a: np.ndarray,

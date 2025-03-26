@@ -225,16 +225,22 @@ def test_align_trajectories(data, mode_idx):
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
-def test_smooth_boolean_array(a):
+@given(
+    a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+    lag=st.integers(min_value=1, max_value=10),
+)
+def test_smooth_boolean_array_and_binary_moving_median(a, lag):
     a[0] = True  # make sure we have at least one True
     smooth = deepof.utils.smooth_boolean_array(a)
+    filtered = deepof.utils.binary_moving_median_numba(a, lag)
 
     def trans(x):
         """In situ function for computing boolean transitions"""
         return sum([i + 1 != i for i in range(x.shape[0] - 1)])
 
+    # Binary median filtered arrays have always less or equal the number of 0-1 and 0-1 transitions
     assert trans(a) >= trans(smooth)
+    assert trans(a) >= trans(filtered)
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -282,6 +288,22 @@ def test_multi_step_paired_smoothing(pos_in,min_length,get_both):
     # make sure behaviors and non_behaviors do not overlap
     if get_both:
         assert np.sum(non_behavior) + np.sum(behavior) <= len(pos_in)
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    array=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+    min_length=st.integers(min_value=1, max_value=10),
+    )
+def test_filter_short_true_segments(array, min_length):
+    
+    filtered_a = deepof.utils.filter_short_true_segments(array, min_length)
+    filtered_b = deepof.utils.filter_short_true_segments_numba(array, min_length)
+
+    # Numba and non-numba version return identical results
+    assert (filtered_a==filtered_b).all()
+    # Arrays with removed short segments always have less or equal the number of "True" entries
+    assert np.sum(filtered_a) <= np.sum(array)
 
 
 @settings(deadline=None)
