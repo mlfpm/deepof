@@ -2303,7 +2303,7 @@ class Coordinates:
             self.reset_supervised_parameters()
 
 
-        return self._supervised_parameters
+        return copy.copy(self._supervised_parameters)
 
 
     # noinspection PyDefaultArgument
@@ -3116,7 +3116,7 @@ class TableDict(dict):
         N_rows_max=int(available_mem/((33+11)*window_size*8))
         if samples_max is None:
             samples_max=N_rows_max
-        elif samples_max>N_rows_max:
+        elif samples_max>N_rows_max: # pragma: no cover
             warning_message = (
             "\033[38;5;208m\n"
             "Warning! The selected number of samples may exceed your available memory."

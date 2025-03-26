@@ -20,6 +20,7 @@ from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from shutil import rmtree
 import warnings
 
+import deepof.data
 from deepof.data import TableDict
 from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
@@ -46,6 +47,49 @@ def test_time_conversion(second, full_second):
     second = np.round(second * 10**9) / 10**9 #up to 9 digits allowed
     second_second=time_to_seconds(seconds_to_time(float(second), cut_milliseconds=False)) 
     assert second == second_second #this pun is intended and necessary
+
+
+@settings(max_examples=2, deadline=None)
+@given(
+
+    experiment_type=st.one_of(
+        st.just("test_multi_topview"),
+        st.just("test_single_topview"),
+    )
+)
+def test_get_behavior_colors(experiment_type):
+
+    if experiment_type == "test_multi_topview":
+        animal_ids=["B","W"] 
+    else:
+        animal_ids = None
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", experiment_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", experiment_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", experiment_type, "Tables"
+        ),
+        arena="circular-autodetect",
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+        video_scale=380,
+        animal_ids=animal_ids,
+        video_format=".mp4",
+        table_format=".h5",
+    ).create(force=True, test=True)
+
+    supervised = prun.supervised_annotation()
+    behaviors=list(supervised['test'].keys())
+
+    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
+    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
+
+    #check if all supervised behaviors have a color
+    assert not None in colors_a
+    #check if generated Colors stay the same independent of animal id retrieval
+    assert colors_a == colors_b
 
 
 @settings(deadline=None)
@@ -299,7 +343,7 @@ class Pseudo_Coordinates:
         return self._table_lengths
 
 
-@settings(deadline=None, max_examples=100)    
+@settings(deadline=None, max_examples=200)    
 @given(
     start_times_raw=st.lists(
         elements=st.integers(min_value=0, max_value=120), min_size=5, max_size=50

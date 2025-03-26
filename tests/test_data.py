@@ -350,14 +350,17 @@ def test_run(nodes, ego, use_numba):
     assert isinstance(prun, deepof.data.Coordinates)
 
 
-@settings(max_examples=2, deadline=None)
+@settings(max_examples=8, deadline=None)
 @given(
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
     detection_mode=st.one_of(
         st.just("polygonal-autodetect"), st.just("circular-autodetect")
     ),
+    bodypart_graph=st.one_of(
+        st.just("deepof_14"), st.just("deepof_8")
+    ),
 )
-def test_get_supervised_annotation(use_numba,detection_mode):
+def test_get_supervised_annotation(use_numba,detection_mode,bodypart_graph):
 
     if detection_mode=="circular-autodetect":
         arena_type="test_single_topview"
@@ -377,6 +380,7 @@ def test_get_supervised_annotation(use_numba,detection_mode):
             ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
+        bodypart_graph=bodypart_graph,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
         video_scale=380,
         video_format=".mp4",
@@ -395,6 +399,45 @@ def test_get_supervised_annotation(use_numba,detection_mode):
     assert isinstance(prun, deepof.data.TableDict)
     assert prun._type == "supervised"
 
+
+def test_supervised_parameters():
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "Tables"
+        ),
+        arena="circular-autodetect",
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+    ).create(force=True, test=True)
+
+    #get and update parameters, get supervised with parameters
+    params=prun.get_supervised_parameters()
+    params['sniff_arena_tol']=50
+    params['stationary_threshold']=100
+    params['non_existing']=7
+    prun.set_supervised_parameters(params)
+    supervised_a = prun.supervised_annotation()
+
+    # reset parameters, get second supervised with parameters
+    prun.reset_supervised_parameters()
+    supervised_b = prun.supervised_annotation()
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+
+    #ensure that more behavior was detected with more generous parameters
+    assert np.sum(supervised_a['test']['sniff_arena']) > np.sum(supervised_b['test']['sniff_arena'])
+    
 
 @settings(deadline=None)
 @given(

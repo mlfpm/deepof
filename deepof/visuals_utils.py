@@ -100,7 +100,9 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     # Organize input
     if type(behaviors)==str:
         behaviors=[behaviors]
-    if type(animal_ids)==pd.DataFrame:
+    if animal_ids is None:
+        pass
+    elif type(animal_ids)==pd.DataFrame:
         animal_ids_raw=animal_ids.columns
         animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
         # in case of only one animal what is found is only behavior names
@@ -136,7 +138,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=["climb_arena", "sniff_arena", "immobility", "stat_lookaround", "stat_active", "stat_passive", "moving", "sniffing", "missing"]
+    single_behaviors=["climb_arena", "sniff_arena", "immobility", "stat_lookaround", "stat_active", "stat_passive", "moving", "sniffing", "missing", "speed"]
     symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
     asymmetric_behaviors=["nose2tail","nose2body","following"]
 
@@ -200,13 +202,16 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
     # Process single mouse behaviors
     for animal_id in animal_ids:
         for behavior in single_behaviors:
-            if behavior != "missing":
+            if behavior != "missing" and behavior != "speed":
                 combined = f"{animal_id}_{behavior}"
                 result.append(combined)
     
     # Add missing
     if "missing" in single_behaviors:            
-        result = result + [id + "_missing" for id in animal_ids]            
+        result = result + [id + "_missing" for id in animal_ids] 
+    # Add speed
+    if "speed" in single_behaviors:            
+        result = result + [id + "_speed" for id in animal_ids]           
     
     return result
 

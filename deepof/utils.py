@@ -640,7 +640,7 @@ def iterative_imputation(
                 imputed = imputed.drop(("Row", "y"), axis=1)
                 imputed_tabs[k].update(imputed)
 
-                if tab.shape[1] != imputed.shape[1]:
+                if tab.shape[1] != imputed.shape[1]: # pragma: no cover
                     warnings.warn(
                         "Some of the body parts have zero measurements. Iterative imputation skips these,"
                         " which could bring problems downstream. A possible solution could be to refine "
@@ -1549,7 +1549,7 @@ def multi_step_paired_smoothing(
     
 
 @nb.njit
-def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg):
+def resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg): # pragma: no cover
     """Determines if conflicting frames (behavior and not_behavior are True) are eitehr one or the other
     based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
     n = len(behavior)
@@ -1701,7 +1701,7 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
     return moving_avg
 
 @nb.njit
-def binary_moving_median_numba(time_series, lag):
+def binary_moving_median_numba(time_series, lag): # pragma: no cover
     """will applay a moving emdian like filter on a binary signal, i.e. if a window of size lag 
     has more 1s than 0s set the frame to 1 for that window, set it to 0 otherwise. 
     Will only work for windows of uneven length N i.e. returns the same for lag=N and lag=N+1"""
@@ -2401,7 +2401,7 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
-def display_message(message: List[str]):
+def display_message(message: List[str]): # pragma: no cover
     """
     Opens a window that displays a message for the user
 
@@ -2836,7 +2836,7 @@ def filter_short_true_segments(array: np.ndarray, min_length: int):
 
 
 @nb.njit
-def filter_short_true_segments_numba(array: np.ndarray, min_length: int):
+def filter_short_true_segments_numba(array: np.ndarray, min_length: int): # pragma: no cover
     """Filters out sahort "True" sections from boolean array "array"
 
     Args:

@@ -149,8 +149,8 @@ def outside_ellipse(x, y, e_center, e_axes, e_angle, threshold=0.0):
     """
     x, y = rotate(e_center, (x, y), np.radians(e_angle))
 
-    term_x = (x - e_center[0]) ** 2 / (e_axes[0] + threshold) ** 2
-    term_y = (y - e_center[1]) ** 2 / (e_axes[1] + threshold) ** 2
+    term_x = (x - e_center[0]) ** 2 / (np.max([e_axes[0] + threshold,1e-12])) ** 2
+    term_y = (y - e_center[1]) ** 2 / (np.max([e_axes[1] + threshold,1e-12])) ** 2
     return term_x + term_y > 1
 
 
@@ -466,7 +466,7 @@ def cowering(
     ]
     try:
         X_huddle = X_huddle[required_features]
-    except KeyError:
+    except KeyError: 
         # Return an array of NaNs if the required features are not present, and raise a warning
         warnings.warn(
             "\033[38;5;208m"
@@ -546,7 +546,7 @@ def digging(
     min_length: int,
     center_name: str = "Center",
     animal_id: str = "",
-):
+): # pragma: no cover
     """Return true when the mouse is standing still and either moving (active) or not moving (passive).
 
     Design considerations:
