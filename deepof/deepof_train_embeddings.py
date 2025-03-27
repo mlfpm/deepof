@@ -18,7 +18,7 @@ import time
 import deepof.data
 import deepof.model_utils
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt
 
 
 if __name__ == "__main__":

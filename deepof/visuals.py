@@ -33,7 +33,7 @@ from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt, _suppress_warning
+from deepof.data_loading import get_dt, _suppress_warning
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,

@@ -24,7 +24,7 @@ from natsort import os_sorted
 
 import deepof.post_hoc
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 
 

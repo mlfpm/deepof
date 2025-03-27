@@ -38,7 +38,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 import deepof.data
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, save_dt
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -874,7 +874,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
             kin_features = pd.concat([kin_features, cur_kin.add_suffix(suffix)], axis=1)
 
         # save paths for modified tables
-        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key, key + '_' + file_name)
+        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key + '_' + file_name)
         kinematic_features[key] = save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics
