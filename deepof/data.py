@@ -2159,12 +2159,12 @@ class Coordinates:
             tab_dict._connectivity = graph
 
             #read table metadata
-            if type(list(dists.values())[0]) == str:
+            if type(list(dists.values())[0]) == dict:
                 edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
             else:
                 edge_feature_names = list(list(dists.values())[0].columns)
 
-            if type(list(tab_dict.values())[0]) == str:
+            if type(list(tab_dict.values())[0]) == dict:
                 feature_names = pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
             else:
                 feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
@@ -2218,9 +2218,10 @@ class Coordinates:
                     for key in to_preprocess[k].keys():
 
                         #load table if not already loaded
-
-                        tab, table_path = get_dt(to_preprocess[k], key, return_path=True) 
-
+                        result = get_dt(to_preprocess[k], key, return_path=True)
+                        if result and len(result)==2 :
+                            tab = result[0]
+                            table_path = result[1]
                         dataset = (
                             tab[:, :, ~feature_names.isin(edge_feature_names)][
                                 :, :, node_sorting_indices
@@ -2233,6 +2234,8 @@ class Coordinates:
                     
 
                         # save paths for modified tables
+                        if type(table_path) == dict:
+                            table_path = os.path.join(os.path.dirname(table_path.get("duckdb_file")) , table_path.get("table"))                    
                         to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:

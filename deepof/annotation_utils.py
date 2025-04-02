@@ -332,7 +332,7 @@ def sniff_object(
 
     else:
         raise NotImplementedError
-
+        
     speed = speed_dframe[animal_id + center_name] < tol_speed
     sniffing = nosing & speed
 
@@ -919,6 +919,7 @@ def following_path(
     follow = np.all(
         np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]), axis=0
     )
+
     speed = (speed_dframe[follower + "_Nose"] > tol_speed).to_numpy()
 
 
@@ -1296,14 +1297,14 @@ def supervised_tagging(
             lag=params["median_filter_width"]
         )
 
-        #tag_dict[_id + undercond + "immobility"], _ = cowering(
-           # current_features,
-           # huddle_estimator=huddle_estimator,
-           # animal_id=_id + undercond,
-           # median_filter_width = params["median_filter_width"],
-          #  min_immobility = params["min_immobility"],
-         #   max_immobility = params["max_immobility"],
-        #)
+        tag_dict[_id + undercond + "immobility"], _ = cowering(
+            current_features,
+            huddle_estimator=huddle_estimator,
+            animal_id=_id + undercond,
+            median_filter_width = params["median_filter_width"],
+            min_immobility = params["min_immobility"],
+            max_immobility = 0,#params["max_immobility"],
+        )
         #detect immobility and active / passive behavior
         tag_dict[_id + undercond + "stat_lookaround"] = stationary_lookaround(
         speeds,

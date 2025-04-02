@@ -46,7 +46,8 @@ class DataManager:
 
         if is_blob:
             buffer = io.BytesIO()
-            pickle.dump(data, buffer)
+            arrays = data if isinstance(data, tuple) else (data,)
+            np.savez_compressed(buffer, *arrays)
             self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB)')
             self.conn.execute(f'INSERT INTO "{table_name}" VALUES (?)', [buffer.getvalue()])
         elif isinstance(data, pd.DataFrame):
@@ -57,7 +58,7 @@ class DataManager:
             raise TypeError("Unsupported data type")
 
     def load(self,
-             key: str,
+             key: str,      
              return_path: bool = False,
              only_metainfo: bool = False,
              load_index: bool = False,
@@ -76,13 +77,20 @@ class DataManager:
 
         if _is_blob():
             df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
-            deserialized = pickle.loads(df.iloc[0]["data"])
-            return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
+            blob = df.iloc[0]["data"]
 
+            with np.load(io.BytesIO(blob)) as loaded:
+                arrays = [loaded[key] for key in loaded.files]
+                deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+                #deserialized = deserialized[:, 1:]
+                return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
         query = self._build_query(table_name, load_range)
         df = self.conn.execute(query).fetchdf()
-        df = self._parse_columns_to_tuples(df)
-        df = self._restore_index(df)
+        data_part = df.iloc[:, 1:]
+        index_part = df.iloc[:, :1]
+        df = self._parse_columns_to_tuples(data_part)
+        #df = self._restore_index(df)
+        #df = pd.concat([index_part, df], axis=1)
 
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 
@@ -124,6 +132,7 @@ class DataManager:
                 except Exception:
                     continue
         return df
+    
 
     def _get_metadata(self, table_name: str, load_index: bool) -> dict:
         def parse_col(c):
@@ -132,54 +141,178 @@ class DataManager:
             except:
                 return c
 
+        # Get raw column info from DuckDB
         raw_cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
-        columns = [parse_col(row[1]) for row in raw_cols]
+        column_names = [row[1] for row in raw_cols]
+
+        # Detect blob table
+        is_blob = len(column_names) == 1 and column_names[0] == "data"
+
+        # Handle BLOB table
+        if is_blob:
+            try:
+                df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
+                blob = df.iloc[0]["data"]
+
+                with np.load(io.BytesIO(blob)) as loaded:
+                    arrays = [loaded[key] for key in loaded.files]
+                    deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+
+                # Infer metadata
+                if isinstance(deserialized, tuple):
+                    # Stack along last axis (feature dimension) if shapes match
+                    try:
+                        stacked = np.concatenate(deserialized, axis=-1)
+                        shape = stacked.shape
+                        num_rows = shape[0]
+                        num_cols = shape[1] * shape[2] if stacked.ndim == 3 else shape[1]
+                    except Exception as e:
+                        # fallback: report as tuple of shapes
+                        shape = tuple(arr.shape for arr in deserialized)
+                        num_rows = deserialized[0].shape[0] if deserialized[0].ndim > 0 else 1
+                        num_cols = sum(arr.shape[1] * arr.shape[2] if arr.ndim == 3 else arr.shape[1] for arr in deserialized)
+
+                elif isinstance(deserialized, np.ndarray):
+                    shape = deserialized.shape
+                    num_rows = shape[0]
+                    if deserialized.ndim == 3:
+                        num_cols = shape[1] * shape[2]
+                    elif deserialized.ndim == 2:
+                        num_cols = shape[1]
+                    else:
+                        num_cols = 1
+                else:
+                    shape = ()
+                    num_rows = 0
+                    num_cols = 0
+
+                return {
+                    "columns": [],
+                    "num_cols": num_cols,
+                    "num_rows": num_rows,
+                    "shape": shape,
+                    "index_column": None,
+                }
+
+            except Exception as e:
+                return {
+                    "columns": [],
+                    "num_cols": 0,
+                    "num_rows": 0,
+                    "shape": (),
+                    "index_column": None,
+                    "error": f"Failed to load blob: {str(e)}"
+                }
+
+        # Handle structured table (non-blob)
+        parsed_columns = [parse_col(name) for name in column_names]
+
+        # Assume first column is index
+        column_names_no_index = column_names[1:]
+        parsed_columns_no_index = parsed_columns[1:]
+
+        # Get number of rows
         num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
 
         meta = {
-            "columns": columns,
-            "num_cols": len(columns),
+            "columns": parsed_columns_no_index,
+            "num_cols": len(parsed_columns_no_index),
             "num_rows": num_rows,
-            "shape": (num_rows, len(columns)),
+            "shape": (num_rows, len(parsed_columns_no_index)),
         }
 
+        # Optionally include index column content
         if load_index:
-            if "index" in columns:
-                try:
-                    idx = self.conn.execute(f'SELECT "index" FROM "{table_name}"').fetchdf()
-                    meta["index_column"] = idx.iloc[:, 0]
-                    meta["start_time"] = str(idx.iloc[0, 0])
-                    meta["end_time"] = str(idx.iloc[-1, 0])
-                except:
-                    meta["index_column"] = None
-            else:
+            try:
+                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
+                meta["index_column"] = idx_df.iloc[:, 0]
+                meta["start_time"] = str(idx_df.iloc[0, 0])
+                meta["end_time"] = str(idx_df.iloc[-1, 0])
+            except Exception:
                 meta["index_column"] = None
+        else:
+            meta["index_column"] = None
 
         return meta
 
+    def _get_metadata_old(self, table_name: str, load_index: bool) -> dict:
+        def parse_col(c):
+            try:
+                return ast.literal_eval(c)
+            except:
+                return c
+
+        # Get raw column info
+        raw_cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+        column_names = [row[1] for row in raw_cols]  # raw string column names
+        parsed_columns = [parse_col(name) for name in column_names]  # parsed (tuple or str)
+
+        # Exclude the first column (index column)
+        column_names_no_index = column_names[1:]
+        parsed_columns_no_index = parsed_columns[1:]
+
+        # Row count
+        num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
+
+        # Metadata dictionary
+        meta = {
+            "columns": parsed_columns_no_index,
+            "num_cols": len(parsed_columns_no_index),
+            "num_rows": num_rows,
+            "shape": (num_rows, len(parsed_columns_no_index)),
+        }
+
+        # Optionally load the actual index column
+        if load_index:
+            try:
+                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
+                meta["index_column"] = idx_df.iloc[:, 0]
+                meta["start_time"] = str(idx_df.iloc[0, 0])
+                meta["end_time"] = str(idx_df.iloc[-1, 0])
+            except Exception:
+                meta["index_column"] = None
+        else:
+            meta["index_column"] = None
+
+        return meta
+    
+
+
+
     def _parse_columns_to_tuples(self, df: pd.DataFrame) -> pd.DataFrame:
         parsed_cols = []
-        is_multiindex = False
+
+        # Axis-like labels that suggest it's a MultiIndex
+        axis_labels = {"x", "y", "z", "vx", "vy", "vz", "velocity_x", "velocity_y", "velocity_z"}
 
         for col in df.columns:
             if isinstance(col, tuple):
                 parsed_cols.append(col)
-                is_multiindex = True
-            elif isinstance(col, str) and col.startswith("("):
+            elif isinstance(col, str) and col.startswith("(") and col.endswith(")"):
                 try:
                     parsed = ast.literal_eval(col)
                     if isinstance(parsed, tuple):
                         parsed_cols.append(parsed)
-                        is_multiindex = True
                     else:
                         parsed_cols.append(col)
-                except:
+                except Exception:
                     parsed_cols.append(col)
             else:
                 parsed_cols.append(col)
+
+        # Decide if it looks like a MultiIndex
+        tuple_cols = [col for col in parsed_cols if isinstance(col, tuple)]
+        is_multiindex = (
+            tuple_cols and
+            all(len(col) == 2 and str(col[1]) in axis_labels for col in tuple_cols)
+        )
 
         if is_multiindex:
             df.columns = pd.MultiIndex.from_tuples(parsed_cols)
         else:
             df.columns = parsed_cols
+
         return df
+
+
+    
