@@ -14,18 +14,47 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # module deepof
 
 #bug fix for linux cv2 issue
+import os
+import sys
+import subprocess
 import cv2
 
+def is_display_available():
+    # Check for Linux and X display
+    if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
+        return False
+    
+    # Test OpenCV in a subprocess to avoid crashing the main script
+    check_script = """
+import cv2
 try:
+    cv2.imshow('test', 1)
+    cv2.waitKey(1)
+    cv2.destroyAllWindows()
+except Exception:
+    exit(1)
+exit(0)
+"""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", check_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        return result.returncode == 0
+    except:
+        return False
+
+if is_display_available():
     cv2.imshow("test",1)
     cv2.waitKey(1)
     cv2.destroyAllWindows()
-except cv2.error:
-    pass
+else:
+    print("Display not available, skipping cv2 init.")
 
 
 import copy
-import os
 import pickle
 import re
 import shutil
@@ -38,7 +67,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import psutil
-import cv2
+
 import umap
 from natsort import os_sorted
 from pkg_resources import resource_filename
