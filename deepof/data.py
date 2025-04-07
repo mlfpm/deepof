@@ -60,7 +60,7 @@ import deepof.utils
 import deepof.visuals
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
-
+from concurrent.futures import ThreadPoolExecutor
 
 # SET DEEPOF VERSION
 current_deepof_version="0.8.0"
@@ -649,7 +649,7 @@ class Project:
                 pbar.set_postfix(step="Saving data")
 
                 #create folder for current data set
-                directory = os.path.join(self.project_path, self.project_name, 'Tables')
+                directory = os.path.join(self.project_path, self.project_name, 'Tables',key)
                 if not os.path.exists(directory):
                     os.makedirs(directory)
                 # save paths for tables
@@ -709,7 +709,7 @@ class Project:
                 tab=tab*scaling_ratio
 
                 #save scaled table
-                distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key)
+                distance_path = os.path.join(self.project_path, self.project_name, 'Tables',key, key)
                 tab_dict[key] = save_dt(tab,distance_path,self.very_large_project)
 
                 pbar.update()
@@ -744,7 +744,7 @@ class Project:
                 distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
 
                 #save distances for active table
-                distance_path = os.path.join(self.project_path, self.project_name, 'Tables', key + '_dist')
+                distance_path = os.path.join(self.project_path, self.project_name, 'Tables',key, key + '_dist')
                 distance_dict[key] = save_dt(distance_tab,distance_path,self.very_large_project)
 
                 #clean up
@@ -838,7 +838,7 @@ class Project:
                     dats.index = tab.index
 
                     # get path for saving
-                    angle_path = os.path.join(self.project_path, self.project_name, 'Tables', key + '_angle')
+                    angle_path = os.path.join(self.project_path, self.project_name, 'Tables',key, key + '_angle')
                     angle_dict[key] = save_dt(dats,angle_path,self.very_large_project)
                     pbar.update()
 
@@ -962,7 +962,7 @@ class Project:
                     # collect area tables for all animals
                     current_table = pd.concat([current_table, areas_table], axis=1)
 
-                area_path = os.path.join(self.project_path, self.project_name, 'Tables', key + '_area')
+                area_path = os.path.join(self.project_path, self.project_name, 'Tables',key, key + '_area')
                 all_areas_dict[key] = save_dt(current_table,area_path,self.very_large_project)
                 pbar.update()
 
@@ -1380,7 +1380,7 @@ class Coordinates:
             )
             
             # save paths for modified tables
-            table_path = os.path.join(self._project_path, self._project_name, 'Tables', key + '_' + file_name)
+            table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
             tab_dict[key] = save_dt(tab,table_path,return_path)
 
             #cleanup
@@ -1610,7 +1610,7 @@ class Coordinates:
                     )
 
                 # save paths for modified tables
-                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key + '_' + file_name)
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
                 tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
@@ -1730,7 +1730,7 @@ class Coordinates:
                 )
 
                 # save paths for modified tables
-                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key + '_' + file_name)
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
                 tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
@@ -1830,7 +1830,7 @@ class Coordinates:
                 )
 
                 # save paths for modified tables
-                table_path = os.path.join(self._project_path, self._project_name, 'Tables', key + '_' + file_name)
+                table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
                 tabs[key] = save_dt(tab,table_path,return_path)
 
                 #cleanup
@@ -2414,25 +2414,34 @@ class Coordinates:
             raw_coords = self.get_coords(center=None, file_name='raw', return_path=self._very_large_project)
             pbar.update()
             pbar.set_postfix(step="Loading coords")
- 
-            try:
-                coords = self.get_coords(center=center, align=align, return_path=self._very_large_project)
-            except AssertionError: # pragma: no cover
-
+            def load_coords():
                 try:
-                    coords = self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
+                    return self.get_coords(center=center, align=align, return_path=self._very_large_project)
                 except AssertionError:
-                    coords = self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
-            pbar.update() 
+                    try:
+                        return self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
+                    except AssertionError:
+                        return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
 
-            speeds = self.get_coords(speed=1, file_name='speeds', return_path=self._very_large_project)
-            pbar.update()
-            pbar.set_postfix(step="Loading speeds") 
+            
+ 
+            with ThreadPoolExecutor() as executor:
+                future_coords = executor.submit(load_coords)
+                future_speeds = executor.submit(self.get_coords, speed=1, file_name='speeds', return_path=self._very_large_project)
+                future_dists = executor.submit(self.get_distances, return_path=self._very_large_project)
+                future_angles = executor.submit(self.get_angles, return_path=self._very_large_project)
 
-            dists = self.get_distances(return_path=self._very_large_project)
-            angles = self.get_angles(return_path=self._very_large_project)
-            pbar.update() 
-            pbar.set_postfix(step="Loading distances")
+                coords = future_coords.result()
+                pbar.update()
+                pbar.set_postfix(step="Loading speeds")
+
+                speeds = future_speeds.result()
+                pbar.update()
+
+                dists = future_dists.result()
+                angles = future_angles.result()
+                pbar.update()
+                pbar.set_postfix(step="Loading distances")
 
 
             #get kinematics
@@ -2516,7 +2525,7 @@ class Coordinates:
                     ] = (1 - presence_masks[key][animal].values)
 
                 # save paths for modified tables
-                table_path = os.path.join(coords._table_path, key + '_' + "supervised_annotations")
+                table_path = os.path.join(coords._table_path,key, key + '_' + "supervised_annotations")
                 tag_dict[key] = save_dt(supervised_tags,table_path,self._very_large_project) 
 
                 pbar.update() 
@@ -2999,7 +3008,7 @@ class TableDict(dict):
             merged_tab=pd.concat(merged_tab, axis=1, ignore_index=ignore_index, join="inner")
 
             # save paths for modified tables
-            table_path = os.path.join(self._table_path, key + '_' + file_name)
+            table_path = os.path.join(self._table_path,key, key + '_' + file_name)
             merged_dict[key] = save_dt(merged_tab,table_path,save_as_paths)           
 
         merged_tables = TableDict(
@@ -3205,7 +3214,7 @@ class TableDict(dict):
                     sampled_tabs.append(tab.sample(n=min(samples_max, len(tab)), random_state=42))
 
                 # save paths for modified tables
-                table_path = os.path.join(self._table_path, key + '_' + file_name)
+                table_path = os.path.join(self._table_path,key, key + '_' + file_name)
                 table_temp[key] = save_dt(tab,table_path,save_as_paths) 
                 pbar.update()
 
@@ -3288,7 +3297,7 @@ class TableDict(dict):
                     tab = tab_interpol
 
                     # save paths for modified tables
-                    table_path = os.path.join(self._table_path, key + '_' + file_name)
+                    table_path = os.path.join(self._table_path,key, key + '_' + file_name)
                     table_temp[key] = save_dt(tab,table_path,save_as_paths) 
                 pbar.update()
 

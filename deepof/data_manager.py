@@ -85,10 +85,8 @@ class DataManager:
             cols = self._get_table_columns(table_name)
             #cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
             return len(cols) == 1 and cols[0][1] == "data"
-
         if only_metainfo:
             return self._get_metadata(table_name, load_index)
-
         if _is_blob():
             df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
             blob = df.iloc[0]["data"]
@@ -98,15 +96,25 @@ class DataManager:
                 deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
                 #deserialized = deserialized[:, 1:]
                 return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
+
         query = self._build_query(table_name, load_range)
-        df = self.conn.execute(query).fetchdf()
-        data_part = df.iloc[:, 1:]
+        arrow_table = self.conn.execute(query).fetch_arrow_table()
+        df = arrow_table.to_pandas(
+            split_blocks=True,             # Speeds up conversion to Pandas
+            self_destruct=True,            # Releases memory held by Arrow
+            types_mapper=pd.ArrowDtype     # Retains arrow-native types
+        )
+        #df = self.conn.sql(query).df().to_pandas()
+        #arrow_table = self.conn.execute(query).fetch_arrow_table()
+        #df = arrow_table.to_pandas(split_blocks=True, self_destruct=True, types_mapper=pd.ArrowDtype)
+
+
         index_part = df.iloc[:, :1]
+        data_part = df.iloc[:, 1:]
         df = self._parse_columns_to_tuples(data_part)
-        #df = self._restore_index(df)
-        #df = pd.concat([index_part, df], axis=1)
 
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
+
 
     def _prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         df_copy = df.copy()
@@ -258,7 +266,7 @@ class DataManager:
         parsed_cols = []
 
         # Axis-like labels that suggest it's a MultiIndex
-        axis_labels = {"x", "y", "z", "vx", "vy", "vz", "velocity_x", "velocity_y", "velocity_z"}
+        axis_labels = {"x", "y"}
 
         for col in df.columns:
             if isinstance(col, tuple):
