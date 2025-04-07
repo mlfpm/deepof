@@ -8,6 +8,9 @@ import duckdb as db
 import numpy as np
 import pandas as pd
 from typing import Any, Dict, Tuple, Union
+from functools import lru_cache
+
+
 
 def sanitize_table_name(table_name: str) -> str:
     import re
@@ -41,21 +44,31 @@ class DataManager:
         table_name = sanitize_table_name(key)
         is_blob = isinstance(data, (np.ndarray, tuple))
 
-        if (table_name,) in self.conn.execute("SHOW TABLES").fetchall():
-            self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-
         if is_blob:
             buffer = io.BytesIO()
             arrays = data if isinstance(data, tuple) else (data,)
             np.savez_compressed(buffer, *arrays)
-            self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB)')
-            self.conn.execute(f'INSERT INTO "{table_name}" VALUES (?)', [buffer.getvalue()])
+
+            try:
+                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT ? AS data', [buffer.getvalue()])
+            except Exception:
+                self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB)')
+                self.conn.execute(f'INSERT INTO "{table_name}" VALUES (?)', [buffer.getvalue()])
+        
         elif isinstance(data, pd.DataFrame):
             df = self._prepare_dataframe(data)
             self.conn.register("df_temp", df)
-            self.conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM df_temp')
+            try:
+                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM df_temp')
+            except Exception:
+                self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                self.conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM df_temp')
+        
         else:
             raise TypeError("Unsupported data type")
+        self._get_table_columns.cache_clear()
+
 
     def load(self,
              key: str,      
@@ -69,7 +82,8 @@ class DataManager:
             raise FileNotFoundError(f"{self.db_path} does not exist")
 
         def _is_blob():
-            cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+            cols = self._get_table_columns(table_name)
+            #cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
             return len(cols) == 1 and cols[0][1] == "data"
 
         if only_metainfo:
@@ -112,7 +126,7 @@ class DataManager:
 
     def _build_query(self, table_name: str, load_range: np.ndarray) -> str:
         quoted_cols = ", ".join(
-            f'"{row[1]}"' for row in self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+            f'"{col[1]}"' for col in self._get_table_columns(table_name)
         )
         if load_range is None:
             return f'SELECT {quoted_cols} FROM "{table_name}"'
@@ -142,7 +156,8 @@ class DataManager:
                 return c
 
         # Get raw column info from DuckDB
-        raw_cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+        raw_cols = self._get_table_columns(table_name)
+
         column_names = [row[1] for row in raw_cols]
 
         # Detect blob table
@@ -235,50 +250,10 @@ class DataManager:
 
         return meta
 
-    def _get_metadata_old(self, table_name: str, load_index: bool) -> dict:
-        def parse_col(c):
-            try:
-                return ast.literal_eval(c)
-            except:
-                return c
-
-        # Get raw column info
-        raw_cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
-        column_names = [row[1] for row in raw_cols]  # raw string column names
-        parsed_columns = [parse_col(name) for name in column_names]  # parsed (tuple or str)
-
-        # Exclude the first column (index column)
-        column_names_no_index = column_names[1:]
-        parsed_columns_no_index = parsed_columns[1:]
-
-        # Row count
-        num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
-
-        # Metadata dictionary
-        meta = {
-            "columns": parsed_columns_no_index,
-            "num_cols": len(parsed_columns_no_index),
-            "num_rows": num_rows,
-            "shape": (num_rows, len(parsed_columns_no_index)),
-        }
-
-        # Optionally load the actual index column
-        if load_index:
-            try:
-                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
-                meta["index_column"] = idx_df.iloc[:, 0]
-                meta["start_time"] = str(idx_df.iloc[0, 0])
-                meta["end_time"] = str(idx_df.iloc[-1, 0])
-            except Exception:
-                meta["index_column"] = None
-        else:
-            meta["index_column"] = None
-
-        return meta
     
-
-
-
+    @lru_cache(maxsize=128)
+    def _get_table_columns(self, table_name: str) -> Tuple[Tuple]:
+        return tuple(self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall())
     def _parse_columns_to_tuples(self, df: pd.DataFrame) -> pd.DataFrame:
         parsed_cols = []
 
