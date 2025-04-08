@@ -2057,13 +2057,15 @@ class Coordinates:
         if verbose:
             print("Done!")
 
-    def save(self, filename: str = None, timestamp: bool = True):
+    def save(self, file=None, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.
 
         Args:
+            file (obj): optional Objet to save, if None, project gets saved
             filename (str): Name of the pickled file to store. If no name is provided, a default is used.
             timestamp (bool): Whether to append a time stamp at the end of the output file name.
         """
+
         pkl_out = "{}{}.pkl".format(
             os.path.join(
                 self._project_path,
@@ -2075,7 +2077,10 @@ class Coordinates:
         )
 
         with open(pkl_out, "wb") as handle:
-            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            if file is None:
+                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            else:
+                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     @deepof.data_loading._suppress_warning(
         warn_messages=[
@@ -2565,7 +2570,7 @@ class Coordinates:
             connectivity=self._connectivity,
             exp_conditions=self._exp_conditions,
         )
-        self.save(filename="supervised_annotation_instance")
+        self.save(file=supervised_annotation_instance, filename="supervised_annotations", timestamp=False)
 
         return supervised_annotation_instance
 
