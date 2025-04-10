@@ -413,7 +413,7 @@ def _is_point_inside_numba(
     return inside
 
 
-def cowering(
+def immobility(
     X_huddle: np.ndarray,
     huddle_estimator: sklearn.pipeline.Pipeline,
     animal_id: str = "",
@@ -527,10 +527,10 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
     X_augmented = pd.concat(augmented_dfs, axis=1)
 
     # Filter columns that contain '0' or 'speed'
-    #filtered_columns = [col for col in X_augmented.columns if '0' in col or 'speed' in col]
+    filtered_columns = [col for col in X_augmented.columns if 'speed' in col]
 
     # Select only the filtered columns
-    #X_augmented = X_augmented[filtered_columns]
+    X_augmented = X_augmented[filtered_columns]
     
     return X_augmented
 
@@ -1296,7 +1296,7 @@ def supervised_tagging(
             lag=params["median_filter_width"]
         )
 
-        tag_dict[_id + undercond + "immobility"], _ = cowering(
+        tag_dict[_id + undercond + "immobility"], _ = immobility(
             current_features,
             huddle_estimator=huddle_estimator,
             animal_id=_id + undercond,

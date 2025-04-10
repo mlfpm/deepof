@@ -191,7 +191,7 @@ def test_single_animal_traits(animal_id):
     ) as handle:
         huddle_clf = pickle.load(handle)
 
-    huddling, sleeping = deepof.annotation_utils.cowering(
+    huddling, sleeping = deepof.annotation_utils.immobility(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
     )
     huddling = huddling.astype(int)
