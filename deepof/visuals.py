@@ -48,6 +48,8 @@ from deepof.visuals_utils import (
     output_annotated_video,
     output_videos_per_cluster,
     get_behavior_colors,
+    get_behaviors_in_roi,
+    _apply_rois
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -69,6 +71,7 @@ def plot_heatmaps(
     align: str = None,
     exp_condition: str = None,
     condition_value: str = None,
+    roi_number: int = None,
     display_arena: bool = True,
     xlim: float = None,
     ylim: float = None,
@@ -92,6 +95,7 @@ def plot_heatmaps(
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
         condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
@@ -120,7 +124,7 @@ def plot_heatmaps(
         condition_values=[condition_value],
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -214,6 +218,7 @@ def plot_gantt(
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
@@ -231,6 +236,7 @@ def plot_gantt(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
@@ -253,6 +259,7 @@ def plot_gantt(
         # Visualization parameters
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
+        roi_number=roi_number,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
@@ -272,6 +279,7 @@ def plot_gantt(
         # Visualization parameters
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
+        roi_number=roi_number,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
@@ -291,6 +299,7 @@ def _plot_experiment_gantt(
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     behaviors_to_plot: list = None,
@@ -308,6 +317,7 @@ def _plot_experiment_gantt(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         behaviors_to_plot (list): list of behaviors to plot.
@@ -331,7 +341,17 @@ def _plot_experiment_gantt(
     # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
-        data_frame=get_dt(supervised_annotations,experiment_id)
+        #get entire supervised behavior data or only the data from a specific ROI
+        if roi_number is None:
+            data_frame=get_dt(supervised_annotations,experiment_id)
+        else:
+            data_frame, _ =get_behaviors_in_roi(
+                coordinates=coordinates, 
+                roi_number=roi_number, 
+                experiment_id=experiment_id,
+                supervised_annotations=supervised_annotations,
+            )
+
         
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
@@ -345,7 +365,16 @@ def _plot_experiment_gantt(
         )
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
-        data_frame=get_dt(soft_counts,experiment_id)
+
+        if roi_number is None:
+            data_frame=get_dt(soft_counts,experiment_id)
+        else:
+            _ , data_frame =get_behaviors_in_roi(
+                coordinates=coordinates, 
+                roi_number=roi_number, 
+                experiment_id=experiment_id,
+                soft_counts=soft_counts,
+            )
 
         # preprocess information given for time binning
         bin_info = _preprocess_time_bins(
@@ -370,7 +399,7 @@ def _plot_experiment_gantt(
 
     # set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = get_dt(soft_counts,experiment_id).argmax(axis=1)
+        hard_counts = np.array([row.argmax() if not np.isnan(row).any() else -1 for row in data_frame])
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
@@ -456,6 +485,7 @@ def _plot_behavior_gantt(
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     experiments_to_plot: list = None,
@@ -473,6 +503,7 @@ def _plot_behavior_gantt(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         experiments_to_plot (list): list of experiments to plot. If None, all experiments are plotted.
@@ -575,11 +606,31 @@ def _plot_behavior_gantt(
 
         # fill gantt row
         if plot_type == "unsupervised":
-            hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
+
+            if roi_number is None:
+                hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
+            else:
+                _ , data_frame =get_behaviors_in_roi(
+                    coordinates=coordinates, 
+                    roi_number=roi_number, 
+                    experiment_id=all_experiments[exp_id],
+                    soft_counts=soft_counts,
+                )
+                hard_counts = np.array([row.argmax() if not np.isnan(row).any() else -1 for row in data_frame])
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
             gantt[rows] = hard_counts[bin_indices] == cluster_no
         elif plot_type == "supervised":
-            gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
+
+            if roi_number is None:
+                gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
+            else:
+                cur_supervised, _ =get_behaviors_in_roi(
+                    coordinates=coordinates, 
+                    roi_number=roi_number, 
+                    experiment_id=all_experiments[exp_id],
+                    supervised_annotations=supervised_annotations,
+                )
+                gantt[rows] = cur_supervised[behavior_id].iloc[bin_indices]
         gantt[rows][gantt[rows]>0]+=rows
         
         rows += 1
@@ -665,10 +716,13 @@ def gantt_plotter(
                 color="black",
             )
 
-        # plot line for axis to separate between features
-        plt.axhline(y=rows, color="k", linewidth=0.5)
+
 
         rows += 1
+    
+    for k in range(gantt_matrix.shape[0]):
+        # plot line for axis to separate between features
+        plt.axhline(y=k, color="k", linewidth=0.5)
 
 
     # Iterate over additional checkpoints and plot
@@ -1747,6 +1801,9 @@ def plot_embeddings(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
+        #bin_info = _apply_rois(
+        #    coordinates, 
+        #)
     else:
         bin_info = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 

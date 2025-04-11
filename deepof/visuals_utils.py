@@ -4,6 +4,7 @@
 
 """Plotting utility functions for the deepof package."""
 import calendar
+import copy
 import os
 import re
 import time
@@ -11,7 +12,6 @@ import warnings
 import itertools
 from typing import Any, List, NewType, Tuple, Union
 from tqdm import tqdm
-
 import cv2
 import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter, FuncAnimation
@@ -287,6 +287,57 @@ def calculate_average_arena(
     avg_points = avg_points / len(all_vertices)
 
     return avg_points
+
+
+def get_behaviors_in_roi(
+    coordinates: coordinates,
+    roi_number: int,
+    experiment_id: str,
+    soft_counts: dict = None,
+    supervised_annotations: table_dict = None,
+    in_roi_criterion: str = "Center",   
+):
+    """Retrieve annotated behaviors that occured within a given roi.
+
+    Args:
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        roi_number (int): number of the roi 
+        experiment_id (str): Id of the experiment for which behaviors should be extracted.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
+        soft_counts (dict): dictionary with soft_counts per experiment.
+        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
+
+    """
+    animal_ids=coordinates._animal_ids
+    if animal_ids is None:
+        animal_ids=[""]
+    
+    cur_supervised = None
+    cur_soft_counts = None
+
+    if supervised_annotations is not None:
+        cur_supervised = copy.deepcopy(get_dt(supervised_annotations,experiment_id))
+    
+    if soft_counts is not None:
+        cur_soft_counts = copy.deepcopy(get_dt(soft_counts,experiment_id))
+
+
+    for id in animal_ids:
+        
+        coords=coordinates.get_coords_at_key(key=experiment_id, scale=coordinates._scales[experiment_id], selected_id=id, roi_number=roi_number, in_roi_criterion=in_roi_criterion)
+        if len(id)==0:
+            mouse_not_in_roi=np.isnan(coords[in_roi_criterion]['x'])
+        else:
+            mouse_not_in_roi=np.isnan(coords[id + "_" + in_roi_criterion]['x'])
+
+        if supervised_annotations is not None:
+            cur_supervised.loc[mouse_not_in_roi, cur_supervised.filter(like=id, axis=1).columns] = 0.0
+        
+        if soft_counts is not None:
+            mouse_not_in_roi=mouse_not_in_roi[0:len(cur_soft_counts)]
+            cur_soft_counts[mouse_not_in_roi]=None
+            
+    return cur_supervised, cur_soft_counts
 
 
 def _filter_embeddings(

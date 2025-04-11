@@ -124,6 +124,7 @@ def load_project(
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        number_of_rois = 0,
         fast_implementations_threshold: int = 50000,) -> coordinates:  # pragma: no cover
     """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version
 
@@ -168,11 +169,6 @@ def load_project(
         #get file endings
         table_extension=".h5"
         video_extension=".mp4"
-        #if coordinates._table_paths[0].endswith(".analysis.h5"):
-        #    table_extension=".analysis.h5"
-        #else:
-        #    _, table_extension = os.path.splitext(coordinates._table_paths[0])
-        #_, video_extension = os.path.splitext(coordinates._videos[0])
 
         redone_project = deepof.data.Project(
             animal_ids=coordinates._animal_ids,
@@ -196,6 +192,7 @@ def load_project(
             table_format=table_extension,
             video_format=video_extension,
             video_scale=coordinates._arena_dims,
+            number_of_rois = number_of_rois,
             fast_implementations_threshold=fast_implementations_threshold,
         )
 
@@ -234,6 +231,7 @@ class Project:
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        number_of_rois: int = 0,
         fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
@@ -259,6 +257,7 @@ class Project:
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
+            number_of_rois (int): number of behavior rois to be drawn during project creation, default = 0,
             video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
 
         """
@@ -320,6 +319,7 @@ class Project:
         # Loads arena details and (if needed) detection models
         self.arena = arena
         self.arena_dims = video_scale
+        self.number_of_rois = number_of_rois
         self.ellipse_detection = None
 
         # check if there are enough frames to use numba compilation and / or use memory efficient implementations
@@ -457,6 +457,7 @@ class Project:
             tables,
             self.arena,
             self.arena_dims,
+            self.number_of_rois,
             self.segmentation_path,
             self.video_path,
             self.videos,
@@ -734,7 +735,7 @@ class Project:
                 if self.scales is not None:
                     scaling_ratio = self.scales[key][3]/self.scales[key][2]
 
-                #scale
+                #scale tables
                 tab=tab*scaling_ratio
 
                 #save scaled table
@@ -1054,7 +1055,7 @@ class Project:
         areas = None
 
         # noinspection PyAttributeOutsideInit
-        self.scales, self.arena_params, self.video_resolution = self.get_arena(
+        self.scales, self.arena_params, self.roi_dicts, self.video_resolution = self.get_arena(
             tables, debug, test
         )
 
@@ -1085,6 +1086,7 @@ class Project:
             self.tables.update(_to_extend._table_paths)
             self.videos.update(_to_extend._videos)
             self.arena_params.update(_to_extend._arena_params)
+            self.roi_dicts.update(_to_extend._roi_dicts)
             self.scales.update(_to_extend._scales)
 
             self.version= _to_extend._version
@@ -1116,6 +1118,7 @@ class Project:
             quality=quality,
             scales=self.scales,
             arena_params=self.arena_params,
+            roi_dicts=self.roi_dicts,
             tables=tables,
             table_paths=self.tables,
             source_table_path=self.source_table_path,
@@ -1123,6 +1126,7 @@ class Project:
             videos=self.videos,
             video_path=self.video_path,
             video_resolution=self.video_resolution,
+            number_of_rois=self.number_of_rois,
             run_numba=self.run_numba,
             very_large_project=self.very_large_project,
             version=self.version,
@@ -1270,6 +1274,7 @@ class Coordinates:
         scales: dict,
         frame_rate: float,
         arena_params: dict,
+        roi_dicts: dict,
         tables: dict,
         source_table_path: str,
         table_paths: List,
@@ -1284,6 +1289,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
         version: str = None,
@@ -1301,6 +1307,7 @@ class Coordinates:
             scales (dict): Scales used for the experiment. See deepof.data.Project for more information.
             frame_rate (float): frame rate of the processed videos.
             arena_params (dict): Dictionary containing the parameters of the arena. See deepof.data.Project for more information.
+            roi_dicts (dict): Dictionary containing all rois for all videos as determined byt he user.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
@@ -1312,6 +1319,7 @@ class Coordinates:
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
+            number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
             version (str): version of deepof this object was created with
@@ -1322,6 +1330,7 @@ class Coordinates:
         self._animal_ids = animal_ids
         self._arena = arena
         self._arena_params = arena_params
+        self._roi_dicts = roi_dicts
         self._arena_dims = arena_dims
         self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
@@ -1341,6 +1350,7 @@ class Coordinates:
         self._areas = areas
         self._distances = distances
         self._connectivity = connectivity
+        self._number_of_rois = number_of_rois
         self._run_numba = run_numba
         self._very_large_project = very_large_project
         self._version = version
@@ -1367,6 +1377,8 @@ class Coordinates:
         align: str = False,
         align_inplace: bool = True,
         selected_id: str = None,
+        roi_number: int = None,
+        in_roi_criterion: str = "Center",
         file_name: str = 'coords',
         return_path: bool = False,
     ) -> table_dict:
@@ -1379,6 +1391,7 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
+            roi_number (int): Returns only coordinates within roi of given number.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
@@ -1406,6 +1419,8 @@ class Coordinates:
                 align = align,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
+                roi_number = roi_number,
+                in_roi_criterion = in_roi_criterion,
             )
             
             # save paths for modified tables
@@ -1440,6 +1455,8 @@ class Coordinates:
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
+    roi_number: int = None,
+    in_roi_criterion: str = "Center",
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -1454,7 +1471,8 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            
+            roi_number (int): Returns only coordinates within roi of given number.
+    
         Returns:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
 
@@ -1477,6 +1495,40 @@ class Coordinates:
             assert any(
                 align in bp for bp in tab.columns.levels[0]
             ), "align must be set to the name of a bodypart"
+        
+        if roi_number is not None:
+            
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+        
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
+
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if selected_id is not None:
+                selected_ids = selected_id
+            else:
+                selected_ids = self._animal_ids
+            
+            for aid in selected_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, self._run_numba)
+                
+                aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+                #tab.loc[~mouse_in_polygon, [i for i in tab.columns if i[0].startswith(aid)]] = np.NaN
+      
 
         if polar:
             coord_1, coord_2 = "rho", "phi"
@@ -1541,7 +1593,7 @@ class Coordinates:
             aligned_coordinates = None
             # noinspection PyUnboundLocalVariable
             for aid in animal_ids:
-                # Bring forward the column to align
+                # Set the column to align to as the first column
                 columns = [
                     i
                     for i in tab.columns
@@ -1585,13 +1637,7 @@ class Coordinates:
                 deriv=speed,
                 center=center,
             )
-            tab = vel
-
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            tab = tab.loc[
-                :, deepof.utils.filter_columns(tab.columns, selected_id)
-            ]
+            tab = vel  
 
         table_dict={key:tab}
         # Set table_dict to NaN if animals are missing
@@ -2037,11 +2083,12 @@ class Coordinates:
                 "Editing {} arena{}".format(len(video_keys), "s" if len(video_keys) > 1 else "")
             )
 
-        edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
+        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.utils.get_arenas(
             coordinates=self,
             tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
+            number_of_rois=self._number_of_rois,
             segmentation_model_path=None,
             video_path=self._video_path,
             videos=videos_to_update,
@@ -2051,6 +2098,7 @@ class Coordinates:
         for key in video_keys:
             self._scales[key] = edited_scales[key]
             self._arena_params[key] = edited_arena_params[key]
+            self._roi_dicts[key] = edited_roi_dicts[key]
 
         self.save(timestamp=False)
 
@@ -2858,7 +2906,7 @@ class TableDict(dict):
         tabs = self.copy()
         for key, val in tabs.items():
 
-            tabs[key] = deepof.utils.filter_animal_id_in_table(val, selected_id)
+            tabs[key] = deepof.utils.filter_animal_id_in_table(val, selected_id, self._type)
 
         return self.new_dict_same_header(tabs)
 
