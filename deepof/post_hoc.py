@@ -38,6 +38,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 import deepof.data
 import deepof.utils
+import deepof.visuals_utils
 from deepof.data_loading import get_dt, load_dt, save_dt
 
 
@@ -537,6 +538,8 @@ def enrichment_across_conditions(
     exp_conditions: dict = None,
     plot_speed: bool = False,
     bin_info: dict = None,
+    roi_number: int = None,
+    animal_id: str = None,
     normalize: bool = False,
 ):
     """Compute the population of each cluster across conditions.
@@ -576,7 +579,9 @@ def enrichment_across_conditions(
         for key in supervised_annotations.keys():
         
             #load and cut current data set
-            current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]]
+            current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
+            if roi_number is not None:
+                current_sa=deepof.visuals_utils.get_behaviors_in_roi(current_sa, bin_info[key], animal_id)
 
             #only keep speed column or only drop speed column
             if plot_speed:

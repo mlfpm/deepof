@@ -869,7 +869,7 @@ def _apply_rois(
 def get_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
-    animal_ids: str, 
+    animal_ids: list, 
 ):
     """Retrieve annotated behaviors that occured within a given roi.
 
@@ -884,10 +884,24 @@ def get_behaviors_in_roi(
     """
     cur_supervised=copy.copy(cur_supervised)
 
+    if animal_ids is None:
+        animal_ids=[]
+    elif type(animal_ids)==str:
+        animal_ids=[animal_ids]
+
     for aid in animal_ids:
 
         aid_cols = cur_supervised.columns[cur_supervised.columns.get_level_values(0).str.contains(aid + "_")]
-        cur_supervised.loc[~local_bin_info[aid], aid_cols] = np.nan
+
+        for aid_2 in local_bin_info.keys():
+
+            if aid == "time":
+                continue
+            
+            aid_cols_subset=[col for col in aid_cols if aid_2 in col]
+                
+            #set all behavior detections to nan in which the selected animal is not inside of the chosen ROI 
+            cur_supervised.loc[~local_bin_info[aid_2], aid_cols_subset] = np.nan
             
     return cur_supervised
 

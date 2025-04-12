@@ -215,10 +215,10 @@ def plot_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    roi_number: int = None,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
@@ -235,9 +235,9 @@ def plot_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
@@ -856,12 +856,14 @@ def plot_enrichment(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=100000,
+    samples_max: int =100000,
+    roi_number: int = None,
     # Visualization parameters
     exp_condition: str = None,
     exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
+    animal_id: str = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -879,6 +881,7 @@ def plot_enrichment(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
@@ -893,6 +896,8 @@ def plot_enrichment(
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
     if normalize and plot_speed:
         print(
             '\033[33mInfo! When plotting speed the normalization option "normalize" is ignored!\033[0m'
@@ -925,24 +930,28 @@ def plot_enrichment(
 
     # Preprocess information given for time binning
     if supervised_annotations is not None:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
+    
+    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
-        soft_counts=soft_counts,
-        supervised_annotations=supervised_annotations,
-        exp_conditions=exp_conditions,
-        plot_speed=plot_speed,
+        soft_counts = soft_counts,
+        supervised_annotations = supervised_annotations,
+        exp_conditions = exp_conditions,
+        plot_speed = plot_speed,
         bin_info = bin_info,
-        normalize=normalize,
+        roi_number = roi_number,
+        animal_id = animal_id,
+        normalize = normalize,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
