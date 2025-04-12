@@ -866,12 +866,12 @@ def _apply_rois(
     return bin_info
 
 
-def get_behaviors_in_roi(
+def get_supervised_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
     animal_ids: list, 
 ):
-    """Retrieve annotated behaviors that occured within a given roi.
+    """Filter supervised behaviors based on rois given by animal_ids.
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
@@ -889,21 +889,67 @@ def get_behaviors_in_roi(
     elif type(animal_ids)==str:
         animal_ids=[animal_ids]
 
-    for aid in animal_ids:
+    # Create set of valid columns that contain any animal id
+    valid_cols = set()
+    for col in cur_supervised.columns:
+        level0 = col[0] if isinstance(col, tuple) else col
+        for aid in animal_ids:
+            if f"{aid}_" in level0:
+                valid_cols.add(col)
+                break  # skip checking for more ids in column
 
-        aid_cols = cur_supervised.columns[cur_supervised.columns.get_level_values(0).str.contains(aid + "_")]
+    # Apply ROIs to each behavior for each mouse. Multiple animal behaviors require all involved animals to be in ROI
+    for aid_2 in local_bin_info:
+        if aid_2 == "time":
+            continue #skip "time" array that contains time binning info
 
-        for aid_2 in local_bin_info.keys():
+        aid_2_cols = []
+        for col in valid_cols:
+            level0 = col[0] if isinstance(col, tuple) else col
+            if aid_2 in level0:
+                aid_2_cols.append(col)
+        # Apply ROI filter if there are columns to process
+        if aid_2_cols:
+            cur_supervised.loc[~local_bin_info[aid_2], aid_2_cols] = np.nan
 
-            if aid == "time":
-                continue
-            
-            aid_cols_subset=[col for col in aid_cols if aid_2 in col]
-                
-            #set all behavior detections to nan in which the selected animal is not inside of the chosen ROI 
-            cur_supervised.loc[~local_bin_info[aid_2], aid_cols_subset] = np.nan
+    # Set all behavior columns to NaN in which none of the requested animals was involved
+    invalid_cols = cur_supervised.columns.difference(valid_cols)
+    cur_supervised[invalid_cols] = np.nan
             
     return cur_supervised
+
+def get_unsupervised_behaviors_in_roi(
+        hard_counts: np.array,
+        local_bin_info: dict,
+        animal_id: str, 
+):
+    """Filter unsupervised behaviors based on rois given by animal_id.
+
+    Args:
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        roi_number (int): number of the roi 
+        experiment_id (str): Id of the experiment for which behaviors should be extracted.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
+        soft_counts (dict): dictionary with soft_counts per experiment.
+        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
+
+    """
+    hard_counts=copy.copy(hard_counts)
+
+    if type(animal_id)==list:
+        animal_id = animal_id[0]
+        if not getattr(get_unsupervised_behaviors_in_roi, '_warning_issued', False):
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
+                f"Therefore, the following animal id was selected automatically: {animal_id}"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)   
+            get_unsupervised_behaviors_in_roi._warning_issued = True
+    hard_counts[~local_bin_info[animal_id]]=-1     
+
+    return hard_counts
 
 
 ######

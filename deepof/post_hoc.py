@@ -246,6 +246,8 @@ def get_time_on_cluster(
     normalize: bool = True,
     reduce_dim: bool = False,
     bin_info: Union[dict,np.ndarray] = None,
+    roi_number: int = None,
+    animal_id: int = None,
 ):
     """Compute how much each animal spends on each cluster.
 
@@ -270,11 +272,14 @@ def get_time_on_cluster(
         
         # Update range (if range can differ between samples)
         if isinstance(bin_info, dict):
-            arr_range = bin_info[key]
+            arr_range = bin_info[key]["time"]
 
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
         hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        if roi_number is not None:
+            hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animal_id)
+            hard_counts=hard_counts[hard_counts >= 0]
         
         # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
@@ -283,6 +288,8 @@ def get_time_on_cluster(
             hard_count_counters[key]={
                 k: v / sum(list(hard_count_counters[key].values())) for k, v in hard_count_counters[key].items()
                 }
+    #reset function warning
+    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
             
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
@@ -572,7 +579,7 @@ def enrichment_across_conditions(
 
         # Extract time on cluster for all videos and add experimental information
         counter_df = get_time_on_cluster(
-            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info,
+            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
         )
     else:
         
@@ -581,7 +588,7 @@ def enrichment_across_conditions(
             #load and cut current data set
             current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
             if roi_number is not None:
-                current_sa=deepof.visuals_utils.get_behaviors_in_roi(current_sa, bin_info[key], animal_id)
+                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animal_id)
 
             #only keep speed column or only drop speed column
             if plot_speed:

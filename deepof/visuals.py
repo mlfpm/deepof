@@ -48,7 +48,8 @@ from deepof.visuals_utils import (
     output_annotated_video,
     output_videos_per_cluster,
     get_behavior_colors,
-    get_behaviors_in_roi,
+    get_supervised_behaviors_in_roi,
+    get_unsupervised_behaviors_in_roi,
     _apply_rois
 )
 
@@ -434,21 +435,15 @@ def _plot_experiment_gantt(
     if plot_type == "unsupervised":
         time_binned = hard_counts[bin_indices]
         if roi_number is not None:
-            if type(animal_id)==list:
-                animal_id = animal_id[0]
-                warning_message = (
-                    "\033[38;5;208m\n"  # Set text color to orange
-                    "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
-                    "Therefore, the following animal id was selected automatically: {animal_id}"
-                    "\033[0m"  # Reset text color
-                )
-                warnings.warn(warning_message)
-            time_binned[~bin_info[experiment_id][animal_id]]=-1
+            time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[experiment_id], animal_id)
+            #reset function warning
+            get_unsupervised_behaviors_in_roi._warning_issued = False
+
     
     elif plot_type == "supervised":
         supervised_binned = data_frame.iloc[bin_indices]
         if roi_number is not None:
-            supervised_binned=get_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animal_id)
+            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animal_id)
 
 
     # Iterate over features and plot
@@ -631,28 +626,22 @@ def _plot_behavior_gantt(
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
             time_binned = hard_counts[bin_indices]
             if roi_number is not None:
-                if type(animal_id)==list:
-                    animal_id = animal_id[0]
-                    warning_message = (
-                        "\033[38;5;208m\n"  # Set text color to orange
-                        "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
-                        "Therefore, the following animal id was selected automatically: {animal_id}"
-                        "\033[0m"  # Reset text color
-                    )
-                    warnings.warn(warning_message)
-                time_binned[~bin_info[all_experiments[exp_id]][animal_id]]=-1
+                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[all_experiments[exp_id]], animal_id)
             gantt[rows] = time_binned == cluster_no
 
         elif plot_type == "supervised":
 
             supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
             if roi_number is not None:
-                supervised_binned=get_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animal_id)
+                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animal_id)
             gantt[rows] = supervised_binned[behavior_id]
 
         gantt[rows][gantt[rows]>0]+=rows
         
         rows += 1
+    
+    #reset function warning
+    get_unsupervised_behaviors_in_roi._warning_issued = False
 
     gantt_plotter(
         coordinates=coordinates,
@@ -935,9 +924,13 @@ def plot_enrichment(
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
+        tab_dict_for_binning = soft_counts
+        if soft_counts is None:
+            tab_dict_for_binning = embeddings
+        
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=embeddings, samples_max=samples_max,
+            tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
         )
     
     bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
