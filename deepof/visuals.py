@@ -222,6 +222,7 @@ def plot_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
+    animal_id: str = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -263,6 +264,7 @@ def plot_gantt(
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
+        animal_id = animal_id,
         ax=ax,
         save=save)
 
@@ -283,6 +285,7 @@ def plot_gantt(
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
+        animal_id = animal_id,
         ax=ax,
         save=save)
 
@@ -303,6 +306,7 @@ def _plot_experiment_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     behaviors_to_plot: list = None,
+    animal_id: str = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -332,7 +336,11 @@ def _plot_experiment_gantt(
         soft_counts=soft_counts,
         experiment_ids=experiment_id,
         behaviors=behaviors_to_plot,
+        animal_id = animal_id,
     )
+
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
 
     # set active axes if provided
     if ax:
@@ -342,19 +350,10 @@ def _plot_experiment_gantt(
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
         #get entire supervised behavior data or only the data from a specific ROI
-        if roi_number is None:
-            data_frame=get_dt(supervised_annotations,experiment_id)
-        else:
-            data_frame, _ =get_behaviors_in_roi(
-                coordinates=coordinates, 
-                roi_number=roi_number, 
-                experiment_id=experiment_id,
-                supervised_annotations=supervised_annotations,
-            )
-
-        
+        data_frame=get_dt(supervised_annotations,experiment_id)
+       
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -366,18 +365,10 @@ def _plot_experiment_gantt(
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
 
-        if roi_number is None:
-            data_frame=get_dt(soft_counts,experiment_id)
-        else:
-            _ , data_frame =get_behaviors_in_roi(
-                coordinates=coordinates, 
-                roi_number=roi_number, 
-                experiment_id=experiment_id,
-                soft_counts=soft_counts,
-            )
+        data_frame=get_dt(soft_counts,experiment_id)
 
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -391,10 +382,11 @@ def _plot_experiment_gantt(
         raise NotImplementedError(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
-
+    
+    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
 
     # get indices to be plotted
-    bin_indices=bin_info[experiment_id]
+    bin_indices=bin_info[experiment_id]["time"]
 
 
     # set behavior ids
@@ -435,9 +427,29 @@ def _plot_experiment_gantt(
         if behaviors_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
-    animal_ids = coordinates._animal_ids
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = get_behavior_colors(behaviors_to_plot, animal_ids)
+    colors = get_behavior_colors(behaviors_to_plot, coordinates._animal_ids)
+
+    # apply time and roi bins to data 
+    if plot_type == "unsupervised":
+        time_binned = hard_counts[bin_indices]
+        if roi_number is not None:
+            if type(animal_id)==list:
+                animal_id = animal_id[0]
+                warning_message = (
+                    "\033[38;5;208m\n"  # Set text color to orange
+                    "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
+                    "Therefore, the following animal id was selected automatically: {animal_id}"
+                    "\033[0m"  # Reset text color
+                )
+                warnings.warn(warning_message)
+            time_binned[~bin_info[experiment_id][animal_id]]=-1
+    
+    elif plot_type == "supervised":
+        supervised_binned = data_frame.iloc[bin_indices]
+        if roi_number is not None:
+            supervised_binned=get_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animal_id)
+
 
     # Iterate over features and plot
     rows = 0
@@ -449,11 +461,10 @@ def _plot_experiment_gantt(
 
         # fill gantt row
         if plot_type == "unsupervised":
-            gantt[rows] = hard_counts[bin_indices] == feature
+            gantt[rows] = time_binned == feature
         elif plot_type == "supervised":
-            gantt[rows] = data_frame[
-                behavior_ids[feature]
-            ].iloc[bin_indices]
+            gantt[rows] = supervised_binned[behavior_ids[feature]]
+
         gantt[rows][gantt[rows]>0]+=rows
 
         rows+=1
@@ -489,6 +500,7 @@ def _plot_behavior_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     experiments_to_plot: list = None,
+    animal_id: str = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -521,6 +533,9 @@ def _plot_behavior_gantt(
         experiment_ids=experiments_to_plot,
     )
 
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
+
     # set active axes if provided
     if ax:
         plt.sca(ax)
@@ -531,7 +546,7 @@ def _plot_behavior_gantt(
         all_experiments=list(supervised_annotations.keys())
         
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -544,7 +559,7 @@ def _plot_behavior_gantt(
         all_experiments=list(soft_counts.keys())
 
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -558,6 +573,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
+    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -571,12 +587,16 @@ def _plot_behavior_gantt(
         experiments_to_plot = all_experiments
 
     # get common indices between all selected experiments
-    bin_indices=bin_info[list(bin_info.keys())[0]]
+    bin_indices=bin_info[list(bin_info.keys())[0]]["time"]
     max_index=np.max(bin_indices)
     for exp_id in experiments_to_plot:
-        if max_index > np.max(bin_info[exp_id]):
-            max_index=np.max(bin_info[exp_id])
-            bin_indices=bin_info[exp_id][bin_info[exp_id]<max_index]
+        if max_index > np.max(bin_info[exp_id]["time"]):
+            max_index=np.max(bin_info[exp_id]["time"])
+            bin_indices=bin_info[exp_id]["time"][bin_info[exp_id]["time"]<max_index]
+    
+    for exp_id in bin_info.keys():
+        for id in bin_info[exp_id].keys():
+            bin_info[exp_id][id]=bin_info[exp_id][id][0:len(bin_indices)]
 
     # set gantt matrix
     n_available_experiments = len(all_experiments)
@@ -607,30 +627,29 @@ def _plot_behavior_gantt(
         # fill gantt row
         if plot_type == "unsupervised":
 
-            if roi_number is None:
-                hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
-            else:
-                _ , data_frame =get_behaviors_in_roi(
-                    coordinates=coordinates, 
-                    roi_number=roi_number, 
-                    experiment_id=all_experiments[exp_id],
-                    soft_counts=soft_counts,
-                )
-                hard_counts = np.array([row.argmax() if not np.isnan(row).any() else -1 for row in data_frame])
+            hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
-            gantt[rows] = hard_counts[bin_indices] == cluster_no
+            time_binned = hard_counts[bin_indices]
+            if roi_number is not None:
+                if type(animal_id)==list:
+                    animal_id = animal_id[0]
+                    warning_message = (
+                        "\033[38;5;208m\n"  # Set text color to orange
+                        "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
+                        "Therefore, the following animal id was selected automatically: {animal_id}"
+                        "\033[0m"  # Reset text color
+                    )
+                    warnings.warn(warning_message)
+                time_binned[~bin_info[all_experiments[exp_id]][animal_id]]=-1
+            gantt[rows] = time_binned == cluster_no
+
         elif plot_type == "supervised":
 
-            if roi_number is None:
-                gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
-            else:
-                cur_supervised, _ =get_behaviors_in_roi(
-                    coordinates=coordinates, 
-                    roi_number=roi_number, 
-                    experiment_id=all_experiments[exp_id],
-                    supervised_annotations=supervised_annotations,
-                )
-                gantt[rows] = cur_supervised[behavior_id].iloc[bin_indices]
+            supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
+            if roi_number is not None:
+                supervised_binned=get_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animal_id)
+            gantt[rows] = supervised_binned[behavior_id]
+
         gantt[rows][gantt[rows]>0]+=rows
         
         rows += 1
@@ -1728,6 +1747,7 @@ def plot_embeddings(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    roi_number: int = None,
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -1754,6 +1774,7 @@ def plot_embeddings(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -1801,13 +1822,15 @@ def plot_embeddings(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
-        #bin_info = _apply_rois(
-        #    coordinates, 
-        #)
     else:
         bin_info = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=embeddings, samples_max=samples_max,
+        )
+    
+    if roi_number>0:
+        bin_info = _apply_rois(
+            coordinates, roi_number, bin_info,
         )
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition

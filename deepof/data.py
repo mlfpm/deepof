@@ -1527,7 +1527,6 @@ class Coordinates:
                 
                 aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
                 tab.loc[~mouse_in_polygon, aid_cols] = np.nan
-                #tab.loc[~mouse_in_polygon, [i for i in tab.columns if i[0].startswith(aid)]] = np.NaN
       
 
         if polar:

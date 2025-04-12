@@ -289,57 +289,6 @@ def calculate_average_arena(
     return avg_points
 
 
-def get_behaviors_in_roi(
-    coordinates: coordinates,
-    roi_number: int,
-    experiment_id: str,
-    soft_counts: dict = None,
-    supervised_annotations: table_dict = None,
-    in_roi_criterion: str = "Center",   
-):
-    """Retrieve annotated behaviors that occured within a given roi.
-
-    Args:
-        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
-        roi_number (int): number of the roi 
-        experiment_id (str): Id of the experiment for which behaviors should be extracted.
-        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        soft_counts (dict): dictionary with soft_counts per experiment.
-        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
-
-    """
-    animal_ids=coordinates._animal_ids
-    if animal_ids is None:
-        animal_ids=[""]
-    
-    cur_supervised = None
-    cur_soft_counts = None
-
-    if supervised_annotations is not None:
-        cur_supervised = copy.deepcopy(get_dt(supervised_annotations,experiment_id))
-    
-    if soft_counts is not None:
-        cur_soft_counts = copy.deepcopy(get_dt(soft_counts,experiment_id))
-
-
-    for id in animal_ids:
-        
-        coords=coordinates.get_coords_at_key(key=experiment_id, scale=coordinates._scales[experiment_id], selected_id=id, roi_number=roi_number, in_roi_criterion=in_roi_criterion)
-        if len(id)==0:
-            mouse_not_in_roi=np.isnan(coords[in_roi_criterion]['x'])
-        else:
-            mouse_not_in_roi=np.isnan(coords[id + "_" + in_roi_criterion]['x'])
-
-        if supervised_annotations is not None:
-            cur_supervised.loc[mouse_not_in_roi, cur_supervised.filter(like=id, axis=1).columns] = 0.0
-        
-        if soft_counts is not None:
-            mouse_not_in_roi=mouse_not_in_roi[0:len(cur_soft_counts)]
-            cur_soft_counts[mouse_not_in_roi]=None
-            
-    return cur_supervised, cur_soft_counts
-
-
 def _filter_embeddings(
     coordinates,
     embeddings,
@@ -868,6 +817,79 @@ def _preprocess_time_bins(
                     bin_warning = True
 
     return bin_info
+
+
+def _apply_rois(
+    coordinates: coordinates,
+    roi_number: int,
+    bin_info_time: dict = None,
+    in_roi_criterion: str = "Center",
+):
+    """Retrieve annotated behaviors that occured within a given roi.
+
+    Args:
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        roi_number (int): number of the roi 
+        bin_info_time (dict): A dictionary containing start and end positions or indices for plotting 
+        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+    """
+
+    animal_ids=coordinates._animal_ids
+    if animal_ids is None:
+        animal_ids=[""]
+
+    # if no time bin info object was given, create one
+    if bin_info_time is None:
+        bin_info_time={}
+        for key in coordinates._tables.keys():
+            bin_info_time[key] = np.array(range(0,len(coordinates._tables[key])), dtype=int)
+
+    #unify bin info format
+    for key in bin_info_time.keys():
+        if len(bin_info_time[key])==2 and bin_info_time[key][0]+1 < bin_info_time[key][1]:
+            bin_info_time[key] = np.array(range(bin_info_time[key][0],bin_info_time[key][1]+1), dtype=int)
+
+    bin_info = {}
+    for key in bin_info_time.keys():
+        bin_info[key] = {}
+        bin_info[key]["time"]=bin_info_time[key]
+        if roi_number is not None:
+            for aid in animal_ids:
+
+                tab = coordinates._tables[key]
+                roi_polygon=coordinates._roi_dicts[key][roi_number]
+                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, coordinates._run_numba)
+
+                # only keep boolean indices that were within the time bins for this mouse
+                bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
+            
+    return bin_info
+
+
+def get_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: str, 
+):
+    """Retrieve annotated behaviors that occured within a given roi.
+
+    Args:
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        roi_number (int): number of the roi 
+        experiment_id (str): Id of the experiment for which behaviors should be extracted.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
+        soft_counts (dict): dictionary with soft_counts per experiment.
+        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
+
+    """
+    cur_supervised=copy.copy(cur_supervised)
+
+    for aid in animal_ids:
+
+        aid_cols = cur_supervised.columns[cur_supervised.columns.get_level_values(0).str.contains(aid + "_")]
+        cur_supervised.loc[~local_bin_info[aid], aid_cols] = np.nan
+            
+    return cur_supervised
 
 
 ######

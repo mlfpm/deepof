@@ -1059,6 +1059,15 @@ def _is_point_inside_numba(
 
 
 def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
+    """Checks if a given animal for a given table is in a given roi by given criterion.
+
+    Args:
+        tab (dataTable): Datatable containing mouse tracking data.
+        aid (str): ainimal id of the mouse to check
+        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        roi_polygon (np.ndarray): 2D numpy array containing the coordinats of the ROI
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
+    """
 
     points=np.array(tab[aid+"_"+in_roi_criterion])
 
