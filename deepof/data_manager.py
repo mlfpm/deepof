@@ -33,6 +33,12 @@ def suppress_warnings(warn_messages):
 
 
 class DataManager:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.conn = db.connect(db_path)
@@ -94,6 +100,18 @@ class DataManager:
             with np.load(io.BytesIO(blob)) as loaded:
                 arrays = [loaded[key] for key in loaded.files]
                 deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+                if load_range is not None:   
+                    if isinstance(load_range, list) and len(load_range) == 2:
+                        load_range = slice(load_range[0], load_range[1] + 1)
+
+                    if isinstance(deserialized, tuple):
+                        deserialized = tuple(arr[load_range] for arr in deserialized)
+                    else:
+                        deserialized = deserialized[load_range]
+
+              
+                    
+
                 #deserialized = deserialized[:, 1:]
                 return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
 
@@ -163,38 +181,48 @@ class DataManager:
             except:
                 return c
 
-        # Get raw column info from DuckDB
+        
         raw_cols = self._get_table_columns(table_name)
-
         column_names = [row[1] for row in raw_cols]
 
-        # Detect blob table
+     
         is_blob = len(column_names) == 1 and column_names[0] == "data"
-
-        # Handle BLOB table
         if is_blob:
             try:
                 df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
                 blob = df.iloc[0]["data"]
+                #blob = self.conn.execute(f'SELECT data FROM "{table_name}" LIMIT 1').fetchone()[0]
+
 
                 with np.load(io.BytesIO(blob)) as loaded:
                     arrays = [loaded[key] for key in loaded.files]
-                    deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+                    #deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+                    # Mimic original behavior: use only the second array
+                    deserialized = arrays[1] if len(arrays) > 1 else arrays[0]
+
 
                 # Infer metadata
                 if isinstance(deserialized, tuple):
-                    # Stack along last axis (feature dimension) if shapes match
                     try:
-                        stacked = np.concatenate(deserialized, axis=-1)
-                        shape = stacked.shape
-                        num_rows = shape[0]
-                        num_cols = shape[1] * shape[2] if stacked.ndim == 3 else shape[1]
+                        # Check if all arrays are 2D and have the same number of rows
+                        if all(arr.ndim == 2 and arr.shape[0] == deserialized[0].shape[0] for arr in deserialized):
+                            # Concatenate along feature axis (columns)
+                            stacked = np.concatenate(deserialized, axis=1)
+                            shape = stacked.shape
+                            num_rows = shape[0]
+                            num_cols = shape[1]
+                        else:
+                            raise ValueError("Cannot concatenate arrays with incompatible shapes.")
                     except Exception as e:
-                        # fallback: report as tuple of shapes
+                        # Fallback: treat as tuple of individual arrays
                         shape = tuple(arr.shape for arr in deserialized)
                         num_rows = deserialized[0].shape[0] if deserialized[0].ndim > 0 else 1
-                        num_cols = sum(arr.shape[1] * arr.shape[2] if arr.ndim == 3 else arr.shape[1] for arr in deserialized)
-
+                        num_cols = sum(
+                            arr.shape[1] * arr.shape[2] if arr.ndim == 3 else
+                            arr.shape[1] if arr.ndim == 2 else 1
+                            for arr in deserialized
+                        )
+                
                 elif isinstance(deserialized, np.ndarray):
                     shape = deserialized.shape
                     num_rows = shape[0]
@@ -227,14 +255,9 @@ class DataManager:
                     "error": f"Failed to load blob: {str(e)}"
                 }
 
-        # Handle structured table (non-blob)
+       
         parsed_columns = [parse_col(name) for name in column_names]
-
-        # Assume first column is index
-        column_names_no_index = column_names[1:]
         parsed_columns_no_index = parsed_columns[1:]
-
-        # Get number of rows
         num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
 
         meta = {
@@ -243,8 +266,7 @@ class DataManager:
             "num_rows": num_rows,
             "shape": (num_rows, len(parsed_columns_no_index)),
         }
-
-        # Optionally include index column content
+        
         if load_index:
             try:
                 idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()

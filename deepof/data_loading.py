@@ -50,6 +50,7 @@ def get_dt(
     load_range: np.ndarray = None
 ):
     raw_data = tab_dict.get(key)
+    path=''
 
     # In-memory DataFrame
     if isinstance(raw_data, pd.DataFrame):
@@ -63,7 +64,14 @@ def get_dt(
                 "start_time":raw_data.index[0] if load_index else None,
                 "end_time":raw_data.index[-1] if load_index else None
             }
-        sliced = raw_data if load_range is None else raw_data.iloc[load_range[0]:load_range[1]+1]
+        if load_range is None:
+            sliced = raw_data
+        elif isinstance(load_range, list) and len(load_range) == 2:
+            sliced = raw_data.iloc[load_range[0]:load_range[1]+1]
+        else:
+            sliced = raw_data.iloc[load_range]
+
+        #sliced = raw_data if load_range is None else raw_data.iloc[load_range[0]:load_range[1]+1]
         return (sliced, '') if return_path else sliced
 
     # In-memory array or tuple
@@ -74,9 +82,16 @@ def get_dt(
 
         if load_range is not None:
             if isinstance(raw_data, tuple):
-                raw_data = tuple(arr[load_range[0]:load_range[1]+1] for arr in raw_data)
+                if len(load_range) == 2:
+                    raw_data = tuple(arr[load_range[0]:load_range[1]+1] for arr in raw_data)
+                else:
+                    raw_data = tuple(arr[load_range] for arr in raw_data)
             else:
-                raw_data = raw_data[load_range[0]:load_range[1]+1]
+                if len(load_range) == 2:
+                    raw_data = raw_data[load_range[0]:load_range[1]+1]
+                else:
+                    raw_data = raw_data[load_range]
+
         return (raw_data, '') if return_path else raw_data
 
     # DuckDB-stored
@@ -84,18 +99,24 @@ def get_dt(
         db_path = raw_data["duckdb_file"]
         table_name = sanitize_table_name(raw_data["table"])
 
-        manager = DataManager(db_path)
-        result = manager.load(
-            table_name,
-            return_path=return_path,
-            only_metainfo=only_metainfo,
-            load_index=load_index,
-            load_range=load_range
-        )
-        manager.close()
-        return result
+        with DataManager(db_path) as manager:
+            result = manager.load(
+                table_name,
+                return_path=return_path,
+                only_metainfo=only_metainfo,
+                load_index=load_index,
+                load_range=load_range
+            )
 
-    raise ValueError(f"Invalid data entry for key '{key}'")
+        if only_metainfo:
+            return (result, '') if return_path else result
+        else:
+            return (result[0], result[1]) if return_path else result[0]
+
+
+        
+       
+    return (raw_data, path) if return_path else raw_data
 
 
 @_suppress_warning(
@@ -114,11 +135,11 @@ def save_dt(
 
     db_path = os.path.join(os.path.dirname(folder_path), "database.duckdb")
     key = os.path.basename(folder_path)
-    manager = DataManager(db_path)
-    manager.save(key, dt)
-    manager.close()
+    #manager = DataManager(db_path)
+    with DataManager(db_path) as manager:
+        manager.save(key, dt)
+    #manager.close()
 
     return {"duckdb_file": db_path, "table": sanitize_table_name(key)} if return_path else dt
 
 
-# Main method to retrieve data from saved tables or memory
