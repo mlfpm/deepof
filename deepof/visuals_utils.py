@@ -819,7 +819,7 @@ def _preprocess_time_bins(
     return bin_info
 
 
-def _apply_rois(
+def _apply_rois_to_bin_info(
     coordinates: coordinates,
     roi_number: int,
     bin_info_time: dict = None,
@@ -899,7 +899,7 @@ def get_supervised_behaviors_in_roi(
                 break  # skip checking for more ids in column
 
     # Apply ROIs to each behavior for each mouse. Multiple animal behaviors require all involved animals to be in ROI
-    for aid_2 in local_bin_info:
+    for aid_2 in local_bin_info.keys():
         if aid_2 == "time":
             continue #skip "time" array that contains time binning info
 
@@ -951,6 +951,47 @@ def get_unsupervised_behaviors_in_roi(
 
     return hard_counts
 
+
+def get_beheavior_frames_in_roi(
+    behavior,
+    local_bin_info,
+    animal_id,        
+):
+    
+    local_bin_info = copy.copy(local_bin_info)
+    frames = local_bin_info["time"]
+
+    is_supervised_behavior = False
+    if behavior is not None:
+        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_id])
+    
+    if type(animal_id)==list and not is_supervised_behavior:
+        animal_id = animal_id[0]
+        if not getattr(get_beheavior_frames_in_roi, '_warning_issued', False):
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! No animal id was selected but the selected behavior is unsupervised!\n"
+                f"Therefore, the following animal id was selected automatically: {animal_id}"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)  
+            get_beheavior_frames_in_roi._warning_issued = True
+    
+    if is_supervised_behavior:
+        for aid in local_bin_info.keys():
+            if aid == "time":
+                continue
+            if aid + "_" in behavior:
+                frames[~local_bin_info[aid]]=-1
+    else:
+        frames[~local_bin_info[animal_id]]=-1
+    
+    frames=frames[frames >= 0]
+    return frames
+
+        
+
+    
 
 ######
 #Functions not included in property based testing for not having a clean return
@@ -1797,6 +1838,8 @@ def output_videos_per_cluster(
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
     bin_info: dict = None,
+    roi_number: int = None,
+    animal_id: str = None,
     single_output_resolution: tuple = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
@@ -1907,7 +1950,10 @@ def output_videos_per_cluster(
             # get frames for current video
             frames = None
             if bin_info is not None:
-                frames = bin_info[key]
+                if roi_number is not None:
+                    frames=get_beheavior_frames_in_roi(behavior=behavior, local_bin_info=bin_info[key], animal_id=animal_id)
+                else:
+                    frames=bin_info[key]["time"]
 
             output_cluster_video(
                 cap,
@@ -1925,8 +1971,7 @@ def output_videos_per_cluster(
         out.release()
         #to not flood the output with loading bars
         clear_output()
-
-
+    get_beheavior_frames_in_roi._warning_issued = False
 
 def output_annotated_video(
     video_path: str,
@@ -1996,33 +2041,32 @@ def output_annotated_video(
     padding = 5
     bg_color = get_behavior_colors(list(hard_counts), soft_counts)
 
-    first_run=True
-    for i in tqdm(frames, desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
+    diff_frames = np.diff(frames)
+    for i in tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
 
-        if first_run:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-            first_run=False
-
+        if i == 0 or diff_frames[i-1] != 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frames[i])
         ret, frame = cap.read()
+
         if ret == False or cap.isOpened() == False:
             break
 
         try:
-            if bg_color[i] is not None:
+            if bg_color[frames[i]] is not None:
                 cv2.rectangle(frame, 
                     (v_width - text_width - x , y - text_height - padding),  # Top-left corner
                     (v_width - padding, y + baseline),  # Bottom-right corner
-                    hex_to_BGR(bg_color[i]),  # Blue color (BGR format)
+                    hex_to_BGR(bg_color[frames[i]]),  # Blue color (BGR format)
                     -1)  # Filled rectangle
 
                 # Draw black outline
-                cv2.putText(frame, str(hard_counts[i]), (v_width - text_width - padding, y), font, font_scale, (0, 0, 0), thickness + 2)
+                cv2.putText(frame, str(hard_counts[frames[i]]), (v_width - text_width - padding, y), font, font_scale, (0, 0, 0), thickness + 2)
                 # Draw white main text
-                cv2.putText(frame, str(hard_counts[i]), (v_width - text_width - padding, y), font, font_scale, (255, 255, 255), thickness)
+                cv2.putText(frame, str(hard_counts[frames[i]]), (v_width - text_width - padding, y), font, font_scale, (255, 255, 255), thickness)
             
             if display_time:
 
-                disp_time = "time: "  + seconds_to_time(i/frame_rate)
+                disp_time = "time: "  + seconds_to_time(frames[i]/frame_rate)
                 # Draw black outline
                 cv2.putText(frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
                 # Draw white main text

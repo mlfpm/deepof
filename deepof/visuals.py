@@ -50,7 +50,8 @@ from deepof.visuals_utils import (
     get_behavior_colors,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
-    _apply_rois
+    get_beheavior_frames_in_roi,
+    _apply_rois_to_bin_info
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -141,7 +142,7 @@ def plot_heatmaps(
     e_id=None
     if not experiment_id=="average":
         e_id=experiment_id
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, samples_max=samples_max
     )
 
@@ -171,7 +172,7 @@ def plot_heatmaps(
         tab = get_dt(coords, key)  
         
         #cut slice from table
-        tab=tab.iloc[bin_info[key]]
+        tab=tab.iloc[bin_info_time[key]]
 
         #append table
         sampled_tabs.append(tab)
@@ -384,7 +385,7 @@ def _plot_experiment_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
-    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # get indices to be plotted
     bin_indices=bin_info[experiment_id]["time"]
@@ -568,7 +569,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
-    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -933,7 +934,7 @@ def plot_enrichment(
             tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
         )
     
-    bin_info = _apply_rois(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
@@ -1831,7 +1832,7 @@ def plot_embeddings(
         )
     
     if roi_number>0:
-        bin_info = _apply_rois(
+        bin_info = _apply_rois_to_bin_info(
             coordinates, roi_number, bin_info,
         )
 
@@ -2586,7 +2587,9 @@ def export_annotated_video(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     frame_limit_per_video: int = None,
+    roi_number: int =None,
     #others
+    animal_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
     display_time: bool = False,
@@ -2617,6 +2620,9 @@ def export_annotated_video(
         coordinates,
         experiment_ids=experiment_id,
     )
+
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
 
     # Create output directory if it doesn't exist
     proj_path = os.path.join(coordinates._project_path, coordinates._project_name)
@@ -2666,15 +2672,22 @@ def export_annotated_video(
         tab_dict=supervised_annotations
 
     #preprocess time bins            
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict,
         )
+    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
     
     # special case: an experiment id was given
     if experiment_id is not None:
 
         # get frames for this experiment id
-        frames=bin_info[experiment_id]
+        if behavior is None and supervised_annotations is not None:
+            behavior = cur_tab.columns
+        if roi_number is not None:
+            frames=get_beheavior_frames_in_roi(behavior=behavior, local_bin_info=bin_info[experiment_id], animal_id=animal_id)
+        else:
+            frames=bin_info[experiment_id]["time"]
         # get current tab and video path
         cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
         video_path=coordinates.get_videos(full_paths=True)[experiment_id]
@@ -2685,12 +2698,10 @@ def export_annotated_video(
             cur_tab=pd.DataFrame(cur_tab,columns=cluster_names)
         else: 
             cur_tab.columns = cluster_names
-
         # handle defaults
         if frame_limit_per_video is None:
             frame_limit_per_video = np.inf
-        if behavior is None and supervised_annotations is not None:
-            behavior = cur_tab.columns
+
         if len(frames) >= frame_limit_per_video:
                 frames = frames[0:frame_limit_per_video]
 
@@ -2703,6 +2714,7 @@ def export_annotated_video(
             frames=frames,
             display_time=display_time,
         )
+        get_beheavior_frames_in_roi._warning_issued = False
 
         return video
 
@@ -2722,6 +2734,8 @@ def export_annotated_video(
             single_output_resolution=(500, 500),
             frame_limit_per_video=frame_limit_per_video,
             bin_info=bin_info,
+            roi_number=roi_number,
+            animal_id=animal_id,
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
