@@ -947,7 +947,10 @@ def get_unsupervised_behaviors_in_roi(
             )
             warnings.warn(warning_message)   
             get_unsupervised_behaviors_in_roi._warning_issued = True
-    hard_counts[~local_bin_info[animal_id]]=-1     
+    if len(hard_counts.shape)==1:
+        hard_counts[~local_bin_info[animal_id]]=-1    
+    else: 
+        hard_counts[~local_bin_info[animal_id]]=np.NaN   
 
     return hard_counts
 

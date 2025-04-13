@@ -308,8 +308,13 @@ def get_time_on_cluster(
     return counter_df
 
 
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Mean of empty slice"
+    ]
+)
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animal_id: list = None
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -337,10 +342,14 @@ def get_aggregated_embedding(
         
         # Update range (if range can differ between samples)
         if isinstance(bin_info, dict):
-            arr_range = bin_info[key]
+            arr_range = bin_info[key]["time"]
 
         # Load full dataset (arr_range==None) or section
         current_embedding=get_dt(embedding,key,load_range=arr_range)
+        if roi_number is not None and type(current_embedding)==pd.DataFrame:
+            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animal_id)
+        elif roi_number is not None and type(current_embedding)==np.ndarray:
+            current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animal_id)
 
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
@@ -348,16 +357,33 @@ def get_aggregated_embedding(
             agg_embedding[key]=np.nanmedian(current_embedding, axis=0)
     
     agg_embedding=pd.DataFrame(agg_embedding).T
+    n_rows=agg_embedding.shape[0]
 
+    if agg_embedding.isnull().any().any():
+        agg_embedding_clean=agg_embedding.dropna()
+        assert agg_embedding_clean.shape[0]>0, "agg_embeddings empty after NaN-row removal!"
+
+        warning_message = (
+            "\033[38;5;208m\n"  # Set text color to orange
+            "Warning! Some rows of aggregated embeddings contained NaNs that were dropped! This can happen if the\n"
+            "time bins are short or ROIs are strict, which leads to behaviors never occuring in the set parameters.\n"
+            f"In total {np.round((1-agg_embedding_clean.shape[0]/n_rows)*10000)/100} % of all rows were removed."
+            "\033[0m"  # Reset text color
+        )
+        warnings.warn(warning_message)
+    else:
+        agg_embedding_clean=agg_embedding
     
     if reduce_dim:
         agg_pipeline = Pipeline(
             [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
 
-        agg_embedding = pd.DataFrame(
-            agg_pipeline.fit_transform(agg_embedding), index=agg_embedding.index
+        agg_embedding_clean = pd.DataFrame(
+            agg_pipeline.fit_transform(agg_embedding_clean), index=agg_embedding_clean.index
         )
+    
+    agg_embedding = agg_embedding_clean.reindex(agg_embedding.index)
 
     return agg_embedding
 

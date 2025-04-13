@@ -1761,6 +1761,7 @@ def plot_embeddings(
     exp_condition: str = None,
     aggregate_experiments: str = None,
     samples: int = 500,
+    animal_id: Union[str,list] = None,
     show_aggregated_density: bool = True,
     colour_by: str = "exp_condition",
     ax: Any = None,
@@ -1799,6 +1800,10 @@ def plot_embeddings(
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
+    elif type(animal_id)==str:
+        animal_id=[animal_id]
     # prevents crash due to axis issues
     if (
         not aggregate_experiments
@@ -1821,20 +1826,18 @@ def plot_embeddings(
 
     # preprocess information given for time binning
     if supervised_annotations is not None:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
     
-    if roi_number>0:
-        bin_info = _apply_rois_to_bin_info(
-            coordinates, roi_number, bin_info,
-        )
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
     (
@@ -1863,12 +1866,17 @@ def plot_embeddings(
         # make sure that not more samples are drawn than are available
         shortest = samples
         for key in bin_info.keys():
+            for aid in bin_info[key].keys():
 
-            num_rows=len(bin_info[key])
+                if aid == "time":
+                    num_rows=len(bin_info[key]["time"])
+                elif roi_number is not None and aid in animal_id:
+                    num_rows=np.sum(bin_info[key][aid])
 
-            if num_rows < shortest:
-                shortest = num_rows
+                if num_rows < shortest:
+                    shortest = num_rows
         if samples > shortest:
+            assert shortest > 0, "Selected time bin and / or ROI are too restrictive, cannot draw enough samples for all experiments!" 
             samples = shortest
             print(
                 "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
@@ -1877,10 +1885,16 @@ def plot_embeddings(
             )
 
         # Sample per animal, to avoid alignment issues
+        valid_samples={}
         for key in emb_to_plot.keys():
 
             #get correct section of current embedding 
-            current_emb=get_dt(emb_to_plot,key)[bin_info[key]]
+            current_emb=get_dt(emb_to_plot,key)
+            if roi_number is not None:
+                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_id=animal_id)
+            else:
+                valid_samples[key]=bin_info[key]["time"]
+            current_emb=current_emb[valid_samples[key]]
 
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
@@ -1900,7 +1914,7 @@ def plot_embeddings(
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
             np.concatenate(
-                [get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
+                [get_dt(counts_to_plot,key)[valid_samples[key]][samples_dict[key]]
                 for key in counts_to_plot], 
                 axis=0
             ), 
@@ -1910,7 +1924,7 @@ def plot_embeddings(
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
             [
-                np.max(get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
+                np.max(get_dt(counts_to_plot,key)[valid_samples[key]][samples_dict[key]], axis=1)
                 for key in counts_to_plot
             ]
         )
@@ -1960,17 +1974,17 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, reduce_dim=True, bin_info=bin_info
+                counts_to_plot, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
             )
 
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info 
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -1981,6 +1995,7 @@ def plot_embeddings(
                 "experimental condition": concat_hue,
             }
         )
+        embedding_dataset=embedding_dataset.dropna()
         embedding_dataset.sort_values(by=embedding_dataset.columns[2], inplace=True)
 
         if normative_model:
