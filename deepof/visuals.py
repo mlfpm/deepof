@@ -2931,6 +2931,8 @@ def plot_behavior_trends(
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
     hide_time_bins: List[bool] = None,
+    roi_number: int = None,
+    animal_id: int = None,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     ax: Any = None,
@@ -2969,6 +2971,8 @@ def plot_behavior_trends(
         condition_values=condition_values,
         behaviors=behavior_to_plot,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
 
     #####
     # Set defaults based on inputs
@@ -3104,6 +3108,27 @@ def plot_behavior_trends(
         raise ValueError(
             f'"custom_time_bins" needs to be a list of at least 4 elments with each element being a list!'
         )
+    
+    #####
+    # Get ROI bin info
+    ##### 
+
+    if roi_number is not None:
+        #create full time bins covering entire signal
+        if supervised_annotations is not None:
+            bin_info_time = _preprocess_time_bins(
+            coordinates, None, None, None, 
+            tab_dict_for_binning=supervised_annotations,
+            )
+        else:            
+            bin_info_time = _preprocess_time_bins(
+                coordinates, None, None, None,  
+                tab_dict_for_binning=soft_counts,
+            )
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+
 
     #####
     # Collect data for plotting
@@ -3118,11 +3143,15 @@ def plot_behavior_trends(
 
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
+            if roi_number is not None:
+                data_set=get_unsupervised_behaviors_in_roi(hard_counts=data_set, local_bin_info=roi_bin_info[key],animal_id=animal_id)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
             data_set=get_dt(supervised_annotations,key)
+            if roi_number is not None:
+                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animal_id)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
@@ -3135,7 +3164,7 @@ def plot_behavior_trends(
             #get current snippet
             data_snippet=data_set[bin_start:bin_end]
 
-            behavior_timebin = np.sum(index_dict_fn(data_snippet))
+            behavior_timebin = np.nansum(index_dict_fn(data_snippet))
             if normalize or behavior_to_plot == "speed":
                 behavior_timebin = behavior_timebin / len(
                     index_dict_fn(data_snippet)
@@ -3154,6 +3183,8 @@ def plot_behavior_trends(
 
     # Normalize frames to reflect seconds
     df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
+    
+    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
     # Calculate mean values and errors accross samples
     time_bin_means = (
