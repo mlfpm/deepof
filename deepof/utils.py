@@ -2927,7 +2927,10 @@ def rolling_speed(
     """
     original_shape = dframe.shape
     try:
-        body_parts = dframe.columns.levels[0]
+        #"levels" seems to be bugged and still finds columns that are not included in the datframe anymore
+        body_parts = [column[0] for column in dframe.columns]
+        body_parts = np.array(body_parts)[np.unique(body_parts, return_index=True)[1]]
+
     except AttributeError:
         body_parts = dframe.columns
 
@@ -2957,6 +2960,7 @@ def rolling_speed(
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)
+        del dframe
         dframe = speeds
 
     # Speed is in mm per frame
