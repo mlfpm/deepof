@@ -183,7 +183,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     soft_counts=TableDict(soft_counts, typ='soft_counts')
 
-    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+    bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
 
     # Create test experimental conditions
@@ -243,7 +243,7 @@ def test_compute_transition_matrix_per_condition(
 
     #convert into used formats
     soft_counts=TableDict(soft_counts, typ='soft_counts')
-    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+    bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
     
     transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
