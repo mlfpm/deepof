@@ -2113,7 +2113,7 @@ def get_arenas(
     video_resolution = {}
     list_of_rois=list(range(1,number_of_rois+1))
 
-    propagate_last = False
+    get_arena = True
     propagate_rois=[]
     
 
@@ -2151,12 +2151,12 @@ def get_arenas(
                     vid_idx,
                     videos,
                     list_of_rois=list_of_rois,
-                    get_arena=not propagate_last,
+                    get_arena=get_arena,
                     test=test,
                 )
 
                 if arena_corners is None:
-                    propagate_last = True
+                    get_arena = False
                 else:
                     arena_dist=get_first_length(arena_corners)
 
@@ -2180,15 +2180,15 @@ def get_arenas(
                         cur_roi_corners[roi]=roi_corners[roi]
                                    
 
-                if propagate_last:  
+                if get_arena:  
+                    cur_arena_params = arena_corners
+                else:
                     cur_arena_params = arena_params[list(arena_params.keys())[-1]]
                     cur_scales = scales[list(scales.keys())[-1]]
-                else:
-                    cur_arena_params = arena_corners
 
                 if arena == "circular-manual":
 
-                    if not propagate_last:
+                    if get_arena:
                         cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
 
                     arena_diameter=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
@@ -2216,17 +2216,18 @@ def get_arenas(
 
         # Open GUI for manual labelling of two scaling points in the first video
         arena_reference = None
-        if not (arena == "circular-autodetect" and number_of_rois==0) and not test:  # pragma: no cover
+        if not test:  # pragma: no cover
 
             #skip arena retival if circular-autodetect was selected
             get_arena=True
-            if arena == "circular-autodetect":
+            if arena == "circular-autodetect" and number_of_rois==0:
                 get_arena=False
-
-            display_message(multi_line_message)
+            else:
+                display_message(multi_line_message)
 
         # Early return in test mode to avoid redundant slow arena detection
         if test:
+            get_arena=False
             if "polygonal" in arena:
                 scales={'test2': [279.5, 213.5, 420.12, 380], 'test': [279.5, 213.5, 420.12, 380]}
                 arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}

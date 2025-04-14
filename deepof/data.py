@@ -1086,8 +1086,10 @@ class Project:
             self.tables.update(_to_extend._table_paths)
             self.videos.update(_to_extend._videos)
             self.arena_params.update(_to_extend._arena_params)
-            self.roi_dicts.update(_to_extend._roi_dicts)
             self.scales.update(_to_extend._scales)
+            if _to_extend._roi_dicts is not None:
+                self.roi_dicts.update(_to_extend._roi_dicts)
+
 
             self.version= _to_extend._version
 
