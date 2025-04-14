@@ -1304,8 +1304,10 @@ def plot_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=20000,
+    samples_max: int=20000,
+    roi_number: int = None,
     # Visualization parameters
+    animal_id: str = None,
     exp_condition: str = None,
     visualization="networks",
     silence_diagonal=False,
@@ -1338,7 +1340,8 @@ def plot_transitions(
         exp_condition=exp_condition,
         visualization=visualization,
     )
-
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
     # Get requested experimental condition. If none is provided, default to the first one available.
     if coordinates.get_exp_conditions is not None and exp_condition is None:
         exp_condition = coordinates.get_exp_conditions[
@@ -1353,14 +1356,17 @@ def plot_transitions(
     # preprocess information given for time binning
 
 
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
         soft_counts,
         exp_conditions,
         bin_info=bin_info,
+        roi_number=roi_number,
+        animal_id=animal_id,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
         normalize=True,
@@ -1478,7 +1484,9 @@ def plot_stationary_entropy(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    roi_number: int = None,
     # Visualization parameters
+    animal_id: str = None,
     exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
@@ -1506,6 +1514,8 @@ def plot_stationary_entropy(
         coordinates,
         exp_condition=exp_condition,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
 
     # Get requested experimental condition. If none is provided, default to the first one available.
     if exp_condition is None:
@@ -1522,11 +1532,12 @@ def plot_stationary_entropy(
     soft_counts = soft_counts.filter_videos(embeddings.keys())
 
     # preprocess information given for time binning
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
-    if (any([np.sum(bin_info[key]) < 2 for key in bin_info.keys()])):
+    if (any([np.sum(bin_info[key]["time"]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
 
     # Get ungrouped entropy scores for the full videos
@@ -1534,6 +1545,8 @@ def plot_stationary_entropy(
         soft_counts,
         exp_conditions,
         bin_info=bin_info,
+        roi_number=roi_number,
+        animal_id=animal_id,
         aggregate=False,
         normalize=True,
     )

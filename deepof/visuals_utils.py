@@ -962,7 +962,7 @@ def get_beheavior_frames_in_roi(
 ):
     
     local_bin_info = copy.copy(local_bin_info)
-    frames = local_bin_info["time"]
+    frames = copy.copy(local_bin_info["time"])
 
     is_supervised_behavior = False
     if behavior is not None:

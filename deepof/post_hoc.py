@@ -646,20 +646,28 @@ def enrichment_across_conditions(
     return enrichment
 
 
-def get_transitions(state_sequence: list, n_states: int):
+def get_transitions(state_sequence: list, n_states: int, index_sequence: list=None):
     """Compute the transitions between states in a state sequence.
 
     Args:
         state_sequence (list): A list of states.
         n_states (int): The number of states.
+        index_sequence (list): An optional list of index positions for the states. Will ensure that state transitions between non-neighboring sequence entries are skipped
 
     Returns:
         The resulting transition matrix.
 
     """
     transition_matrix = np.zeros([n_states, n_states])
-    for cur_state, next_state in zip(state_sequence[:-1], state_sequence[1:]):
-        transition_matrix[cur_state, next_state] += 1
+    if index_sequence is None:
+        for cur_state, next_state in zip(state_sequence[:-1], state_sequence[1:]):
+            transition_matrix[cur_state, next_state] += 1
+    else:
+        for k, (cur_state, next_state) in enumerate(zip(state_sequence[:-1], state_sequence[1:])):
+            if index_sequence[k+1]-index_sequence[k]==1:
+                transition_matrix[cur_state, next_state] += 1
+            else:
+                continue
 
     return transition_matrix
 
@@ -669,6 +677,8 @@ def compute_transition_matrix_per_condition(
     exp_conditions: dict,
     silence_diagonal: bool = False,
     bin_info: dict = None,
+    roi_number: int = None,
+    animal_id: str = None,
     aggregate: str = True,
     normalize: str = True,
 ):
@@ -697,14 +707,22 @@ def compute_transition_matrix_per_condition(
 
     for key in soft_counts.keys():
 
+        #Determine load range
+        load_range = bin_info[key]["time"]
+        if roi_number is not None:
+            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animal_id)
+
         #load requested range from current soft counts
-        current_sc = get_dt(soft_counts, key, load_range=bin_info[key])
+        current_sc = get_dt(soft_counts, key, load_range=load_range)
 
         # Get hard counts per video
         hard_counts = np.argmax(current_sc, axis=1)
 
         # Get transition counts per video
-        transitions=get_transitions(hard_counts, n_states)
+        transitions=get_transitions(hard_counts, n_states, index_sequence=load_range)
+
+        # Exclude transitions accross gaps
+         
 
         if silence_diagonal:
             np.fill_diagonal(transitions, 0)
@@ -715,6 +733,8 @@ def compute_transition_matrix_per_condition(
             transitions_dict[exp_cond] += transitions
         else:
             transitions_dict[key] = transitions
+    # Reset warning
+    deepof.visuals_utils.get_beheavior_frames_in_roi._warning_issued = False
 
     # Normalize rows if specified
     if normalize:
