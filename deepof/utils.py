@@ -30,7 +30,7 @@ from joblib import Parallel, delayed
 from scipy.signal import savgol_filter, medfilt
 from scipy.spatial.distance import cdist
 from segment_anything import SamPredictor, sam_model_registry
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
@@ -2234,7 +2234,7 @@ def get_arenas(
                 if test == "detect_arena":
                     arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
                 else:
-                    return scales, arena_params, video_resolution
+                    return scales, arena_params, None, video_resolution
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
@@ -2243,7 +2243,7 @@ def get_arenas(
                 if test == "detect_arena":
                     pass
                 else:
-                    return scales, arena_params, video_resolution
+                    return scales, arena_params, None, video_resolution
 
 
         # Load SAM 
@@ -2331,7 +2331,7 @@ def get_arenas(
                 pbar.update()
 
     elif not arena:
-        return None, None, None
+        return None, None, None, None
 
     else:  # pragma: no cover
         raise NotImplementedError(
