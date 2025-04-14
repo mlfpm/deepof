@@ -2136,7 +2136,8 @@ def animate_skeleton(
     precomputed_bins: np.ndarray = None,
     samples_max: int =20000,  
     sampling_rate: float = None, 
-    #otehr parameters
+    roi_number: int = None,
+    #other parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
@@ -2177,9 +2178,11 @@ def animate_skeleton(
         center=center,
     )
 
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
     coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
     )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
     if sampling_rate is None:
         sampling_rate=coordinates._frame_rate
 
@@ -2360,10 +2363,16 @@ def animate_skeleton(
 
         return skeleton_scatter
 
+    #get frames to display based on binning
+    if roi_number is None:
+        frames = bin_info[experiment_id]["time"]
+    else:
+        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_ids)
+
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=bin_info[experiment_id],
+        frames=frames,
         interval=int(np.round(1000 // sampling_rate)),
     )
 
