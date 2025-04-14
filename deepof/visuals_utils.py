@@ -138,7 +138,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=["climb_arena", "sniff_arena", "immobility", "stat_lookaround", "stat_active", "stat_passive", "moving", "sniffing", "missing", "speed"]
+    single_behaviors=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing", "speed"]
     symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
     asymmetric_behaviors=["nose2tail","nose2body","following"]
 
@@ -1614,12 +1614,12 @@ def _tag_annotated_frames(
 
         if flag:
 
-            if tag_dict[_id + undercond + "climb_arena"][fnum]:
-                write_on_frame("climb_arena", down_pos)
+            if tag_dict[_id + undercond + "climb-arena"][fnum]:
+                write_on_frame("climb-arena", down_pos)
             elif tag_dict[_id + undercond + "immobility"][fnum]:
                 write_on_frame("immobility", down_pos)
-            elif tag_dict[_id + undercond + "sniff_arena"][fnum]:
-                write_on_frame("sniff_arena", down_pos)
+            elif tag_dict[_id + undercond + "sniff-arena"][fnum]:
+                write_on_frame("sniff-arena", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:

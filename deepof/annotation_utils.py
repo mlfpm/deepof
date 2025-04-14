@@ -17,7 +17,7 @@ import pandas as pd
 import sklearn.pipeline
 from joblib import Parallel, delayed, parallel_backend
 from natsort import os_sorted
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 

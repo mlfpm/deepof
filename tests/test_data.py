@@ -436,7 +436,7 @@ def test_supervised_parameters():
     )
 
     #ensure that more behavior was detected with more generous parameters
-    assert np.sum(supervised_a['test']['sniff_arena']) > np.sum(supervised_b['test']['sniff_arena'])
+    assert np.sum(supervised_a['test']['sniff-arena']) > np.sum(supervised_b['test']['sniff-arena'])
     
 
 @settings(deadline=None)
