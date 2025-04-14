@@ -70,7 +70,7 @@ class DataManager:
             except Exception:
                 self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
                 self.conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM df_temp')
-        
+            
         else:
             raise TypeError("Unsupported data type")
         self._get_table_columns.cache_clear()
@@ -122,14 +122,16 @@ class DataManager:
             self_destruct=True,            # Releases memory held by Arrow
             types_mapper=pd.ArrowDtype     # Retains arrow-native types
         )
-        #df = self.conn.sql(query).df().to_pandas()
-        #arrow_table = self.conn.execute(query).fetch_arrow_table()
-        #df = arrow_table.to_pandas(split_blocks=True, self_destruct=True, types_mapper=pd.ArrowDtype)
-
 
         index_part = df.iloc[:, :1]
         data_part = df.iloc[:, 1:]
         df = self._parse_columns_to_tuples(data_part)
+        df = df.applymap(lambda x: np.nan if pd.isna(x) else x)
+
+        #df = self.conn.sql(query).df().to_pandas()
+        #arrow_table = self.conn.execute(query).fetch_arrow_table()
+        #df = arrow_table.to_pandas(split_blocks=True, self_destruct=True, types_mapper=pd.ArrowDtype)
+
 
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 

@@ -106,16 +106,16 @@ def get_dt(
                 only_metainfo=only_metainfo,
                 load_index=load_index,
                 load_range=load_range
-            )
+            )      
 
         if only_metainfo:
             return (result, '') if return_path else result
         else:
-            return (result[0], result[1]) if return_path else result[0]
-
-
-        
-       
+            if len(result) == 2:
+                return (result[0], result[1]) if return_path else result[0]
+            else:
+                return (result, '') if return_path else result
+            
     return (raw_data, path) if return_path else raw_data
 
 
