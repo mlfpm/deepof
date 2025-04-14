@@ -726,12 +726,20 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
         result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
 
     """
+    original_shape = cartesian_df.shape
+    if type(cartesian_df.columns) == pd.MultiIndex:
+        #"levels" seems to be bugged and still finds columns that are not included in the datframe anymore
+        body_parts = [column[0] for column in cartesian_df.columns]
+        body_parts = np.array(body_parts)[np.unique(body_parts, return_index=True)[1]]
+    else:
+        body_parts = cartesian_df.columns
+
     result = []
-    for df in list(cartesian_df.columns.levels[0]):
+    for df in list(body_parts):
         result.append(bp2polar(cartesian_df[df]))
     result = pd.concat(result, axis=1)
     idx = pd.MultiIndex.from_product(
-        [list(cartesian_df.columns.levels[0]), ["rho", "phi"]]
+        [list(body_parts), ["rho", "phi"]]
     )
     result.columns = idx
     result.index = cartesian_df.index
@@ -2927,12 +2935,11 @@ def rolling_speed(
 
     """
     original_shape = dframe.shape
-    try:
+    if type(dframe.columns) == pd.MultiIndex:
         #"levels" seems to be bugged and still finds columns that are not included in the datframe anymore
         body_parts = [column[0] for column in dframe.columns]
         body_parts = np.array(body_parts)[np.unique(body_parts, return_index=True)[1]]
-
-    except AttributeError:
+    else:
         body_parts = dframe.columns
 
     speeds = pd.DataFrame

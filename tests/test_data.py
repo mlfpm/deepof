@@ -261,7 +261,7 @@ def test_get_distances(nodes, ego):
     prun.create(force=True, test=True)
 
     tables, _ = prun.preprocess_tables()
-    prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
+    prun.scales, prun.arena_params, prun.roi_dicts, prun.video_resolution = prun.get_arena(
         tables=tables, test=True,
     )
     prun.distances = nodes
