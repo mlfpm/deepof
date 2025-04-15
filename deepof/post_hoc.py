@@ -413,7 +413,7 @@ def condition_distance_binning(
         end_bin (int): The index of the last bin to compute the distance for.
         step_bin (int): The step size of the bins to compute the distance for.
         scan_mode (str): The mode to use for computing the distance. Can be one of "growing-window" (used to select optimal binning), "per-bin" (used to evaluate how discriminability evolves in subsequent bins of a specified size) or "precomputed", which requires a numpy ndarray with bin IDs to be passed to precomputed_bins.
-        precomputed_bins (np.ndarray): numpy array with IDs mapping to different bins, not necessarily having the same size. Difference across conditions for each of these bins will be reported.
+        precomputed_bins (np.ndarray): numpy array with integer bin sizes in frames, do not necessarily need to have the same size. Difference across conditions for each of these bins will be reported.
         agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
         metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
         n_jobs (int): The number of jobs to use for parallel processing.
@@ -425,6 +425,8 @@ def condition_distance_binning(
     
     # Divide the embeddings in as many corresponding bins, and compute distances
     def embedding_distance(bin_index):
+
+        nonlocal precomputed_cumsums
 
         if scan_mode == "per-bin":
 
@@ -439,7 +441,7 @@ def condition_distance_binning(
                 "the precomputed_bins parameter"
             )
             
-            bin_info=precomputed_bins 
+            bin_info=np.array([precomputed_cumsums[bin_index],precomputed_cumsums[bin_index+1]])
 
         return separation_between_conditions(
             embedding,
@@ -455,7 +457,8 @@ def condition_distance_binning(
     elif scan_mode == "growing_window":
         bin_range = range(start_bin, end_bin, step_bin)
     else:
-        bin_range = pd.Series(precomputed_bins).unique()
+        bin_range = range(len(precomputed_bins))
+        precomputed_cumsums=np.insert(np.cumsum(precomputed_bins), 0, 0)
 
     exp_condition_distance_array = Parallel(n_jobs=n_jobs)(
         delayed(embedding_distance)(bin_index) for bin_index in bin_range
