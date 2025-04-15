@@ -19,7 +19,7 @@ import sys
 import subprocess
 import cv2
 
-def is_display_available():
+def is_display_available(): # pragma: no cover
     # Check for Linux and X display
     if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
         return False
