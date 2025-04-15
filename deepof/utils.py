@@ -1077,7 +1077,12 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
     """
 
-    points=np.array(tab[aid+"_"+in_roi_criterion])
+    if aid != "":
+        points=np.array(tab[aid+"_"+in_roi_criterion])
+    else:
+        points=np.array(tab[in_roi_criterion])
+    if type(roi_polygon)==tuple:
+        roi_polygon=np.array(roi_polygon)
 
     if run_numba:
         mouse_in_polygon=deepof.utils.point_in_polygon_numba(points,roi_polygon)
@@ -2238,21 +2243,37 @@ def get_arenas(
             get_arena=False
             if "polygonal" in arena:
                 scales={'test2': [279.5, 213.5, 420.12, 380], 'test': [279.5, 213.5, 420.12, 380]}
-                arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}
+                arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (323, 29), (323, 434), (104, 431))}
                 video_resolution={'test2': (480, 640), 'test': (480, 640)}
+                rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
+                roi_dicts={'test': rois, 'test2': rois} 
+                #scale rois to mm
+                for key in roi_dicts.keys():
+                    for k, roi in roi_dicts[key].items():
+                        scaling_ratio = scales[key][3]/scales[key][2]
+                        roi_dicts[key][k] = np.array(roi)*scaling_ratio
+
                 if test == "detect_arena":
                     arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
                 else:
-                    return scales, arena_params, None, video_resolution
+                    return scales, arena_params, roi_dicts, video_resolution
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
                 arena_params={'test2': ((200, 195), (167, 169), 14.071887016296387), 'test': ((200, 195), (167, 169), 14.071887016296387)}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
+                rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
+                roi_dicts={'test': rois, 'test2': rois} 
+                #scale rois to mm
+                for key in roi_dicts.keys():
+                    for k, roi in roi_dicts[key].items():
+                        scaling_ratio = scales[key][3]/scales[key][2]
+                        roi_dicts[key][k] = np.array(roi)*scaling_ratio
+                        
                 if test == "detect_arena":
                     pass
                 else:
-                    return scales, arena_params, None, video_resolution
+                    return scales, arena_params, roi_dicts, video_resolution
 
 
         # Load SAM 

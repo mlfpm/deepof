@@ -1518,7 +1518,7 @@ class Coordinates:
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
             if selected_id is not None:
-                selected_ids = selected_id
+                selected_ids = [selected_id]
             else:
                 selected_ids = self._animal_ids
             
