@@ -33,6 +33,10 @@ from deepof.visuals_utils import (
     create_bin_pairs,
     cohend,
     _preprocess_time_bins,
+    _apply_rois_to_bin_info,
+    get_supervised_behaviors_in_roi,
+    get_unsupervised_behaviors_in_roi,
+    get_beheavior_frames_in_roi,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -411,4 +415,61 @@ def test_preprocess_time_bins(
         if (len(bin_info[key])>0):
             assert bin_info[key][-1] <= lengths[key]
             assert bin_info[key][0] >= 0
+
+
+@settings(deadline=None)
+@given(
+    mode=st.one_of(st.just("single"), st.just("multi")),
+    bin_size=st.one_of(st.just(100), st.just(50)),
+    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose")),
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+)
+def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
+
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
+
+    if mode == "multi":
+        animal_ids = ["B", "W"]
+    else:
+        animal_ids = [""]
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Tables"
+        ),
+        project_name=f"deepof_project_roi_test",
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        animal_ids=animal_ids,
+        table_format=".h5",
+        fast_implementations_threshold=fast_implementations_threshold,
+    )
+
+    #also use large table handling 
+    if use_numba:
+        prun.very_large_project=True
+    
+    prun = prun.create(force=True, test=True)
+ 
+    bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
+
+    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+
+    # bin info is a two level dictionary
+    assert isinstance(bin_info_roi1, dict) 
+    assert isinstance(bin_info_roi1[list(bin_info_roi1.keys())[0]], dict)
+    # There are always more or an equal amount of frames in which the animal is in the larger roi (roi 1) as compared to it being in the smaller roi (roi2) 
+    for key in bin_info_roi1.keys():
+        for roi in bin_info_roi1[key].keys():
+            assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
     

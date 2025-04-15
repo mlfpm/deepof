@@ -856,7 +856,7 @@ def _apply_rois_to_bin_info(
         if roi_number is not None:
             for aid in animal_ids:
 
-                tab = coordinates._tables[key]
+                tab = get_dt(coordinates._tables,key)
                 roi_polygon=coordinates._roi_dicts[key][roi_number]
                 mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, coordinates._run_numba)
 
