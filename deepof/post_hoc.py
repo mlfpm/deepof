@@ -184,7 +184,7 @@ def recluster(
         try:
             hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
             hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
-        except:
+        except: # pragma: no cover
             hmm_model = DenseHMM(
                 [
                     Normal(covariance_type="diag")
