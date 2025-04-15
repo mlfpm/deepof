@@ -385,6 +385,8 @@ def get_aggregated_embedding(
     
     agg_embedding = agg_embedding_clean.reindex(agg_embedding.index)
 
+    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
+
     return agg_embedding
 
 
