@@ -136,7 +136,7 @@ def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animal_ids)
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
-    scan_mode=st.sampled_from(["growing-window", "per-bin"]),
+    scan_mode=st.sampled_from(["growing_window", "per-bin", "precomputed"]),
     agg=st.sampled_from(["time_on_cluster", "mean", "median"]),
     metric=st.sampled_from(["auc", "wasserstein"]),
 )
