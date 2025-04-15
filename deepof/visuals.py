@@ -3166,7 +3166,7 @@ def plot_behavior_trends(
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
             if roi_number is not None:
-                data_set=get_unsupervised_behaviors_in_roi(hard_counts=data_set, local_bin_info=roi_bin_info[key],animal_id=animal_id)
+                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_id=animal_id)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]

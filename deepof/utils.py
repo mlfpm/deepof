@@ -2233,7 +2233,7 @@ def get_arenas(
 
             #skip arena retival if circular-autodetect was selected
             get_arena=True
-            if arena == "circular-autodetect" and number_of_rois==0:
+            if arena == "circular-autodetect":
                 get_arena=False
             else:
                 display_message(multi_line_message)
@@ -2269,7 +2269,7 @@ def get_arenas(
                     for k, roi in roi_dicts[key].items():
                         scaling_ratio = scales[key][3]/scales[key][2]
                         roi_dicts[key][k] = np.array(roi)*scaling_ratio
-                        
+
                 if test == "detect_arena":
                     pass
                 else:

@@ -885,16 +885,18 @@ def get_supervised_behaviors_in_roi(
     cur_supervised=copy.copy(cur_supervised)
 
     if animal_ids is None:
-        animal_ids=[]
+        animal_ids=[""]
     elif type(animal_ids)==str:
-        animal_ids=[animal_ids]
+        animal_ids=[animal_ids+"_"]
+    elif type(animal_ids)==list and len(animal_ids)>1:
+        animal_ids=[aid+"_" for aid in animal_ids]
 
     # Create set of valid columns that contain any animal id
     valid_cols = set()
     for col in cur_supervised.columns:
         level0 = col[0] if isinstance(col, tuple) else col
         for aid in animal_ids:
-            if f"{aid}_" in level0:
+            if f"{aid}" in level0:
                 valid_cols.add(col)
                 break  # skip checking for more ids in column
 
@@ -919,7 +921,7 @@ def get_supervised_behaviors_in_roi(
     return cur_supervised
 
 def get_unsupervised_behaviors_in_roi(
-        hard_counts: np.array,
+        cur_unsupervised: np.array,
         local_bin_info: dict,
         animal_id: str, 
 ):
@@ -934,7 +936,7 @@ def get_unsupervised_behaviors_in_roi(
         in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
 
     """
-    hard_counts=copy.copy(hard_counts)
+    cur_unsupervised=copy.copy(cur_unsupervised)
 
     if type(animal_id)==list:
         animal_id = animal_id[0]
@@ -947,12 +949,12 @@ def get_unsupervised_behaviors_in_roi(
             )
             warnings.warn(warning_message)   
             get_unsupervised_behaviors_in_roi._warning_issued = True
-    if len(hard_counts.shape)==1:
-        hard_counts[~local_bin_info[animal_id]]=-1    
+    if len(cur_unsupervised.shape)==1:
+        cur_unsupervised[~local_bin_info[animal_id]]=-1    
     else: 
-        hard_counts[~local_bin_info[animal_id]]=np.NaN   
+        cur_unsupervised[~local_bin_info[animal_id]]=np.NaN   
 
-    return hard_counts
+    return cur_unsupervised
 
 
 def get_beheavior_frames_in_roi(

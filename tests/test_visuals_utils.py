@@ -9,6 +9,8 @@ Testing module for deepof.visuals_utils
 """
 
 import os
+import string
+import random
 
 import numpy as np
 import pandas as pd
@@ -473,3 +475,74 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
         for roi in bin_info_roi1[key].keys():
             assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
     
+
+@settings(deadline=None)
+@given(
+
+    animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ).map(sorted),
+    supervised_behavior = st.booleans(),
+)
+def test_get_rois(animal_ids, bins, supervised_behavior):
+
+    animal_ids=list(animal_ids)
+    if len(animal_ids)==0:
+        animal_ids=['']
+
+    num_rows = 100
+    num_cols = 10
+
+    # Generate column names with random animal_id combinations
+    column_names = []
+    for col_num in range(1, num_cols + 1):
+        k = random.randint(1, len(animal_ids))
+        subset = random.sample(animal_ids, k)
+        subset.sort()
+        if animal_ids[0] != '':
+            prefix = '_'.join(subset)
+            column_names.append(f"{prefix}_{col_num}")
+        else:
+            column_names.append(f"{col_num}")
+
+    # Create supervised DataFrame with binary values
+    cur_supervised = pd.DataFrame(
+        np.random.randint(2, size=(num_rows, num_cols)),
+        columns=column_names
+    )
+
+    # Convert DataFrame to numpy array for unsupervised data
+    cur_unsupervised = cur_supervised.to_numpy().astype(float)
+
+    # Create local_bin_info
+    local_bin_info = {"time": np.array(bins)}
+    for k, animal_id in enumerate(animal_ids):
+        local_bin_info[animal_id] = cur_unsupervised[bins,k].astype(bool)
+
+    # Determine random behavior from column names or as unsupervised dummy
+    if supervised_behavior:
+        behavior=column_names[0]
+    else:
+        behavior="_"
+
+    # get ROIs with different methods
+    cur_supervised_filtered = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids)
+    cur_unsupervised_filtered = get_unsupervised_behaviors_in_roi(cur_unsupervised[bins], local_bin_info, animal_ids)
+    frames = get_beheavior_frames_in_roi(behavior, local_bin_info, animal_ids)
+
+    # In the not supervised case, frames represent the non-nan positions in cur_unsupervised after filtering
+    if not supervised_behavior:
+        assert (cur_unsupervised[frames] == cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]).all()
+    # if there is only one supervised behavior, frames represent the non-nan positions in cur_supervised after filtering
+    elif len(animal_ids)==1:
+        assert (cur_supervised.iloc[frames] == cur_supervised_filtered.dropna()).all().all()
+    # For multiple animals, selecting frames based on a random behavior is always greator or equal the number of non-nan supervised rows
+    # (because the more rows will be set to nan the more mice are involved in a behavior)
+    else:
+        assert (len(cur_supervised.iloc[frames]) >= len(cur_supervised_filtered.dropna()))
+    # unsupervised always onyl filters by one animal, supervised can filter by combinations, respectively supervised can filter out more but not less
+    assert (len((cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]))) >= len(cur_supervised_filtered.dropna())
