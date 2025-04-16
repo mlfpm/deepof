@@ -152,7 +152,8 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-
+    # fallback for not defined scan mode
+    precomputed_bins=(np.ones(9)*11).astype(int)
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
@@ -164,6 +165,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         end_bin=99,
         step_bin=11,
         scan_mode=scan_mode,
+        precomputed_bins=precomputed_bins,
         agg=agg,
         metric=metric,
         n_jobs=1,
