@@ -173,7 +173,7 @@ class DataManager:
                     break
                 except Exception:
                     continue
-        return df
+        return df    
     
 
     def _get_metadata(self, table_name: str, load_index: bool) -> dict:
@@ -200,7 +200,8 @@ class DataManager:
                     arrays = [loaded[key] for key in loaded.files]
                     #deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
                     # Mimic original behavior: use only the second array
-                    deserialized = arrays[1] if len(arrays) > 1 else arrays[0]
+                    deserialized = arrays[0]
+                    
 
 
                 # Infer metadata
@@ -228,12 +229,13 @@ class DataManager:
                 elif isinstance(deserialized, np.ndarray):
                     shape = deserialized.shape
                     num_rows = shape[0]
-                    if deserialized.ndim == 3:
-                        num_cols = shape[1] * shape[2]
-                    elif deserialized.ndim == 2:
-                        num_cols = shape[1]
-                    else:
-                        num_cols = 1
+                    num_cols = shape[1] if len(shape) > 1 else 1
+                    #if deserialized.ndim == 3:
+                     #   num_cols = shape[1] * shape[2]
+                    #elif deserialized.ndim == 2:
+                     #   num_cols = shape[1]
+                    #else:
+                     #   num_cols = 1
                 else:
                     shape = ()
                     num_rows = 0

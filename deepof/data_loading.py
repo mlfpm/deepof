@@ -112,7 +112,7 @@ def get_dt(
             return (result, '') if return_path else result
         else:
             if len(result) == 2:
-                return (result[0], result[1]) if return_path else result[0]
+               return (result[0], result[1]) if return_path else result
             else:
                 return (result, '') if return_path else result
             
