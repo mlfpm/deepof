@@ -2177,6 +2177,12 @@ def animate_skeleton(
         animal_id=animal_id,
         center=center,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
+        if roi_number is not None:
+            animal_id = animal_id[0]
+    elif type(animal_id)==str:
+        animal_id=[animal_id]
 
     bin_info_time = _preprocess_time_bins(
     coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
@@ -2197,12 +2203,14 @@ def animate_skeleton(
     #scales is now a dictionary which simplifies things
     coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
 
+    # Filter requested animals
+    coords_list=[]
+    for aid in animal_id:
+        coords_list.append(deepof.utils.filter_animal_id_in_table(table=coords, selected_id=aid))
+    coords=pd.concat(coords_list,axis=1)
+
     # Sort column index to allow for multiindex slicing
     coords = coords.sort_index(ascending=True, inplace=False, axis=1)
-
-    # Filter requested animals
-    if animal_id:
-        coords = coords.filter_id(animal_id)
 
     # Get output scale
     x_dv = np.maximum(
@@ -2269,40 +2277,36 @@ def animate_skeleton(
 
     # If there are more than one animal in the representation, display each in a different color
     hue = None
-    cmap = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
+    cmap_all = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
+    positions = [coordinates._animal_ids.index(item) for item in animal_id]
+    cmap = ListedColormap([cmap_all(pos)for pos in positions])
+    #cmap = cmap[]
 
-    if not animal_id and coordinates._animal_ids[0]:
-        animal_ids = coordinates._animal_ids
+    polygons = [_get_polygon_coords(coords, aid) for aid in animal_id]
 
-    else:
-        animal_ids = [animal_id]
+    hue = np.zeros(len(np.array(init_x)))
+    for i, id in enumerate(animal_id):
 
-    polygons = [_get_polygon_coords(coords, aid) for aid in animal_ids]
+        hue[coords.columns.levels[0].str.startswith(id)] = i
 
-    if animal_id is None:
-        hue = np.zeros(len(np.array(init_x)))
-        for i, id in enumerate(coordinates._animal_ids):
+        # Set a custom legend outside the plot, with the color of each animal
 
-            hue[coords.columns.levels[0].str.startswith(id)] = i
-
-            # Set a custom legend outside the plot, with the color of each animal
-
-            if legend:
-                custom_labels = [
-                    plt.scatter(
-                        [np.inf],
-                        [np.inf],
-                        color=cmap(i / len(coordinates._animal_ids)),
-                        lw=3,
-                    )
-                    for i in range(len(coordinates._animal_ids))
-                ]
-                ax2.legend(custom_labels, coordinates._animal_ids, loc="upper right")
+        if legend:
+            custom_labels = [
+                plt.scatter(
+                    [np.inf],
+                    [np.inf],
+                    color=cmap(i / len(animal_id)),
+                    lw=3,
+                )
+                for i in range(len(animal_id))
+            ]
+            ax2.legend(custom_labels, animal_id, loc="upper right")
 
     skeleton_scatter = ax2.scatter(
         x=np.array(init_x),
         y=np.array(init_y),
-        cmap=(cmap if animal_id is None else None),
+        cmap=cmap,
         label="Original",
         c=hue,
     )
@@ -2367,7 +2371,8 @@ def animate_skeleton(
     if roi_number is None:
         frames = bin_info[experiment_id]["time"]
     else:
-        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_ids)
+        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_id)
+        get_beheavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
         fig,
@@ -2377,7 +2382,7 @@ def animate_skeleton(
     )
 
     ax2.set_title(
-        f"deepOF animation - {(f'{animal_id} - ' if animal_id is not None else '')}{experiment_id}",
+        f"deepOF animation - {(f'{str(animal_id)} - ')}{experiment_id}",
         fontsize=15,
     )
     ax2.set_xlabel("x")

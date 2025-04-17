@@ -869,18 +869,17 @@ def _apply_rois_to_bin_info(
 def get_supervised_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
-    animal_ids: list, 
+    animal_ids: Union[str, list], 
 ):
     """Filter supervised behaviors based on rois given by animal_ids.
 
     Args:
-        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
-        roi_number (int): number of the roi 
-        experiment_id (str): Id of the experiment for which behaviors should be extracted.
-        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        soft_counts (dict): dictionary with soft_counts per experiment.
-        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
-
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
     """
     cur_supervised=copy.copy(cur_supervised)
 
@@ -925,17 +924,17 @@ def get_unsupervised_behaviors_in_roi(
         local_bin_info: dict,
         animal_id: str, 
 ):
-    """Filter unsupervised behaviors based on rois given by animal_id.
+    """Filter unsupervised behaviors based on rois given by animal_ids.
 
     Args:
-        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
-        roi_number (int): number of the roi 
-        experiment_id (str): Id of the experiment for which behaviors should be extracted.
-        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
-        soft_counts (dict): dictionary with soft_counts per experiment.
-        in_roi_criterion (str): criterion by which it is determined if a mouse is currently within or outside of a ROI
-
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
     """
+
     cur_unsupervised=copy.copy(cur_unsupervised)
 
     if type(animal_id)==list:
@@ -958,11 +957,21 @@ def get_unsupervised_behaviors_in_roi(
 
 
 def get_beheavior_frames_in_roi(
-    behavior,
-    local_bin_info,
-    animal_id,        
+    behavior: str,
+    local_bin_info: dict,
+    animal_id: Union[str, list],        
 ):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        behavior (str): Behavior for which frames in ROi get determined.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
     
+    Returns:
+        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
+    """
+        
     local_bin_info = copy.copy(local_bin_info)
     frames = copy.copy(local_bin_info["time"])
 
@@ -971,8 +980,9 @@ def get_beheavior_frames_in_roi(
         is_supervised_behavior = any([aid+"_" in behavior for aid in animal_id])
     
     if type(animal_id)==list and not is_supervised_behavior:
+        L_list = len(animal_id)
         animal_id = animal_id[0]
-        if not getattr(get_beheavior_frames_in_roi, '_warning_issued', False):
+        if not getattr(get_beheavior_frames_in_roi, '_warning_issued', False) and L_list>1:
             warning_message = (
                 "\033[38;5;208m\n"  # Set text color to orange
                 "Warning! No animal id was selected but the selected behavior is unsupervised!\n"
