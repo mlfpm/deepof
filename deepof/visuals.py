@@ -79,6 +79,7 @@ def plot_heatmaps(
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
+    animal_id: str = None,
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
@@ -121,12 +122,13 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
+        animal_id=animal_id,
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, selected_id=animal_id)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -343,6 +345,11 @@ def _plot_experiment_gantt(
 
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+
 
     # set active axes if provided
     if ax:
@@ -527,10 +534,15 @@ def _plot_behavior_gantt(
         soft_counts=soft_counts,
         behaviors=behavior_id,
         experiment_ids=experiments_to_plot,
+        animal_id=animal_id,
     )
 
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
 
     # set active axes if provided
     if ax:
@@ -885,9 +897,14 @@ def plot_enrichment(
         coordinates,
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
+        animal_id=animal_id,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
     if normalize and plot_speed:
         print(
             '\033[33mInfo! When plotting speed the normalization option "normalize" is ignored!\033[0m'
@@ -1339,9 +1356,14 @@ def plot_transitions(
         origin="plot_transitions",
         exp_condition=exp_condition,
         visualization=visualization,
+        animal_id=animal_id,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
     # Get requested experimental condition. If none is provided, default to the first one available.
     if coordinates.get_exp_conditions is not None and exp_condition is None:
         exp_condition = coordinates.get_exp_conditions[
@@ -1513,9 +1535,15 @@ def plot_stationary_entropy(
     _check_enum_inputs(
         coordinates,
         exp_condition=exp_condition,
+        animal_id=animal_id,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+
 
     # Get requested experimental condition. If none is provided, default to the first one available.
     if exp_condition is None:
@@ -1812,10 +1840,19 @@ def plot_embeddings(
         exp_condition=exp_condition,
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
+        animal_id=animal_id,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
-    elif type(animal_id)==str:
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+    if supervised_annotations is not None and roi_number is not None and animal_id is not None:
+        raise ValueError(
+            '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
+        )
+    if type(animal_id)==str:
         animal_id=[animal_id]
     # prevents crash due to axis issues
     if (
@@ -1915,6 +1952,7 @@ def plot_embeddings(
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
+        get_beheavior_frames_in_roi._warning_issued = False
                
 
         # Concatenate experiments and align experimental conditions
@@ -2661,10 +2699,15 @@ def export_annotated_video(
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
+        animal_id=animal_id,
     )
 
     if animal_id is None:
         animal_id = coordinates._animal_ids
+        if roi_number is None:
+            print(
+            '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
+            )
 
     # Create output directory if it doesn't exist
     proj_path = os.path.join(coordinates._project_path, coordinates._project_name)
@@ -2725,7 +2768,8 @@ def export_annotated_video(
 
         # get frames for this experiment id
         if behavior is None and supervised_annotations is not None:
-            behavior = cur_tab.columns
+            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+            behavior = cur_tab.columns[0]
         if roi_number is not None:
             frames=get_beheavior_frames_in_roi(behavior=behavior, local_bin_info=bin_info[experiment_id], animal_id=animal_id)
         else:
@@ -2997,9 +3041,14 @@ def plot_behavior_trends(
         exp_condition=exp_condition,
         condition_values=condition_values,
         behaviors=behavior_to_plot,
+        animal_id=animal_id,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
 
     #####
     # Set defaults based on inputs
@@ -3207,6 +3256,7 @@ def plot_behavior_trends(
                 ]
             )
             df = pd.concat([df, new_row], ignore_index=True)
+    get_unsupervised_behaviors_in_roi._warning_issued = False
 
     # Normalize frames to reflect seconds
     df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
