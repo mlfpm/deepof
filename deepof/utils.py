@@ -2368,11 +2368,18 @@ def get_arenas(
             "arenas must be set to one of: 'polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect'"
         )
     
-    #scale rois to mm
+    #scale rois and arenas to mm
     for key in roi_dicts.keys():
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][3]/scales[key][2]
             roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    for key in arena_params.keys():
+        scaling_ratio = scales[key][3]/scales[key][2]
+        if "polygonal" in arena:
+            arena_params[key]=tuple(map(tuple,np.array(arena_params[key])*scaling_ratio))
+        elif "circular" in arena:
+            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+
 
     return scales, arena_params, roi_dicts, video_resolution
 
