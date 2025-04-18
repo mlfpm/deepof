@@ -2376,7 +2376,7 @@ def get_arenas(
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
         if "polygonal" in arena:
-            arena_params[key]=tuple(map(tuple,np.array(arena_params[key])*scaling_ratio))
+            arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif "circular" in arena:
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
 
