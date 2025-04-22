@@ -1560,8 +1560,8 @@ def _tag_annotated_frames(
             # Print arena for debugging
             cv2.ellipse(
                 img=frame,
-                center=arena[0],
-                axes=arena[1],
+                center=np.round(arena[0]).astype(int),
+                axes=np.round(arena[1]).astype(int),
                 angle=arena[2],
                 startAngle=0,
                 endAngle=360,
