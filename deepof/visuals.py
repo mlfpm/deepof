@@ -1849,15 +1849,15 @@ def plot_embeddings(
         colour_by=colour_by,
         animal_id=animal_id,
     )
+    if supervised_annotations is not None and roi_number is not None and animal_id is not None:
+        raise ValueError(
+            '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
+        )
     if animal_id is None:
         animal_id = coordinates._animal_ids
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
-        )
-    if supervised_annotations is not None and roi_number is not None and animal_id is not None:
-        raise ValueError(
-            '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
         )
     if type(animal_id)==str:
         animal_id=[animal_id]
@@ -2226,7 +2226,7 @@ def animate_skeleton(
         animal_id = coordinates._animal_ids
         if roi_number is not None:
             animal_id = animal_id[0]
-    elif type(animal_id)==str:
+    if type(animal_id)==str:
         animal_id=[animal_id]
 
     bin_info_time = _preprocess_time_bins(

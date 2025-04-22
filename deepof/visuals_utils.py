@@ -109,6 +109,8 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         behaviors=[behaviors]
     if animal_ids is None:
         pass
+    elif type(animal_ids) == str:
+        animal_ids=[animal_ids]
     elif type(animal_ids)==pd.DataFrame:
         animal_ids_raw=animal_ids.columns
         animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
@@ -150,7 +152,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     asymmetric_behaviors=["nose2tail","nose2body","following"]
 
     # create names of supervised behaviors from animal ids and raw behavior names in correct order
-    if animal_ids is None:
+    if animal_ids is None or len(animal_ids)==1:
         supervised = single_behaviors
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
@@ -1277,7 +1279,7 @@ def plot_arena(
         roi_number int: number of a roi, if given
     """
     if key != "average" and roi_number is None:
-        arena = coordinates._arena_params[key]
+        arena = copy.copy(coordinates._arena_params[key])
     elif key != "average":
         arena = copy.copy(coordinates._roi_dicts[key][roi_number])
 
@@ -1308,7 +1310,7 @@ def plot_arena(
         if center == "arena" and key == "average":
 
             if roi_number is None:
-                polygon_dictionary = coordinates._arena_params
+                polygon_dictionary = copy.copy(coordinates._arena_params)
             else:
                 polygon_dictionary = {
                     exp: copy.copy(roi_data[roi_number]) 
