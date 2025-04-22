@@ -51,7 +51,8 @@ from deepof.visuals_utils import (
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
     get_beheavior_frames_in_roi,
-    _apply_rois_to_bin_info
+    _apply_rois_to_bin_info,
+    BGR_to_hex,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -75,6 +76,7 @@ def plot_heatmaps(
     condition_value: str = None,
     roi_number: int = None,
     display_arena: bool = True,
+    display_rois: bool = True,
     xlim: float = None,
     ylim: float = None,
     save: bool = False,
@@ -199,6 +201,11 @@ def plot_heatmaps(
     if display_arena:
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
+
+    if display_rois:
+        for hmap in heatmaps:
+            color = BGR_to_hex(deepof.utils.get_roi_colors()[roi_number-1])
+            plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
 
     if not ax:
         plt.gca().invert_yaxis()
@@ -3682,3 +3689,86 @@ def plot_behavior_trends(
     # If no axes are given, show plot
     if show:
         plt.show()
+
+
+def get_roi_data(
+    coordinates: coordinates,
+    table_dict: table_dict,
+    roi_number: int,
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =100000,
+    # Visualization parameters
+    experiment_id: str = None,
+    animal_id: str = None,
+):
+    """get data in Rois.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)        
+        experiment_id (str): Name of the experiment id to extract. If None (default) a dictionary of all entries will be exported.
+        animal_id (str): id of the animal that is used to determine if a ROI is active.
+
+    """
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        experiment_ids=experiment_id,
+        animal_id=animal_id,
+    )
+    if coordinates._very_large_project and experiment_id is None:
+        raise NotImplementedError(
+            "Iteration accross all experiments is currently not supported for very large projects! However, by setting \"experiment_id\" you can still export single tables"
+        )
+
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if experiment_id is None:
+        exp_ids = list(table_dict.keys())
+    else:
+        exp_ids = [experiment_id]
+
+    # Preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, 
+        tab_dict_for_binning=table_dict, samples_max=samples_max,
+    )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)    
+
+    object_out={}
+    for key in exp_ids:
+        tab = get_dt(table_dict, key)
+        if type(tab)==pd.DataFrame:
+            supervised_binned = pd.DataFrame(tab.iloc[bin_info[key]["time"]])
+            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animal_id)
+        elif type(tab)==np.ndarray:
+            unsupervised_binned = tab[bin_info[key]["time"]]
+            time_binned = get_unsupervised_behaviors_in_roi(unsupervised_binned, bin_info[key], animal_id)
+        else:
+            raise NotImplementedError(
+                "This function only supports supervised and unsupervides table dicts!"
+            )
+        if len(exp_ids)>1:
+            object_out[key]=time_binned
+        else:
+            object_out=time_binned
+
+    get_unsupervised_behaviors_in_roi._warning_issued = False
+
+    return object_out

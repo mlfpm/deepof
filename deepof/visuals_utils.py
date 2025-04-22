@@ -83,6 +83,13 @@ def hex_to_BGR(hex_color):
     color = hex_color.lstrip('#')
     return tuple(int(color[i:i+2], 16) for i in (4, 2, 0))
 
+def BGR_to_hex(bgr_color):
+    r, g, b = bgr_color[2], bgr_color[1], bgr_color[0]
+    return "#{:02X}{:02X}{:02X}".format(r, g, b)
+
+def RGB_to_hex(bgr_color):
+    r, g, b = bgr_color[0], bgr_color[1], bgr_color[2]
+    return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
 def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None):
     """
@@ -1257,7 +1264,7 @@ def _check_enum_inputs(
     
 
 def plot_arena(
-    coordinates: coordinates, center: str, color: str, ax: Any, key: str
+    coordinates: coordinates, center: str, color: str, ax: Any, key: str, roi_number: int = None,
 ): # pragma: no cover
     """Plot the arena in the given canvas.
 
@@ -1267,11 +1274,14 @@ def plot_arena(
         color (str): color of the displayed arena.
         ax (Any): axes where to plot the arena.
         key str: key of the animal to plot with optional "all of them" (if key=="average").
+        roi_number int: number of a roi, if given
     """
-    if key != "average":
+    if key != "average" and roi_number is None:
         arena = coordinates._arena_params[key]
+    elif key != "average":
+        arena = copy.copy(coordinates._roi_dicts[key][roi_number])
 
-    if "circular" in coordinates._arena:
+    if "circular" in coordinates._arena and roi_number is None:
 
         if key == "average":
             arena = [
@@ -1293,11 +1303,19 @@ def plot_arena(
             )
         )
 
-    elif "polygonal" in coordinates._arena:
+    elif "polygonal" in coordinates._arena or roi_number is not None:
 
         if center == "arena" and key == "average":
 
-            arena = calculate_average_arena(coordinates._arena_params)
+            if roi_number is None:
+                polygon_dictionary = coordinates._arena_params
+            else:
+                polygon_dictionary = {
+                    exp: copy.copy(roi_data[roi_number]) 
+                    for exp, roi_data in coordinates._roi_dicts.items()
+                }
+
+            arena = calculate_average_arena(polygon_dictionary)
             avg_scaling = np.mean(np.array(list(coordinates._scales.values()))[:, :2], 0)
             arena -= avg_scaling
 
