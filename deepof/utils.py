@@ -2252,6 +2252,12 @@ def get_arenas(
                     for k, roi in roi_dicts[key].items():
                         scaling_ratio = scales[key][3]/scales[key][2]
                         roi_dicts[key][k] = np.array(roi)*scaling_ratio
+                for key in arena_params.keys():
+                    scaling_ratio = scales[key][3]/scales[key][2]
+                    if "polygonal" in arena:
+                        arena_params[key]=np.array(arena_params[key])*scaling_ratio
+                    elif "circular" in arena:
+                        arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
 
                 if test == "detect_arena":
                     arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
@@ -2269,6 +2275,12 @@ def get_arenas(
                     for k, roi in roi_dicts[key].items():
                         scaling_ratio = scales[key][3]/scales[key][2]
                         roi_dicts[key][k] = np.array(roi)*scaling_ratio
+                for key in arena_params.keys():
+                    scaling_ratio = scales[key][3]/scales[key][2]
+                    if "polygonal" in arena:
+                        arena_params[key]=np.array(arena_params[key])*scaling_ratio
+                    elif "circular" in arena:
+                        arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
 
                 if test == "detect_arena":
                     pass
