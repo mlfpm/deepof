@@ -954,15 +954,8 @@ def supervised_tagging(
         huddle_estimator = pickle.load(est)
 
     # Extract arena information from coordinates object
-    arena_params = coord_object._arena_params[key]
-    to_mm_scaling = coord_object._scales[key][3]/coord_object._scales[key][2]
+    arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
     arena_type = coord_object._arena
-    if arena_type.startswith("circular"):
-        # Multiply ellipse information (except angle) by scaling factor
-        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params[0:2]] + [arena_params[2]])
-    elif arena_type.startswith("polygon"):
-        # Multiply set of arena points by scaling factor
-        arena_params_scaled= tuple([tuple([x * to_mm_scaling for x in inner]) for inner in arena_params])
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""

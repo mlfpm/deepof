@@ -2498,7 +2498,7 @@ class Coordinates:
             "climb_tol": 0.15,                                 # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
             "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from teh arena edge or closer
             "min_immobility": int(self._frame_rate),           # Min Time interval the mouse needs to be immobile to be counted as immobility, 1 second 
-            #"max_immobility": 120*int(self._frame_rate),       # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
+            #"max_immobility": 120*int(self._frame_rate),      # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
             "stationary_threshold": 40,                        # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
             "nose_likelihood": 0.85,                           # Minimum degree of certainty of the Nose position prediction, relevant for lookaround and sniffing
         }

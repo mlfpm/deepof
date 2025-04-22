@@ -2711,10 +2711,10 @@ def export_annotated_video(
 
     if animal_id is None:
         animal_id = coordinates._animal_ids
-        if roi_number is None:
-            print(
-            '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
-            )
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
+        )
 
     # Create output directory if it doesn't exist
     proj_path = os.path.join(coordinates._project_path, coordinates._project_name)
