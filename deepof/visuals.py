@@ -202,7 +202,7 @@ def plot_heatmaps(
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
-    if display_rois:
+    if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
         for hmap in heatmaps:
             color = BGR_to_hex(deepof.utils.get_roi_colors()[roi_number-1])
             plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)

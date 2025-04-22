@@ -1652,6 +1652,7 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
+        roi_number: int = None,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
         return_path: bool = False,
@@ -1682,6 +1683,7 @@ class Coordinates:
                     key,
                     speed=speed,
                     selected_id=selected_id,
+                    roi_number=roi_number,
                     filter_on_graph=filter_on_graph,
                     )
 
@@ -1712,6 +1714,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = None,
+        roi_number: int = None,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
         """Return a pd.DataFrame with the distances between body parts of one animal as values.
@@ -1728,6 +1731,15 @@ class Coordinates:
 
         """
 
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._distances, key))
         #to avoid reloading quality if quality is given
@@ -1735,13 +1747,32 @@ class Coordinates:
             quality=self.get_quality().filter_videos([key])
             quality[key] = get_dt(quality,key)
 
-        if speed:
-            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
-
         if selected_id is not None:
             tab = tab.loc[
                 :, deepof.utils.filter_columns(tab.columns, selected_id)
             ]
+        
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if selected_id is not None:
+                selected_ids = [selected_id]
+            else:
+                selected_ids = self._animal_ids
+
+            tab_pos=get_dt(self._tables, key)
+            
+            for aid in selected_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                mask = [col[0].startswith(aid) or col[1].startswith(aid) for col in tab.columns]
+                aid_cols = tab.loc[:, mask].columns
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        if speed:
+            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
 
 
         table_dict={key:tab}
@@ -1775,6 +1806,7 @@ class Coordinates:
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
+        roi_number: int = None,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -1803,6 +1835,7 @@ class Coordinates:
                     degrees=degrees,
                     speed=speed,
                     selected_id=selected_id,
+                    roi_number = roi_number,
                 )
 
                 # save paths for modified tables
@@ -1832,6 +1865,7 @@ class Coordinates:
     degrees: bool = False,
     speed: int = 0,
     selected_id: str = None,
+    roi_number: int = None,
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
 
@@ -1847,6 +1881,15 @@ class Coordinates:
 
         """  
 
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._angles, key))
         #to avoid reloading quality if quality is given
@@ -1854,17 +1897,36 @@ class Coordinates:
             quality=self.get_quality().filter_videos([key])
             quality[key] = get_dt(quality,key)
 
-        if degrees:
-            tab = np.degrees(tab) 
-
-        if speed:
-            vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-            tab = vel
-
         if selected_id is not None:
             tab = tab.loc[
                 :, deepof.utils.filter_columns(tab.columns, selected_id)
             ]
+
+        if degrees:
+            tab = np.degrees(tab) 
+
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if selected_id is not None:
+                selected_ids = [selected_id]
+            else:
+                selected_ids = self._animal_ids
+            
+            tab_pos=get_dt(self._tables, key)
+       
+            for aid in selected_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                mask = [col[0].startswith(aid) for col in tab.columns]
+                aid_cols = tab.loc[:, mask].columns
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        if speed:
+            vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+            tab = vel
 
         table_dict={key:tab}
         # Set table_dict to NaN if animals are missing
@@ -1878,6 +1940,7 @@ class Coordinates:
             self, 
             speed: int = 0,
             selected_id: str = "all",
+            roi_number: int = None,
             file_name: str = 'got_areas',
             return_path: bool = False,
             ) -> table_dict:
@@ -1903,6 +1966,7 @@ class Coordinates:
                     key=key, 
                     speed = speed,
                     selected_id = selected_id,
+                    roi_number = roi_number,
                 )
 
                 # save paths for modified tables
@@ -1934,6 +1998,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = "all",
+        roi_number: int = None,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
@@ -1948,6 +2013,15 @@ class Coordinates:
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
         """
+
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
         
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._areas, key))
@@ -1960,6 +2034,20 @@ class Coordinates:
             selected_ids = self._animal_ids
         else:
             selected_ids = [selected_id]
+
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+
+            tab_pos=get_dt(self._tables, key)
+            
+            for aid in selected_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
 
         exp_table = pd.DataFrame()
 
