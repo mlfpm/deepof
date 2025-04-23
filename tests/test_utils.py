@@ -451,6 +451,12 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
         segmentation_model=deepof.utils.load_segmentation_model(None),
         arena_type=detection_mode,
     )
+    #adjust scaling
+    scaling_ratio = coords._scales[video_key][3]/coords._scales[video_key][2]
+    if "polygonal" in detection_mode:
+        arena_parameters=np.array(arena_parameters)*scaling_ratio
+    elif "circular" in detection_mode:
+        arena_parameters=(tuple(np.array(arena_parameters[0])*scaling_ratio),tuple(np.array(arena_parameters[1])*scaling_ratio),arena_parameters[2])
 
     rmtree(
         os.path.join(
