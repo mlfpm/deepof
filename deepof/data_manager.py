@@ -120,13 +120,15 @@ class DataManager:
         df = arrow_table.to_pandas(
             split_blocks=True,             # Speeds up conversion to Pandas
             self_destruct=True,            # Releases memory held by Arrow
-            types_mapper=pd.ArrowDtype     # Retains arrow-native types
+            #types_mapper=pd.ArrowDtype     # Retains arrow-native types
         )
 
         index_part = df.iloc[:, :1]
         data_part = df.iloc[:, 1:]
         df = self._parse_columns_to_tuples(data_part)
         df = df.applymap(lambda x: np.nan if pd.isna(x) else x)
+        #df = df.replace({pd.NA: np.nan})
+
 
         #df = self.conn.sql(query).df().to_pandas()
         #arrow_table = self.conn.execute(query).fetch_arrow_table()
