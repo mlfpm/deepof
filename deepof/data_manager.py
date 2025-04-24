@@ -126,7 +126,7 @@ class DataManager:
         index_part = df.iloc[:, :1]
         data_part = df.iloc[:, 1:]
         df = self._parse_columns_to_tuples(data_part)
-        df = df.applymap(lambda x: np.nan if pd.isna(x) else x)
+        #df = df.applymap(lambda x: np.nan if pd.isna(x) else x)
         #df = df.replace({pd.NA: np.nan})
 
 
