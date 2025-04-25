@@ -135,10 +135,8 @@ def save_dt(
 
     db_path = os.path.join(os.path.dirname(folder_path), "database.duckdb")
     key = os.path.basename(folder_path)
-    #manager = DataManager(db_path)
     with DataManager(db_path) as manager:
         manager.save(key, dt)
-    #manager.close()
 
     return {"duckdb_file": db_path, "table": sanitize_table_name(key)} if return_path else dt
 

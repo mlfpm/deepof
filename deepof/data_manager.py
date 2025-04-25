@@ -89,7 +89,6 @@ class DataManager:
 
         def _is_blob():
             cols = self._get_table_columns(table_name)
-            #cols = self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
             return len(cols) == 1 and cols[0][1] == "data"
         if only_metainfo:
             return self._get_metadata(table_name, load_index)
@@ -118,23 +117,13 @@ class DataManager:
         query = self._build_query(table_name, load_range)
         arrow_table = self.conn.execute(query).fetch_arrow_table()
         df = arrow_table.to_pandas(
-            split_blocks=True,             # Speeds up conversion to Pandas
-            self_destruct=True,            # Releases memory held by Arrow
-            #types_mapper=pd.ArrowDtype     # Retains arrow-native types
+            split_blocks=True,             
+            self_destruct=True,      
         )
 
-        index_part = df.iloc[:, :1]
+        #index_part = df.iloc[:, :1]
         data_part = df.iloc[:, 1:]
         df = self._parse_columns_to_tuples(data_part)
-        #df = df.applymap(lambda x: np.nan if pd.isna(x) else x)
-        #df = df.replace({pd.NA: np.nan})
-
-
-        #df = self.conn.sql(query).df().to_pandas()
-        #arrow_table = self.conn.execute(query).fetch_arrow_table()
-        #df = arrow_table.to_pandas(split_blocks=True, self_destruct=True, types_mapper=pd.ArrowDtype)
-
-
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 
 
@@ -195,23 +184,16 @@ class DataManager:
             try:
                 df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
                 blob = df.iloc[0]["data"]
-                #blob = self.conn.execute(f'SELECT data FROM "{table_name}" LIMIT 1').fetchone()[0]
 
 
                 with np.load(io.BytesIO(blob)) as loaded:
                     arrays = [loaded[key] for key in loaded.files]
-                    #deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
-                    # Mimic original behavior: use only the second array
                     deserialized = arrays[0]
                     
 
-
-                # Infer metadata
                 if isinstance(deserialized, tuple):
                     try:
-                        # Check if all arrays are 2D and have the same number of rows
                         if all(arr.ndim == 2 and arr.shape[0] == deserialized[0].shape[0] for arr in deserialized):
-                            # Concatenate along feature axis (columns)
                             stacked = np.concatenate(deserialized, axis=1)
                             shape = stacked.shape
                             num_rows = shape[0]
@@ -219,7 +201,6 @@ class DataManager:
                         else:
                             raise ValueError("Cannot concatenate arrays with incompatible shapes.")
                     except Exception as e:
-                        # Fallback: treat as tuple of individual arrays
                         shape = tuple(arr.shape for arr in deserialized)
                         num_rows = deserialized[0].shape[0] if deserialized[0].ndim > 0 else 1
                         num_cols = sum(
@@ -231,13 +212,7 @@ class DataManager:
                 elif isinstance(deserialized, np.ndarray):
                     shape = deserialized.shape
                     num_rows = shape[0]
-                    num_cols = shape[1] if len(shape) > 1 else 1
-                    #if deserialized.ndim == 3:
-                     #   num_cols = shape[1] * shape[2]
-                    #elif deserialized.ndim == 2:
-                     #   num_cols = shape[1]
-                    #else:
-                     #   num_cols = 1
+                    num_cols = shape[1] if len(shape) > 1 else 1                    
                 else:
                     shape = ()
                     num_rows = 0
@@ -293,7 +268,6 @@ class DataManager:
     def _parse_columns_to_tuples(self, df: pd.DataFrame) -> pd.DataFrame:
         parsed_cols = []
 
-        # Axis-like labels that suggest it's a MultiIndex
         axis_labels = {"x", "y"}
 
         for col in df.columns:
@@ -310,8 +284,6 @@ class DataManager:
                     parsed_cols.append(col)
             else:
                 parsed_cols.append(col)
-
-        # Decide if it looks like a MultiIndex
         tuple_cols = [col for col in parsed_cols if isinstance(col, tuple)]
         is_multiindex = (
             tuple_cols and
