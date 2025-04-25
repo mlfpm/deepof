@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict, Tuple, Union
 from functools import lru_cache
+from pathlib import Path
+
 
 
 
@@ -40,8 +42,8 @@ class DataManager:
         self.close()
 
     def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.conn = db.connect(db_path)
+        self.db_path = str(Path(db_path).resolve())
+        self.conn = db.connect(self.db_path)
 
     def close(self):
         self.conn.close()
