@@ -102,7 +102,7 @@ class DataManager:
                 arrays = [loaded[key] for key in loaded.files]
                 deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
                 if load_range is not None:   
-                    if isinstance(load_range, list) and len(load_range) == 2:
+                    if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
                         load_range = slice(load_range[0], load_range[1] + 1)
 
                     if isinstance(deserialized, tuple):
