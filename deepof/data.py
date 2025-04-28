@@ -2326,6 +2326,13 @@ class Coordinates:
                 ),
                 graph_preset=self._bodypart_graph,
             )
+            # Compares with existing table and removes all nodes from graph that are not part of the table columns
+            table_metadata = get_dt(self._tables, list(self._tables.keys())[0], only_metainfo=True)
+            table_columns = table_metadata["columns"]
+            table_column_names = [column[0] for column in table_columns]
+            nodes_to_remove=list(set(list(graph.nodes)) - set(table_column_names))
+            for node in nodes_to_remove:
+                graph.remove_node(node)
 
             tab_dict._connectivity = graph
 
