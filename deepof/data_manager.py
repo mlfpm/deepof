@@ -154,11 +154,18 @@ class DataManager:
 
 
     def _get_metadata(self, table_name: str, load_index: bool) -> dict:
+        
+
         def parse_col(c):
-            try:
-                return ast.literal_eval(c)
-            except:
-                return c
+            tuple_pattern = re.compile(r'^\(([^()]+,[^()]+)\)$')
+            if isinstance(c, str) and tuple_pattern.match(c):
+                try:
+                    parts = [x.strip().strip("'").strip('"') for x in tuple_pattern.match(c).group(1).split(",")]
+                    return tuple(parts)
+                except Exception:
+                    return c
+            return c
+        
 
 
         raw_cols = self._get_table_columns(table_name)
