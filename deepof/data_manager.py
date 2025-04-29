@@ -10,6 +10,7 @@ import pandas as pd
 from typing import Any, Dict, Tuple, Union
 from functools import lru_cache
 from pathlib import Path
+import json
 
 
 
@@ -57,13 +58,23 @@ class DataManager:
             arrays = data if isinstance(data, tuple) else (data,)
             np.savez_compressed(buffer, *arrays)
 
+            meta = {
+                "shapes": [arr.shape for arr in arrays],
+                "dtypes": [str(arr.dtype) for arr in arrays],
+                "num_arrays": len(arrays),
+            }
+            meta_json = json.dumps(meta)
+
             try:
-                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT ? AS data', [buffer.getvalue()])
+                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT ? AS data , ? AS metadata', [buffer.getvalue(), meta_json])
             except Exception:
                 self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-                self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB)')
-                self.conn.execute(f'INSERT INTO "{table_name}" VALUES (?)', [buffer.getvalue()])
-        
+                self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB, metadata TEXT)')
+                self.conn.execute(
+                    f'INSERT INTO "{table_name}" VALUES (?, ?)',
+                    [buffer.getvalue(), meta_json]
+                )
+                
         elif isinstance(data, pd.DataFrame):
             df = self._prepare_dataframe(data)
             self.conn.register("df_temp", df)
@@ -88,34 +99,47 @@ class DataManager:
 
         if not os.path.exists(self.db_path):
             raise FileNotFoundError(f"{self.db_path} does not exist")
-
+        
         def _is_blob():
-            cols = self._get_table_columns(table_name)
-            return len(cols) == 1 and cols[0][1] == "data"
-        if only_metainfo:
-            return self._get_metadata(table_name, load_index)
+            cols = {col[1] for col in self._get_table_columns(table_name)}
+            return "data" in cols and "metadata" in cols and len(cols) == 2
+        
+       
         if _is_blob():
-            df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
-            blob = df.iloc[0]["data"]
+            if only_metainfo:
+                return self._get_metadata_blob(table_name, load_index)
+            blob = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchone()[0]
 
             with np.load(io.BytesIO(blob)) as loaded:
-                arrays = [loaded[key] for key in loaded.files]
-                deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
-                if load_range is not None:   
+                if load_range is not None:
                     if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
                         load_range = slice(load_range[0], load_range[1] + 1)
 
-                    if isinstance(deserialized, tuple):
-                        deserialized = tuple(arr[load_range] for arr in deserialized)
-                    else:
-                        deserialized = deserialized[load_range]
+                if len(loaded.files) == 1:
+                    arr = loaded[loaded.files[0]]
+                    deserialized = arr[load_range] if load_range else arr
+                else:
+                    deserialized = tuple(
+                        loaded[key][load_range] if load_range else loaded[key]
+                        for key in loaded.files
+                    )
 
-              
-                    
 
-                #deserialized = deserialized[:, 1:]
-                return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
+            #with np.load(io.BytesIO(blob)) as loaded:
+            #    arrays = [loaded[key] for key in loaded.files]
+            #    deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
+            #    if load_range is not None:   
+            
+            #       if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
+            #           load_range = slice(load_range[0], load_range[1] + 1)
 
+            #      if isinstance(deserialized, tuple):
+            #          deserialized = tuple(arr[load_range] for arr in deserialized)
+            #       else:
+            #           deserialized = deserialized[load_range]
+            return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
+        if only_metainfo:
+            return self._get_metadata(table_name, load_index)
         query = self._build_query(table_name, load_range)
         arrow_table = self.conn.execute(query).fetch_arrow_table()
         df = arrow_table.to_pandas(
@@ -128,6 +152,82 @@ class DataManager:
         df = self._parse_columns_to_tuples(data_part)
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 
+
+    def _get_metadata(self, table_name: str, load_index: bool) -> dict:
+        def parse_col(c):
+            try:
+                return ast.literal_eval(c)
+            except:
+                return c
+
+        
+        raw_cols = self._get_table_columns(table_name)
+        column_names = [row[1] for row in raw_cols]    
+        
+        parsed_columns = [parse_col(name) for name in column_names]
+        parsed_columns_no_index = parsed_columns[1:]
+        num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
+
+        meta = {
+            "columns": parsed_columns_no_index,
+            "num_cols": len(parsed_columns_no_index),
+            "num_rows": num_rows,
+            "shape": (num_rows, len(parsed_columns_no_index)),
+        }
+        
+        if load_index:
+            try:
+                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
+                meta["index_column"] = idx_df.iloc[:, 0]
+                meta["start_time"] = str(idx_df.iloc[0, 0])
+                meta["end_time"] = str(idx_df.iloc[-1, 0])
+            except Exception:
+                meta["index_column"] = None
+        else:
+            meta["index_column"] = None
+
+        return meta
+
+    def _get_metadata_blob(self, table_name: str, load_index: bool) -> dict:
+       
+        try:
+            meta_json = self.conn.execute(f'SELECT metadata FROM "{table_name}"').fetchone()[0]
+            meta_dict = json.loads(meta_json)
+
+            # Taking the first shape to make it similar like original behavior
+            first_shape = meta_dict["shapes"][0] if meta_dict["shapes"] else (0,)
+
+            return {
+                "columns": [],
+                "num_cols": np.prod(first_shape[1:]) if len(first_shape) > 1 else 1,
+                "num_rows": first_shape[0] if len(first_shape) > 0 else 0,
+                "shape": first_shape,
+                "index_column": None,
+            }
+
+           
+
+            #return {
+             #       "columns": [],
+              #      "num_cols": sum(
+               #         np.prod(shape[1:]) if len(shape) > 1 else 1
+                #        for shape in meta_dict["shapes"]
+                 #   ),
+                  #  "num_rows": meta_dict["shapes"][0][0] if meta_dict["shapes"] else 0,
+                   # "shape": meta_dict["shapes"] if meta_dict["num_arrays"] > 1 else meta_dict["shapes"][0],
+                   # "index_column": None,
+                #}
+
+
+        except Exception as e:
+                return {
+                    "columns": [],
+                    "num_cols": 0,
+                    "num_rows": 0,
+                    "shape": (),
+                    "index_column": None,
+                    "error": f"Failed to load blob: {str(e)}"
+                }
 
     def _prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         df_copy = df.copy()
@@ -168,100 +268,6 @@ class DataManager:
                     continue
         return df    
     
-
-    def _get_metadata(self, table_name: str, load_index: bool) -> dict:
-        def parse_col(c):
-            try:
-                return ast.literal_eval(c)
-            except:
-                return c
-
-        
-        raw_cols = self._get_table_columns(table_name)
-        column_names = [row[1] for row in raw_cols]
-
-     
-        is_blob = len(column_names) == 1 and column_names[0] == "data"
-        if is_blob:
-            try:
-                df = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchdf()
-                blob = df.iloc[0]["data"]
-
-
-                with np.load(io.BytesIO(blob)) as loaded:
-                    arrays = [loaded[key] for key in loaded.files]
-                    deserialized = arrays[0]
-                    
-
-                if isinstance(deserialized, tuple):
-                    try:
-                        if all(arr.ndim == 2 and arr.shape[0] == deserialized[0].shape[0] for arr in deserialized):
-                            stacked = np.concatenate(deserialized, axis=1)
-                            shape = stacked.shape
-                            num_rows = shape[0]
-                            num_cols = shape[1]
-                        else:
-                            raise ValueError("Cannot concatenate arrays with incompatible shapes.")
-                    except Exception as e:
-                        shape = tuple(arr.shape for arr in deserialized)
-                        num_rows = deserialized[0].shape[0] if deserialized[0].ndim > 0 else 1
-                        num_cols = sum(
-                            arr.shape[1] * arr.shape[2] if arr.ndim == 3 else
-                            arr.shape[1] if arr.ndim == 2 else 1
-                            for arr in deserialized
-                        )
-                
-                elif isinstance(deserialized, np.ndarray):
-                    shape = deserialized.shape
-                    num_rows = shape[0]
-                    num_cols = shape[1] if len(shape) > 1 else 1                    
-                else:
-                    shape = ()
-                    num_rows = 0
-                    num_cols = 0
-
-                return {
-                    "columns": [],
-                    "num_cols": num_cols,
-                    "num_rows": num_rows,
-                    "shape": shape,
-                    "index_column": None,
-                }
-
-            except Exception as e:
-                return {
-                    "columns": [],
-                    "num_cols": 0,
-                    "num_rows": 0,
-                    "shape": (),
-                    "index_column": None,
-                    "error": f"Failed to load blob: {str(e)}"
-                }
-
-       
-        parsed_columns = [parse_col(name) for name in column_names]
-        parsed_columns_no_index = parsed_columns[1:]
-        num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
-
-        meta = {
-            "columns": parsed_columns_no_index,
-            "num_cols": len(parsed_columns_no_index),
-            "num_rows": num_rows,
-            "shape": (num_rows, len(parsed_columns_no_index)),
-        }
-        
-        if load_index:
-            try:
-                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
-                meta["index_column"] = idx_df.iloc[:, 0]
-                meta["start_time"] = str(idx_df.iloc[0, 0])
-                meta["end_time"] = str(idx_df.iloc[-1, 0])
-            except Exception:
-                meta["index_column"] = None
-        else:
-            meta["index_column"] = None
-
-        return meta
 
     
     @lru_cache(maxsize=128)
