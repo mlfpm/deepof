@@ -11,7 +11,7 @@ from typing import Any, Dict, Tuple, Union
 from functools import lru_cache
 from pathlib import Path
 import json
-
+import re
 
 
 
@@ -160,7 +160,7 @@ class DataManager:
             except:
                 return c
 
-        
+
         raw_cols = self._get_table_columns(table_name)
         column_names = [row[1] for row in raw_cols]    
         
@@ -273,25 +273,25 @@ class DataManager:
     @lru_cache(maxsize=128)
     def _get_table_columns(self, table_name: str) -> Tuple[Tuple]:
         return tuple(self.conn.execute(f"PRAGMA table_info('{table_name}')").fetchall())
+    
     def _parse_columns_to_tuples(self, df: pd.DataFrame) -> pd.DataFrame:
         parsed_cols = []
-
         axis_labels = {"x", "y"}
-
+        tuple_pattern = re.compile(r'^\(([^)]+)\)$')
         for col in df.columns:
             if isinstance(col, tuple):
                 parsed_cols.append(col)
-            elif isinstance(col, str) and col.startswith("(") and col.endswith(")"):
-                try:
-                    parsed = ast.literal_eval(col)
-                    if isinstance(parsed, tuple):
-                        parsed_cols.append(parsed)
-                    else:
-                        parsed_cols.append(col)
-                except Exception:
-                    parsed_cols.append(col)
+            elif isinstance(col, str):
+                match = tuple_pattern.match(col)
+                if match:
+                    parts = [x.strip().strip("'") for x in match.group(1).split(",")]
+                    if len(parts) == 2:
+                        parsed_cols.append((parts[0], parts[1]))  # <--- treat both as str
+                        continue
+                parsed_cols.append(col)
             else:
                 parsed_cols.append(col)
+
         tuple_cols = [col for col in parsed_cols if isinstance(col, tuple)]
         is_multiindex = (
             tuple_cols and
