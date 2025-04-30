@@ -97,6 +97,7 @@ def get_dt(
     # DuckDB-stored
     if isinstance(raw_data, dict) and "duckdb_file" in raw_data:
         db_path = raw_data["duckdb_file"]
+        filetype = raw_data["datatype"]
         table_name = sanitize_table_name(raw_data["table"])
 
         with DataManager(db_path) as manager:
@@ -105,7 +106,8 @@ def get_dt(
                 return_path=return_path,
                 only_metainfo=only_metainfo,
                 load_index=load_index,
-                load_range=load_range
+                load_range=load_range,
+                filetype = filetype
             )      
 
         if only_metainfo:
@@ -136,8 +138,8 @@ def save_dt(
     db_path = os.path.join(os.path.dirname(folder_path), "database.duckdb")
     key = os.path.basename(folder_path)
     with DataManager(db_path) as manager:
-        manager.save(key, dt)
+        filetype = manager.save(key, dt)
 
-    return {"duckdb_file": db_path, "table": sanitize_table_name(key)} if return_path else dt
+    return {"duckdb_file": db_path, "table": sanitize_table_name(key),"datatype" : filetype} if return_path else dt
 
 

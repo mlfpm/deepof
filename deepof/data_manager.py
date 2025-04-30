@@ -43,114 +43,195 @@ class DataManager:
         self.close()
 
     def __init__(self, db_path: str):
-        self.db_path = str(Path(db_path).resolve())
+        path = Path(db_path).resolve()
+        self.db_path = str(path)
+        self.save_dir = path.parent if db_path else Path(".").resolve()
         self.conn = db.connect(self.db_path)
 
     def close(self):
         self.conn.close()
+    
+    def save(self, key: str, data: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, ...]]):
+        sanitized_key = sanitize_table_name(key)
+        file_ext = None
 
-    def save(self, key: str, data: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray]]):
-        table_name = sanitize_table_name(key)
-        is_blob = isinstance(data, (np.ndarray, tuple))
 
-        if is_blob:
-            buffer = io.BytesIO()
-            arrays = data if isinstance(data, tuple) else (data,)
-            np.savez_compressed(buffer, *arrays)
+        if isinstance(data, (np.ndarray, tuple)):
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS dataset_files (
+                    key TEXT PRIMARY KEY,
+                    file_path TEXT,
+                    shape TEXT,
+                    dtype TEXT,
+                    num_arrays INTEGER,
+                    num_rows INTEGER,
+                    num_cols INTEGER
+                )
+            """)
 
-            meta = {
-                "shapes": [arr.shape for arr in arrays],
+            table_name = "dataset_files"
+            save_dir = self.save_dir
+            os.makedirs(save_dir, exist_ok=True)
+            num_rows, num_cols = None, None          
+
+
+            if isinstance(data, np.ndarray):
+                arrays = [data]
+                file_ext = "npy"
+                
+            elif isinstance(data, tuple) and all(isinstance(arr, np.ndarray) for arr in data):
+                arrays = list(data)
+                file_ext = "npz"
+            else:
+                raise TypeError("Tuples must only contain NumPy arrays")
+            new_key = f"{sanitized_key}__{file_ext}"
+
+            # Use base key and store the format internally
+            save_path = os.path.join(save_dir, f"{sanitized_key}.{file_ext}")
+
+            if file_ext == "npy":
+                with open(save_path, 'wb') as file:
+                    np.lib.format.write_array(file, arrays[0])
+            else:
+                with open(save_path, 'wb') as file:
+                    np.savez(file, *[('arr_{}'.format(i), arr) for i, arr in enumerate(arrays)])
+
+            shape = arrays[0].shape
+            if len(shape) >= 2:
+                num_rows = shape[0]
+                num_cols = shape[1]
+
+            meta_info = {
+                "shape": shape ,
                 "dtypes": [str(arr.dtype) for arr in arrays],
                 "num_arrays": len(arrays),
+                "num_rows": num_rows,
+                "num_cols": num_cols,
             }
-            meta_json = json.dumps(meta)
 
-            try:
-                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT ? AS data , ? AS metadata', [buffer.getvalue(), meta_json])
-            except Exception:
-                self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-                self.conn.execute(f'CREATE TABLE "{table_name}" (data BLOB, metadata TEXT)')
-                self.conn.execute(
-                    f'INSERT INTO "{table_name}" VALUES (?, ?)',
-                    [buffer.getvalue(), meta_json]
+            self.conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {table_name} (key, file_path, shape, dtype, num_arrays, num_rows, num_cols)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    new_key,
+                    save_path,
+                    json.dumps(meta_info["shape"]),
+                    json.dumps(meta_info["dtypes"]),
+                    meta_info["num_arrays"],
+                    meta_info["num_rows"],
+                    meta_info["num_cols"]
                 )
-                
+            )
+
         elif isinstance(data, pd.DataFrame):
             df = self._prepare_dataframe(data)
             self.conn.register("df_temp", df)
-            try:
-                self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM df_temp')
-            except Exception:
-                self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-                self.conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM df_temp')
-            
-        else:
-            raise TypeError("Unsupported data type")
-        self._get_table_columns.cache_clear()
+            self.conn.execute(f'CREATE OR REPLACE TABLE "{sanitized_key}" AS SELECT * FROM df_temp')
 
+        else:
+            raise TypeError(f"Unsupported data type for save(): {type(data)}")
+
+        self._get_table_columns.cache_clear()
+        return file_ext
 
     def load(self,
-             key: str,      
-             return_path: bool = False,
-             only_metainfo: bool = False,
-             load_index: bool = False,
-             load_range: np.ndarray = None):
-        table_name = sanitize_table_name(key)
+         key: str,
+         return_path: bool = False,
+         only_metainfo: bool = False,
+         load_index: bool = False,
+         load_range: np.ndarray = None,
+         filetype : str = None):
 
         if not os.path.exists(self.db_path):
             raise FileNotFoundError(f"{self.db_path} does not exist")
-        
-        def _is_blob():
-            cols = {col[1] for col in self._get_table_columns(table_name)}
-            return "data" in cols and "metadata" in cols and len(cols) == 2
-        
-       
-        if _is_blob():
+
+        sanitized_key = sanitize_table_name(key)
+        tab = None
+
+        if filetype:
+            new_key = f"{sanitized_key}__{filetype}"
+
+        # Check if dataset_files table exists before querying
+            table_exists = self.conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'dataset_files'"
+            ).fetchone()[0] > 0
+
+            result = None
+            if table_exists:
+                result = self.conn.execute(
+                        "SELECT file_path, shape, dtype, num_arrays, num_rows, num_cols FROM dataset_files WHERE key = ?",
+                        (new_key,)
+                    ).fetchone()
+                if result is None:
+                    raise KeyError(f"No data found for key '{new_key}' in dataset_files")
+
+                file_path, shape_json, dtype_json, num_arrays, num_rows, num_cols = result
+
+                if only_metainfo:
+                    return {
+                            "file_path": file_path,
+                            "shape": json.loads(shape_json),
+                            "dtype": json.loads(dtype_json),
+                            "num_arrays": num_arrays,
+                            "num_rows": num_rows,
+                            "num_cols": num_cols
+                        }
+
+                if not os.path.exists(file_path):
+                    raise FileNotFoundError(f"Data file {file_path} not found on disk")
+
+                if file_path.endswith(".npy"):
+                    tab = np.load(file_path, mmap_mode='r') if load_range is not None else np.load(file_path)
+                    if load_range is not None:
+                        if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
+                            load_range = slice(load_range[0], load_range[1] + 1)
+                        tab = tab[load_range]
+                
+
+                elif file_path.endswith(".npz"):
+                    
+                    with open(file_path, 'rb') as file:
+                        loaded = np.load(file, allow_pickle=True)
+
+                        # Reconstruct the tuple of NumPy arrays (assuming each entry is a (name, array) tuple)
+                        arrays = tuple(loaded[f'arr_{i}'][1] for i in range(len(loaded.files)))
+
+                        if load_range is not None:
+                            # Handle slicing logic robustly
+                            if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2 and load_range[1] - load_range[0] > 1:
+                                tab1 = arrays[0][load_range[0]:load_range[1] + 1]
+                                tab2 = arrays[1][load_range[0]:load_range[1] + 1]
+                            else:
+                                tab1 = arrays[0][load_range]
+                                tab2 = arrays[1][load_range]
+                            tab = (tab1, tab2)
+                        else:
+                            tab = arrays
+
+                    #with np.load(file_path, allow_pickle=True) as loaded:
+                     #   arrays = tuple(loaded[f'arr_{i}'] for i in range(len(loaded.files)))
+                      #  if load_range is not None:
+                       #     if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
+                        #        load_range = slice(load_range[0], load_range[1] + 1)
+                         #   arrays = tuple(arr[load_range] for arr in arrays)
+                        #tab = arrays[0] if len(arrays) == 1 else arrays
+        else :
             if only_metainfo:
-                return self._get_metadata_blob(table_name, load_index)
-            blob = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchone()[0]
+                return self._get_metadata(sanitized_key, load_index)
 
-            with np.load(io.BytesIO(blob)) as loaded:
-                if load_range is not None:
-                    if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
-                        load_range = slice(load_range[0], load_range[1] + 1)
+            query = self._build_query(sanitized_key, load_range)
+            arrow_table = self.conn.execute(query).fetch_arrow_table()
+            tab = arrow_table.to_pandas(
+                split_blocks=True,
+                self_destruct=True,
+            )
 
-                if len(loaded.files) == 1:
-                    arr = loaded[loaded.files[0]]
-                    deserialized = arr[load_range] if load_range else arr
-                else:
-                    deserialized = tuple(
-                        loaded[key][load_range] if load_range else loaded[key]
-                        for key in loaded.files
-                    )
+            data_part = tab.iloc[:, 1:]  
+            tab = self._parse_columns_to_tuples(data_part)
 
-
-            #with np.load(io.BytesIO(blob)) as loaded:
-            #    arrays = [loaded[key] for key in loaded.files]
-            #    deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
-            #    if load_range is not None:   
-            
-            #       if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
-            #           load_range = slice(load_range[0], load_range[1] + 1)
-
-            #      if isinstance(deserialized, tuple):
-            #          deserialized = tuple(arr[load_range] for arr in deserialized)
-            #       else:
-            #           deserialized = deserialized[load_range]
-            return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
-        if only_metainfo:
-            return self._get_metadata(table_name, load_index)
-        query = self._build_query(table_name, load_range)
-        arrow_table = self.conn.execute(query).fetch_arrow_table()
-        df = arrow_table.to_pandas(
-            split_blocks=True,             
-            self_destruct=True,      
-        )
-
-        #index_part = df.iloc[:, :1]
-        data_part = df.iloc[:, 1:]
-        df = self._parse_columns_to_tuples(data_part)
-        return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
+        return (tab, {"duckdb_file": self.db_path, "table": sanitized_key, "datatype":filetype}) if return_path else tab
 
 
     def _get_metadata(self, table_name: str, load_index: bool) -> dict:

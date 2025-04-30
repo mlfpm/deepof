@@ -1185,7 +1185,7 @@ def scale_table(
         global_scaler (Any): global scaler, fit in the whole dataset.
 
     """
-    exp_temp = feature_array.to_numpy()
+    exp_temp = feature_array.to_numpy() if not isinstance(feature_array, np.ndarray) else feature_array
 
     annot_length = 0
 
