@@ -51,9 +51,14 @@ class DataManager:
 
     def save(self, key: str, data: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray]]):
         table_name = sanitize_table_name(key)
-        is_blob = isinstance(data, (np.ndarray, tuple))
+        filetype, is_blob = ("npz", True) if isinstance(data, tuple) else ("npy", True) if isinstance(data, np.ndarray) else (None, False)
+
+        
+               
+       
 
         if is_blob:
+            table_name = f"{table_name}__{filetype}"
             buffer = io.BytesIO()
             arrays = data if isinstance(data, tuple) else (data,)
             np.savez_compressed(buffer, *arrays)
@@ -87,6 +92,7 @@ class DataManager:
         else:
             raise TypeError("Unsupported data type")
         self._get_table_columns.cache_clear()
+        return table_name
 
 
     def load(self,
@@ -96,6 +102,7 @@ class DataManager:
              load_index: bool = False,
              load_range: np.ndarray = None):
         table_name = sanitize_table_name(key)
+        
 
         if not os.path.exists(self.db_path):
             raise FileNotFoundError(f"{self.db_path} does not exist")
@@ -111,32 +118,22 @@ class DataManager:
             blob = self.conn.execute(f'SELECT data FROM "{table_name}"').fetchone()[0]
 
             with np.load(io.BytesIO(blob)) as loaded:
-                if load_range is not None:
-                    if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
-                        load_range = slice(load_range[0], load_range[1] + 1)
+                if isinstance(load_range, (list, np.ndarray)):
+                    arr_load_range = np.array(load_range)
+                    if arr_load_range.ndim == 1 and len(arr_load_range) == 2 and np.issubdtype(arr_load_range.dtype, np.integer):
+                        load_range = slice(arr_load_range[0], arr_load_range[1] + 1)
+                    
+                with np.load(io.BytesIO(blob)) as loaded:
+                    if len(loaded.files) == 1:
+                        arr = loaded[loaded.files[0]]
+                        deserialized = arr[load_range] if load_range is not None else arr
+                    else:
+                        deserialized = tuple(
+                            loaded[key][load_range] if load_range is not None else loaded[key]
+                            for key in loaded.files
+                        )
 
-                if len(loaded.files) == 1:
-                    arr = loaded[loaded.files[0]]
-                    deserialized = arr[load_range] if load_range else arr
-                else:
-                    deserialized = tuple(
-                        loaded[key][load_range] if load_range else loaded[key]
-                        for key in loaded.files
-                    )
-
-
-            #with np.load(io.BytesIO(blob)) as loaded:
-            #    arrays = [loaded[key] for key in loaded.files]
-            #    deserialized = tuple(arrays) if len(arrays) > 1 else arrays[0]
-            #    if load_range is not None:   
-            
-            #       if isinstance(load_range, (list, np.ndarray)) and len(load_range) == 2:
-            #           load_range = slice(load_range[0], load_range[1] + 1)
-
-            #      if isinstance(deserialized, tuple):
-            #          deserialized = tuple(arr[load_range] for arr in deserialized)
-            #       else:
-            #           deserialized = deserialized[load_range]
+           
             return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
         if only_metainfo:
             return self._get_metadata(table_name, load_index)
