@@ -120,18 +120,21 @@ class DataManager:
             with np.load(io.BytesIO(blob)) as loaded:
                 if isinstance(load_range, (list, np.ndarray)):
                     arr_load_range = np.array(load_range)
-                    if arr_load_range.ndim == 1 and len(arr_load_range) == 2 and np.issubdtype(arr_load_range.dtype, np.integer):
+                    if (
+                        arr_load_range.ndim == 1
+                        and len(arr_load_range) == 2
+                        and np.issubdtype(arr_load_range.dtype, np.integer)
+                    ):
                         load_range = slice(arr_load_range[0], arr_load_range[1] + 1)
-                    
-                with np.load(io.BytesIO(blob)) as loaded:
-                    if len(loaded.files) == 1:
-                        arr = loaded[loaded.files[0]]
-                        deserialized = arr[load_range] if load_range is not None else arr
-                    else:
-                        deserialized = tuple(
-                            loaded[key][load_range] if load_range is not None else loaded[key]
-                            for key in loaded.files
-                        )
+
+                if len(loaded.files) == 1:
+                    arr = loaded[loaded.files[0]]
+                    deserialized = arr[load_range] if load_range is not None else arr
+                else:
+                    deserialized = tuple(
+                        loaded[key][load_range] if load_range is not None else loaded[key]
+                        for key in loaded.files
+                    )
 
            
             return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
@@ -207,21 +210,7 @@ class DataManager:
                 "num_rows": first_shape[0] if len(first_shape) > 0 else 0,
                 "shape": first_shape,
                 "index_column": None,
-            }
-
-           
-
-            #return {
-             #       "columns": [],
-              #      "num_cols": sum(
-               #         np.prod(shape[1:]) if len(shape) > 1 else 1
-                #        for shape in meta_dict["shapes"]
-                 #   ),
-                  #  "num_rows": meta_dict["shapes"][0][0] if meta_dict["shapes"] else 0,
-                   # "shape": meta_dict["shapes"] if meta_dict["num_arrays"] > 1 else meta_dict["shapes"][0],
-                   # "index_column": None,
-                #}
-
+            }           
 
         except Exception as e:
                 return {
