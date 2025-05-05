@@ -4,6 +4,7 @@
 
 """Data structures and functions for analyzing supervised and unsupervised model results."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import pickle
 import warnings
@@ -35,6 +36,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from typing import Optional, Union
 
 import deepof.data
 import deepof.utils
@@ -265,6 +267,19 @@ def get_time_on_cluster(
     if isinstance(bin_info, np.ndarray):
         arr_range = bin_info 
 
+    preloaded = {}
+
+    def load_single_key(key,arr_range):
+        return key, get_dt(soft_counts, key, load_range=arr_range)
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key,arr_range): key for key in soft_counts}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
+
     for key in soft_counts.keys():
         
         # Update range (if range can differ between samples)
@@ -273,7 +288,8 @@ def get_time_on_cluster(
 
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
-        hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        hard_counts = np.argmax(preloaded[key], axis=1)
         
         # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
@@ -324,6 +340,18 @@ def get_aggregated_embedding(
     arr_range=None
     if isinstance(bin_info, np.ndarray):
         arr_range = bin_info 
+    preloaded = {}
+
+    def load_single_key(key,arr_range):
+        return key, get_dt(embedding, key, load_range=arr_range)
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key,arr_range): key for key in embedding}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
 
     for key in embedding.keys():
         
@@ -332,7 +360,8 @@ def get_aggregated_embedding(
             arr_range = bin_info[key]
 
         # Load full dataset (arr_range==None) or section
-        current_embedding=get_dt(embedding,key,load_range=arr_range)
+        #current_embedding=get_dt(embedding,key,load_range=arr_range)
+        current_embedding=preloaded[key]
 
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
