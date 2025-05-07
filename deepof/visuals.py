@@ -131,7 +131,7 @@ def plot_heatmaps(
         roi_number=roi_number,
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, selected_id=animal_id)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animal_in_roi=animal_id)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
