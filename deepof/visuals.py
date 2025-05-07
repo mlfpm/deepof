@@ -2237,7 +2237,7 @@ def animate_skeleton(
     if type(animal_id)==str:
         animal_id=[animal_id]
     if roi_number is not None:
-        animal_id_roi = [animal_id[0]]
+        animal_id_roi = animal_id
         if show_all:
             animal_id = coordinates._animal_ids
 
@@ -2429,7 +2429,8 @@ def animate_skeleton(
     if roi_number is None:
         frames = bin_info[experiment_id]["time"]
     else:
-        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_id_roi)
+        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
+        frames = get_beheavior_frames_in_roi('_'.join(animal_id_roi) + '_', bin_info[experiment_id], animal_id=animal_id_roi)
         get_beheavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
