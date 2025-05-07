@@ -25,7 +25,7 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, load_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP
 
 
 
@@ -154,16 +154,18 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     # create names of supervised behaviors from animal ids and raw behavior names in correct order
     if animal_ids is None or len(animal_ids)==1:
         supervised = single_behaviors
+        color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
+        color_map = TWO_ANIMALS_COLOR_MAP
 
     supervised_max = 1
     if len(supervised) > 0:
         supervised_max = len(supervised)
     # Generate color map of appropriate length
     supervised_colors = np.tile(
-        list(sns.color_palette("tab20").as_hex()),
-        int(np.ceil(supervised_max / 20)),
+        color_map,
+        int(np.ceil(supervised_max / len(color_map))),
     )
 
     # Select appropriate color for all given behaviors
