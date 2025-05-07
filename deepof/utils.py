@@ -2247,17 +2247,9 @@ def get_arenas(
                 video_resolution={'test2': (480, 640), 'test': (480, 640)}
                 rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
                 roi_dicts={'test': rois, 'test2': rois} 
-                #scale rois to mm
-                for key in roi_dicts.keys():
-                    for k, roi in roi_dicts[key].items():
-                        scaling_ratio = scales[key][3]/scales[key][2]
-                        roi_dicts[key][k] = np.array(roi)*scaling_ratio
-                for key in arena_params.keys():
-                    scaling_ratio = scales[key][3]/scales[key][2]
-                    if "polygonal" in arena:
-                        arena_params[key]=np.array(arena_params[key])*scaling_ratio
-                    elif "circular" in arena:
-                        arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+                #scale rois and arenas to mm
+                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
                     arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
@@ -2270,17 +2262,9 @@ def get_arenas(
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
                 roi_dicts={'test': rois, 'test2': rois} 
-                #scale rois to mm
-                for key in roi_dicts.keys():
-                    for k, roi in roi_dicts[key].items():
-                        scaling_ratio = scales[key][3]/scales[key][2]
-                        roi_dicts[key][k] = np.array(roi)*scaling_ratio
-                for key in arena_params.keys():
-                    scaling_ratio = scales[key][3]/scales[key][2]
-                    if "polygonal" in arena:
-                        arena_params[key]=np.array(arena_params[key])*scaling_ratio
-                    elif "circular" in arena:
-                        arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+                #scale rois and arenas to mm
+                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
                     pass
@@ -2381,19 +2365,28 @@ def get_arenas(
         )
     
     #scale rois and arenas to mm
-    for key in roi_dicts.keys():
-        for k, roi in roi_dicts[key].items():
-            scaling_ratio = scales[key][3]/scales[key][2]
-            roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+    roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
+
+    return scales, arena_params, roi_dicts, video_resolution
+
+
+def _scale_arenas_to_mm(arena_params, scales, arena):
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
         if "polygonal" in arena:
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif "circular" in arena:
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+    return arena_params
 
 
-    return scales, arena_params, roi_dicts, video_resolution
+def _scale_rois_to_mm(roi_dicts, scales):
+    for key in roi_dicts.keys():
+        for k, roi in roi_dicts[key].items():
+            scaling_ratio = scales[key][3]/scales[key][2]
+            roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    return roi_dicts
 
 
 def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
