@@ -465,7 +465,7 @@ def _plot_experiment_gantt(
 
     # Iterate over features and plot
     rows = 0
-    for feature, color in zip(range(n_available_features), colors):
+    for feature in range(n_available_features):
 
         # skip if feature is not selected for plotting
         if behavior_ids[feature] not in behaviors_to_plot:
