@@ -2194,6 +2194,7 @@ def animate_skeleton(
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
     display_arena: bool = True,
+    show_all: bool = True,
     legend: bool = True,
     save: bool = None,
     dpi: int = 100,
@@ -2217,6 +2218,7 @@ def animate_skeleton(
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        show_all (bool): wheter all animals should be shown if a roi was selected
         legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
         save (str): name of the file where to save the produced animation.
         dpi (int): dots per inch of the figure to create.
@@ -2232,10 +2234,13 @@ def animate_skeleton(
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
-        if roi_number is not None:
-            animal_id = animal_id[0]
     if type(animal_id)==str:
         animal_id=[animal_id]
+    if roi_number is not None:
+        animal_id_roi = [animal_id[0]]
+        if show_all:
+            animal_id = coordinates._animal_ids
+
 
     bin_info_time = _preprocess_time_bins(
     coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
@@ -2424,7 +2429,7 @@ def animate_skeleton(
     if roi_number is None:
         frames = bin_info[experiment_id]["time"]
     else:
-        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_id)
+        frames = get_beheavior_frames_in_roi(None, bin_info[experiment_id], animal_id=animal_id_roi)
         get_beheavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
