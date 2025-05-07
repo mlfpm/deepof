@@ -1751,6 +1751,16 @@ def annotate_video(
                 for _id in animal_ids:
                     frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
 
+            # scale arena_params back o video res
+
+
+
+            scaling_ratio = coordinates._scales[key][2]/coordinates._scales[key][3]
+            if "polygonal" in coordinates._arena:
+                arena_params=np.array(arena_params)*scaling_ratio
+            elif "circular" in coordinates._arena:
+                arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
+
 
             # Display all annotations in the output video
             _tag_annotated_frames(

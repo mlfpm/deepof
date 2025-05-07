@@ -1526,6 +1526,13 @@ def embedding_per_video(
         soft_counts (table_dict): soft_counts per experiment.
 
     """
+
+    # at some point _check_enum_inputs will get moved somewhere else and be reworked to function as a general guard function 
+    deepof.visuals_utils._check_enum_inputs(
+        coordinates,
+        animal_id=animal_id,
+    )
+
     embeddings = {}
     soft_counts = {}
     #interim
