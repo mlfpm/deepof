@@ -128,6 +128,7 @@ def plot_heatmaps(
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
+        roi_number=roi_number,
     )
 
     coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, selected_id=animal_id)
@@ -348,6 +349,7 @@ def _plot_experiment_gantt(
         experiment_ids=experiment_id,
         behaviors=behaviors_to_plot,
         animal_id = animal_id,
+        roi_number=roi_number,
     )
 
     if animal_id is None:
@@ -542,6 +544,7 @@ def _plot_behavior_gantt(
         behaviors=behavior_id,
         experiment_ids=experiments_to_plot,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
 
     if animal_id is None:
@@ -905,6 +908,7 @@ def plot_enrichment(
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -1364,6 +1368,7 @@ def plot_transitions(
         exp_condition=exp_condition,
         visualization=visualization,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -1543,6 +1548,7 @@ def plot_stationary_entropy(
         coordinates,
         exp_condition=exp_condition,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -1848,6 +1854,7 @@ def plot_embeddings(
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if supervised_annotations is not None and roi_number is not None and animal_id is not None:
         raise ValueError(
@@ -2221,6 +2228,7 @@ def animate_skeleton(
         experiment_ids=experiment_id,
         animal_id=animal_id,
         center=center,
+        roi_number=roi_number,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -2707,6 +2715,7 @@ def export_annotated_video(
         coordinates,
         experiment_ids=experiment_id,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
 
     if animal_id is None:
@@ -3049,6 +3058,7 @@ def plot_behavior_trends(
         condition_values=condition_values,
         behaviors=behavior_to_plot,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -3725,6 +3735,7 @@ def get_roi_data(
         coordinates,
         experiment_ids=experiment_id,
         animal_id=animal_id,
+        roi_number=roi_number,
     )
     if coordinates._very_large_project and experiment_id is None:
         raise NotImplementedError(

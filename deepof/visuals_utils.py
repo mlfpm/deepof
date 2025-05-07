@@ -1041,6 +1041,7 @@ def _check_enum_inputs(
     normative_model: str = None,
     aggregate_experiments: str = None,
     colour_by: str = None,
+    roi_number: int = None,
 ): # pragma: no cover
     """
     Checks and validates enum-like input parameters for the different plot functions.
@@ -1062,6 +1063,7 @@ def _check_enum_inputs(
     normative_model (str): Name of the cohort to use as controls.
     aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
     colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
+    roi_number (int): Number of the ROI that should be used (all behavior that occurs outside of the ROI gets excluded)        
 
     """
     # activate warnings (again, because just putting it at the beginning of the skript
@@ -1122,6 +1124,11 @@ def _check_enum_inputs(
         )
     else:
         condition_value_options_list = []
+    if roi_number is not None and coordinates._roi_dicts is not None:    
+        first_key=list(coordinates._roi_dicts.keys())[0]
+        roi_number_options_list=list(coordinates._roi_dicts[first_key].keys())
+    else:
+        roi_number_options_list=[]
 
     #get lists of all body parts     
     bodyparts_options_list = np.unique(
@@ -1263,6 +1270,16 @@ def _check_enum_inputs(
                 str(colour_by_options_list)
             )
         )
+    
+    if roi_number is not None and roi_number not in roi_number_options_list:
+        if len(roi_number_options_list)>0:
+            raise ValueError(
+                'If you want to apply ROIs, "roi_number" needs to be one of the following: {}'.format(
+                    str(roi_number_options_list)
+                )
+            )
+        else:
+            raise ValueError("No regions of interest (ROI)s were defined for this project!\n You can define ROIs during project creation if you have set number_of_rois\n to a number between 1 and 20 during project definition before")
     
 
 def plot_arena(
