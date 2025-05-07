@@ -1511,12 +1511,6 @@ class Coordinates:
             ), "The requested ROI does not exist"
         
 
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            tab = tab.loc[
-                :, deepof.utils.filter_columns(tab.columns, selected_id)
-            ]
-
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
@@ -1532,6 +1526,12 @@ class Coordinates:
                 
                 aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
                 tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
       
 
         if polar:
@@ -1752,12 +1752,7 @@ class Coordinates:
         if quality is None:
             quality=self.get_quality().filter_videos([key])
             quality[key] = get_dt(quality,key)
-
-        if selected_id is not None:
-            tab = tab.loc[
-                :, deepof.utils.filter_columns(tab.columns, selected_id)
-            ]
-        
+      
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
@@ -1776,6 +1771,12 @@ class Coordinates:
                 mask = [col[0].startswith(aid) or col[1].startswith(aid) for col in tab.columns]
                 aid_cols = tab.loc[:, mask].columns
                 tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # remove unselected animals
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
 
         if speed:
             tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
@@ -1906,11 +1907,6 @@ class Coordinates:
             quality=self.get_quality().filter_videos([key])
             quality[key] = get_dt(quality,key)
 
-        if selected_id is not None:
-            tab = tab.loc[
-                :, deepof.utils.filter_columns(tab.columns, selected_id)
-            ]
-
         if degrees:
             tab = np.degrees(tab) 
 
@@ -1932,6 +1928,12 @@ class Coordinates:
                 mask = [col[0].startswith(aid) for col in tab.columns]
                 aid_cols = tab.loc[:, mask].columns
                 tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # remove unselected animals
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
 
         if speed:
             vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
@@ -2068,6 +2070,7 @@ class Coordinates:
 
         exp_table = pd.DataFrame()
 
+        # remove unselected animals
         for aid in selected_ids:
 
             if aid == "":
