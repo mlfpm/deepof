@@ -1514,7 +1514,7 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None:
+            if animal_in_roi is not None and type(animal_in_roi)==str:
                 animal_in_roi_ids = [animal_in_roi]
             else:
                 animal_in_roi_ids = self._animal_ids
@@ -1756,7 +1756,7 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None:
+            if animal_in_roi is not None and type(animal_in_roi)==str:
                 animal_in_roi_ids = [animal_in_roi]
             else:
                 animal_in_roi_ids = self._animal_ids
@@ -1913,7 +1913,7 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None:
+            if animal_in_roi is not None and type(animal_in_roi)==str:
                 animal_in_roi_ids = [animal_in_roi]
             else:
                 animal_in_roi_ids = self._animal_ids
@@ -2055,7 +2055,7 @@ class Coordinates:
 
             tab_pos=get_dt(self._tables, key)
             
-            if animal_in_roi is not None:
+            if animal_in_roi is not None and type(animal_in_roi)==str:
                 animal_in_roi_ids = [animal_in_roi]
             else:
                 animal_in_roi_ids = self._animal_ids

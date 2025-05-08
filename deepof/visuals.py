@@ -81,7 +81,7 @@ def plot_heatmaps(
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
-    animal_id: str = None,
+    animal_in_roi: str = None,
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
@@ -124,14 +124,14 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
-        animal_id=animal_id,
+        animal_id=animal_in_roi,
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
         roi_number=roi_number,
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animal_in_roi=animal_id)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animal_in_roi=animal_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
