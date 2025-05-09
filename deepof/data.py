@@ -1379,7 +1379,7 @@ class Coordinates:
         align: str = False,
         align_inplace: bool = True,
         selected_id: str = None,
-        animal_in_roi: str = None,
+        animals_in_roi: str = None,
         roi_number: int = None,
         in_roi_criterion: str = "Center",
         file_name: str = 'coords',
@@ -1422,7 +1422,7 @@ class Coordinates:
                 align = align,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
-                animal_in_roi = animal_in_roi,
+                animals_in_roi = animals_in_roi,
                 roi_number = roi_number,
                 in_roi_criterion = in_roi_criterion,
             )
@@ -1459,7 +1459,7 @@ class Coordinates:
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
-    animal_in_roi: str = None,
+    animals_in_roi: str = None,
     roi_number: int = None,
     in_roi_criterion: str = "Center",
 ) -> pd.DataFrame:
@@ -1514,12 +1514,12 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None and type(animal_in_roi)==str:
-                animal_in_roi_ids = [animal_in_roi]
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
             else:
-                animal_in_roi_ids = self._animal_ids
+                animals_in_roi_ids = self._animal_ids
             
-            for aid in animal_in_roi_ids:
+            for aid in animals_in_roi_ids:
 
                 roi_polygon=self._roi_dicts[key][roi_number]
                 mouse_in_polygon = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, self._run_numba)
@@ -1655,7 +1655,7 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
-        animal_in_roi: str = None,
+        animals_in_roi: str = None,
         roi_number: int = None,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
@@ -1687,7 +1687,7 @@ class Coordinates:
                     key,
                     speed=speed,
                     selected_id=selected_id,
-                    animal_in_roi=animal_in_roi,
+                    animals_in_roi=animals_in_roi,
                     roi_number=roi_number,
                     filter_on_graph=filter_on_graph,
                     )
@@ -1719,7 +1719,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = None,
-        animal_in_roi: str = None,
+        animals_in_roi: str = None,
         roi_number: int = None,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
@@ -1756,14 +1756,14 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None and type(animal_in_roi)==str:
-                animal_in_roi_ids = [animal_in_roi]
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
             else:
-                animal_in_roi_ids = self._animal_ids
+                animals_in_roi_ids = self._animal_ids
 
             tab_pos=get_dt(self._tables, key)
             
-            for aid in animal_in_roi_ids:
+            for aid in animals_in_roi_ids:
 
                 roi_polygon=self._roi_dicts[key][roi_number]
                 mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
@@ -1813,7 +1813,7 @@ class Coordinates:
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
-        animal_in_roi: str = None,
+        animals_in_roi: str = None,
         roi_number: int = None,
         file_name: str = 'got_angles',
         return_path: bool = False,
@@ -1843,7 +1843,7 @@ class Coordinates:
                     degrees=degrees,
                     speed=speed,
                     selected_id=selected_id,
-                    animal_in_roi=animal_in_roi,
+                    animals_in_roi=animals_in_roi,
                     roi_number = roi_number,
                 )
 
@@ -1874,7 +1874,7 @@ class Coordinates:
     degrees: bool = False,
     speed: int = 0,
     selected_id: str = None,
-    animal_in_roi: str = None,
+    animals_in_roi: str = None,
     roi_number: int = None,
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
@@ -1913,14 +1913,14 @@ class Coordinates:
         # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
         # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
         if roi_number is not None:
-            if animal_in_roi is not None and type(animal_in_roi)==str:
-                animal_in_roi_ids = [animal_in_roi]
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
             else:
-                animal_in_roi_ids = self._animal_ids
+                animals_in_roi_ids = self._animal_ids
             
             tab_pos=get_dt(self._tables, key)
        
-            for aid in animal_in_roi_ids:
+            for aid in animals_in_roi_ids:
 
                 roi_polygon=self._roi_dicts[key][roi_number]
                 mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
@@ -1951,7 +1951,7 @@ class Coordinates:
             self, 
             speed: int = 0,
             selected_id: str = "all",
-            animal_in_roi: str = None,
+            animals_in_roi: str = None,
             roi_number: int = None,
             file_name: str = 'got_areas',
             return_path: bool = False,
@@ -1978,7 +1978,7 @@ class Coordinates:
                     key=key, 
                     speed = speed,
                     selected_id = selected_id,
-                    animal_in_roi = animal_in_roi,
+                    animals_in_roi = animals_in_roi,
                     roi_number = roi_number,
                 )
 
@@ -2011,7 +2011,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = "all",
-        animal_in_roi: str = None,
+        animals_in_roi: str = None,
         roi_number: int = None,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
@@ -2055,12 +2055,12 @@ class Coordinates:
 
             tab_pos=get_dt(self._tables, key)
             
-            if animal_in_roi is not None and type(animal_in_roi)==str:
-                animal_in_roi_ids = [animal_in_roi]
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
             else:
-                animal_in_roi_ids = self._animal_ids
+                animals_in_roi_ids = self._animal_ids
             
-            for aid in animal_in_roi_ids:
+            for aid in animals_in_roi_ids:
 
                 roi_polygon=self._roi_dicts[key][roi_number]
                 mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)

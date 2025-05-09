@@ -247,7 +247,7 @@ def get_time_on_cluster(
     reduce_dim: bool = False,
     bin_info: Union[dict,np.ndarray] = None,
     roi_number: int = None,
-    animal_id: int = None,
+    animals_in_roi: list = None,
 ):
     """Compute how much each animal spends on each cluster.
 
@@ -278,7 +278,7 @@ def get_time_on_cluster(
         # Load full dataset (arr_range==None) or section
         hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
         if roi_number is not None:
-            hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animal_id)
+            hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
             hard_counts=hard_counts[hard_counts >= 0]
         
         # Create dictionary with number of bin_occurences per bin
@@ -314,7 +314,7 @@ def get_time_on_cluster(
     ]
 )
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animal_id: list = None
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animals_in_roi: list = None, special_case: bool = False
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -347,9 +347,9 @@ def get_aggregated_embedding(
         # Load full dataset (arr_range==None) or section
         current_embedding=get_dt(embedding,key,load_range=arr_range)
         if roi_number is not None and type(current_embedding)==pd.DataFrame:
-            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animal_id)
+            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, special_case)
         elif roi_number is not None and type(current_embedding)==np.ndarray:
-            current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animal_id)
+            current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
 
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
@@ -577,8 +577,9 @@ def enrichment_across_conditions(
     plot_speed: bool = False,
     bin_info: dict = None,
     roi_number: int = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     normalize: bool = False,
+    special_case: bool = False
 ):
     """Compute the population of each cluster across conditions.
 
@@ -610,7 +611,7 @@ def enrichment_across_conditions(
 
         # Extract time on cluster for all videos and add experimental information
         counter_df = get_time_on_cluster(
-            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
+            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi,
         )
     else:
         
@@ -619,7 +620,7 @@ def enrichment_across_conditions(
             #load and cut current data set
             current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
             if roi_number is not None:
-                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animal_id)
+                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,special_case)
 
             #only keep speed column or only drop speed column
             if plot_speed:
@@ -683,7 +684,7 @@ def compute_transition_matrix_per_condition(
     silence_diagonal: bool = False,
     bin_info: dict = None,
     roi_number: int = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     aggregate: str = True,
     normalize: str = True,
 ):
@@ -715,7 +716,7 @@ def compute_transition_matrix_per_condition(
         #Determine load range
         load_range = bin_info[key]["time"]
         if roi_number is not None:
-            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animal_id)
+            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
 
         #load requested range from current soft counts
         current_sc = get_dt(soft_counts, key, load_range=load_range)

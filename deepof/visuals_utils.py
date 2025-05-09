@@ -881,6 +881,7 @@ def get_supervised_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
     animal_ids: Union[str, list], 
+    special_case: bool =True,
 ):
     """Filter supervised behaviors based on rois given by animal_ids.
 
@@ -894,19 +895,21 @@ def get_supervised_behaviors_in_roi(
     """
     cur_supervised=copy.copy(cur_supervised)
 
-    if animal_ids is None:
+    if animal_ids is None or animal_ids=="" or animal_ids==[""]:
         animal_ids=[""]
+        animal_ids_edited=[""]
     elif type(animal_ids)==str:
-        animal_ids=[animal_ids+"_"]
-    elif type(animal_ids)==list and len(animal_ids)>1:
-        animal_ids=[aid+"_" for aid in animal_ids]
+        animal_ids=[animal_ids]
+        animal_ids_edited=[animal_ids+"_"]
+    elif type(animal_ids)==list:
+        animal_ids_edited=[aid+"_" for aid in animal_ids]
 
     # Create set of valid columns that contain any animal id
     valid_cols = set()
     for col in cur_supervised.columns:
         level0 = col[0] if isinstance(col, tuple) else col
-        for aid in animal_ids:
-            if f"{aid}" in level0:
+        for aid in animal_ids_edited:
+            if not special_case or f"{aid}" in level0:
                 valid_cols.add(col)
                 break  # skip checking for more ids in column
 
@@ -916,10 +919,14 @@ def get_supervised_behaviors_in_roi(
             continue #skip "time" array that contains time binning info
 
         aid_2_cols = []
-        for col in valid_cols:
-            level0 = col[0] if isinstance(col, tuple) else col
-            if aid_2 in level0:
-                aid_2_cols.append(col)
+        if special_case:
+            for col in valid_cols:
+                level0 = col[0] if isinstance(col, tuple) else col
+                if aid_2 in level0:
+                    aid_2_cols.append(col)
+        else:
+            if aid_2 in animal_ids:
+               aid_2_cols=list(valid_cols) 
         # Apply ROI filter if there are columns to process
         if aid_2_cols:
             cur_supervised.loc[~local_bin_info[aid_2], aid_2_cols] = np.nan
@@ -971,7 +978,7 @@ def get_unsupervised_behaviors_in_roi(
 def get_beheavior_frames_in_roi(
     behavior: str,
     local_bin_info: dict,
-    animal_id: Union[str, list],        
+    animal_ids: Union[str, list],        
 ):
     """Filter unsupervised behaviors based on rois given by animal_ids.
 
@@ -983,27 +990,17 @@ def get_beheavior_frames_in_roi(
     Returns:
         frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
     """
-        
+
+    if isinstance(animal_ids, str):
+        animal_ids=[animal_ids]   
+
     local_bin_info = copy.copy(local_bin_info)
     frames = copy.copy(local_bin_info["time"])
 
     is_supervised_behavior = False
     if behavior is not None:
-        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_id])
-    
-    if type(animal_id)==list and not is_supervised_behavior:
-        L_list = len(animal_id)
-        animal_id = animal_id[0]
-        if not getattr(get_beheavior_frames_in_roi, '_warning_issued', False) and L_list>1:
-            warning_message = (
-                "\033[38;5;208m\n"  # Set text color to orange
-                "Warning! No animal id was selected but the selected behavior is unsupervised!\n"
-                f"Therefore, the following animal id was selected automatically: {animal_id}"
-                "\033[0m"  # Reset text color
-            )
-            warnings.warn(warning_message)  
-            get_beheavior_frames_in_roi._warning_issued = True
-    
+        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
+       
     if is_supervised_behavior:
         for aid in local_bin_info.keys():
             if aid == "time":
@@ -1011,7 +1008,8 @@ def get_beheavior_frames_in_roi(
             if aid + "_" in behavior:
                 frames[~local_bin_info[aid]]=-1
     else:
-        frames[~local_bin_info[animal_id]]=-1
+        for aid in animal_ids:
+            frames[~local_bin_info[aid]]=-1
     
     frames=frames[frames >= 0]
     return frames
@@ -1038,6 +1036,7 @@ def _check_enum_inputs(
     behaviors: list = None,
     bodyparts: list = None,
     animal_id: str = None,
+    animals_in_roi: list = None,
     center: str = None,
     visualization: str = None,
     normative_model: str = None,
@@ -1083,6 +1082,8 @@ def _check_enum_inputs(
         behaviors=[behaviors]
     if isinstance(bodyparts, str):
         bodyparts=[bodyparts]
+    if isinstance(animals_in_roi, str):
+        animals_in_roi=[animals_in_roi]
      
 
     # Generate lists of possible options for all enum-likes (solution will be improved in the future)
@@ -1232,6 +1233,15 @@ def _check_enum_inputs(
         raise ValueError(
             'One or more bodyparts in "bodyparts" are not part of: {}'.format(
                 str(bodyparts_options_list)[1:-1]
+            )
+        )
+    
+    if animals_in_roi is not None and not animals_in_roi == [None] and not set(animals_in_roi).issubset(
+        set(animal_id_options_list)
+    ):
+        raise ValueError(
+            'One or more animal_ids in "animal_in_roi" are not part of: {}'.format(
+                str(animal_id_options_list)[1:-1]
             )
         )
     
@@ -1901,12 +1911,13 @@ def output_videos_per_cluster(
     frame_limit_per_video: int = np.inf,
     bin_info: dict = None,
     roi_number: int = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     single_output_resolution: tuple = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     display_time: bool = False,
     out_path: str = ".",
+    special_case: bool = False,
 ): # pragma: no cover
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
 
@@ -2013,7 +2024,11 @@ def output_videos_per_cluster(
             frames = None
             if bin_info is not None:
                 if roi_number is not None:
-                    frames=get_beheavior_frames_in_roi(behavior=behavior, local_bin_info=bin_info[key], animal_id=animal_id)
+                    if special_case:
+                        behavior_in=behavior
+                    else:
+                        behavior_in=None
+                    frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
                 else:
                     frames=bin_info[key]["time"]
 

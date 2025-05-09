@@ -81,7 +81,7 @@ def plot_heatmaps(
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
-    animal_in_roi: str = None,
+    animals_in_roi: str = None,
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
@@ -124,14 +124,14 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
-        animal_id=animal_in_roi,
+        animals_in_roi=animals_in_roi,
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
         roi_number=roi_number,
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animal_in_roi=animal_in_roi)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animals_in_roi=animals_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -234,7 +234,7 @@ def plot_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -276,7 +276,7 @@ def plot_gantt(
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
-        animal_id = animal_id,
+        animals_in_roi = animals_in_roi,
         ax=ax,
         save=save)
 
@@ -297,7 +297,7 @@ def plot_gantt(
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
-        animal_id = animal_id,
+        animals_in_roi = animals_in_roi,
         ax=ax,
         save=save)
 
@@ -318,7 +318,7 @@ def _plot_experiment_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     behaviors_to_plot: list = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -348,15 +348,17 @@ def _plot_experiment_gantt(
         soft_counts=soft_counts,
         experiment_ids=experiment_id,
         behaviors=behaviors_to_plot,
-        animal_id = animal_id,
+        animals_in_roi = animals_in_roi,
         roi_number=roi_number,
     )
 
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
-        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
         )
 
 
@@ -452,7 +454,7 @@ def _plot_experiment_gantt(
     if plot_type == "unsupervised":
         time_binned = hard_counts[bin_indices]
         if roi_number is not None:
-            time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[experiment_id], animal_id)
+            time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[experiment_id], animals_in_roi)
             #reset function warning
             get_unsupervised_behaviors_in_roi._warning_issued = False
 
@@ -460,7 +462,7 @@ def _plot_experiment_gantt(
     elif plot_type == "supervised":
         supervised_binned = data_frame.iloc[bin_indices]
         if roi_number is not None:
-            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animal_id)
+            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, special_case)
 
 
     # Iterate over features and plot
@@ -512,7 +514,7 @@ def _plot_behavior_gantt(
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     experiments_to_plot: list = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -543,15 +545,17 @@ def _plot_behavior_gantt(
         soft_counts=soft_counts,
         behaviors=behavior_id,
         experiment_ids=experiments_to_plot,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
 
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False,
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
-        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
         )
 
     # set active axes if provided
@@ -649,14 +653,14 @@ def _plot_behavior_gantt(
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
             time_binned = hard_counts[bin_indices]
             if roi_number is not None:
-                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[all_experiments[exp_id]], animal_id)
+                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[all_experiments[exp_id]], animals_in_roi)
             gantt[rows] = time_binned == cluster_no
 
         elif plot_type == "supervised":
 
             supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
             if roi_number is not None:
-                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animal_id)
+                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animals_in_roi, special_case)
             gantt[rows] = supervised_binned[behavior_id]
 
         gantt[rows][gantt[rows]>0]+=rows
@@ -875,7 +879,7 @@ def plot_enrichment(
     exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
-    animal_id: str = None,
+    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -907,11 +911,13 @@ def plot_enrichment(
         coordinates,
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case = False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case = True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -972,8 +978,9 @@ def plot_enrichment(
         plot_speed = plot_speed,
         bin_info = bin_info,
         roi_number = roi_number,
-        animal_id = animal_id,
+        animals_in_roi = animals_in_roi,
         normalize = normalize,
+        special_case=special_case,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
@@ -1335,7 +1342,7 @@ def plot_transitions(
     samples_max: int=20000,
     roi_number: int = None,
     # Visualization parameters
-    animal_id: str = None,
+    animals_in_roi: list = None,
     exp_condition: str = None,
     visualization="networks",
     silence_diagonal=False,
@@ -1367,11 +1374,11 @@ def plot_transitions(
         origin="plot_transitions",
         exp_condition=exp_condition,
         visualization=visualization,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -1400,7 +1407,7 @@ def plot_transitions(
         exp_conditions,
         bin_info=bin_info,
         roi_number=roi_number,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
         normalize=True,
@@ -1520,7 +1527,7 @@ def plot_stationary_entropy(
     samples_max=20000,
     roi_number: int = None,
     # Visualization parameters
-    animal_id: str = None,
+    animals_in_roi: list = None,
     exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
@@ -1547,11 +1554,11 @@ def plot_stationary_entropy(
     _check_enum_inputs(
         coordinates,
         exp_condition=exp_condition,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -1587,7 +1594,7 @@ def plot_stationary_entropy(
         exp_conditions,
         bin_info=bin_info,
         roi_number=roi_number,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         aggregate=False,
         normalize=True,
     )
@@ -1815,7 +1822,7 @@ def plot_embeddings(
     exp_condition: str = None,
     aggregate_experiments: str = None,
     samples: int = 500,
-    animal_id: Union[str,list] = None,
+    animals_in_roi: Union[str,list] = None,
     show_aggregated_density: bool = True,
     colour_by: str = "exp_condition",
     ax: Any = None,
@@ -1853,21 +1860,23 @@ def plot_embeddings(
         exp_condition=exp_condition,
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    if supervised_annotations is not None and roi_number is not None and animal_id is not None:
+    if supervised_annotations is not None and roi_number is not None and animals_in_roi is not None:
         raise ValueError(
             '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
         )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
         )
-    if type(animal_id)==str:
-        animal_id=[animal_id]
+    if type(animals_in_roi)==str:
+        animals_in_roi=[animals_in_roi]
     # prevents crash due to axis issues
     if (
         not aggregate_experiments
@@ -1934,7 +1943,7 @@ def plot_embeddings(
 
                 if aid == "time":
                     num_rows=len(bin_info[key]["time"])
-                elif roi_number is not None and aid in animal_id:
+                elif roi_number is not None and aid in animals_in_roi:
                     num_rows=np.sum(bin_info[key][aid])
 
                 if num_rows < shortest:
@@ -1955,7 +1964,7 @@ def plot_embeddings(
             #get correct section of current embedding 
             current_emb=get_dt(emb_to_plot,key)
             if roi_number is not None:
-                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_id=animal_id)
+                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
             else:
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
@@ -2039,17 +2048,17 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
+                counts_to_plot, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi,
             )
 
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, special_case=special_case,
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animal_id=animal_id,
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, special_case=special_case,
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -2180,6 +2189,7 @@ def animate_skeleton(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     animal_id: list = None,
+    animals_in_roi: list = None,
     center: str = "arena",
     align: str = None,
     # Time selection parameters
@@ -2194,7 +2204,6 @@ def animate_skeleton(
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
     display_arena: bool = True,
-    show_all: bool = True,
     legend: bool = True,
     save: bool = None,
     dpi: int = 100,
@@ -2236,10 +2245,10 @@ def animate_skeleton(
         animal_id = coordinates._animal_ids
     if type(animal_id)==str:
         animal_id=[animal_id]
-    if roi_number is not None:
-        animal_id_roi = animal_id
-        if show_all:
-            animal_id = coordinates._animal_ids
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    if type(animals_in_roi)==str:
+        animals_in_roi=[animals_in_roi]
 
 
     bin_info_time = _preprocess_time_bins(
@@ -2430,7 +2439,7 @@ def animate_skeleton(
         frames = bin_info[experiment_id]["time"]
     else:
         #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_beheavior_frames_in_roi('_'.join(animal_id_roi) + '_', bin_info[experiment_id], animal_id=animal_id_roi)
+        frames = get_beheavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
         get_beheavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
@@ -2690,7 +2699,7 @@ def export_annotated_video(
     frame_limit_per_video: int = None,
     roi_number: int =None,
     #others
-    animal_id: str = None,
+    animals_in_roi: list = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
     display_time: bool = False,
@@ -2720,12 +2729,14 @@ def export_annotated_video(
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
 
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
@@ -2793,7 +2804,11 @@ def export_annotated_video(
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behavior = cur_tab.columns[0]
         if roi_number is not None:
-            frames=get_beheavior_frames_in_roi(behavior=behavior, local_bin_info=bin_info[experiment_id], animal_id=animal_id)
+            if special_case:
+                behavior_in=behavior
+            else:
+                behavior_in=None
+            frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
         else:
             frames=bin_info[experiment_id]["time"]
         # get current tab and video path
@@ -2843,11 +2858,12 @@ def export_annotated_video(
             frame_limit_per_video=frame_limit_per_video,
             bin_info=bin_info,
             roi_number=roi_number,
-            animal_id=animal_id,
+            animals_in_roi=animals_in_roi,
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
             display_time=display_time,
+            special_case=special_case,
         )
 
         return None
@@ -3025,7 +3041,7 @@ def plot_behavior_trends(
     custom_time_bins: List[List[Union[int, str]]] = None,
     hide_time_bins: List[bool] = None,
     roi_number: int = None,
-    animal_id: int = None,
+    animals_in_roi: list = None,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     ax: Any = None,
@@ -3063,11 +3079,13 @@ def plot_behavior_trends(
         exp_condition=exp_condition,
         condition_values=condition_values,
         behaviors=behavior_to_plot,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -3243,14 +3261,14 @@ def plot_behavior_trends(
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
             if roi_number is not None:
-                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_id=animal_id)
+                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_id=animals_in_roi)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
             data_set=get_dt(supervised_annotations,key)
             if roi_number is not None:
-                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animal_id)
+                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, special_case=special_case)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
@@ -3718,7 +3736,7 @@ def get_roi_data(
     samples_max: int =100000,
     # Visualization parameters
     experiment_id: str = None,
-    animal_id: str = None,
+    animals_in_roi: list = None,
 ):
     """get data in Rois.
 
@@ -3740,7 +3758,7 @@ def get_roi_data(
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
-        animal_id=animal_id,
+        animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
     if coordinates._very_large_project and experiment_id is None:
@@ -3748,8 +3766,10 @@ def get_roi_data(
             "Iteration accross all experiments is currently not supported for very large projects! However, by setting \"experiment_id\" you can still export single tables"
         )
 
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
+    special_case=False
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -3773,10 +3793,10 @@ def get_roi_data(
         tab = get_dt(table_dict, key)
         if type(tab)==pd.DataFrame:
             supervised_binned = pd.DataFrame(tab.iloc[bin_info[key]["time"]])
-            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animal_id)
+            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animals_in_roi, special_case=special_case)
         elif type(tab)==np.ndarray:
             unsupervised_binned = tab[bin_info[key]["time"]]
-            time_binned = get_unsupervised_behaviors_in_roi(unsupervised_binned, bin_info[key], animal_id)
+            time_binned = get_unsupervised_behaviors_in_roi(unsupervised_binned, bin_info[key], animals_in_roi)
         else:
             raise NotImplementedError(
                 "This function only supports supervised and unsupervides table dicts!"
