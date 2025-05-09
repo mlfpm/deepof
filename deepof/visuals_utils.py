@@ -954,23 +954,15 @@ def get_unsupervised_behaviors_in_roi(
     """
 
     cur_unsupervised=copy.copy(cur_unsupervised)
+    if type(animal_id)==str:
+        animal_id=[animal_id]
 
-    if type(animal_id)==list:
-        L_list = len(animal_id)
-        animal_id = animal_id[0]
-        if not getattr(get_unsupervised_behaviors_in_roi, '_warning_issued', False) and L_list>1:
-            warning_message = (
-                "\033[38;5;208m\n"  # Set text color to orange
-                "Warning! No animal id was selected but soft_counts were selected for plotting with using a ROI!\n"
-                f"Therefore, the following animal id was selected automatically: {animal_id}"
-                "\033[0m"  # Reset text color
-            )
-            warnings.warn(warning_message)   
-            get_unsupervised_behaviors_in_roi._warning_issued = True
     if len(cur_unsupervised.shape)==1:
-        cur_unsupervised[~local_bin_info[animal_id]]=-1    
-    else: 
-        cur_unsupervised[~local_bin_info[animal_id]]=np.NaN   
+        for aid in animal_id:
+            cur_unsupervised[~local_bin_info[aid]]=-1    
+    else:
+        for aid in animal_id: 
+            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
 
     return cur_unsupervised
 

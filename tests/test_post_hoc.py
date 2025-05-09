@@ -104,9 +104,9 @@ def test_get_time_on_cluster():
         unique=True
     ),
     roi_number = st.integers(min_value=1, max_value=2),
-    animal_ids = st.one_of(st.just(["A"]),st.just(["A","B"]))
+    animals_in_roi = st.one_of(st.just(["A"]),st.just(["A","B"]))
 )
-def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animal_ids):
+def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animals_in_roi):
 
     # Define a test embedding dictionary
     embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
@@ -115,14 +115,14 @@ def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animal_ids)
     bin_info = {i: {} for i in range(10)}
     for key in bin_info:
         local_bin_info = {"time": np.array(bins)}
-        for k, animal_id in enumerate(animal_ids):
+        for k, animal_id in enumerate(animals_in_roi):
             local_bin_info[animal_id] = np.ones(len(bins)).astype(bool)
             if key==0:
                 local_bin_info[animal_id] = np.zeros(len(bins)).astype(bool)
         bin_info[key]=local_bin_info
 
     aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-        embedding, reduce_dim, agg, bin_info, roi_number=roi_number, animal_id = animal_ids
+        embedding, reduce_dim, agg, bin_info, roi_number=roi_number, animals_in_roi = animals_in_roi
     )
 
     assert aggregated_embeddings.shape[0] == len(embedding)
