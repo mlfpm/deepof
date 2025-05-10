@@ -2837,17 +2837,18 @@ def retrieve_corners_from_image(
             frame_copy,
         )
 
+        key = cv2.waitKey(1) & 0xFF
         # Remove last added coordinate if user presses 'd'
-        if cv2.waitKey(1) & 0xFF == ord("d"):
+        if key == ord("d"):
             corners = corners[:-1]
 
         # Exit is user presses 'q'
         if len(corners) > 2:
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            if key == ord("q"):
                 break
 
         # Exit and copy all coordinates if user presses 'c'
-        if cur_vid > 0 and cv2.waitKey(1) & 0xFF == ord("p"):
+        if cur_vid > 0 and key == ord("p"):
             corners = None
             break
 
