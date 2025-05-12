@@ -20,6 +20,8 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
+from shapely.geometry import Point, Polygon
+
 
 import deepof.data
 import deepof.utils
@@ -449,6 +451,12 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
         segmentation_model=deepof.utils.load_segmentation_model(None),
         arena_type=detection_mode,
     )
+    #adjust scaling
+    scaling_ratio = coords._scales[video_key][3]/coords._scales[video_key][2]
+    if "polygonal" in detection_mode:
+        arena_parameters=np.array(arena_parameters)*scaling_ratio
+    elif "circular" in detection_mode:
+        arena_parameters=(tuple(np.array(arena_parameters[0])*scaling_ratio),tuple(np.array(arena_parameters[1])*scaling_ratio),arena_parameters[2])
 
     rmtree(
         os.path.join(
@@ -649,3 +657,50 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
             assert isinstance(trans, nx.Graph)
         else:
             assert isinstance(trans, np.ndarray)
+
+# list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations
+polygons = [
+    [[0, 0], [1, 0], [1, 1], [0, 1]],  # Square
+    [[0, 0], [2, 0], [1, 2], [0, 0]],  # Triangle
+    [[-4, 0], [2, 0], [2, 2], [-4, 2], [-4, 0]],  # Rectangle
+    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]],  # Complex polygon
+    [[0, 0], [6, 0], [6, 4], [4, 4], [4, 2], [2, 2], [2, 4], [0, 4], [0, 0]],  # U-shape
+    [
+        [0, 0],
+        [6, 0],
+        [6, 6],
+        [0, 6],
+        [0, 3],
+        [2, 3],
+        [2, 4],
+        [4, 4],
+        [4, 2],
+        [2, 2],
+        [2, 3],
+        [0, 3],
+        [0, 0],
+    ],  # ring polygon
+]
+
+@settings(max_examples=100, deadline=None)
+@given(
+    points=st.lists(
+        st.lists(
+            st.floats(min_value=-100, max_value=100, width=32), min_size=2, max_size=2
+        ),
+        min_size=1,
+        max_size=100,
+    ),
+    polygons=st.sampled_from(polygons),
+)
+def test_point_in_polygon(points, polygons):
+
+    points = np.array(points)
+    polygons = np.array(polygons)
+    assert all(
+        deepof.utils.point_in_polygon_numba(points, polygons)
+        == deepof.utils.point_in_polygon(points, Polygon(polygons))
+    )
+
+
+test_point_in_polygon()

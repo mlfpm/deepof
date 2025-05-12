@@ -14,18 +14,47 @@ For a detailed tutorial on how to use this module, see the advanced tutorials in
 # module deepof
 
 #bug fix for linux cv2 issue
+import os
+import sys
+import subprocess
 import cv2
 
-#try:
-#    cv2.imshow("test",1)
-#    cv2.waitKey(1)
-#    cv2.destroyAllWindows()
-#except:
-#    pass
+def is_display_available(): # pragma: no cover
+    # Check for Linux and X display
+    if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
+        return False
+    
+    # Test OpenCV in a subprocess to avoid crashing the main script
+    check_script = """
+import cv2
+try:
+    cv2.imshow('test', 1)
+    cv2.waitKey(1)
+    cv2.destroyAllWindows()
+except Exception:
+    exit(1)
+exit(0)
+"""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", check_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        return result.returncode == 0
+    except:
+        return False
+
+if is_display_available():
+    cv2.imshow("test",1)
+    cv2.waitKey(1)
+    cv2.destroyAllWindows()
+else:
+    print("Display not available, skipping cv2 init.")
 
 
 import copy
-import os
 import pickle
 import re
 import shutil
@@ -38,7 +67,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import psutil
-import cv2
+
 import umap
 from natsort import os_sorted
 from pkg_resources import resource_filename
@@ -95,6 +124,7 @@ def load_project(
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        number_of_rois = 0,
         fast_implementations_threshold: int = 50000,) -> coordinates:  # pragma: no cover
     """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version
 
@@ -139,11 +169,6 @@ def load_project(
         #get file endings
         table_extension=".h5"
         video_extension=".mp4"
-        #if coordinates._table_paths[0].endswith(".analysis.h5"):
-        #    table_extension=".analysis.h5"
-        #else:
-        #    _, table_extension = os.path.splitext(coordinates._table_paths[0])
-        #_, video_extension = os.path.splitext(coordinates._videos[0])
 
         redone_project = deepof.data.Project(
             animal_ids=coordinates._animal_ids,
@@ -167,6 +192,7 @@ def load_project(
             table_format=table_extension,
             video_format=video_extension,
             video_scale=coordinates._arena_dims,
+            number_of_rois = number_of_rois,
             fast_implementations_threshold=fast_implementations_threshold,
         )
 
@@ -205,6 +231,7 @@ class Project:
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
+        number_of_rois: int = 0,
         fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
@@ -230,6 +257,7 @@ class Project:
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
+            number_of_rois (int): number of behavior rois to be drawn during project creation, default = 0,
             video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
 
         """
@@ -291,6 +319,7 @@ class Project:
         # Loads arena details and (if needed) detection models
         self.arena = arena
         self.arena_dims = video_scale
+        self.number_of_rois = number_of_rois
         self.ellipse_detection = None
 
         # check if there are enough frames to use numba compilation and / or use memory efficient implementations
@@ -428,6 +457,7 @@ class Project:
             tables,
             self.arena,
             self.arena_dims,
+            self.number_of_rois,
             self.segmentation_path,
             self.video_path,
             self.videos,
@@ -705,7 +735,7 @@ class Project:
                 if self.scales is not None:
                     scaling_ratio = self.scales[key][3]/self.scales[key][2]
 
-                #scale
+                #scale tables
                 tab=tab*scaling_ratio
 
                 #save scaled table
@@ -1025,7 +1055,7 @@ class Project:
         areas = None
 
         # noinspection PyAttributeOutsideInit
-        self.scales, self.arena_params, self.video_resolution = self.get_arena(
+        self.scales, self.arena_params, self.roi_dicts, self.video_resolution = self.get_arena(
             tables, debug, test
         )
 
@@ -1057,6 +1087,9 @@ class Project:
             self.videos.update(_to_extend._videos)
             self.arena_params.update(_to_extend._arena_params)
             self.scales.update(_to_extend._scales)
+            if _to_extend._roi_dicts is not None:
+                self.roi_dicts.update(_to_extend._roi_dicts)
+
 
             self.version= _to_extend._version
 
@@ -1087,6 +1120,7 @@ class Project:
             quality=quality,
             scales=self.scales,
             arena_params=self.arena_params,
+            roi_dicts=self.roi_dicts,
             tables=tables,
             table_paths=self.tables,
             source_table_path=self.source_table_path,
@@ -1094,6 +1128,7 @@ class Project:
             videos=self.videos,
             video_path=self.video_path,
             video_resolution=self.video_resolution,
+            number_of_rois=self.number_of_rois,
             run_numba=self.run_numba,
             very_large_project=self.very_large_project,
             version=self.version,
@@ -1241,6 +1276,7 @@ class Coordinates:
         scales: dict,
         frame_rate: float,
         arena_params: dict,
+        roi_dicts: dict,
         tables: dict,
         source_table_path: str,
         table_paths: List,
@@ -1255,6 +1291,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
         version: str = None,
@@ -1272,6 +1309,7 @@ class Coordinates:
             scales (dict): Scales used for the experiment. See deepof.data.Project for more information.
             frame_rate (float): frame rate of the processed videos.
             arena_params (dict): Dictionary containing the parameters of the arena. See deepof.data.Project for more information.
+            roi_dicts (dict): Dictionary containing all rois for all videos as determined byt he user.
             tables (dict): Dictionary containing the tables of the experiment. See deepof.data.Project for more information.
             table_paths (List): List containing the paths to the tables of the experiment. See deepof.data.Project for more information.f
             trained_model_path (str): Path to the trained models used for the supervised pipeline. For internal use only.
@@ -1283,6 +1321,7 @@ class Coordinates:
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
+            number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
             version (str): version of deepof this object was created with
@@ -1293,6 +1332,7 @@ class Coordinates:
         self._animal_ids = animal_ids
         self._arena = arena
         self._arena_params = arena_params
+        self._roi_dicts = roi_dicts
         self._arena_dims = arena_dims
         self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
@@ -1312,6 +1352,7 @@ class Coordinates:
         self._areas = areas
         self._distances = distances
         self._connectivity = connectivity
+        self._number_of_rois = number_of_rois
         self._run_numba = run_numba
         self._very_large_project = very_large_project
         self._version = version
@@ -1338,6 +1379,9 @@ class Coordinates:
         align: str = False,
         align_inplace: bool = True,
         selected_id: str = None,
+        animals_in_roi: str = None,
+        roi_number: int = None,
+        in_roi_criterion: str = "Center",
         file_name: str = 'coords',
         return_path: bool = False,
     ) -> table_dict:
@@ -1350,6 +1394,7 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
+            roi_number (int): Returns only coordinates within roi of given number.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
@@ -1377,6 +1422,9 @@ class Coordinates:
                 align = align,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
+                animals_in_roi = animals_in_roi,
+                roi_number = roi_number,
+                in_roi_criterion = in_roi_criterion,
             )
             
             # save paths for modified tables
@@ -1411,6 +1459,9 @@ class Coordinates:
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
+    animals_in_roi: str = None,
+    roi_number: int = None,
+    in_roi_criterion: str = "Center",
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -1425,7 +1476,8 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            
+            roi_number (int): Returns only coordinates within roi of given number.
+    
         Returns:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
 
@@ -1448,6 +1500,39 @@ class Coordinates:
             assert any(
                 align in bp for bp in tab.columns.levels[0]
             ), "align must be set to the name of a bodypart"
+        
+        if roi_number is not None:
+            
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+        
+
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
+            else:
+                animals_in_roi_ids = self._animal_ids
+            
+            for aid in animals_in_roi_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, self._run_numba)
+                
+                aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # Id selected_id was specified, selects coordinates of only one animal for further processing
+        if selected_id is not None:
+            tab = tab.loc[
+                :, deepof.utils.filter_columns(tab.columns, selected_id)
+            ]
+      
 
         if polar:
             coord_1, coord_2 = "rho", "phi"
@@ -1512,7 +1597,7 @@ class Coordinates:
             aligned_coordinates = None
             # noinspection PyUnboundLocalVariable
             for aid in animal_ids:
-                # Bring forward the column to align
+                # Set the column to align to as the first column
                 columns = [
                     i
                     for i in tab.columns
@@ -1556,13 +1641,7 @@ class Coordinates:
                 deriv=speed,
                 center=center,
             )
-            tab = vel
-
-        # Id selected_id was specified, selects coordinates of only one animal for further processing
-        if selected_id is not None:
-            tab = tab.loc[
-                :, deepof.utils.filter_columns(tab.columns, selected_id)
-            ]
+            tab = vel  
 
         table_dict={key:tab}
         # Set table_dict to NaN if animals are missing
@@ -1576,6 +1655,8 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
+        animals_in_roi: str = None,
+        roi_number: int = None,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
         return_path: bool = False,
@@ -1606,6 +1687,8 @@ class Coordinates:
                     key,
                     speed=speed,
                     selected_id=selected_id,
+                    animals_in_roi=animals_in_roi,
+                    roi_number=roi_number,
                     filter_on_graph=filter_on_graph,
                     )
 
@@ -1636,6 +1719,8 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = None,
+        animals_in_roi: str = None,
+        roi_number: int = None,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
         """Return a pd.DataFrame with the distances between body parts of one animal as values.
@@ -1652,20 +1737,49 @@ class Coordinates:
 
         """
 
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._distances, key))
         #to avoid reloading quality if quality is given
         if quality is None:
             quality=self.get_quality().filter_videos([key])
             quality[key] = get_dt(quality,key)
+      
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
+            else:
+                animals_in_roi_ids = self._animal_ids
 
-        if speed:
-            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
+            tab_pos=get_dt(self._tables, key)
+            
+            for aid in animals_in_roi_ids:
 
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                mask = [col[0].startswith(aid) or col[1].startswith(aid) for col in tab.columns]
+                aid_cols = tab.loc[:, mask].columns
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # remove unselected animals
         if selected_id is not None:
             tab = tab.loc[
                 :, deepof.utils.filter_columns(tab.columns, selected_id)
             ]
+
+        if speed:
+            tab = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="dists")
 
 
         table_dict={key:tab}
@@ -1699,6 +1813,8 @@ class Coordinates:
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
+        animals_in_roi: str = None,
+        roi_number: int = None,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -1727,6 +1843,8 @@ class Coordinates:
                     degrees=degrees,
                     speed=speed,
                     selected_id=selected_id,
+                    animals_in_roi=animals_in_roi,
+                    roi_number = roi_number,
                 )
 
                 # save paths for modified tables
@@ -1756,6 +1874,8 @@ class Coordinates:
     degrees: bool = False,
     speed: int = 0,
     selected_id: str = None,
+    animals_in_roi: str = None,
+    roi_number: int = None,
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
 
@@ -1771,6 +1891,15 @@ class Coordinates:
 
         """  
 
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
+
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._angles, key))
         #to avoid reloading quality if quality is given
@@ -1781,14 +1910,34 @@ class Coordinates:
         if degrees:
             tab = np.degrees(tab) 
 
-        if speed:
-            vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
-            tab = vel
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
+            else:
+                animals_in_roi_ids = self._animal_ids
+            
+            tab_pos=get_dt(self._tables, key)
+       
+            for aid in animals_in_roi_ids:
 
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                mask = [col[0].startswith(aid) for col in tab.columns]
+                aid_cols = tab.loc[:, mask].columns
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
+        # remove unselected animals
         if selected_id is not None:
             tab = tab.loc[
                 :, deepof.utils.filter_columns(tab.columns, selected_id)
             ]
+
+        if speed:
+            vel = deepof.utils.rolling_speed(tab, deriv=speed + 1, typ="angles")
+            tab = vel
 
         table_dict={key:tab}
         # Set table_dict to NaN if animals are missing
@@ -1802,6 +1951,8 @@ class Coordinates:
             self, 
             speed: int = 0,
             selected_id: str = "all",
+            animals_in_roi: str = None,
+            roi_number: int = None,
             file_name: str = 'got_areas',
             return_path: bool = False,
             ) -> table_dict:
@@ -1827,6 +1978,8 @@ class Coordinates:
                     key=key, 
                     speed = speed,
                     selected_id = selected_id,
+                    animals_in_roi = animals_in_roi,
+                    roi_number = roi_number,
                 )
 
                 # save paths for modified tables
@@ -1858,6 +2011,8 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = "all",
+        animals_in_roi: str = None,
+        roi_number: int = None,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
@@ -1872,6 +2027,15 @@ class Coordinates:
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
         """
+
+        #guard
+        if roi_number is not None:      
+            assert (
+                self._roi_dicts is not None
+            ), "No ROIs were created for this project. To use rois, set number_of_rois to an integer \nbetween 1 and 20 during project definition and mark your ROIs during project creation"
+            assert (
+                len(self._roi_dicts[key]) >= roi_number
+            ), "The requested ROI does not exist"
         
         #load table if not already loaded
         tab = deepof.utils.deepcopy(get_dt(self._areas, key))
@@ -1885,8 +2049,28 @@ class Coordinates:
         else:
             selected_ids = [selected_id]
 
+        # Sets all table values outside of ROI to NaN. This step needs to happen before coordinate transformations 
+        # but after speed calculation (to not have teh resulting gaps by mice leaving the ROIs affect the speed calculation)
+        if roi_number is not None:
+
+            tab_pos=get_dt(self._tables, key)
+            
+            if animals_in_roi is not None and type(animals_in_roi)==str:
+                animals_in_roi_ids = [animals_in_roi]
+            else:
+                animals_in_roi_ids = self._animal_ids
+            
+            for aid in animals_in_roi_ids:
+
+                roi_polygon=self._roi_dicts[key][roi_number]
+                mouse_in_polygon = deepof.utils.mouse_in_roi(tab_pos, aid, "Center", roi_polygon, self._run_numba)
+                
+                aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+                tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+
         exp_table = pd.DataFrame()
 
+        # remove unselected animals
         for aid in selected_ids:
 
             if aid == "":
@@ -2008,11 +2192,12 @@ class Coordinates:
                 "Editing {} arena{}".format(len(video_keys), "s" if len(video_keys) > 1 else "")
             )
 
-        edited_scales, edited_arena_params, _ = deepof.utils.get_arenas(
+        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.utils.get_arenas(
             coordinates=self,
             tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
+            number_of_rois=self._number_of_rois,
             segmentation_model_path=None,
             video_path=self._video_path,
             videos=videos_to_update,
@@ -2022,19 +2207,22 @@ class Coordinates:
         for key in video_keys:
             self._scales[key] = edited_scales[key]
             self._arena_params[key] = edited_arena_params[key]
+            self._roi_dicts[key] = edited_roi_dicts[key]
 
         self.save(timestamp=False)
 
         if verbose:
             print("Done!")
 
-    def save(self, filename: str = None, timestamp: bool = True):
+    def save(self, file=None, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.
 
         Args:
+            file (obj): optional Objet to save, if None, project gets saved
             filename (str): Name of the pickled file to store. If no name is provided, a default is used.
             timestamp (bool): Whether to append a time stamp at the end of the output file name.
         """
+
         pkl_out = "{}{}.pkl".format(
             os.path.join(
                 self._project_path,
@@ -2046,7 +2234,10 @@ class Coordinates:
         )
 
         with open(pkl_out, "wb") as handle:
-            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            if file is None:
+                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            else:
+                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     @deepof.data_loading._suppress_warning(
         warn_messages=[
@@ -2155,6 +2346,13 @@ class Coordinates:
                 ),
                 graph_preset=self._bodypart_graph,
             )
+            # Compares with existing table and removes all nodes from graph that are not part of the table columns
+            table_metadata = get_dt(self._tables, list(self._tables.keys())[0], only_metainfo=True)
+            table_columns = table_metadata["columns"]
+            table_column_names = [column[0] for column in table_columns]
+            nodes_to_remove=list(set(list(graph.nodes)) - set(table_column_names))
+            for node in nodes_to_remove:
+                graph.remove_node(node)
 
             tab_dict._connectivity = graph
 
@@ -2330,7 +2528,7 @@ class Coordinates:
             "climb_tol": 0.15,                                 # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
             "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from teh arena edge or closer
             "min_immobility": int(self._frame_rate),           # Min Time interval the mouse needs to be immobile to be counted as immobility, 1 second 
-            #"max_immobility": 120*int(self._frame_rate),       # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
+            #"max_immobility": 120*int(self._frame_rate),      # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
             "stationary_threshold": 40,                        # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
             "nose_likelihood": 0.85,                           # Minimum degree of certainty of the Nose position prediction, relevant for lookaround and sniffing
         }
@@ -2553,7 +2751,7 @@ class Coordinates:
             connectivity=self._connectivity,
             exp_conditions=self._exp_conditions,
         )
-        self.save(filename="supervised_annotation_instance")
+        self.save(file=supervised_annotation_instance, filename="supervised_annotations", timestamp=False)
 
         return supervised_annotation_instance
 
@@ -2841,7 +3039,7 @@ class TableDict(dict):
         tabs = self.copy()
         for key, val in tabs.items():
 
-            tabs[key] = deepof.utils.filter_animal_id_in_table(val, selected_id)
+            tabs[key] = deepof.utils.filter_animal_id_in_table(val, selected_id, self._type)
 
         return self.new_dict_same_header(tabs)
 

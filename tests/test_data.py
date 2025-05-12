@@ -261,7 +261,7 @@ def test_get_distances(nodes, ego):
     prun.create(force=True, test=True)
 
     tables, _ = prun.preprocess_tables()
-    prun.scales, prun.arena_params, prun.video_resolution = prun.get_arena(
+    prun.scales, prun.arena_params, prun.roi_dicts, prun.video_resolution = prun.get_arena(
         tables=tables, test=True,
     )
     prun.distances = nodes
@@ -436,7 +436,7 @@ def test_supervised_parameters():
     )
 
     #ensure that more behavior was detected with more generous parameters
-    assert np.sum(supervised_a['test']['sniff_arena']) > np.sum(supervised_b['test']['sniff_arena'])
+    assert np.sum(supervised_a['test']['sniff-arena']) > np.sum(supervised_b['test']['sniff-arena'])
     
 
 @settings(deadline=None)
@@ -503,6 +503,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
     polar = sampler.draw(st.booleans())
     speed = sampler.draw(st.integers(min_value=1, max_value=3))
+    rois = sampler.draw(st.one_of(st.just(None),st.integers(min_value=1, max_value=2)))
 
     #get table info
     start_times_dict=prun.get_start_times()
@@ -520,10 +521,12 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
         selected_id=selected_id,
+        roi_number = rois
     )
     speeds = prun.get_coords(
         speed=(speed if not ego and nodes == "all" else 0),
         selected_id=selected_id,
+        roi_number = rois
     )
     distances = prun.get_distances(
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
@@ -532,29 +535,38 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
-        selected_id=selected_id,
+        selected_id=selected_id, 
     )
     areas = prun.get_areas()
     merged = coords.merge(speeds, distances, angles, areas)
 
 
     # deepof.table testing
-    prep = coords.preprocess(
-        prun,
-        window_size=11,
-        window_step=1,
-        scale=sampler.draw(
-            st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
-        ),
-        test_videos=1,
-        verbose=2,
-        filter_low_variance=1e-3,
-        interpolate_normalized=5,
-        shuffle=sampler.draw(st.booleans()),
-        samples_max=sampler.draw(st.integers(min_value=10, max_value=500000)),
-    )
-    first_key=list(prep[0][0].keys())[0]
-    prep_data=deepof.data_loading.get_dt(prep[0][0],first_key)
+    if speeds['test'].notnull().any().all() and speeds['test2'].notnull().any().all():
+        prep = coords.preprocess(
+            prun,
+            window_size=11,
+            window_step=1,
+            scale=sampler.draw(
+                st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
+            ),
+            test_videos=1,
+            verbose=2,
+            filter_low_variance=1e-3,
+            interpolate_normalized=5,
+            shuffle=sampler.draw(st.booleans()),
+            samples_max=sampler.draw(st.integers(min_value=10, max_value=500000)),
+        )
+        first_key=list(prep[0][0].keys())[0]
+        prep_data=deepof.data_loading.get_dt(prep[0][0],first_key)
+
+        assert isinstance(prep[0][0], dict)
+        assert isinstance(prep_data, np.ndarray)
+
+        # deepof dimensionality reduction testing
+
+        assert isinstance(coords.random_projection(n_components=2), tuple)
+        assert isinstance(coords.pca(n_components=2), tuple)
 
     rmtree(
         os.path.join(
@@ -565,7 +577,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             f"deepof_project_{random_id}",
         )
     )
-
+    
 
     #table info
     assert all(
@@ -592,14 +604,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     assert prun.get_exp_conditions is not None
     assert isinstance(prun.get_quality(), deepof.data.TableDict)
     assert isinstance(prun.get_arenas, tuple)
-
-    assert isinstance(prep[0][0], dict)
-    assert isinstance(prep_data, np.ndarray)
-    
-    # deepof dimensionality reduction testing
-
-    assert isinstance(coords.random_projection(n_components=2), tuple)
-    assert isinstance(coords.pca(n_components=2), tuple)
 
 
 @settings(deadline=None)
