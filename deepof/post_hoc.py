@@ -41,7 +41,7 @@ from typing import Optional, Union
 import deepof.data
 import deepof.utils
 import deepof.visuals_utils
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, save_dt
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
