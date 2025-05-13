@@ -357,16 +357,21 @@ def get_aggregated_embedding(
         arr_range = bin_info 
     preloaded = {}
 
-    def load_single_key(key,arr_range):
+    def load_single_key(key):
+        if isinstance(bin_info, dict):
+            arr_range = bin_info[key]["time"]
+        else:
+            arr_range = None
         return key, get_dt(embedding, key, load_range=arr_range)
 
-    max_workers = min(32, (cpu_count() or 1) + 4) 
 
+    max_workers = min(32, (cpu_count() or 1) + 4) 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(load_single_key, key,arr_range): key for key in embedding}
+        futures = {executor.submit(load_single_key, key): key for key in embedding}
         for future in as_completed(futures):
             key, result = future.result()
             preloaded[key] = result
+
 
     for key in embedding.keys():
         
