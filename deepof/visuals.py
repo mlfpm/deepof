@@ -33,7 +33,7 @@ from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt, _suppress_warning
+from deepof.data_loading import get_dt, _suppress_warning
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -2778,6 +2778,9 @@ def export_annotated_video(
     if soft_counts is not None:
 
         first_key=list(soft_counts.keys())[0]
+        if isinstance(soft_counts[first_key], dict):
+            soft_counts[first_key] = get_dt(soft_counts,first_key)
+
         if cluster_names is None or len(cluster_names) != soft_counts[first_key].shape[1]:
             cluster_names = ["Cluster "+ str(k) for k in range(soft_counts[first_key].shape[1])]
         #unify tab_dict name

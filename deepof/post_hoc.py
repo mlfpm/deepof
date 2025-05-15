@@ -4,6 +4,7 @@
 
 """Data structures and functions for analyzing supervised and unsupervised model results."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import pickle
 import warnings
@@ -35,11 +36,12 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from typing import Optional, Union
 
 import deepof.data
 import deepof.utils
 import deepof.visuals_utils
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, save_dt
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -268,6 +270,19 @@ def get_time_on_cluster(
     if isinstance(bin_info, np.ndarray):
         arr_range = bin_info 
 
+    preloaded = {}
+
+    def load_single_key(key,arr_range):
+        return key, get_dt(soft_counts, key, load_range=arr_range)
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key,arr_range): key for key in soft_counts}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
+
     for key in soft_counts.keys():
         
         # Update range (if range can differ between samples)
@@ -276,10 +291,13 @@ def get_time_on_cluster(
 
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
-        hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        hard_counts = np.argmax(preloaded[key], axis=1)
+
         if roi_number is not None:
             hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
             hard_counts=hard_counts[hard_counts >= 0]
+        
         
         # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
@@ -337,6 +355,23 @@ def get_aggregated_embedding(
     arr_range=None
     if isinstance(bin_info, np.ndarray):
         arr_range = bin_info 
+    preloaded = {}
+
+    def load_single_key(key):
+        if isinstance(bin_info, dict):
+            arr_range = bin_info[key]["time"]
+        else:
+            arr_range = None
+        return key, get_dt(embedding, key, load_range=arr_range)
+
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key): key for key in embedding}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
+
 
     for key in embedding.keys():
         
@@ -345,7 +380,8 @@ def get_aggregated_embedding(
             arr_range = bin_info[key]["time"]
 
         # Load full dataset (arr_range==None) or section
-        current_embedding=get_dt(embedding,key,load_range=arr_range)
+        #current_embedding=get_dt(embedding,key,load_range=arr_range)
+        current_embedding=preloaded[key]
         if roi_number is not None and type(current_embedding)==pd.DataFrame:
             current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, special_case)
         elif roi_number is not None and type(current_embedding)==np.ndarray:
@@ -938,7 +974,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
             kin_features = pd.concat([kin_features, cur_kin.add_suffix(suffix)], axis=1)
 
         # save paths for modified tables
-        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key, key + '_' + file_name)
+        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables',key, key + '_' + file_name)
         kinematic_features[key] = save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics

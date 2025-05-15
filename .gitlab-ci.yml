@@ -4,7 +4,6 @@ stages:
   - tutorials
 
 install-pypi:
-
   stage: install
   retry: 1
 
@@ -17,7 +16,6 @@ install-pypi:
     #- python -c 'import deepof.data'
 
 install-poetry:
-
   stage: install
   retry: 1
 
@@ -28,6 +26,7 @@ install-poetry:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - curl -sSL https://install.python-poetry.org | python3 -
     - export PATH="/root/.local/bin:$PATH"
+    - poetry lock
     - poetry install
     - poetry run python -c 'import deepof.data'
 
@@ -45,6 +44,7 @@ test:
   script:
     - pip install pyarrow
     - pip install xgboost==2.1.4
+    - pip install duckdb
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py
     - coverage xml -o deepof_cov.xml
@@ -61,7 +61,7 @@ tutorials:
   stage: tutorials
 
   artifacts:
-    expose_as: 'tutorials_report'
+    expose_as: "tutorials_report"
     paths:
       - deepof_big_data_tutorial.ipynb
       - deepof_preprocessing_tutorial.ipynb
@@ -71,7 +71,7 @@ tutorials:
 
   image:
     name: lucasmiranda42/deepof
-    entrypoint: [ "" ]
+    entrypoint: [""]
 
   before_script:
     - apt update
@@ -84,6 +84,7 @@ tutorials:
 
   script:
     - pip install pyarrow
+    - pip install duckdb
     - pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb

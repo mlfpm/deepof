@@ -24,7 +24,7 @@ from tqdm import tqdm
 import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
-from deepof.data_loading import get_dt, load_dt, _suppress_warning
+from deepof.data_loading import get_dt, _suppress_warning
 import xgboost #as xgb
 
 
@@ -332,7 +332,7 @@ def sniff_object(
 
     else:
         raise NotImplementedError
-
+        
     speed = speed_dframe[animal_id + center_name] < tol_speed
     sniffing = nosing & speed
 
@@ -845,6 +845,7 @@ def following_path(
     follow = np.all(
         np.array([(dist_df.min(axis=1) < tol), right_orient1, right_orient2]), axis=0
     )
+
     speed = (speed_dframe[follower + "_Nose"] > tol_speed).to_numpy()
 
 

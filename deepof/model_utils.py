@@ -32,7 +32,7 @@ import deepof.data
 import deepof.hypermodels
 import deepof.models
 import deepof.post_hoc
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, save_dt
 
 
 tfb = tfp.bijectors
@@ -1586,11 +1586,11 @@ def embedding_per_video(
                 [tab_tuple[0], tab_tuple[1]]
             ).numpy()
             # save paths for modified tables
-            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
             soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
         # save paths for modified tables
-        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
+        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
         embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
 
         #to not flood the output with loading bars

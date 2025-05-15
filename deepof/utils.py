@@ -39,7 +39,7 @@ from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
-from deepof.data_loading import get_dt, load_dt, save_dt, _suppress_warning
+from deepof.data_loading import get_dt, save_dt, _suppress_warning
 
 
 
@@ -1731,7 +1731,12 @@ def extract_windows(
         for key in to_window.keys():
                             
             #load tab from disk if not already loaded
-            tab, tab_path = get_dt(to_window, key, True)  
+            tab, tab_path = get_dt(to_window, key, True) 
+            if isinstance(tab_path, dict):
+                duckdb_file = tab_path.get("duckdb_file")
+                table = tab_path.get("table")
+                dir_path = os.path.dirname(duckdb_file) 
+                tab_path = os.path.join(dir_path, table)  
             tab=np.array(tab)
 
             tab = rolling_window(
