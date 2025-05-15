@@ -266,9 +266,12 @@ def get_time_on_cluster(
 
     """
     hard_count_counters={}
-    arr_range=None
-    if isinstance(bin_info, np.ndarray):
-        arr_range = bin_info 
+    arr_ranges={}
+    for key in soft_counts.keys():
+        if isinstance(bin_info, np.ndarray):
+            arr_ranges[key] = bin_info 
+        elif isinstance(bin_info, dict):
+            arr_ranges[key] = bin_info[key]["time"]
 
     preloaded = {}
 
@@ -278,17 +281,13 @@ def get_time_on_cluster(
     max_workers = min(32, (cpu_count() or 1) + 4) 
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(load_single_key, key,arr_range): key for key in soft_counts}
+        futures = {executor.submit(load_single_key, key, arr_ranges[key]): key for key in soft_counts}
         for future in as_completed(futures):
             key, result = future.result()
             preloaded[key] = result
 
     for key in soft_counts.keys():
         
-        # Update range (if range can differ between samples)
-        if isinstance(bin_info, dict):
-            arr_range = bin_info[key]["time"]
-
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
         #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
@@ -352,16 +351,13 @@ def get_aggregated_embedding(
     
     # Aggregate the provided embeddings and cast to a dataframe
     agg_embedding={}
-    arr_range=None
-    if isinstance(bin_info, np.ndarray):
-        arr_range = bin_info 
     preloaded = {}
 
     def load_single_key(key):
         if isinstance(bin_info, dict):
             arr_range = bin_info[key]["time"]
         else:
-            arr_range = None
+            arr_range = bin_info
         return key, get_dt(embedding, key, load_range=arr_range)
 
 
@@ -375,10 +371,6 @@ def get_aggregated_embedding(
 
     for key in embedding.keys():
         
-        # Update range (if range can differ between samples)
-        if isinstance(bin_info, dict):
-            arr_range = bin_info[key]["time"]
-
         # Load full dataset (arr_range==None) or section
         #current_embedding=get_dt(embedding,key,load_range=arr_range)
         current_embedding=preloaded[key]
