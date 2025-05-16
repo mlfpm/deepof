@@ -45,6 +45,7 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
+    calculate_FSTTC,
     output_annotated_video,
     output_videos_per_cluster,
     get_behavior_colors,
@@ -1513,6 +1514,241 @@ def plot_transitions(
             )
 
         plt.show()
+
+
+def plot_associations(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Visualization parameters
+    exp_condition: str = None,
+    exclude_behaviors: list = None,
+    delta_T: float = 2.0,
+    association_metric:str = "FSTTC",
+    ax: list = None,
+    save: bool = False,
+    **kwargs,
+):
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        behaviors=exclude_behaviors,
+        experiment_ids=exp_condition,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+
+    special_case=False,
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+        special_case=True
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
+        )
+
+    # set active axes if provided
+    if ax:
+        plt.sca(ax)
+
+    # Determine plot type and length of the whole dataset
+    if soft_counts is None and supervised_annotations is not None:
+        plot_type = "supervised"
+        tab_dict = supervised_annotations
+        
+        # preprocess information given for time binning
+        bin_info_time = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
+        )
+    elif soft_counts is not None and supervised_annotations is None:
+        plot_type = "unsupervised"
+        tab_dict = soft_counts
+
+        # preprocess information given for time binning
+        bin_info_time = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
+        )
+    else:
+        plot_type = "mixed"
+        raise NotImplementedError(
+            "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    if exp_condition is not None:
+        tab_dict = {exp_condition: get_dt(tab_dict,exp_condition)}
+    #collect transitions for all experiments
+    included_behaviors=[]
+    first_key=list(tab_dict.keys())[0]
+    num_behaviors=get_dt(tab_dict,first_key,only_metainfo=True)['num_cols']
+    if exclude_behaviors is not None:
+        num_behaviors=num_behaviors-len(exclude_behaviors)
+    associations= np.zeros([num_behaviors,num_behaviors])    
+    for key in tab_dict.keys():
+        load_range = bin_info[key]["time"]
+        if roi_number is not None:
+            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+        tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
+        #reformat tab in unsupervised case
+        if plot_type=="unsupervised":
+            pass
+        #remove excluded behaviors
+        if exclude_behaviors is not None:
+            tab=tab.drop(columns=exclude_behaviors)
+        #save behavior order
+        if key == first_key:
+            included_behaviors=tab.columns
+
+        for i in range(0,tab.shape[1]):
+            for j in range(0, tab.shape[1]):
+                if i==j:
+                    association_ij=np.NaN
+                else: 
+                    preceding_behavior=tab.iloc[:,i]
+                    proximate_behavior=tab.iloc[:,j]
+                    if association_metric=="FSTTC":
+                        association_ij=calculate_FSTTC(preceding_behavior, proximate_behavior, coordinates._frame_rate, delta_T)
+                    else:
+                        raise NotImplementedError(
+                        "currently, only FSTTC is implemented as a valid association metric!"
+                    )
+                #skip cases in which nans are returned (treat them as zeros i.e. no association)
+                if not np.isnan(association_ij):
+                    associations[i,j]+=association_ij
+
+    associations=associations/len(tab_dict)
+
+    # Use seaborn to plot heatmaps across both conditions
+    if ax is None:
+        fig, ax = plt.subplots(
+            1,
+            1,
+            figsize=(16, 8),
+        )
+
+    sns.heatmap(
+        associations,
+        cmap=sns.diverging_palette(145, 20, as_cmap=True),
+        vmin=-1.0,
+        vmax=1.0,
+        ax=ax,
+        **kwargs,
+    )
+    ax.set_title(exp_condition)
+    ax.set_xticklabels(included_behaviors, rotation=90)
+    ax.set_yticklabels(included_behaviors, rotation=0)
+
+
+    if ax is None:
+
+        plt.tight_layout()
+
+        if save:
+            plt.savefig(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Figures",
+                    "deepof_associations{}_bin_size={}_bin_index={}_{}.pdf".format(
+                        (f"_{save}" if isinstance(save, str) else ""),
+                        bin_size,
+                        bin_index,
+                        calendar.timegm(time.gmtime()),
+                    ),
+                )
+            )
+
+        plt.show() 
+
+    '''    
+    # Use seaborn to plot heatmaps across both conditions
+    if ax is None:
+        fig, ax = plt.subplots(
+            1,
+            (len(set(exp_conditions.values())) if exp_conditions is not None else 1),
+            figsize=(16, 8),
+        )
+
+    if not isinstance(ax, np.ndarray) and not isinstance(ax, Sequence):
+        ax = [ax]
+
+    if exp_conditions is not None:
+        iters = zip(set(exp_conditions.values()), ax)
+    else:
+        iters = zip([None], ax)
+
+
+    for exp_condition, ax in iters:
+
+        if isinstance(grouped_transitions, dict):
+            clustered_transitions = grouped_transitions[exp_condition]
+        else:
+            clustered_transitions = grouped_transitions
+        # Cluster rows and columns and reorder
+        row_link = linkage(
+            clustered_transitions, method="average", metric="euclidean"
+        )  # computing the linkage
+        row_order = dendrogram(row_link, no_plot=True)["leaves"]
+        clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
+            row_order, row_order
+        ]
+
+        sns.heatmap(
+            clustered_transitions,
+            cmap="coolwarm",
+            vmin=0,
+            vmax=0.35,
+            ax=ax,
+            **kwargs,
+        )
+        ax.set_title(exp_condition)
+
+    if ax is None:
+
+        plt.tight_layout()
+
+        if save:
+            plt.savefig(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Figures",
+                    "deepof_transitions{}_viz={}_bin_size={}_bin_index={}_{}.pdf".format(
+                        (f"_{save}" if isinstance(save, str) else ""),
+                        visualization,
+                        bin_size,
+                        bin_index,
+                        calendar.timegm(time.gmtime()),
+                    ),
+                )
+            )
+
+        plt.show()  
+    '''      
+                                
+
+
 
 
 def plot_stationary_entropy(
@@ -3075,16 +3311,16 @@ def plot_behavior_trends(
 
 
     # Initial check if enum-like inputs were given correctly
-    _check_enum_inputs(
-        coordinates,
-        supervised_annotations=supervised_annotations,
-        soft_counts=soft_counts,
-        exp_condition=exp_condition,
-        condition_values=condition_values,
-        behaviors=behavior_to_plot,
-        animals_in_roi=animals_in_roi,
-        roi_number=roi_number,
-    )
+    #_check_enum_inputs(
+    #    coordinates,
+    #    supervised_annotations=supervised_annotations,
+    #    soft_counts=soft_counts,
+    #    exp_condition=exp_condition,
+    #    condition_values=condition_values,
+    #    behaviors=behavior_to_plot,
+    #    animals_in_roi=animals_in_roi,
+    #    roi_number=roi_number,
+    #)
     special_case=False
     if animals_in_roi is None:
         animals_in_roi = coordinates._animal_ids
@@ -3203,7 +3439,7 @@ def plot_behavior_trends(
             all(isinstance(x, int) and x >= 0 for x in sublist)
             for sublist in custom_time_bins
         ) or not all(  # Lists consist of positive integers
-            sublist[0] < sublist[1] for sublist in custom_time_bins
+            sublist[0] <= sublist[1] for sublist in custom_time_bins
         ):  # List elements increase
             raise ValueError(
                 f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'

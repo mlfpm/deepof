@@ -1524,6 +1524,45 @@ def _scatter_embeddings(
     plt.show()
 
 
+def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):
+    """Calculates the association measure FSTTC between two behaviors given as boolean series"""
+    
+    # calculate delta T in frames
+    delta_T_frames=int(frame_rate*delta_T)
+    
+    # Get total length of interval in which behaviors can occur
+    L = len(preceding_behavior)
+    # Inits
+    preceding_onsets=np.zeros(L)
+    proximate_onsets=np.zeros(L)
+    preceding_active=np.zeros(L)
+    proximate_active=np.zeros(L)
+
+    # Calculate positions of both behavior onsets
+    preceding_onsets[1:]=np.diff(preceding_behavior)
+    proximate_onsets[1:]=np.diff(proximate_behavior)
+    if preceding_behavior[0]==1:
+        preceding_onsets[0]=1
+    if proximate_behavior[0]==1:
+        proximate_onsets[0]=1
+    pre_onset_pos = np.where(preceding_onsets == 1)[0]   
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]  
+
+    # Calculate relevant interval of frames close to any behavior starts 
+    for pre_start in pre_onset_pos:
+        preceding_active[pre_start:np.min([pre_start+delta_T_frames,L])]=1
+    for prox_start in prox_onset_pos:
+        proximate_active[prox_start:np.min([prox_start+delta_T_frames,L])]=1
+
+    t_A = np.sum(preceding_active)/L #proportion of frames following preceding behavior onset of all frames
+    t_b = np.sum(proximate_active)/L #proportion of frames following proximate behavior onset of all frames
+    p = np.sum(preceding_active[prox_onset_pos])/len(prox_onset_pos) #proportion of proximate behavior onsets that fall within preceding behavior onset interval
+    
+    # Calculate FSTTC
+    fsttc = 0.5*((p-t_b)/(1-p*t_b)+(p-t_A)/(1-p*t_A))
+    return fsttc
+
+
 def _tag_annotated_frames(
     frame,
     font,
