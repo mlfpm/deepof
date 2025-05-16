@@ -272,6 +272,8 @@ def get_time_on_cluster(
             arr_ranges[key] = bin_info 
         elif isinstance(bin_info, dict):
             arr_ranges[key] = bin_info[key]["time"]
+        elif bin_info is None:
+            arr_ranges[key] = None
 
     preloaded = {}
 
@@ -354,6 +356,7 @@ def get_aggregated_embedding(
     preloaded = {}
 
     def load_single_key(key):
+		arr_range = None
         if isinstance(bin_info, dict):
             arr_range = bin_info[key]["time"]
         else:
