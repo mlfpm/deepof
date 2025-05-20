@@ -888,6 +888,7 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
 
     return area
 
+
 #@nb.njit(error_model='python')
 def calculate_FSTTC(
     preceding_behavior: np.ndarray,
@@ -922,19 +923,20 @@ def calculate_FSTTC(
     pre_offset_pos = np.where(preceding_onsets == -1)[0]
     prox_offset_pos = np.where(proximate_onsets == -1)[0]
     # Find positions where proximate behavior starts
-    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+    #prox_onset_pos = np.where(proximate_onsets == 1)[0]
 
     # Extend active periods after offsets
-    for pre_start in pre_offset_pos:
-        end = min(pre_start + delta_T_frames, L)
-        preceding_active[pre_start:end] = 1
+    for pre_end in pre_offset_pos:
+        end = min(pre_end + delta_T_frames, L)
+        preceding_active[pre_end:end] = 1
     
-    for prox_start in prox_offset_pos:
-        end = min(prox_start + delta_T_frames, L)
-        proximate_active[prox_start:end] = 1
+    for prox_end in prox_offset_pos:
+        end = min(prox_end + delta_T_frames, L)
+        proximate_active[prox_end:end] = 1
 
-    #proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
-    #prox_onset_pos = np.where(proximate_onsets == 1)[0]
+    # Find positions where proximate behavior starts
+    proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]
 
     # Calculate time proportions
     t_A = np.sum(preceding_active) / L
@@ -979,6 +981,107 @@ def calculate_simple_association(
     Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
 
     return Q
+
+
+def count_transitions(
+    preceding_behavior: np.ndarray,
+    proximate_behavior: np.ndarray,
+    frame_rate: float,
+    delta_T: float = 2.0,
+    min_T: float = 10.0,        
+):
+    delta_T_frames = int(frame_rate * delta_T)
+    L = len(preceding_behavior)
+    
+    # Initialize onset arrays
+    preceding_onsets = np.zeros(L, dtype=np.int8)
+    proximate_onsets = np.zeros(L, dtype=np.int8)
+    
+    # Copy behaviors to active arrays
+    preceding_active = preceding_behavior.copy()
+    proximate_active = proximate_behavior.copy()
+
+    # Calculate behavior onsets using differences
+    preceding_onsets[1:] = np.diff(preceding_behavior.astype(np.int8))
+    proximate_onsets[1:] = np.diff(proximate_behavior.astype(np.int8))
+
+    # Find positions where behaviors end (offsets)
+    pre_offset_pos = np.where(preceding_onsets == -1)[0]
+    prox_offset_pos = np.where(proximate_onsets == -1)[0]
+
+    # Extend active periods after offsets
+    for pre_end in pre_offset_pos:
+        end = min(pre_end + delta_T_frames, L)
+        preceding_active[pre_end:end] = 1
+    
+    for prox_end in prox_offset_pos:
+        end = min(prox_end + delta_T_frames, L)
+        proximate_active[prox_end:end] = 1   
+
+    # Find positions where proximate behavior starts after delta T expansion
+    proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+    N_transitions_preceding_to_proximate = np.sum(preceding_active[prox_onset_pos])
+
+def count_events(
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    bin_info: dict = None,
+    animals_in_roi: list = None,
+):
+    # create tabdict dictionary to iterate over options
+    tab_dict_dict={'supervised' :supervised_annotations, 'unsupervised': soft_counts} 
+    return_dict={}
+    load_range = None
+    for tab_dict_key, tab_dict in tab_dict_dict.items():
+        
+        # if the respective tab_dict was not given, continue
+        if tab_dict is None:
+            return_dict[tab_dict_key] = None
+            continue
+        
+        results={}
+        for key in tab_dict.keys():
+
+            # for each tab, first cut tab in requested shape based on bin_info
+            if bin_info is not None:
+                load_range = bin_info[key]["time"]
+                if len(bin_info[key]) > 1:
+                    load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            tab = get_dt(tab_dict,key,load_range=load_range)
+            
+            # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
+            if isinstance(tab,np.ndarray):
+                max_indices = tab.argmax(axis=1)
+                tab_soft = np.zeros_like(tab, dtype=int)
+                tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
+                columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+                tab=pd.DataFrame(tab_soft, columns=columns)
+            
+            # count connected events of continuous 1s in all columns
+            column_counts={}
+            for col in tab.columns:
+                series = tab[col]
+                series.fillna(0,inplace=True)
+                # skip non-binary columns (e.g. speed column)
+                if (series > 1.0001).any():
+                    continue
+                shifted = series.round().shift(1).fillna(0)
+                block_starts = (series == 1) & (shifted != 1)
+                num_blocks = block_starts.sum()
+                column_counts[col] = num_blocks
+            results[key] = pd.Series(column_counts)
+        
+        count_df = pd.DataFrame.from_dict(results, orient='index')
+        return_dict[tab_dict_key] = count_df
+        #final_df = final_df.reindex(columns=sorted(final_df.columns))
+    
+    return return_dict['supervised'], return_dict['unsupervised']
+    
+
+
+
 
 
 def rotate(

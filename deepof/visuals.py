@@ -1531,7 +1531,7 @@ def plot_associations(
     # Visualization parameters
     experiment_id: str = None,
     exp_condition: str = None,
-    condition_value: str = None,
+    condition_values: list = None,
     behaviors: list = None,
     exclude: bool = False,
     delta_T: float = 2.0,
@@ -1541,6 +1541,9 @@ def plot_associations(
     save: bool = False,
     **kwargs,
 ):
+    if isinstance(condition_values,str):
+        condition_values=[condition_values]  
+    
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -1549,7 +1552,7 @@ def plot_associations(
         behaviors=behaviors,
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
-        condition_values = [condition_value],
+        condition_values = condition_values,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
@@ -1622,7 +1625,7 @@ def plot_associations(
 
     if experiment_id is not None:
         # Filter to only the specified experiment ID
-        tab_dict = {experiment_id: get_dt(tab_dict, experiment_id)}
+        tab_dicts = [{experiment_id: get_dt(tab_dict, experiment_id)}]
         
         if exp_condition is not None:
             # Warn about ignored exp_condition parameters
@@ -1633,75 +1636,99 @@ def plot_associations(
             warnings.warn(warning_message)
 
     elif exp_condition is not None:
-        if condition_value is not None:
+
+        if condition_values is None:
+            condition_df = tab_dict.get_exp_conditions[first_experiment_key]
+            condition_values = [condition_df.iloc[0, 0]]
+            
+            print(
+                f"\033[33mInfo! Automatically set condition_value to {condition_values[0]} "
+                f"as only exp_condition was provided!\033[0m"
+            )
+        elif len(condition_values) > 2:
+            condition_values = [condition_values[0]]
+            
+            print(
+                f"\033[33mInfo! Automatically set condition_value to {condition_values[0]} "
+                f"as too many condition_values (max 2) were provided!\033[0m"
+            )
+
+        if condition_values is not None and (len(condition_values)==1 or len(condition_values)==2):
             # Filter experiments based on condition value
             filtered_experiments = [
                 experiment_key
                 for experiment_key, conditions in coordinates.get_exp_conditions.items()
-                if conditions[exp_condition].values.astype(str) == condition_value
+                if conditions[exp_condition].values.astype(str) == condition_values[0]
             ]
-            tab_dict = tab_dict.filter_videos(filtered_experiments)
-        else:
-            # Auto-set condition value from first experiment
-            condition_df = tab_dict.get_exp_conditions[first_experiment_key]
-            condition_value = condition_df.iloc[0, 0]
-            
-            print(
-                f"\033[33mInfo! Automatically set condition_value to {condition_value} "
-                f"as only exp_condition was provided!\033[0m"
-            )
+            tab_dicts = [tab_dict.filter_videos(filtered_experiments)]
+            if len(condition_values)==2: 
+                filtered_experiments = [
+                    experiment_key
+                    for experiment_key, conditions in coordinates.get_exp_conditions.items()
+                    if conditions[exp_condition].values.astype(str) == condition_values[1]
+                ]
+                tab_dicts.append(tab_dict.filter_videos(filtered_experiments))
+
+    else:
+        tab_dicts = [tab_dict]
 
     #collect transitions for all experiments
-    first_key=list(tab_dict.keys())[0]
-    num_behaviors=get_dt(tab_dict,first_key,only_metainfo=True)['num_cols']
+    first_key=list(tab_dicts[0].keys())[0]
+    num_behaviors=get_dt(tab_dicts[0],first_key,only_metainfo=True)['num_cols']
     if behaviors is not None:
         num_behaviors=num_behaviors-len(np.unique(behaviors))
-    associations= np.zeros([num_behaviors,num_behaviors])    
-    for key in tab_dict.keys():
-        load_range = bin_info[key]["time"]
-        if roi_number is not None:
-            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-        tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
-        #reformat tab in unsupervised case
-        if plot_type=="unsupervised":
-            pass
-        #remove excluded behaviors
-        if behaviors is not None:
-            tab=tab.drop(columns=behaviors)
-        #save behavior order
-        if key == first_key:
-            included_behaviors=tab.columns
 
-        for i in range(0,tab.shape[1]):
-            for j in range(0, tab.shape[1]):
-                if i==j:
-                    association_ij=np.NaN
-                else: 
-                    preceding_behavior=tab.iloc[:,i]
-                    proximate_behavior=tab.iloc[:,j]
-                    if association_metric=="FSTTC":
-                        association_ij=deepof.utils.calculate_FSTTC(
-                            np.nan_to_num(preceding_behavior.to_numpy()),
-                            np.nan_to_num(proximate_behavior.to_numpy()),
-                            coordinates._frame_rate,
-                            delta_T
-                            )
-                    elif association_metric=="simple":
-                        association_ij=deepof.utils.calculate_simple_association(
-                            np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
-                            np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
-                            coordinates._frame_rate,
-                            delta_T
-                            )
-                    else:
-                        raise NotImplementedError(
-                        "currently, only FSTTC is implemented as a valid association metric!"
-                    )
-                #skip cases in which nans are returned (treat them as zeros i.e. no association)
-                if not np.isnan(association_ij):
-                    associations[i,j]+=association_ij
+    for z, tab_dict in enumerate(tab_dicts): 
+        associations = np.zeros([num_behaviors,num_behaviors])    
+        for key in tab_dict.keys():
+            load_range = bin_info[key]["time"]
+            if roi_number is not None:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
+            #reformat tab in unsupervised case
+            if plot_type=="unsupervised":
+                pass
+            #remove excluded behaviors
+            if behaviors is not None:
+                tab=tab.drop(columns=behaviors)
+            #save behavior order
+            if key == first_key:
+                included_behaviors=tab.columns
 
-    associations=associations/len(tab_dict)
+            for i in range(0,tab.shape[1]):
+                for j in range(0, tab.shape[1]):
+                    if i==j:
+                        association_ij=np.NaN
+                    else: 
+                        preceding_behavior=tab.iloc[:,i]
+                        proximate_behavior=tab.iloc[:,j]
+                        if association_metric=="FSTTC":
+                            association_ij=deepof.utils.calculate_FSTTC(
+                                np.nan_to_num(preceding_behavior.to_numpy()),
+                                np.nan_to_num(proximate_behavior.to_numpy()),
+                                coordinates._frame_rate,
+                                delta_T
+                                )
+                        elif association_metric=="simple":
+                            association_ij=deepof.utils.calculate_simple_association(
+                                np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
+                                np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
+                                coordinates._frame_rate,
+                                delta_T
+                                )
+                        else:
+                            raise NotImplementedError(
+                            "currently, only FSTTC is implemented as a valid association metric!"
+                        )
+                    #skip cases in which nans are returned (treat them as zeros i.e. no association)
+                    if not np.isnan(association_ij):
+                        associations[i,j]+=association_ij
+
+        associations=associations/len(tab_dict)
+        if z==0:
+            associations_prev=copy.copy(associations)
+        else:
+            associations=associations_prev-associations
 
     # Use seaborn to plot heatmaps across both conditions
     if ax is None:
@@ -1721,8 +1748,10 @@ def plot_associations(
     )
     if experiment_id is not None:
         ax.set_title(experiment_id)
-    elif exp_condition is not None:
-        ax.set_title(condition_value)
+    elif exp_condition is not None and len(condition_values)==1:
+        ax.set_title(condition_values[0])
+    elif exp_condition is not None and len(condition_values)==2:
+        ax.set_title(condition_values[0]+ " - "+ condition_values[1])
     else:
         ax.set_title("all")
     ax.set_xticklabels(included_behaviors, rotation=90)
@@ -3001,7 +3030,7 @@ def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
     supervised_annotations: table_dict = None,
-    behavior: str = None,
+    behaviors: list = None,
     experiment_id: str = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
@@ -3036,6 +3065,8 @@ def export_annotated_video(
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
+    if isinstance(behaviors,str):
+        behaviors=[behaviors]
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -3093,7 +3124,7 @@ def export_annotated_video(
             soft_counts[first_key] = get_dt(soft_counts,first_key)
 
         if cluster_names is None or len(cluster_names) != soft_counts[first_key].shape[1]:
-            cluster_names = ["Cluster "+ str(k) for k in range(soft_counts[first_key].shape[1])]
+            cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
         #unify tab_dict name
         tab_dict=soft_counts
  
@@ -3114,12 +3145,14 @@ def export_annotated_video(
     if experiment_id is not None:
 
         # get frames for this experiment id
-        if behavior is None and supervised_annotations is not None:
+        if behaviors is None and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-            behavior = cur_tab.columns[0]
+            behaviors = cur_tab.columns[0]
         if roi_number is not None:
             if special_case:
-                behavior_in=behavior
+                behavior_in=behaviors[0]
+                if len(behaviors)>1:
+                    print('\033[33mInfo! The first behavior was automatically chosen for ROI application!\033[0m')
             else:
                 behavior_in=None
             frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
@@ -3145,7 +3178,7 @@ def export_annotated_video(
         video = output_annotated_video(
             video_path,                
             cur_tab,
-            behavior,
+            behaviors,
             frame_rate=coordinates._frame_rate,
             out_path=out_path,
             frames=frames,
@@ -3166,7 +3199,7 @@ def export_annotated_video(
         output_videos_per_cluster(
             filtered_videos,
             tab_dict,
-            behavior,
+            behaviors,
             frame_rate=coordinates._frame_rate,
             single_output_resolution=(500, 500),
             frame_limit_per_video=frame_limit_per_video,

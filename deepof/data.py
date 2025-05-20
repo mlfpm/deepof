@@ -493,6 +493,7 @@ class Project:
         N_tables = len(self.tables)
         found_individuals=False
         sum_warn_nans=0
+        exclude_bodyparts_no_ids=copy.copy(self.exclude_bodyparts)
 
         with tqdm(total=N_tables, desc=f"{'Preprocessing tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for i, key in enumerate(self.tables.keys()):
@@ -550,7 +551,7 @@ class Project:
                             not in [aid + "_" for aid in self.animal_ids]
                             else bp[len(aid) + 1 :]
                             for aid in self.animal_ids
-                            for bp in self.exclude_bodyparts
+                            for bp in exclude_bodyparts_no_ids
                         ]
                     )
                 )

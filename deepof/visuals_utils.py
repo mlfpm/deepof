@@ -127,10 +127,10 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Find all cluster behaviors if any
-    clusters=[re.search(r'Cluster \d+', behavior)[0] 
+    clusters=[re.search(r'Cluster_\d+', behavior)[0] 
                 for behavior 
                 in behaviors
-                if (re.search(r'Cluster \d+', behavior)) is not None
+                if (re.search(r'Cluster_\d+', behavior)) is not None
     ]
     # Find maximum Cluster
     Cluster_max=1
@@ -1094,7 +1094,7 @@ def _check_enum_inputs(
     if soft_counts is not None:
         first_key=list(soft_counts.keys())[0]
         N_clusters=get_dt(soft_counts,first_key,only_metainfo=True)['num_cols']
-        behaviors_options_list+=["Cluster "+str(i) for i in range(N_clusters)]
+        behaviors_options_list+=["Cluster_"+str(i) for i in range(N_clusters)]
 
 
     if coordinates.get_exp_conditions is not None:
@@ -1986,7 +1986,7 @@ def output_videos_per_cluster(
             print()  # Newline when complete
 
     meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
-    if behavior is not None:
+    if isinstance(behavior, str):
         behaviors = [behavior]
     elif meta_info.get('columns') is not None:
         behaviors=meta_info['columns']
@@ -2091,8 +2091,8 @@ def output_videos_per_cluster(
 
 def output_annotated_video(
     video_path: str,
-    soft_counts: np.ndarray,
-    behavior: str,
+    tab: np.ndarray,
+    behaviors: list,
     frame_rate: float = 25,
     frames: np.array = None,
     display_time: bool = False,
@@ -2110,24 +2110,27 @@ def output_annotated_video(
         out_path: out_path: path to the output directory.
 
     """
-    # If a specific behavior is requested, annotate that behavior
-    if behavior is not None:
-        hard_counts = soft_counts[behavior]>0.1
-        idx = soft_counts[behavior]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
-        hard_counts = hard_counts.astype(str)
-        hard_counts[idx]=str(behavior)
-        hard_counts[~idx]=""
-    # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
-    elif not (np.sum(soft_counts, 1)>1.9).any():
-        hard_counts = soft_counts.idxmax(axis=1)
-    else:
+    # if every frame has only one distinct behavior assigned to it, plot all behaviors
+    shift_name_box=True
+    if behaviors is None and not (np.sum(tab, 1)>1.9).any():
+        behaviors = list(tab.columns)
+        shift_name_box=False
+    elif behaviors is None:
         raise ValueError(
             "Cannot accept no behavior for supervised annotations!"
         )
+    # create behavior_df that lists in which frames each behavior occurs
+    behavior_df = tab[behaviors]>0.1
+    idx = tab[behaviors]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
+    behavior_df = behavior_df.astype(str)
+    behavior_df[idx]=behaviors
+    behavior_df[~idx]=""
+    # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
+
     
     # Ensure that no frames are requested that are outside of the provided data
-    if np.max(frames) >= len(hard_counts):
-        frames = np.where(frames<len(hard_counts))[0]
+    if np.max(frames) >= len(behavior_df):
+        frames = np.where(frames<len(behavior_df))[0]
 
     # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
     cap = cv2.VideoCapture(video_path)
@@ -2150,12 +2153,13 @@ def output_annotated_video(
     font = cv2.FONT_HERSHEY_DUPLEX
     font_scale = 0.75
     thickness = 2
-    (text_width, text_height), baseline = cv2.getTextSize(np.max(np.unique(hard_counts)), font, font_scale, thickness)
+    text_widths=[cv2.getTextSize(behavior, font, font_scale, thickness)[0][0] for behavior in behaviors]
+    (text_width, text_height), baseline = cv2.getTextSize(behaviors[np.argmax(text_widths)], font, font_scale, thickness)
     (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
     x = 10  # 10 pixels from left
     y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
     padding = 5
-    bg_color = get_behavior_colors(list(hard_counts), soft_counts)
+    bg_color = get_behavior_colors(behaviors, tab)
 
     diff_frames = np.diff(frames)
     for i in tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
@@ -2168,17 +2172,21 @@ def output_annotated_video(
             break
 
         try:
-            if bg_color[frames[i]] is not None:
-                cv2.rectangle(frame, 
-                    (v_width - text_width - x , y - text_height - padding),  # Top-left corner
-                    (v_width - padding, y + baseline),  # Bottom-right corner
-                    hex_to_BGR(bg_color[frames[i]]),  # Blue color (BGR format)
-                    -1)  # Filled rectangle
+            ystep=0
+            for z, behavior in enumerate(behaviors):
+                if len(behavior_df[behavior][frames[i]])>0:
+                    cv2.rectangle(frame, 
+                        (v_width - text_width - x , y - text_height - padding +ystep),  # Top-left corner
+                        (v_width - padding, y + baseline +ystep),  # Bottom-right corner
+                        hex_to_BGR(bg_color[z]),  # Blue color (BGR format)
+                        -1)  # Filled rectangle
 
-                # Draw black outline
-                cv2.putText(frame, str(hard_counts[frames[i]]), (v_width - text_width - padding, y), font, font_scale, (0, 0, 0), thickness + 2)
-                # Draw white main text
-                cv2.putText(frame, str(hard_counts[frames[i]]), (v_width - text_width - padding, y), font, font_scale, (255, 255, 255), thickness)
+                    # Draw black outline
+                    cv2.putText(frame, str(behavior_df[behavior][frames[i]]), (v_width - text_width - padding, y+ystep), font, font_scale, (0, 0, 0), thickness + 2)
+                    # Draw white main text
+                    cv2.putText(frame, str(behavior_df[behavior][frames[i]]), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
+                if shift_name_box:
+                    ystep=ystep+50
             
             if display_time:
 
