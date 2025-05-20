@@ -1529,10 +1529,14 @@ def plot_associations(
     roi_number: int = None,
     animals_in_roi: list = None,
     # Visualization parameters
+    experiment_id: str = None,
     exp_condition: str = None,
-    exclude_behaviors: list = None,
+    condition_value: str = None,
+    behaviors: list = None,
+    exclude: bool = False,
     delta_T: float = 2.0,
-    association_metric:str = "FSTTC",
+    association_metric:str = "simple",
+    get_values = False,
     ax: list = None,
     save: bool = False,
     **kwargs,
@@ -1542,8 +1546,10 @@ def plot_associations(
         coordinates,
         supervised_annotations=supervised_annotations,
         soft_counts=soft_counts,
-        behaviors=exclude_behaviors,
-        experiment_ids=exp_condition,
+        behaviors=behaviors,
+        experiment_ids=experiment_id,
+        exp_condition=exp_condition,
+        condition_values = [condition_value],
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
@@ -1556,7 +1562,7 @@ def plot_associations(
         print(
         '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
         )
-
+    
     # set active axes if provided
     if ax:
         plt.sca(ax)
@@ -1565,7 +1571,10 @@ def plot_associations(
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
         tab_dict = supervised_annotations
-        
+        # Extract the first key from the tab dictionary
+        first_experiment_key = list(tab_dict.keys())[0]
+        available_behaviors=get_dt(tab_dict,first_experiment_key,only_metainfo=True)["columns"]
+  
         # preprocess information given for time binning
         bin_info_time = _preprocess_time_bins(
         coordinates, 
@@ -1578,6 +1587,10 @@ def plot_associations(
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
         tab_dict = soft_counts
+        # Extract the first key from the tab dictionary
+        first_experiment_key = list(tab_dict.keys())[0]
+        num_cols=get_dt(tab_dict,first_experiment_key,only_metainfo=True)["num_cols"]
+        available_behaviors = ["Cluster_" + k for k in range(0,num_cols)]
 
         # preprocess information given for time binning
         bin_info_time = _preprocess_time_bins(
@@ -1596,14 +1609,53 @@ def plot_associations(
 
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
-    if exp_condition is not None:
-        tab_dict = {exp_condition: get_dt(tab_dict,exp_condition)}
+    if behaviors is None:
+        behaviors=[]
+    # invert behavior list to contain only excluded behaviors if non-exclusion was chosen
+    elif not exclude:
+        behaviors = list(set(available_behaviors)-set(behaviors))
+    # Always exclude
+    always_exclude=["speed"]
+    if coordinates._animal_ids is not None:
+        always_exclude = [id + "_" + "speed" for id in coordinates._animal_ids]
+    behaviors = behaviors + always_exclude
+
+    if experiment_id is not None:
+        # Filter to only the specified experiment ID
+        tab_dict = {experiment_id: get_dt(tab_dict, experiment_id)}
+        
+        if exp_condition is not None:
+            # Warn about ignored exp_condition parameters
+            warning_message = (
+                "\033[38;5;208m\nWarning! Both exp_condition and experiment_id were provided. "
+                "exp_condition related inputs will be ignored!\n\033[0m"
+            )
+            warnings.warn(warning_message)
+
+    elif exp_condition is not None:
+        if condition_value is not None:
+            # Filter experiments based on condition value
+            filtered_experiments = [
+                experiment_key
+                for experiment_key, conditions in coordinates.get_exp_conditions.items()
+                if conditions[exp_condition].values.astype(str) == condition_value
+            ]
+            tab_dict = tab_dict.filter_videos(filtered_experiments)
+        else:
+            # Auto-set condition value from first experiment
+            condition_df = tab_dict.get_exp_conditions[first_experiment_key]
+            condition_value = condition_df.iloc[0, 0]
+            
+            print(
+                f"\033[33mInfo! Automatically set condition_value to {condition_value} "
+                f"as only exp_condition was provided!\033[0m"
+            )
+
     #collect transitions for all experiments
-    included_behaviors=[]
     first_key=list(tab_dict.keys())[0]
     num_behaviors=get_dt(tab_dict,first_key,only_metainfo=True)['num_cols']
-    if exclude_behaviors is not None:
-        num_behaviors=num_behaviors-len(exclude_behaviors)
+    if behaviors is not None:
+        num_behaviors=num_behaviors-len(np.unique(behaviors))
     associations= np.zeros([num_behaviors,num_behaviors])    
     for key in tab_dict.keys():
         load_range = bin_info[key]["time"]
@@ -1614,8 +1666,8 @@ def plot_associations(
         if plot_type=="unsupervised":
             pass
         #remove excluded behaviors
-        if exclude_behaviors is not None:
-            tab=tab.drop(columns=exclude_behaviors)
+        if behaviors is not None:
+            tab=tab.drop(columns=behaviors)
         #save behavior order
         if key == first_key:
             included_behaviors=tab.columns
@@ -1628,7 +1680,19 @@ def plot_associations(
                     preceding_behavior=tab.iloc[:,i]
                     proximate_behavior=tab.iloc[:,j]
                     if association_metric=="FSTTC":
-                        association_ij=calculate_FSTTC(preceding_behavior, proximate_behavior, coordinates._frame_rate, delta_T)
+                        association_ij=deepof.utils.calculate_FSTTC(
+                            np.nan_to_num(preceding_behavior.to_numpy()),
+                            np.nan_to_num(proximate_behavior.to_numpy()),
+                            coordinates._frame_rate,
+                            delta_T
+                            )
+                    elif association_metric=="simple":
+                        association_ij=deepof.utils.calculate_simple_association(
+                            np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
+                            np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
+                            coordinates._frame_rate,
+                            delta_T
+                            )
                     else:
                         raise NotImplementedError(
                         "currently, only FSTTC is implemented as a valid association metric!"
@@ -1655,7 +1719,12 @@ def plot_associations(
         ax=ax,
         **kwargs,
     )
-    ax.set_title(exp_condition)
+    if experiment_id is not None:
+        ax.set_title(experiment_id)
+    elif exp_condition is not None:
+        ax.set_title(condition_value)
+    else:
+        ax.set_title("all")
     ax.set_xticklabels(included_behaviors, rotation=90)
     ax.set_yticklabels(included_behaviors, rotation=0)
 
@@ -1680,6 +1749,12 @@ def plot_associations(
             )
 
         plt.show() 
+
+        if get_values:
+            return associations
+        else:
+            return None
+
 
     '''    
     # Use seaborn to plot heatmaps across both conditions

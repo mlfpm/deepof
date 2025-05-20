@@ -35,6 +35,7 @@ from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from scipy.stats import chi2_contingency
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
@@ -886,6 +887,98 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
     area = abs(area) / 2
 
     return area
+
+#@nb.njit(error_model='python')
+def calculate_FSTTC(
+    preceding_behavior: np.ndarray,
+    proximate_behavior: np.ndarray,
+    frame_rate: float,
+    delta_T: float = 2.0,
+    min_T: float = 10.0,
+):
+    """Calculates the association measure FSTTC between two behaviors given as boolean arrays"""
+    
+    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
+    min_T_frames = int(frame_rate * min_T)
+    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
+        return 0.0
+    
+    delta_T_frames = int(frame_rate * delta_T)
+    L = len(preceding_behavior)
+    
+    # Initialize onset arrays
+    preceding_onsets = np.zeros(L, dtype=np.int8)
+    proximate_onsets = np.zeros(L, dtype=np.int8)
+    
+    # Copy behaviors to active arrays
+    preceding_active = preceding_behavior.copy()
+    proximate_active = proximate_behavior.copy()
+
+    # Calculate behavior onsets using differences
+    preceding_onsets[1:] = np.diff(preceding_behavior.astype(np.int8))
+    proximate_onsets[1:] = np.diff(proximate_behavior.astype(np.int8))
+
+    # Find positions where behaviors end (offsets)
+    pre_offset_pos = np.where(preceding_onsets == -1)[0]
+    prox_offset_pos = np.where(proximate_onsets == -1)[0]
+    # Find positions where proximate behavior starts
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+    # Extend active periods after offsets
+    for pre_start in pre_offset_pos:
+        end = min(pre_start + delta_T_frames, L)
+        preceding_active[pre_start:end] = 1
+    
+    for prox_start in prox_offset_pos:
+        end = min(prox_start + delta_T_frames, L)
+        proximate_active[prox_start:end] = 1
+
+    #proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
+    #prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+    # Calculate time proportions
+    t_A = np.sum(preceding_active) / L
+    t_B = np.sum(proximate_active) / L
+
+    if t_A == 0 or t_B == 0:
+        return 0.0
+    else:      
+        # Calculate probability of co-occurrence
+        if len(prox_onset_pos)>0:
+            p = np.sum(preceding_active[prox_onset_pos]) / len(prox_onset_pos)
+
+            # Compute FSTTC
+            fsttc = 0.5 * ((p - t_B) / (1 - p * t_B) + (p - t_A) / (1 - p * t_A))
+        else:
+            fsttc = 0
+
+        return fsttc
+    
+
+#@nb.njit(error_model='python')
+def calculate_simple_association(
+    preceding_behavior: np.ndarray,
+    proximate_behavior: np.ndarray,
+    frame_rate: float,
+    delta_T: float = 2.0,
+    min_T: float = 10.0,
+):
+    """Calculates the association measure FSTTC between two behaviors given as boolean arrays"""
+
+    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
+    min_T_frames = int(frame_rate * min_T)
+    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
+        return 0.0
+    
+    #chi2, p, dof, expected = chi2_contingency(cont_table)
+    a = np.sum(preceding_behavior & proximate_behavior) # Both behaviors present
+    b = np.sum(preceding_behavior & ~proximate_behavior)  # A present, B absent
+    c = np.sum(~preceding_behavior & proximate_behavior)  # A absent, B present
+    d = np.sum(~preceding_behavior & ~proximate_behavior)  # Both absent
+
+    Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
+
+    return Q
 
 
 def rotate(
