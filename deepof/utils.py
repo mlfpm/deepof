@@ -967,7 +967,6 @@ def calculate_simple_association(
     preceding_behavior: np.ndarray,
     proximate_behavior: np.ndarray,
     frame_rate: float,
-    delta_T: float = 2.0,
     min_T: float = 10.0,
 ):
     """Calculates the association measure FSTTC between two behaviors given as boolean arrays"""

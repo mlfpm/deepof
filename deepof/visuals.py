@@ -1757,7 +1757,6 @@ def plot_associations(
                                 np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
                                 np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
                                 coordinates._frame_rate,
-                                delta_T
                                 )
                         else:
                             raise NotImplementedError(
