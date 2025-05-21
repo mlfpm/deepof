@@ -75,18 +75,18 @@ def plot_heatmaps(
     align: str = None,
     exp_condition: str = None,
     condition_value: str = None,
-    roi_number: int = None,
     display_arena: bool = True,
     display_rois: bool = True,
     xlim: float = None,
     ylim: float = None,
     save: bool = False,
     experiment_id: int = "average",
-    animals_in_roi: str = None,
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int = 20000,
+    roi_number: int = None,
+    animals_in_roi: list = None,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -101,7 +101,6 @@ def plot_heatmaps(
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
         condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
@@ -109,7 +108,10 @@ def plot_heatmaps(
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
+        animals_in_roi (list): list of ids of the animals that need to be inside of a given roi to evaluate the corresponding data.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
