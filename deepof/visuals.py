@@ -75,18 +75,21 @@ def plot_heatmaps(
     align: str = None,
     exp_condition: str = None,
     condition_value: str = None,
-    display_arena: bool = True,
-    display_rois: bool = True,
-    xlim: float = None,
-    ylim: float = None,
-    save: bool = False,
     experiment_id: int = "average",
+    # Time selection paramaters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int = 20000,
+    # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    display_rois: bool = True,
+    # Others
+    display_arena: bool = True,
+    xlim: float = None,
+    ylim: float = None,
+    save: bool = False,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -101,17 +104,18 @@ def plot_heatmaps(
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
         condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        xlim (float): x-axis limits.
-        ylim (float): y-axis limits.
-        save (str):  if provided, the figure is saved to the specified path.
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
-        animals_in_roi (list): list of ids of the animals that need to be inside of a given roi to evaluate the corresponding data.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        display_rois (bool): Display the active ROI, if a ROI was selected. Defaults to True.              
+        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        xlim (float): x-axis limits.
+        ylim (float): y-axis limits.
+        save (str):  if provided, the figure is saved to the specified path.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
@@ -230,14 +234,15 @@ def plot_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
     roi_number: int = None,
+    animals_in_roi: list = None,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
-    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -250,7 +255,8 @@ def plot_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -314,14 +320,15 @@ def _plot_experiment_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     behaviors_to_plot: list = None,
-    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -334,9 +341,10 @@ def _plot_experiment_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         behaviors_to_plot (list): list of behaviors to plot.
@@ -510,14 +518,15 @@ def _plot_behavior_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    roi_number: int = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     experiments_to_plot: list = None,
-    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -530,9 +539,10 @@ def _plot_behavior_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         experiments_to_plot (list): list of experiments to plot. If None, all experiments are plotted.
@@ -710,7 +720,7 @@ def gantt_plotter(
         coordinates (project): deepOF project where the data is stored.
         gantt_matrix (np.ndarray): 2D integer matrix denoting time sections with present or absent behavior
         plot_type (str): type of plot, either "supervised" or "unsupervised"
-        behavior_id (str): Name of the experiment or behavior to display.
+        instance_id (str): Name of the experiment or behavior to display.
         n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
         instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
         colors (list): list of color hexcodes for plotting
@@ -868,21 +878,22 @@ def plot_enrichment(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    polar_depiction: bool = False,
-    plot_speed: bool = False,
-    add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int =100000,
+    # ROI functionality
     roi_number: int = None,
+    animals_in_roi: list = None,
     # Visualization parameters
+    polar_depiction: bool = False,
+    plot_speed: bool = False,
+    add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
     exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
-    animals_in_roi: list = None,
     ax: Any = None,
     save: bool = False,
 ):
@@ -893,14 +904,15 @@ def plot_enrichment(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
-        polar_depiction (bool): if True, display as polar plot.
-        plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)        
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
+        polar_depiction (bool): if True, display as polar plot.
+        plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
@@ -1343,9 +1355,10 @@ def plot_transitions(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int=20000,
+    # ROI functionality
     roi_number: int = None,
-    # Visualization parameters
     animals_in_roi: list = None,
+    # Visualization parameters
     exp_condition: str = None,
     visualization="networks",
     silence_diagonal=False,
@@ -1363,6 +1376,8 @@ def plot_transitions(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         silence_diagonal (bool): If True, diagonals are set to zero.
@@ -1531,18 +1546,42 @@ def plot_associations(
     roi_number: int = None,
     animals_in_roi: list = None,
     # Visualization parameters
-    experiment_id: str = None,
     exp_condition: str = None,
     condition_values: list = None,
+    experiment_id: str = None,
     behaviors: list = None,
-    exclude: bool = False,
+    exclude_given_behaviors: bool = False,
     delta_T: float = 0.5,
     association_metric:str = "FSTTC",
-    get_values = False,
+    return_values = False,
     ax: list = None,
     save: bool = False,
     **kwargs,
 ):
+    """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
+        condition_values (list): Experimental condition values to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition. If two condition values are given as a list, the difference between both sets of corresponding experiments is plotted
+        experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
+        behaviors (list): List of behaviors to include in the plot. Should be given as "[Cluster_0, Cluster_1..." in case of soft_counts.
+        exclude_given_behaviors (bool): If True, will instead of only including given behaviors in the plot exclude tehse behaviors and plot all other behaviors. Defaults to False.
+        delta_T (float): Maximum time delay after teh end of any behavior instance during which following behaviors are still counted as associated. 
+        association_metric (str): Association metric that should be used to determine if two behaviors are associated. Options are "odds_ratio" and "FSTTC". Defaults to FSTTC.
+        get_values (bool): Determines if the plotted matrix should also be returned as an 2D array. Defaults to False.
+        ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    """
     if isinstance(condition_values,str):
         condition_values=[condition_values]  
     
@@ -1615,7 +1654,7 @@ def plot_associations(
     if behaviors is None:
         behaviors=[]
     # invert behavior list to contain only excluded behaviors if non-exclusion was chosen
-    elif not exclude:
+    elif not exclude_given_behaviors:
         behaviors = list(set(available_behaviors)-set(behaviors))
     # Always exclude
     always_exclude=["speed"]
@@ -1712,7 +1751,7 @@ def plot_associations(
                                 coordinates._frame_rate,
                                 delta_T
                                 )
-                        elif association_metric=="simple":
+                        elif association_metric=="odds_ratio":
                             preceding_behavior=tab.iloc[:,i]
                             proximate_behavior=tab.iloc[:,j]
                             association_ij=deepof.utils.calculate_simple_association(
@@ -1784,95 +1823,26 @@ def plot_associations(
 
         plt.show() 
 
-        if get_values:
+        if return_values:
             return associations
         else:
             return None
-
-
-    '''    
-    # Use seaborn to plot heatmaps across both conditions
-    if ax is None:
-        fig, ax = plt.subplots(
-            1,
-            (len(set(exp_conditions.values())) if exp_conditions is not None else 1),
-            figsize=(16, 8),
-        )
-
-    if not isinstance(ax, np.ndarray) and not isinstance(ax, Sequence):
-        ax = [ax]
-
-    if exp_conditions is not None:
-        iters = zip(set(exp_conditions.values()), ax)
-    else:
-        iters = zip([None], ax)
-
-
-    for exp_condition, ax in iters:
-
-        if isinstance(grouped_transitions, dict):
-            clustered_transitions = grouped_transitions[exp_condition]
-        else:
-            clustered_transitions = grouped_transitions
-        # Cluster rows and columns and reorder
-        row_link = linkage(
-            clustered_transitions, method="average", metric="euclidean"
-        )  # computing the linkage
-        row_order = dendrogram(row_link, no_plot=True)["leaves"]
-        clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
-            row_order, row_order
-        ]
-
-        sns.heatmap(
-            clustered_transitions,
-            cmap="coolwarm",
-            vmin=0,
-            vmax=0.35,
-            ax=ax,
-            **kwargs,
-        )
-        ax.set_title(exp_condition)
-
-    if ax is None:
-
-        plt.tight_layout()
-
-        if save:
-            plt.savefig(
-                os.path.join(
-                    coordinates._project_path,
-                    coordinates._project_name,
-                    "Figures",
-                    "deepof_transitions{}_viz={}_bin_size={}_bin_index={}_{}.pdf".format(
-                        (f"_{save}" if isinstance(save, str) else ""),
-                        visualization,
-                        bin_size,
-                        bin_index,
-                        calendar.timegm(time.gmtime()),
-                    ),
-                )
-            )
-
-        plt.show()  
-    '''      
                                 
-
-
-
 
 def plot_stationary_entropy(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
     roi_number: int = None,
-    # Visualization parameters
     animals_in_roi: list = None,
+    # Visualization parameters
+    add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
@@ -1884,11 +1854,13 @@ def plot_stationary_entropy(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                           
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -2156,7 +2128,9 @@ def plot_embeddings(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
     roi_number: int = None,
+    animals_in_roi: Union[str,list] = None,
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -2167,7 +2141,6 @@ def plot_embeddings(
     exp_condition: str = None,
     aggregate_experiments: str = None,
     samples: int = 500,
-    animals_in_roi: Union[str,list] = None,
     show_aggregated_density: bool = True,
     colour_by: str = "exp_condition",
     ax: Any = None,
@@ -2184,7 +2157,8 @@ def plot_embeddings(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded) 
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                          
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -2533,18 +2507,19 @@ def animate_skeleton(
     experiment_id: str,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    animal_id: list = None,
-    animals_in_roi: list = None,
-    center: str = "arena",
-    align: str = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int =20000,  
+    # ROI functionality
+    roi_number: int = None,  
+    animals_in_roi: list = None,
+    # other parameters
+    animal_id: list = None,
+    center: str = "arena",
+    align: str = None,
     sampling_rate: float = None, 
-    roi_number: int = None,
-    #other parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
@@ -2560,19 +2535,20 @@ def animate_skeleton(
         experiment_id (str): Name of the experiment to display.
         embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
         soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).       
         sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        show_all (bool): wheter all animals should be shown if a roi was selected
         legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
         save (str): name of the file where to save the produced animation.
         dpi (int): dots per inch of the figure to create.
@@ -3035,16 +3011,17 @@ def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
     supervised_annotations: table_dict = None,
-    behaviors: list = None,
-    experiment_id: str = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     frame_limit_per_video: int = None,
+    # ROI functionality
     roi_number: int =None,
-    #others
     animals_in_roi: list = None,
+    #others
+    behaviors: list = None,
+    experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
     display_time: bool = False,
@@ -3055,14 +3032,16 @@ def export_annotated_video(
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
-        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         soft_counts (dict): dictionary with soft_counts per experiment.
-        behavior (str): Behavior or Cluster to that gets exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations.
-        experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        behaviors (list): Behaviors or Clusters to that get exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations. If multiple behaviors are given as a list, one video can get annotated with multiple different behaviors
+        experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         display_time (bool): Displays current time in top left corner of teh video frame
@@ -3380,20 +3359,23 @@ def plot_distance_between_conditions(
 
 def plot_behavior_trends(
     coordinates: coordinates,
-    embedding: table_dict = None,
+    embeddings: table_dict = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    # Time selection parameters
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Visualization
+    hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
     show_histogram: bool = True,
     exp_condition: str = None,
     condition_values: list = None,
     behavior_to_plot: str = None,
     normalize: bool = False,
-    N_time_bins: int = 24,
-    custom_time_bins: List[List[Union[int, str]]] = None,
-    hide_time_bins: List[bool] = None,
-    roi_number: int = None,
-    animals_in_roi: list = None,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     ax: Any = None,
@@ -3407,15 +3389,17 @@ def plot_behavior_trends(
     embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
     soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
     supervised_annotations (table_dict): Table dict with supervised annotations per video.
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.    
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
     exp_condition (str): Experimental condition to compare.
     condition_values (list): List of two strings containing the condition values to compare.
     behavior_to_plot (str): Behavior to compare for selected condition.
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
-    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
-    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
     error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
@@ -3424,16 +3408,16 @@ def plot_behavior_trends(
 
 
     # Initial check if enum-like inputs were given correctly
-    #_check_enum_inputs(
-    #    coordinates,
-    #    supervised_annotations=supervised_annotations,
-    #    soft_counts=soft_counts,
-    #    exp_condition=exp_condition,
-    #    condition_values=condition_values,
-    #    behaviors=behavior_to_plot,
-    #    animals_in_roi=animals_in_roi,
-    #    roi_number=roi_number,
-    #)
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        exp_condition=exp_condition,
+        condition_values=condition_values,
+        behaviors=behavior_to_plot,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
     special_case=False
     if animals_in_roi is None:
         animals_in_roi = coordinates._animal_ids
@@ -3473,7 +3457,7 @@ def plot_behavior_trends(
 
     # Init plot type based on inputs
     if (
-        any([embedding is None, soft_counts is None])
+        any([embeddings is None, soft_counts is None])
         and supervised_annotations is not None
     ):
         plot_type = "supervised"
@@ -3481,7 +3465,7 @@ def plot_behavior_trends(
             get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
         )
     elif (
-        embedding is not None
+        embeddings is not None
         and soft_counts is not None
         and supervised_annotations is None
     ):
@@ -4080,7 +4064,9 @@ def plot_behavior_trends(
 def get_roi_data(
     coordinates: coordinates,
     table_dict: table_dict,
+    # ROI functionality
     roi_number: int,
+    animals_in_roi: list = None,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -4088,22 +4074,19 @@ def get_roi_data(
     samples_max: int =100000,
     # Visualization parameters
     experiment_id: str = None,
-    animals_in_roi: list = None,
 ):
     """get data in Rois.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
-        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
+        table_dict (table_dict): table dict with information for ROi extraction. Can be supervised or unsupervised data.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
-        roi_number (int): Number of the ROI that should be used for the Gantt plot (all behavior that occurs outside of teh ROI gets excluded)        
         experiment_id (str): Name of the experiment id to extract. If None (default) a dictionary of all entries will be exported.
-        animal_id (str): id of the animal that is used to determine if a ROI is active.
 
     """
     # initial check if enum-like inputs were given correctly
