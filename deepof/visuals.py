@@ -1534,8 +1534,8 @@ def plot_associations(
     condition_values: list = None,
     behaviors: list = None,
     exclude: bool = False,
-    delta_T: float = 2.0,
-    association_metric:str = "simple",
+    delta_T: float = 0.5,
+    association_metric:str = "FSTTC",
     get_values = False,
     ax: list = None,
     save: bool = False,
@@ -1557,10 +1557,8 @@ def plot_associations(
         roi_number=roi_number,
     )
 
-    special_case=False,
     if animals_in_roi is None:
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
@@ -1694,22 +1692,27 @@ def plot_associations(
             #save behavior order
             if key == first_key:
                 included_behaviors=tab.columns
+            if association_metric=="FSTTC":
+                tab_numpy=np.nan_to_num(tab.to_numpy().T)
+                extended_behaviors=deepof.utils.extend_behaviors_numba(tab_numpy,coordinates._frame_rate,delta_T)
 
             for i in range(0,tab.shape[1]):
                 for j in range(0, tab.shape[1]):
                     if i==j:
                         association_ij=np.NaN
                     else: 
-                        preceding_behavior=tab.iloc[:,i]
-                        proximate_behavior=tab.iloc[:,j]
                         if association_metric=="FSTTC":
+                            preceding_behavior=extended_behaviors[i,:]
+                            proximate_behavior=extended_behaviors[j,:]
                             association_ij=deepof.utils.calculate_FSTTC(
-                                np.nan_to_num(preceding_behavior.to_numpy()),
-                                np.nan_to_num(proximate_behavior.to_numpy()),
+                                preceding_behavior,
+                                proximate_behavior,
                                 coordinates._frame_rate,
                                 delta_T
                                 )
                         elif association_metric=="simple":
+                            preceding_behavior=tab.iloc[:,i]
+                            proximate_behavior=tab.iloc[:,j]
                             association_ij=deepof.utils.calculate_simple_association(
                                 np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
                                 np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
