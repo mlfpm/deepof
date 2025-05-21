@@ -940,7 +940,7 @@ def get_supervised_behaviors_in_roi(
 def get_unsupervised_behaviors_in_roi(
         cur_unsupervised: np.array,
         local_bin_info: dict,
-        animal_id: str, 
+        animal_ids: str, 
 ):
     """Filter unsupervised behaviors based on rois given by animal_ids.
 
@@ -954,14 +954,14 @@ def get_unsupervised_behaviors_in_roi(
     """
 
     cur_unsupervised=copy.copy(cur_unsupervised)
-    if type(animal_id)==str:
-        animal_id=[animal_id]
+    if type(animal_ids)==str:
+        animal_ids=[animal_ids]
 
     if len(cur_unsupervised.shape)==1:
-        for aid in animal_id:
+        for aid in animal_ids:
             cur_unsupervised[~local_bin_info[aid]]=-1    
     else:
-        for aid in animal_id: 
+        for aid in animal_ids: 
             cur_unsupervised[~local_bin_info[aid]]=np.NaN   
 
     return cur_unsupervised
@@ -1028,13 +1028,13 @@ def _check_enum_inputs(
     behaviors: list = None,
     bodyparts: list = None,
     animal_id: str = None,
-    animals_in_roi: list = None,
     center: str = None,
     visualization: str = None,
     normative_model: str = None,
     aggregate_experiments: str = None,
     colour_by: str = None,
     roi_number: int = None,
+    animals_in_roi: list = None,
 ): # pragma: no cover
     """
     Checks and validates enum-like input parameters for the different plot functions.
@@ -1056,7 +1056,9 @@ def _check_enum_inputs(
     normative_model (str): Name of the cohort to use as controls.
     aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
     colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
-    roi_number (int): Number of the ROI that should be used (all behavior that occurs outside of the ROI gets excluded)        
+    roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+       
 
     """
     # activate warnings (again, because just putting it at the beginning of the skript
@@ -1945,7 +1947,7 @@ def output_cluster_video(
 def output_videos_per_cluster(
     video_paths: dict,
     behavior_dict: table_dict,
-    behavior: str,
+    behaviors: Union[str,list],
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
     bin_info: dict = None,
@@ -1962,16 +1964,18 @@ def output_videos_per_cluster(
 
     Args:
         video_paths: dict of paths to the videos
-        soft_counts: table_dict of soft counts per video
+        behavior_dict: table_dict containing data tables with behavior information (presence or absence of behaviors (columns) for each frame (rows))
+        behaviors (Union[str,list]): list of behaviors to annotate
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
         bin_info (dict): dictionary containing indices to plot for all experiments
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
         display_time (bool): Displays current time in top left corner of the video frame
         out_path: path to the output directory.
-
     """
 
     #manual laoding bar for inner loop
@@ -1986,8 +1990,8 @@ def output_videos_per_cluster(
             print()  # Newline when complete
 
     meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
-    if isinstance(behavior, str):
-        behaviors = [behavior]
+    if isinstance(behaviors, str):
+        behaviors = [behaviors]
     elif meta_info.get('columns') is not None:
         behaviors=meta_info['columns']
     else:
@@ -2064,7 +2068,7 @@ def output_videos_per_cluster(
             if bin_info is not None:
                 if roi_number is not None:
                     if special_case:
-                        behavior_in=behavior
+                        behavior_in=behaviors[0]
                     else:
                         behavior_in=None
                     frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)

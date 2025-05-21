@@ -259,7 +259,10 @@ def get_time_on_cluster(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         normalize (bool): Whether to normalize the time by the total number of frames in each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
-        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings
+        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings and ROIs
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+
  
     Returns:
         A dataframe with the time spent on each cluster for each experiment.
@@ -619,7 +622,9 @@ def enrichment_across_conditions(
         supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         plot_speed (bool): plot "speed" behavior
-        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROIs
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -725,7 +730,9 @@ def compute_transition_matrix_per_condition(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
-        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROI information
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 

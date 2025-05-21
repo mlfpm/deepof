@@ -1380,8 +1380,8 @@ class Coordinates:
         align: str = False,
         align_inplace: bool = True,
         selected_id: str = None,
-        animals_in_roi: str = None,
         roi_number: int = None,
+        animals_in_roi: str = None,
         in_roi_criterion: str = "Center",
         file_name: str = 'coords',
         return_path: bool = False,
@@ -1395,7 +1395,9 @@ class Coordinates:
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            roi_number (int): Returns only coordinates within roi of given number.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
@@ -1423,8 +1425,8 @@ class Coordinates:
                 align = align,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
-                animals_in_roi = animals_in_roi,
                 roi_number = roi_number,
+                animals_in_roi = animals_in_roi,
                 in_roi_criterion = in_roi_criterion,
             )
             
@@ -1460,8 +1462,8 @@ class Coordinates:
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
-    animals_in_roi: str = None,
     roi_number: int = None,
+    animals_in_roi: str = None,
     in_roi_criterion: str = "Center",
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
@@ -1477,7 +1479,9 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
-            roi_number (int): Returns only coordinates within roi of given number.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
     
         Returns:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
@@ -1656,8 +1660,8 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
-        animals_in_roi: str = None,
         roi_number: int = None,
+        animals_in_roi: str = None,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
         return_path: bool = False,
@@ -1667,6 +1671,8 @@ class Coordinates:
         Args:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
@@ -1688,8 +1694,8 @@ class Coordinates:
                     key,
                     speed=speed,
                     selected_id=selected_id,
-                    animals_in_roi=animals_in_roi,
                     roi_number=roi_number,
+                    animals_in_roi=animals_in_roi,
                     filter_on_graph=filter_on_graph,
                     )
 
@@ -1720,8 +1726,8 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = None,
-        animals_in_roi: str = None,
         roi_number: int = None,
+        animals_in_roi: str = None,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
         """Return a pd.DataFrame with the distances between body parts of one animal as values.
@@ -1731,6 +1737,8 @@ class Coordinates:
             quality: (table_dict): Quality information for current data Frame
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
 
         Returns:
@@ -1814,8 +1822,8 @@ class Coordinates:
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
-        animals_in_roi: str = None,
         roi_number: int = None,
+        animals_in_roi: str = None,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -1825,6 +1833,8 @@ class Coordinates:
             degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -1844,8 +1854,8 @@ class Coordinates:
                     degrees=degrees,
                     speed=speed,
                     selected_id=selected_id,
-                    animals_in_roi=animals_in_roi,
                     roi_number = roi_number,
+                    animals_in_roi=animals_in_roi,
                 )
 
                 # save paths for modified tables
@@ -1875,8 +1885,9 @@ class Coordinates:
     degrees: bool = False,
     speed: int = 0,
     selected_id: str = None,
-    animals_in_roi: str = None,
     roi_number: int = None,
+    animals_in_roi: str = None,
+
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
 
@@ -1886,6 +1897,8 @@ class Coordinates:
             degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
@@ -1952,8 +1965,8 @@ class Coordinates:
             self, 
             speed: int = 0,
             selected_id: str = "all",
-            animals_in_roi: str = None,
             roi_number: int = None,
+            animals_in_roi: str = None,
             file_name: str = 'got_areas',
             return_path: bool = False,
             ) -> table_dict:
@@ -1962,6 +1975,8 @@ class Coordinates:
         Args:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -1979,8 +1994,8 @@ class Coordinates:
                     key=key, 
                     speed = speed,
                     selected_id = selected_id,
-                    animals_in_roi = animals_in_roi,
                     roi_number = roi_number,
+                    animals_in_roi = animals_in_roi,
                 )
 
                 # save paths for modified tables
@@ -2012,8 +2027,8 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = "all",
-        animals_in_roi: str = None,
         roi_number: int = None,
+        animals_in_roi: str = None,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
@@ -2022,8 +2037,8 @@ class Coordinates:
             quality: (table_dict): Quality information for current data Frame
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
-            file_name (str): Name of the file for saving
-            return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.

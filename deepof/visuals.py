@@ -45,7 +45,6 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
-    calculate_FSTTC,
     output_annotated_video,
     output_videos_per_cluster,
     get_behavior_colors,
@@ -3597,7 +3596,7 @@ def plot_behavior_trends(
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
             if roi_number is not None:
-                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_id=animals_in_roi)
+                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
