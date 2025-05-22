@@ -1044,66 +1044,104 @@ def count_events(
     
 
 def count_transitions(
-    frame_rate: float,
-    supervised_annotations: table_dict = None,
-    soft_counts: table_dict = None,
+    tab_dict: table_dict,
+    exp_conditions: dict,
     bin_info: dict = None,
     animals_in_roi: list = None,
     delta_T: float = 0.5,
+    frame_rate: float = 1,
+    silence_diagonal: bool = False,
+    aggregate: str = True,
+    normalize: str = True,
+    diagonal_behavior_counting: str = "Frames"
 ):
+    """Count transitions between successive behaviors"""
     # create tabdict dictionary to iterate over options
-    tab_dict_dict={'supervised' :supervised_annotations, 'unsupervised': soft_counts} 
-    return_dict={}
     load_range = None
-    for tab_dict_key, tab_dict in tab_dict_dict.items():
+
+    n_states = get_dt(tab_dict, list(tab_dict.keys())[0], only_metainfo=True)["num_cols"]
+
+    transitions_dict = {}
+    if aggregate: 
+        for exp_cond in set(exp_conditions.values()):
+            transitions_dict[exp_cond] = np.zeros([n_states, n_states])
+               
+    for key in tab_dict.keys():
+
+        # for each tab, first cut tab in requested shape based on bin_info
+        if bin_info is not None:
+            load_range = bin_info[key]["time"]
+            if len(bin_info[key]) > 1:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+        tab = get_dt(tab_dict,key,load_range=load_range)
         
-        # if the respective tab_dict was not given, continue
-        if tab_dict is None:
-            return_dict[tab_dict_key] = None
-            continue
-        
-        results={}
-        for key in tab_dict.keys():
+        # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
+        if isinstance(tab,np.ndarray):
+            max_indices = tab.argmax(axis=1)
+            tab_soft = np.zeros_like(tab, dtype=int)
+            tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
+            columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+            tab=pd.DataFrame(tab_soft, columns=columns)
 
-            # for each tab, first cut tab in requested shape based on bin_info
-            if bin_info is not None:
-                load_range = bin_info[key]["time"]
-                if len(bin_info[key]) > 1:
-                    load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-            tab = get_dt(tab_dict,key,load_range=load_range)
-            
-            # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
-            if isinstance(tab,np.ndarray):
-                max_indices = tab.argmax(axis=1)
-                tab_soft = np.zeros_like(tab, dtype=int)
-                tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
-                columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
-                tab=pd.DataFrame(tab_soft, columns=columns)
+        tab_numpy=np.nan_to_num(tab.to_numpy().T)
+        extended_behaviors=extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
+        L = extended_behaviors.shape[1]
 
-            tab_numpy=np.nan_to_num(tab.to_numpy().T)
-            extended_behaviors=extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
-            L = extended_behaviors.shape[1]
+        associations = np.zeros([tab.shape[1],tab.shape[1]])
+        columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
 
-            associations = np.zeros([tab.shape[1],tab.shape[1]])
-            columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
-
-            for i in range(0,tab.shape[1]):
-                for j in range(0, tab.shape[1]):
+        for i in range(0,tab.shape[1]):
+            for j in range(0, tab.shape[1]):
+                if i==j:
+                    match diagonal_behavior_counting:
+                        case "Frames":
+                            associations[i,j]= np.sum(extended_behaviors[i,:])
+                        case "Time":
+                            associations[i,j]= np.sum(extended_behaviors[i,:])/frame_rate
+                        case "Events":
+                            proximate_onsets = np.zeros(L, dtype=np.int8)
+                            proximate_onsets[:-1] = np.diff(extended_behaviors[i,:].astype(np.int8))
+                            prox_onset_pos = np.where(proximate_onsets == 1)[0]
+                            association_ij=len(prox_onset_pos)
+                            if extended_behaviors[i,0].astype(np.int8)==1:
+                                association_ij=association_ij+1
+                            associations[i,j]= association_ij
+                        # Frame_to_frame_transitions
+                        case "Transitions":
+                            prev = extended_behaviors[i,:-1]
+                            curr = extended_behaviors[i,1:]
+                            associations[i,j]= np.sum((prev == 1) & (curr == 1))
+                            
+                else:
                     preceding_active=extended_behaviors[i,:]
                     proximate_active=extended_behaviors[j,:]
                     proximate_onsets = np.zeros(L, dtype=np.int8)
-                    proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
+                    proximate_onsets[:-1] = np.diff(proximate_active.astype(np.int8))
                     prox_onset_pos = np.where(proximate_onsets == 1)[0]
                     association_ij=np.sum(preceding_active[prox_onset_pos])
                     associations[i,j]=association_ij
-            
-            results[key] = associations.ravel()  # Flatten the matrix into a 1D array in row-major order
+
+        if silence_diagonal:
+            np.fill_diagonal(associations, 0)
+
+        # Aggregate based on experimental condition if specified
+        if aggregate:
+            exp_cond=exp_conditions[key]
+            transitions_dict[exp_cond] += associations
+        else:
+            transitions_dict[key] = associations    
         
-        count_df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
-        return_dict[tab_dict_key] = count_df
-        #final_df = final_df.reindex(columns=sorted(final_df.columns))
+    # Normalize rows if specified
+    if normalize:
+
+        transitions_dict = {
+            key: np.nan_to_num(value.astype(float) / value.astype(float).sum(axis=1)[:, np.newaxis])
+            for key, value in transitions_dict.items()
+        } 
+         
+    #final_df = final_df.reindex(columns=sorted(final_df.columns))
     
-    return return_dict['supervised'], return_dict['unsupervised']
+    return transitions_dict, columns
 
 
 

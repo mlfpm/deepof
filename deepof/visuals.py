@@ -1345,9 +1345,9 @@ def plot_enrichment(
         plt.show()
 
 
-def plot_transitions(
+def return_transitions(
     coordinates: coordinates,
-    embeddings: table_dict,
+    supervised_annotations: table_dict,
     soft_counts: table_dict,
     # Time selection parameters
     bin_size: Union[int, str] = None,
@@ -1357,10 +1357,157 @@ def plot_transitions(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
-    # Visualization parameters
+    # Selection parameters
     exp_condition: str = None,
+    delta_T: float = 0.5,
+    silence_diagonal: bool = False,
+    diagonal_behavior_counting: str = "Events",
+    normalize:bool = True,
+
+):
+
+    bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T = _preprocess_transitions(
+        coordinates=coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        roi_number=roi_number,
+        animals_in_roi=animals_in_roi,
+        exp_condition=exp_condition,
+        delta_T=delta_T,
+        diagonal_behavior_counting=diagonal_behavior_counting,
+    )
+
+    grouped_transitions, columns = deepof.utils.count_transitions(
+        tab_dict=soft_counts,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T = delta_T,
+        frame_rate=coordinates._frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=(exp_conditions is not None),
+        normalize=normalize,
+        diagonal_behavior_counting=diagonal_behavior_counting
+    )
+
+    results={}
+    for key in grouped_transitions.keys():
+
+        results[key]=grouped_transitions[key].ravel()  # Flatten the matrix into a 1D array in row-major order  
+        count_df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+
+def _preprocess_transitions(
+    coordinates: coordinates,
+    supervised_annotations: table_dict,
+    soft_counts: table_dict,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Selection parameters
+    exp_condition: str = None,
+    delta_T: float = None,
+    diagonal_behavior_counting=None,
+    # Visualization parameters
     visualization="networks",
-    silence_diagonal=False,
+):
+    """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
+
+    """
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        origin="plot_transitions",
+        exp_condition=exp_condition,
+        visualization=visualization,
+        supervised_annotations=supervised_annotations,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+    diagonal_behavior_counting_options=["Frames","Time","Events","Transitions"]  
+    if diagonal_behavior_counting not in diagonal_behavior_counting_options:
+        raise ValueError(
+            '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
+                str(diagonal_behavior_counting_options)[1:-1]
+            )
+        )
+    if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
+        raise ValueError(
+            "Need to set exactly one of supervised_annotations or soft_counts!"
+        )
+    if delta_T is None:
+        delta_T=0.0
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if coordinates.get_exp_conditions is not None and exp_condition is None:
+        exp_condition = coordinates.get_exp_conditions[
+            list(coordinates.get_exp_conditions.keys())[0]
+        ].columns[0]
+
+    exp_conditions = {
+        key: str(val.loc[:, exp_condition].values[0])
+        for key, val in coordinates.get_exp_conditions.items()
+    }
+
+    # preprocess information given for time binning
+
+
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
+    )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    return bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T
+        
+
+
+def plot_transitions(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Selection parameters
+    exp_condition: str = None,
+    delta_T: float = 0.5,
+    silence_diagonal: bool = False,
+    diagonal_behavior_counting: str = "Events",
+    normalize:bool = True,
+    # Visualization parameters
+    visualization="networks",
     ax: list = None,
     save: bool = False,
     **kwargs,
@@ -1385,50 +1532,47 @@ def plot_transitions(
         kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
-    # initial check if enum-like inputs were given correctly
-    _check_enum_inputs(
-        coordinates,
-        origin="plot_transitions",
+    bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T = _preprocess_transitions(
+        coordinates=coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        roi_number=roi_number,
+        animals_in_roi=animals_in_roi,
         exp_condition=exp_condition,
+        delta_T=delta_T,
         visualization=visualization,
-        animals_in_roi=animals_in_roi,
-        roi_number=roi_number,
+        diagonal_behavior_counting=diagonal_behavior_counting,
     )
-    if animals_in_roi is None:
-        animals_in_roi = coordinates._animal_ids
-    elif roi_number is None:
-        print(
-        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
-        )
-    # Get requested experimental condition. If none is provided, default to the first one available.
-    if coordinates.get_exp_conditions is not None and exp_condition is None:
-        exp_condition = coordinates.get_exp_conditions[
-            list(coordinates.get_exp_conditions.keys())[0]
-        ].columns[0]
-
-    exp_conditions = {
-        key: str(val.loc[:, exp_condition].values[0])
-        for key, val in coordinates.get_exp_conditions.items()
-    }
-
-    # preprocess information given for time binning
+    # initial check if enum-like inputs were given correctly
 
 
-    bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
-    )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
-
-    grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
-        soft_counts,
-        exp_conditions,
+    grouped_transitions, _ = deepof.utils.count_transitions(
+        tab_dict=soft_counts,
+        exp_conditions=exp_conditions,
         bin_info=bin_info,
-        roi_number=roi_number,
         animals_in_roi=animals_in_roi,
+        delta_T = delta_T,
+        frame_rate=coordinates._frame_rate,
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None),
-        normalize=True,
+        normalize=normalize,
+        diagonal_behavior_counting=diagonal_behavior_counting
     )
+
+    #grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
+    #    soft_counts,
+    #    exp_conditions,
+    #    bin_info=bin_info,
+    #    roi_number=roi_number,
+    #    animals_in_roi=animals_in_roi,
+    #    silence_diagonal=silence_diagonal,
+    #    aggregate=(exp_conditions is not None),
+    #    normalize=False,
+    #)
 
     if exp_conditions is None:
         grouped_transitions = np.mean(
@@ -1484,6 +1628,10 @@ def plot_transitions(
 
     elif visualization == "heatmaps":
 
+        if normalize:
+            vmax=0.5 
+        else:
+            vmax=None
         for exp_condition, ax in iters:
 
             if isinstance(grouped_transitions, dict):
@@ -1503,7 +1651,7 @@ def plot_transitions(
                 clustered_transitions,
                 cmap="coolwarm",
                 vmin=0,
-                vmax=0.35,
+                vmax=vmax,
                 ax=ax,
                 **kwargs,
             )
