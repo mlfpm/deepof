@@ -1132,7 +1132,7 @@ def _check_enum_inputs(
         np.concatenate(
             [
             coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
-            if type(coordinates._tables[key]) != str   #if table is not a save path
+            if type(coordinates._tables[key]) != dict   #if table is not a save path
             else [t[0] for t in get_dt(coordinates._tables,key,only_metainfo=True)['columns']] #otherwise read in saved column headers and then extract first elements
             for key 
             in coordinates._tables.keys()
