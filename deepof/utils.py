@@ -53,7 +53,7 @@ table_dict = NewType("deepof_table_dict", Any)
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
@@ -132,7 +132,7 @@ def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     return smoothed_states
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def enforce_skeleton_constraints_numba(
     data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5
 ):  # pragma: no cover
@@ -844,7 +844,7 @@ def compute_areas(polygon_xy_stack: np.array) -> np.array:
     return polygon_areas
 
 
-@nb.njit(parallel=True,nopython=True)
+@nb.njit(parallel=True)
 def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no cover
     """
     Compute polygon areas for the provided stack of sets of data point-xy coordinates.
@@ -865,7 +865,7 @@ def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no c
     return polygon_areas
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
     """
     Calculate the area of a single polygon given its vertices.
@@ -934,7 +934,7 @@ def calculate_FSTTC(
         return fsttc
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def extend_behaviors_numba(
     behaviors: np.ndarray,
     frame_rate: float,
@@ -1132,7 +1132,7 @@ def rotate(
     return rotated
 
 
-@nb.njit(parallel=True,nopython=True)
+@nb.njit(parallel=True)
 def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: no cover
     """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
@@ -1169,7 +1169,7 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: n
     return aligned_trajs
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def rotate_numba(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:  # pragma: no cover
@@ -1227,7 +1227,7 @@ def point_in_polygon(points: np.array, polygon: Polygon) -> np.array:
     return inside
 
 
-@nb.njit(parallel=True,nopython=True)
+@nb.njit(parallel=True)
 def point_in_polygon_numba(
     points: np.array, polygon: np.array
 ) -> np.array:  # pragma: no cover
@@ -1253,7 +1253,7 @@ def point_in_polygon_numba(
     return inside
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def _is_point_inside_numba(
     x: float, y: float, polygon: np.array
 ) -> bool:  # pragma: no cover
@@ -1679,7 +1679,7 @@ def kleinberg(
     return bursts
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def kleinberg_core_numba(
     gaps: np.array, s: np.float64, gamma: np.float64, n: int, T: np.float64, k: int
 ) -> np.array:  # pragma: no cover
@@ -1823,7 +1823,7 @@ def multi_step_paired_smoothing(
 
     """
 
-    @nb.njit(nopython=True)
+    @nb.njit()
     def _resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg): # pragma: no cover
         """Determines if conflicting frames (behavior and not_behavior are True) are either one or the other
         based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
@@ -2035,7 +2035,7 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
 
     return moving_avg
 
-@nb.njit(nopython=True)
+@nb.njit()
 def binary_moving_median_numba(time_series, lag): # pragma: no cover
     """will applay a moving emdian like filter on a binary signal, i.e. if a window of size lag 
     has more 1s than 0s set the frame to 1 for that window, set it to 0 otherwise. 
@@ -3384,7 +3384,7 @@ def filter_short_true_segments(array: np.ndarray, min_length: int):
     return output_array
 
 
-@nb.njit(nopython=True)
+@nb.njit()
 def filter_short_true_segments_numba(array: np.ndarray, min_length: int): # pragma: no cover
     """Filters out sahort "True" sections from boolean array "array"
 
