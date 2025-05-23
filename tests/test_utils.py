@@ -247,6 +247,21 @@ def test_smooth_boolean_array_and_binary_moving_median(a, lag):
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
+    tab_numpy=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+)
+def test_count_events(tab_numpy):
+
+    num_events=deepof.utils.count_events(tab_numpy)
+
+    # Number of 1s in teh table is always larger than or equal to the number of counted events
+    assert(np.sum(tab_numpy) >= num_events)
+    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to teh numebr of events
+    assert len(np.where(np.diff(tab_numpy.astype(int))==1)[0]) <= num_events
+    assert len(np.where(np.diff(tab_numpy.astype(int))==-1)[0]) <= num_events
+    
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
     tab_numpy=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=30),st.integers(min_value=3, max_value=100))),
     frame_rate=st.floats(min_value=1, max_value=100),
     delta_T=st.floats(min_value=0.0, max_value=100),
