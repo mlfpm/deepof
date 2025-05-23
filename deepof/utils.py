@@ -934,7 +934,7 @@ def calculate_FSTTC(
         return fsttc
 
 
-@nb.njit()
+#@nb.njit()
 def extend_behaviors_numba(
     behaviors: np.ndarray,
     frame_rate: float,

@@ -247,6 +247,44 @@ def test_smooth_boolean_array_and_binary_moving_median(a, lag):
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
+    tab_numpy=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=30),st.integers(min_value=3, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
+
+    def _has_no_short_ones(matrix, N):
+        """Counts consecutive ones and checks if the at least as long as N except for edge case (Borderline too complicated function for a test case)"""
+        for row in range(0,matrix.shape[0]):
+            # Count number of consecutive Ones
+            c_row=matrix[row,:]
+            c_row=np.concatenate(( [0], c_row, [0] ))
+            idx = np.flatnonzero(c_row[1:] != c_row[:-1])
+            len_ones=np.abs(idx[::2] - idx[1::2])
+            #remove last segment, if it ended at 1 (nd hence was correctly cut off)
+            if c_row[-2]==1:
+                len_ones=len_ones[:-1]
+            # Notify, if any segment was too short
+            if (len_ones<N).any():
+                return False
+            
+        return True
+
+    tab_extended=deepof.utils.extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
+    extension=int(frame_rate*delta_T)
+
+    # An extended table always has equal or more ones than their unextended equivalent
+    assert(np.sum(tab_numpy)<=np.sum(tab_extended))
+    # All original 1s still exist
+    assert np.sum(tab_extended[tab_numpy])==np.sum(tab_numpy)
+    # An extended table cannot have more ones than all ones in the original table including extension length
+    assert(np.sum(tab_numpy)+np.sum(tab_numpy)*extension)>=np.sum(tab_extended)
+    # Make sure that no section of 1s remain that are shorter than extension +1 except the end segemnts
+    assert _has_no_short_ones(tab_extended, extension+1)
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
     pos_in=st.lists(elements=st.integers(min_value=1, max_value=4), min_size=3, max_size=100),
     min_length=st.integers(min_value=3,max_value=100),
     get_both=st.booleans(),
