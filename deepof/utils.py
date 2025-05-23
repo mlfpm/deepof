@@ -1093,7 +1093,8 @@ def count_transitions(
                 transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
 
         associations = np.zeros([tab.shape[1],tab.shape[1]])
-        columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
+        combined_columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
+        columns = tab.columns
 
         for i in range(0,tab.shape[1]):
             for j in range(0, tab.shape[1]):
@@ -1139,7 +1140,7 @@ def count_transitions(
          
     #final_df = final_df.reindex(columns=sorted(final_df.columns))
     
-    return transitions_dict, columns
+    return transitions_dict, columns, combined_columns
 
 
 def count_events(binary_behavior: np.ndarray) -> int:
