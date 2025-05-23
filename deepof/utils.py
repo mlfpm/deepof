@@ -987,7 +987,7 @@ def calculate_simple_association(
     return Q
 
 
-def count_events(
+def count_all_events(
     supervised_annotations: table_dict = None,
     soft_counts: table_dict = None,
     bin_info: dict = None,
@@ -1059,14 +1059,9 @@ def count_transitions(
     # create tabdict dictionary to iterate over options
     load_range = None
 
-    n_states = get_dt(tab_dict, list(tab_dict.keys())[0], only_metainfo=True)["num_cols"]
-
     transitions_dict = {}
-    if aggregate: 
-        for exp_cond in set(exp_conditions.values()):
-            transitions_dict[exp_cond] = np.zeros([n_states, n_states])
                
-    for key in tab_dict.keys():
+    for z, key in enumerate(tab_dict.keys()):
 
         # for each tab, first cut tab in requested shape based on bin_info
         if bin_info is not None:
@@ -1074,6 +1069,7 @@ def count_transitions(
             if len(bin_info[key]) > 1:
                 load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         tab = get_dt(tab_dict,key,load_range=load_range)
+        # skip non-binary columns (e.g. speed column)
         
         # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
         if isinstance(tab,np.ndarray):
@@ -1082,10 +1078,19 @@ def count_transitions(
             tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
             columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
             tab=pd.DataFrame(tab_soft, columns=columns)
+        
+        # Drop non-binary columns (speed column in supervised)
+        for col in tab.columns:
+            if (tab[col].iloc[:]>1.000001).any():
+                tab=tab.drop(columns=[col])
 
         tab_numpy=np.nan_to_num(tab.to_numpy().T)
         extended_behaviors=extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
         L = extended_behaviors.shape[1]
+
+        if z==0 and aggregate: 
+            for exp_cond in set(exp_conditions.values()):
+                transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
 
         associations = np.zeros([tab.shape[1],tab.shape[1]])
         columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
@@ -1099,13 +1104,7 @@ def count_transitions(
                         case "Time":
                             associations[i,j]= np.sum(extended_behaviors[i,:])/frame_rate
                         case "Events":
-                            proximate_onsets = np.zeros(L, dtype=np.int8)
-                            proximate_onsets[:-1] = np.diff(extended_behaviors[i,:].astype(np.int8))
-                            prox_onset_pos = np.where(proximate_onsets == 1)[0]
-                            association_ij=len(prox_onset_pos)
-                            if extended_behaviors[i,0].astype(np.int8)==1:
-                                association_ij=association_ij+1
-                            associations[i,j]= association_ij
+                            associations[i,j] = count_events(extended_behaviors[i,:])
                         # Frame_to_frame_transitions
                         case "Transitions":
                             prev = extended_behaviors[i,:-1]
@@ -1143,6 +1142,17 @@ def count_transitions(
     
     return transitions_dict, columns
 
+
+def count_events(binary_behavior: np.ndarray) -> int:
+    """Counts the number of continuous blocks of 1s in a binary behavior vector"""
+    L = len(binary_behavior)
+    behavior_onsets = np.zeros(L, dtype=np.int8)
+    behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
+    behavior_onset_pos = np.where(behavior_onsets == 1)[0]
+    num_events=len(behavior_onset_pos)
+    if binary_behavior[0].astype(np.int8)==1:
+        num_events=num_events+1
+    return num_events
 
 
 

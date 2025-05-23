@@ -1366,7 +1366,7 @@ def return_transitions(
 
 ):
 
-    bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T = _preprocess_transitions(
+    tab_dict, bin_info, exp_conditions, _, animals_in_roi, delta_T, _ = _preprocess_transitions(
         coordinates=coordinates,
         supervised_annotations=supervised_annotations,
         soft_counts=soft_counts,
@@ -1382,14 +1382,14 @@ def return_transitions(
     )
 
     grouped_transitions, columns = deepof.utils.count_transitions(
-        tab_dict=soft_counts,
+        tab_dict=tab_dict,
         exp_conditions=exp_conditions,
         bin_info=bin_info,
         animals_in_roi=animals_in_roi,
         delta_T = delta_T,
         frame_rate=coordinates._frame_rate,
         silence_diagonal=silence_diagonal,
-        aggregate=(exp_conditions is not None),
+        aggregate=(exp_conditions is not None and exp_condition is not None),
         normalize=normalize,
         diagonal_behavior_counting=diagonal_behavior_counting
     )
@@ -1398,7 +1398,9 @@ def return_transitions(
     for key in grouped_transitions.keys():
 
         results[key]=grouped_transitions[key].ravel()  # Flatten the matrix into a 1D array in row-major order  
-        count_df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    count_df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    
+    return count_df
 
 def _preprocess_transitions(
     coordinates: coordinates,
@@ -1417,7 +1419,8 @@ def _preprocess_transitions(
     delta_T: float = None,
     diagonal_behavior_counting=None,
     # Visualization parameters
-    visualization="networks",
+    visualization="heatmaps",
+    normalize:bool = True,
 ):
     """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
 
@@ -1457,6 +1460,15 @@ def _preprocess_transitions(
         raise ValueError(
             "Need to set exactly one of supervised_annotations or soft_counts!"
         )
+    elif supervised_annotations is not None:
+        tab_dict=supervised_annotations
+    else:
+        tab_dict=soft_counts
+    if visualization == "networks" and normalize ==False:
+        normalize=True
+        print(
+        '\033[33mInfo! Cannot use networks visulization without normlization!\033[0m'
+        )
     if delta_T is None:
         delta_T=0.0
     if animals_in_roi is None:
@@ -1466,15 +1478,17 @@ def _preprocess_transitions(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
         )
     # Get requested experimental condition. If none is provided, default to the first one available.
-    if coordinates.get_exp_conditions is not None and exp_condition is None:
-        exp_condition = coordinates.get_exp_conditions[
-            list(coordinates.get_exp_conditions.keys())[0]
-        ].columns[0]
+    #if coordinates.get_exp_conditions is not None and exp_condition is None:
+    #    exp_condition = coordinates.get_exp_conditions[
+    #        list(coordinates.get_exp_conditions.keys())[0]
+    #    ].columns[0]
 
-    exp_conditions = {
-        key: str(val.loc[:, exp_condition].values[0])
-        for key, val in coordinates.get_exp_conditions.items()
-    }
+    exp_conditions=None
+    if exp_condition is not None:
+        exp_conditions = {
+            key: str(val.loc[:, exp_condition].values[0])
+            for key, val in coordinates.get_exp_conditions.items()
+        }
 
     # preprocess information given for time binning
 
@@ -1484,7 +1498,7 @@ def _preprocess_transitions(
     )
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
-    return bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T
+    return tab_dict, bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T, normalize
         
 
 
@@ -1532,7 +1546,7 @@ def plot_transitions(
         kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
-    bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T = _preprocess_transitions(
+    tab_dict, bin_info, exp_conditions, exp_condition, animals_in_roi, delta_T, normalize = _preprocess_transitions(
         coordinates=coordinates,
         supervised_annotations=supervised_annotations,
         soft_counts=soft_counts,
@@ -1546,19 +1560,19 @@ def plot_transitions(
         delta_T=delta_T,
         visualization=visualization,
         diagonal_behavior_counting=diagonal_behavior_counting,
+        normalize=normalize,
     )
     # initial check if enum-like inputs were given correctly
 
 
     grouped_transitions, _ = deepof.utils.count_transitions(
-        tab_dict=soft_counts,
+        tab_dict=tab_dict,
         exp_conditions=exp_conditions,
         bin_info=bin_info,
         animals_in_roi=animals_in_roi,
         delta_T = delta_T,
         frame_rate=coordinates._frame_rate,
         silence_diagonal=silence_diagonal,
-        aggregate=(exp_conditions is not None),
         normalize=normalize,
         diagonal_behavior_counting=diagonal_behavior_counting
     )
@@ -1602,9 +1616,9 @@ def plot_transitions(
 
         for exp_condition, ax in iters:
 
-            try:
+            if isinstance(grouped_transitions, dict):
                 G = nx.DiGraph(grouped_transitions[exp_condition])
-            except nx.NetworkXError:
+            else:
                 G = nx.DiGraph(grouped_transitions)
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
 
