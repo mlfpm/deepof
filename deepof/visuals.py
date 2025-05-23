@@ -1347,8 +1347,8 @@ def plot_enrichment(
 
 def return_transitions(
     coordinates: coordinates,
-    supervised_annotations: table_dict,
-    soft_counts: table_dict,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
@@ -1363,6 +1363,10 @@ def return_transitions(
     silence_diagonal: bool = False,
     diagonal_behavior_counting: str = "Events",
     normalize:bool = True,
+    # Visualization parameters
+    visualization="networks",
+    ax: list = None,
+    save: bool = False,
 
 ):
 
