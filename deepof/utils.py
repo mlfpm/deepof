@@ -1063,12 +1063,20 @@ def count_transitions(
                
     for z, key in enumerate(tab_dict.keys()):
 
+        columns = None
         # for each tab, first cut tab in requested shape based on bin_info
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
                 load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-        tab = get_dt(tab_dict,key,load_range=load_range)
+            # Create empty tab, in case load range does not contain any valid frames
+        if load_range is not None and len(load_range)==0:
+            meta_info = get_dt(tab_dict,key,only_metainfo=True)
+            tab = np.zeros([1,meta_info["num_cols"]])
+            if "columns" in meta_info:
+                columns = meta_info["columns"]
+        else:
+            tab = get_dt(tab_dict,key,load_range=load_range)
         # skip non-binary columns (e.g. speed column)
         
         # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
@@ -1076,11 +1084,14 @@ def count_transitions(
             max_indices = tab.argmax(axis=1)
             tab_soft = np.zeros_like(tab, dtype=int)
             tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
-            columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+            if columns is None:
+                columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
             tab=pd.DataFrame(tab_soft, columns=columns)
+        else:
+            columns = tab.columns
         
         # Drop non-binary columns (speed column in supervised)
-        for col in tab.columns:
+        for col in columns:
             if col.endswith('_speed') or col == 'speed':
                 tab=tab.drop(columns=[col])
 
@@ -1093,8 +1104,8 @@ def count_transitions(
                 transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
 
         associations = np.zeros([tab.shape[1],tab.shape[1]])
-        combined_columns = [f"{var_i}-x-{var_j}" for var_i in tab.columns for var_j in tab.columns]
-        columns = tab.columns
+        combined_columns = [f"{var_i}-x-{var_j}" for var_i in columns for var_j in columns]
+
 
         for i in range(0,tab.shape[1]):
             for j in range(0, tab.shape[1]):
@@ -1137,9 +1148,7 @@ def count_transitions(
             key: np.nan_to_num(value.astype(float) / value.astype(float).sum(axis=1)[:, np.newaxis])
             for key, value in transitions_dict.items()
         } 
-         
-    #final_df = final_df.reindex(columns=sorted(final_df.columns))
-    
+             
     return transitions_dict, columns, combined_columns
 
 

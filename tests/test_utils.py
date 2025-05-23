@@ -283,6 +283,113 @@ def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
     assert _has_no_short_ones(tab_extended, extension+1)
 
 
+@given(
+    num_features=st.integers(min_value=1, max_value=10),
+    exp_conditions=st.one_of(st.just({0:'Stressed'}),st.just({0:'Stressed',1:'VeryStressed'})),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ),
+    animals_in_roi = st.one_of(st.just(["A"]),st.just(["A","B"])),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    silence_diagonal=st.booleans(),
+    aggregate=st.booleans(),
+    normalize=st.booleans(),
+    diagonal_behavior_counting=st.one_of(st.just("Frames"),st.just("Time"),st.just("Events"),st.just("Transitions"))
+)
+def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting):
+
+    # Define a test embedding dictionary
+    tab_dict = {i: np.random.choice(a=[False, True], size=(100, num_features), p=[0.5,0.5]) for i in range(len(exp_conditions))}
+
+    # Create local_bin_info
+    bin_info = {i: {} for i in range(len(exp_conditions))}
+    for key in bin_info:
+        local_bin_info = {"time": np.array(bins)}
+        for k, animal_id in enumerate(animals_in_roi):
+            local_bin_info[animal_id] = np.ones(len(bins)).astype(bool)
+            if key==0:
+                local_bin_info[animal_id] = np.zeros(len(bins)).astype(bool)
+        bin_info[key]=local_bin_info
+
+    transitions_dict, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting=diagonal_behavior_counting
+    )
+
+    # Paired column combinations are the square of single columns
+    assert len(columns)**2 == len(combined_columns)
+    # Values are always larger than 0
+    assert (transitions_dict[list(transitions_dict.keys())[0]]>=0).all()
+
+    # Silencing the diagonal means all values on the diagonal are 0
+    if silence_diagonal:
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()==0).all()
+    # In aggregation mode, there is exactly one table for each experiment condition
+    if aggregate:
+        assert len(transitions_dict)==len(exp_conditions)
+    # Normalization implies no values greater 1
+    if normalize:
+        assert (transitions_dict[list(transitions_dict.keys())[0]]<=1).all()
+    # Diagonal behavior counting
+    if diagonal_behavior_counting == "Frames":
+
+        transitions_dict_transitions, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Transitions"
+        )
+
+        transitions_dict_time, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Time"
+        )
+
+        transitions_dict_events, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Events"
+        )
+
+        # The number of Frames will be always greater or equal than any otehr of the diagonal counting options
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_transitions[list(transitions_dict_transitions.keys())[0]].diagonal()).all()
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_time[list(transitions_dict_time.keys())[0]].diagonal()).all()
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_events[list(transitions_dict_events.keys())[0]].diagonal()).all()
+
+
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     pos_in=st.lists(elements=st.integers(min_value=1, max_value=4), min_size=3, max_size=100),
