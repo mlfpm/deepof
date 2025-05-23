@@ -1098,18 +1098,17 @@ def count_transitions(
         for i in range(0,tab.shape[1]):
             for j in range(0, tab.shape[1]):
                 if i==j:
-                    match diagonal_behavior_counting:
-                        case "Frames":
-                            associations[i,j]= np.sum(extended_behaviors[i,:])
-                        case "Time":
-                            associations[i,j]= np.sum(extended_behaviors[i,:])/frame_rate
-                        case "Events":
-                            associations[i,j] = count_events(extended_behaviors[i,:])
+                    if diagonal_behavior_counting == "Frames":
+                        associations[i,j]= np.sum(extended_behaviors[i,:])
+                    elif diagonal_behavior_counting == "Time":
+                        associations[i,j]= np.sum(extended_behaviors[i,:])/frame_rate
+                    elif diagonal_behavior_counting == "Events":
+                        associations[i,j] = count_events(extended_behaviors[i,:])
                         # Frame_to_frame_transitions
-                        case "Transitions":
-                            prev = extended_behaviors[i,:-1]
-                            curr = extended_behaviors[i,1:]
-                            associations[i,j]= np.sum((prev == 1) & (curr == 1))
+                    elif diagonal_behavior_counting == "Transitions":
+                        prev = extended_behaviors[i,:-1]
+                        curr = extended_behaviors[i,1:]
+                        associations[i,j]= np.sum((prev == 1) & (curr == 1))
                             
                 else:
                     preceding_active=extended_behaviors[i,:]

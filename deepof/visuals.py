@@ -1389,7 +1389,7 @@ def return_transitions(
         delta_T = delta_T,
         frame_rate=coordinates._frame_rate,
         silence_diagonal=silence_diagonal,
-        aggregate=(exp_conditions is not None and exp_condition is not None),
+        aggregate=(exp_conditions is not None), 
         normalize=normalize,
         diagonal_behavior_counting=diagonal_behavior_counting
     )
@@ -1458,7 +1458,7 @@ def _preprocess_transitions(
         )
     if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
         raise ValueError(
-            "Need to set exactly one of supervised_annotations or soft_counts!"
+            "Eet either supervised_annotations or soft_counts, not both or neither!"
         )
     elif supervised_annotations is not None:
         tab_dict=supervised_annotations
@@ -1467,7 +1467,7 @@ def _preprocess_transitions(
     if visualization == "networks" and normalize ==False:
         normalize=True
         print(
-        '\033[33mInfo! Cannot use networks visulization without normlization!\033[0m'
+        '\033[33mInfo! Cannot use networks visulization without normalization!\033[0m'
         )
     if delta_T is None:
         delta_T=0.0
@@ -1573,6 +1573,7 @@ def plot_transitions(
         delta_T = delta_T,
         frame_rate=coordinates._frame_rate,
         silence_diagonal=silence_diagonal,
+        aggregate=(exp_conditions is not None), 
         normalize=normalize,
         diagonal_behavior_counting=diagonal_behavior_counting
     )
