@@ -1532,7 +1532,7 @@ def plot_transitions(
             clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
                 row_order, row_order
             ]
-            columns = columns[row_order]
+            reordered_columns = columns[row_order]
 
             sns.heatmap(
                 clustered_transitions,
@@ -1543,8 +1543,8 @@ def plot_transitions(
                 **kwargs,
             )
             ax.set_title(exp_condition)
-            ax.set_xticklabels(columns, rotation=90)
-            ax.set_yticklabels(columns, rotation=0)
+            ax.set_xticklabels(reordered_columns, rotation=90)
+            ax.set_yticklabels(reordered_columns, rotation=0)
 
     if ax is None:
 
