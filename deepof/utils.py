@@ -1081,7 +1081,7 @@ def count_transitions(
         
         # Drop non-binary columns (speed column in supervised)
         for col in tab.columns:
-            if (tab[col].iloc[:]>1.000001).any():
+            if col.endswith('_speed') or col == 'speed':
                 tab=tab.drop(columns=[col])
 
         tab_numpy=np.nan_to_num(tab.to_numpy().T)
