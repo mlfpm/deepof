@@ -1005,10 +1005,50 @@ def get_beheavior_frames_in_roi(
     
     frames=frames[frames >= 0]
     return frames
-
-        
-
     
+
+def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):
+    """Calculates the association measure FSTTC between two behaviors given as boolean series"""
+    
+    # calculate delta T in frames
+    delta_T_frames=int(frame_rate*delta_T)
+    
+    # Get total length of interval in which behaviors can occur
+    L = len(preceding_behavior)+1
+    # Inits
+    preceding_onsets=np.zeros(L)
+    proximate_onsets=np.zeros(L)
+    preceding_active=np.concatenate(( [0], copy.copy(preceding_behavior.astype(int)), [0] ))
+    proximate_active=np.concatenate(( [0], copy.copy(proximate_behavior.astype(int)), [0] )) 
+
+    # Calculate positions of both behavior onsets
+    preceding_onsets=np.diff(preceding_active)
+    proximate_onsets=np.diff(proximate_active)
+    pre_offset_pos = np.where(preceding_onsets == -1)[0]   
+    prox_offset_pos = np.where(proximate_onsets == -1)[0]
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+
+    # Calculate relevant interval of frames close to any behavior starts 
+    for pre_stop in pre_offset_pos:
+        preceding_active[pre_stop:np.min([pre_stop+delta_T_frames,L])]=1
+    for prox_stop in prox_offset_pos:
+        proximate_active[prox_stop:np.min([prox_stop+delta_T_frames,L])]=1
+
+    t_A = np.sum(preceding_active)/L #proportion of frames following preceding behavior onset of all frames
+    t_B = np.sum(proximate_active)/L #proportion of frames following proximate behavior onset of all frames
+    
+    if t_A==0 or t_B==0:
+        return 0
+    else:
+        # Calculate FSTTC
+        if len(prox_onset_pos) > 0:
+            p = np.sum(preceding_active[prox_onset_pos])/len(prox_onset_pos) #proportion of proximate behavior onsets that fall within preceding behavior onset interval
+            fsttc = 0.5*((p-t_B)/(1-p*t_B)+(p-t_A)/(1-p*t_A))
+        else:
+            fsttc = 0
+    return fsttc
+   
 
 ######
 #Functions not included in property based testing for not having a clean return
@@ -1524,53 +1564,6 @@ def _scatter_embeddings(
         return ax
 
     plt.show()
-
-
-def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):
-    """Calculates the association measure FSTTC between two behaviors given as boolean series"""
-    
-    # calculate delta T in frames
-    delta_T_frames=int(frame_rate*delta_T)
-    
-    # Get total length of interval in which behaviors can occur
-    L = len(preceding_behavior)
-    # Inits
-    preceding_onsets=np.zeros(L)
-    proximate_onsets=np.zeros(L)
-    preceding_active=copy.copy(preceding_behavior)
-    proximate_active=copy.copy(proximate_behavior)
-
-    # Calculate positions of both behavior onsets
-    preceding_onsets[1:]=np.diff(preceding_behavior)
-    proximate_onsets[1:]=np.diff(proximate_behavior)
-    #if preceding_behavior[0]==1:
-    #    preceding_onsets[0]=1
-    #if proximate_behavior[0]==1:
-    #    proximate_onsets[0]=1
-    pre_offset_pos = np.where(preceding_onsets == -1)[0]   
-    prox_offset_pos = np.where(proximate_onsets == -1)[0]
-    prox_onset_pos = np.where(proximate_onsets == 1)[0]
-
-
-    # Calculate relevant interval of frames close to any behavior starts 
-    for pre_start in pre_offset_pos:
-        preceding_active[pre_start:np.min([pre_start+delta_T_frames,L])]=1
-    for prox_start in prox_offset_pos:
-        proximate_active[prox_start:np.min([prox_start+delta_T_frames,L])]=1
-
-    t_A = np.sum(preceding_active)/L #proportion of frames following preceding behavior onset of all frames
-    t_B = np.sum(proximate_active)/L #proportion of frames following proximate behavior onset of all frames
-    
-    if t_A==0 or t_B==0:
-        return 0
-    else:
-        # Calculate FSTTC
-        if len(prox_onset_pos) > 0:
-            p = np.sum(preceding_active[prox_onset_pos])/len(prox_onset_pos) #proportion of proximate behavior onsets that fall within preceding behavior onset interval
-            fsttc = 0.5*((p-t_B)/(1-p*t_B)+(p-t_A)/(1-p*t_A))
-        else:
-            fsttc = 0
-    return fsttc
 
 
 def _tag_annotated_frames(

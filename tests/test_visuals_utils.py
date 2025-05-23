@@ -18,6 +18,7 @@ from hypothesis import given
 from hypothesis import settings, example
 from hypothesis import strategies as st
 from hypothesis import reproduce_failure
+from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from shutil import rmtree
 import warnings
@@ -546,3 +547,21 @@ def test_get_rois(animal_ids, bins, supervised_behavior):
         assert (len(cur_supervised.iloc[frames]) >= len(cur_supervised_filtered.dropna()))
     # unsupervised always onyl filters by one animal, supervised can filter by combinations, respectively supervised can filter out more but not less
     assert (len((cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]))) >= len(cur_supervised_filtered.dropna())
+
+
+@settings(deadline=None)
+@given(
+    max_val=st.integers(min_value=1, max_value=99),
+    preceding_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    proximate_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_calculate_FSTTC(max_val,preceding_behavior,proximate_behavior,frame_rate,delta_T):
+
+    preceding_behavior=preceding_behavior[0:max_val]
+    proximate_behavior=proximate_behavior[0:max_val]
+    fsttc=deepof.visuals_utils.calculate_FSTTC(preceding_behavior,proximate_behavior,frame_rate,delta_T)
+
+    # The FSTTC can only reach values in teh range between 1 and -1
+    assert(1 >= fsttc and fsttc >=-1)
