@@ -1360,9 +1360,9 @@ def return_transitions(
     animals_in_roi: list = None,
     # Selection parameters
     exp_condition: str = None,
-    delta_T: float = 0.5,
+    delta_T: float = 0.0,
     silence_diagonal: bool = False,
-    diagonal_behavior_counting: str = "Events",
+    diagonal_behavior_counting: str = "Transitions",
     normalize:bool = True,
     # Visualization parameters
     visualization="networks",
@@ -1412,9 +1412,9 @@ def plot_transitions(
     animals_in_roi: list = None,
     # Selection parameters
     exp_condition: str = None,
-    delta_T: float = 0.5,
+    delta_T: float = 0.0,
     silence_diagonal: bool = False,
-    diagonal_behavior_counting: str = "Events",
+    diagonal_behavior_counting: str = "Transitions",
     normalize:bool = True,
     # Visualization parameters
     visualization="networks",
@@ -1532,7 +1532,7 @@ def plot_transitions(
             clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
                 row_order, row_order
             ]
-            reordered_columns = columns[row_order]
+            reordered_columns = np.array(columns)[row_order]
 
             sns.heatmap(
                 clustered_transitions,

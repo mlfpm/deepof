@@ -127,10 +127,10 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Find all cluster behaviors if any
-    clusters=[re.search(r'Cluster_\d+', behavior)[0] 
+    clusters=[re.search(r'Cluster(_| )\d+', behavior)[0] 
                 for behavior 
                 in behaviors
-                if (re.search(r'Cluster_\d+', behavior)) is not None
+                if (re.search(r'Cluster(_| )\d+', behavior)) is not None
     ]
     # Find maximum Cluster
     Cluster_max=1
