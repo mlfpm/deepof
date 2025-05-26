@@ -579,7 +579,7 @@ def test_calculate_simple_association(max_val,preceding_behavior,proximate_behav
 
     preceding_behavior=preceding_behavior[0:max_val]
     proximate_behavior=proximate_behavior[0:max_val]
-    fsttc=deepof.visuals_utils.calculate_simple_association(preceding_behavior,proximate_behavior,frame_rate,delta_T)
+    Q=deepof.visuals_utils.calculate_simple_association(preceding_behavior,proximate_behavior,frame_rate,delta_T)
 
     # Yule's coefficient Q can only reach values in the range between -1 and 1
-    assert(1 >= fsttc and fsttc >=-1)
+    assert(1 >= Q and Q >=-1)

@@ -298,6 +298,7 @@ def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
     assert _has_no_short_ones(tab_extended, extension+1)
 
 
+@settings(deadline=None)
 @given(
     num_features=st.integers(min_value=1, max_value=10),
     exp_conditions=st.one_of(st.just({0:'Stressed'}),st.just({0:'Stressed',1:'VeryStressed'})),

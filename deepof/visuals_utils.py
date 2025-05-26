@@ -1070,7 +1070,17 @@ def calculate_simple_association(
     c = np.sum(~preceding_behavior & proximate_behavior)  # A absent, B present
     d = np.sum(~preceding_behavior & ~proximate_behavior)  # Both absent
 
-    Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
+    # For identical only True or only False arrays
+    if ((a * d) + (b * c)) == 0 and (a>0 or d > 0) and (b==0 and c == 0):
+        Q = 1
+    # For inverse arrays
+    elif ((a * d) + (b * c)) == 0 and (b>0 or c > 0) and (a==0 and d == 0):
+        Q = -1 
+    # Other badly defined cases 
+    elif ((a * d) + (b * c)) == 0:
+        Q = 0 
+    else:
+        Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
 
     return Q
 
