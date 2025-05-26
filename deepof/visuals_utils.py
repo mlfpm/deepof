@@ -1048,7 +1048,32 @@ def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series
         else:
             fsttc = 0
     return fsttc
-   
+
+
+#@nb.njit(error_model='python')
+def calculate_simple_association(
+    preceding_behavior: np.ndarray,
+    proximate_behavior: np.ndarray,
+    frame_rate: float,
+    min_T: float = 10.0,
+):
+    """Calculates Yule's coefficient Q between two behaviors given as boolean arrays"""
+
+    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
+    min_T_frames = int(frame_rate * min_T)
+    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
+        return 0.0
+    
+    #chi2, p, dof, expected = chi2_contingency(cont_table)
+    a = np.sum(preceding_behavior & proximate_behavior) # Both behaviors present
+    b = np.sum(preceding_behavior & ~proximate_behavior)  # A present, B absent
+    c = np.sum(~preceding_behavior & proximate_behavior)  # A absent, B present
+    d = np.sum(~preceding_behavior & ~proximate_behavior)  # Both absent
+
+    Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
+
+    return Q
+
 
 ######
 #Functions not included in property based testing for not having a clean return

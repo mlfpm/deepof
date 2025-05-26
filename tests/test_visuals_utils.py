@@ -563,5 +563,23 @@ def test_calculate_FSTTC(max_val,preceding_behavior,proximate_behavior,frame_rat
     proximate_behavior=proximate_behavior[0:max_val]
     fsttc=deepof.visuals_utils.calculate_FSTTC(preceding_behavior,proximate_behavior,frame_rate,delta_T)
 
-    # The FSTTC can only reach values in teh range between 1 and -1
+    # The FSTTC can only reach values in teh range between -1 and 1
+    assert(1 >= fsttc and fsttc >=-1)
+
+
+@settings(deadline=None)
+@given(
+    max_val=st.integers(min_value=1, max_value=99),
+    preceding_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    proximate_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_calculate_simple_association(max_val,preceding_behavior,proximate_behavior,frame_rate,delta_T):
+
+    preceding_behavior=preceding_behavior[0:max_val]
+    proximate_behavior=proximate_behavior[0:max_val]
+    fsttc=deepof.visuals_utils.calculate_simple_association(preceding_behavior,proximate_behavior,frame_rate,delta_T)
+
+    # Yule's coefficient Q can only reach values in the range between -1 and 1
     assert(1 >= fsttc and fsttc >=-1)

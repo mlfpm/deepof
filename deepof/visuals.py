@@ -53,7 +53,9 @@ from deepof.visuals_utils import (
     get_beheavior_frames_in_roi,
     _apply_rois_to_bin_info,
     BGR_to_hex,
-    _preprocess_transitions
+    _preprocess_transitions,
+    calculate_FSTTC,
+    calculate_simple_association,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -1781,7 +1783,7 @@ def plot_associations(
                         if association_metric=="FSTTC":
                             preceding_behavior=extended_behaviors[i,:]
                             proximate_behavior=extended_behaviors[j,:]
-                            association_ij=deepof.utils.calculate_FSTTC(
+                            association_ij=calculate_FSTTC(
                                 preceding_behavior,
                                 proximate_behavior,
                                 coordinates._frame_rate,
@@ -1790,7 +1792,7 @@ def plot_associations(
                         elif association_metric=="odds_ratio":
                             preceding_behavior=tab.iloc[:,i]
                             proximate_behavior=tab.iloc[:,j]
-                            association_ij=deepof.utils.calculate_simple_association(
+                            association_ij=calculate_simple_association(
                                 np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
                                 np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
                                 coordinates._frame_rate,

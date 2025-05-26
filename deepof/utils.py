@@ -649,7 +649,7 @@ def iterative_imputation(
                         "DLC tracklets."
                     )
 
-            except ValueError:
+            except ValueError: # pragma: no cover
                 warnings.warn(
                     f"Animal {animal_id} in experiment {k} has not enough data. Skipping imputation."
                 )
@@ -889,57 +889,12 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
     return area
 
 
-#@nb.njit(error_model='python')
-def calculate_FSTTC(
-    preceding_behavior: np.ndarray,
-    proximate_behavior: np.ndarray,
-    frame_rate: float,
-    delta_T: float = 2.0,
-    min_T: float = 20.0,
-):
-    """Calculates the association measure FSTTC between two behaviors given as boolean arrays"""
-    
-    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
-    min_T_frames = int(frame_rate * min_T)
-    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
-        return 0.0
-    L = len(preceding_behavior)
-
-    #extended_behaviors = extend_behaviors_numba(np.vstack([preceding_behavior,proximate_behavior]),frame_rate,delta_T)
-
-    preceding_active = preceding_behavior
-    proximate_active = proximate_behavior
-
-    # Find positions where proximate behavior starts after delta T expansion
-    proximate_onsets = np.zeros(L, dtype=np.int8)
-    proximate_onsets[1:] = np.diff(proximate_active.astype(np.int8))
-    prox_onset_pos = np.where(proximate_onsets == 1)[0]
-    
-    # Calculate time proportions
-    t_A = np.sum(preceding_active) / L
-    t_B = np.sum(proximate_active) / L
-
-    if t_A == 0 or t_B == 0:
-        return 0.0
-    else:      
-        # Calculate probability of co-occurrence
-        if len(prox_onset_pos)>0:
-            p = np.sum(preceding_active[prox_onset_pos]) / len(prox_onset_pos)
-
-            # Compute FSTTC
-            fsttc = 0.5 * ((p - t_B) / (1 - p * t_B) + (p - t_A) / (1 - p * t_A))
-        else:
-            fsttc = 0
-
-        return fsttc
-
-
-#@nb.njit()
+@nb.njit()
 def extend_behaviors_numba(
     behaviors: np.ndarray,
     frame_rate: float,
     delta_T: float = 2.0,
-) -> np.ndarray:
+) -> np.ndarray: # pragma: no cover
     
     delta_T_frames = int(frame_rate * delta_T)
     n_behaviors, n_frames = behaviors.shape
@@ -958,33 +913,6 @@ def extend_behaviors_numba(
             behavior[offset:end] = 1
     
     return active_behaviors
-
-
-
-
-#@nb.njit(error_model='python')
-def calculate_simple_association(
-    preceding_behavior: np.ndarray,
-    proximate_behavior: np.ndarray,
-    frame_rate: float,
-    min_T: float = 10.0,
-):
-    """Calculates the association measure FSTTC between two behaviors given as boolean arrays"""
-
-    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
-    min_T_frames = int(frame_rate * min_T)
-    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
-        return 0.0
-    
-    #chi2, p, dof, expected = chi2_contingency(cont_table)
-    a = np.sum(preceding_behavior & proximate_behavior) # Both behaviors present
-    b = np.sum(preceding_behavior & ~proximate_behavior)  # A present, B absent
-    c = np.sum(~preceding_behavior & proximate_behavior)  # A absent, B present
-    d = np.sum(~preceding_behavior & ~proximate_behavior)  # Both absent
-
-    Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
-
-    return Q
 
 
 def count_all_events(
@@ -2646,7 +2574,7 @@ def get_arenas(
                             list_of_rois.remove(roi)
                 
                     cur_roi_corners={}
-                    for roi in list(range(1,number_of_rois+1)):
+                    for roi in list(range(1,number_of_rois+1)): # pragma: no cover
                         if roi in propagate_rois:
                             cur_roi_corners[roi]=roi_dicts[list(roi_dicts.keys())[-1]][roi]
                         else:
