@@ -1571,6 +1571,89 @@ def plot_transitions(
         plt.show()
 
 
+def count_all_events(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Others
+    counting_mode = "Events",
+):
+
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+    Counting_mode_options=["Frames","Time","Events","Transitions"]  
+    if counting_mode not in Counting_mode_options:
+        raise ValueError(
+            '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
+                str(Counting_mode_options)[1:-1]
+            )
+        )
+    if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
+        raise ValueError(
+            "Need either supervised_annotations or soft_counts, not both or neither!"
+        )
+    elif supervised_annotations is not None:
+        tab_dict=supervised_annotations
+    else:
+        tab_dict=soft_counts
+
+    # preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
+    )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    # create tabdict dictionary to iterate over options
+    load_range = None
+            
+    results={}
+    for key in tab_dict.keys():
+
+        # for each tab, first cut tab in requested shape based on bin_info
+        if bin_info is not None:
+            load_range = bin_info[key]["time"]
+            if len(bin_info[key]) > 1:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+        tab = get_dt(tab_dict,key,load_range=load_range)
+        
+        # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
+        if isinstance(tab,np.ndarray):
+            max_indices = tab.argmax(axis=1)
+            tab_soft = np.zeros_like(tab, dtype=int)
+            tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
+            columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+            tab=pd.DataFrame(tab_soft, columns=columns)
+        
+        # count events in all columns
+        column_counts={}
+        for col in tab.columns:
+            series = tab[col]
+            series.fillna(0,inplace=True)
+            # skip non-binary columns (e.g. speed column)
+            if (series > 1.0001).any():
+                continue
+            column_counts[col]=deepof.utils.count_events(series, mode=counting_mode, frame_rate=coordinates._frame_rate)   
+
+        results[key] = pd.Series(column_counts)
+    
+    count_df = pd.DataFrame.from_dict(results, orient='index')
+    
+    return count_df
+
+
 def plot_associations(
     coordinates: coordinates,
     supervised_annotations: table_dict = None,

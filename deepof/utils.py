@@ -914,63 +914,7 @@ def extend_behaviors_numba(
     
     return active_behaviors
 
-
-def count_all_events(
-    supervised_annotations: table_dict = None,
-    soft_counts: table_dict = None,
-    bin_info: dict = None,
-    animals_in_roi: list = None,
-):
-    # create tabdict dictionary to iterate over options
-    tab_dict_dict={'supervised' :supervised_annotations, 'unsupervised': soft_counts} 
-    return_dict={}
-    load_range = None
-    for tab_dict_key, tab_dict in tab_dict_dict.items():
-        
-        # if the respective tab_dict was not given, continue
-        if tab_dict is None:
-            return_dict[tab_dict_key] = None
-            continue
-        
-        results={}
-        for key in tab_dict.keys():
-
-            # for each tab, first cut tab in requested shape based on bin_info
-            if bin_info is not None:
-                load_range = bin_info[key]["time"]
-                if len(bin_info[key]) > 1:
-                    load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-            tab = get_dt(tab_dict,key,load_range=load_range)
-            
-            # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
-            if isinstance(tab,np.ndarray):
-                max_indices = tab.argmax(axis=1)
-                tab_soft = np.zeros_like(tab, dtype=int)
-                tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
-                columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
-                tab=pd.DataFrame(tab_soft, columns=columns)
-            
-            # count connected events of continuous 1s in all columns
-            column_counts={}
-            for col in tab.columns:
-                series = tab[col]
-                series.fillna(0,inplace=True)
-                # skip non-binary columns (e.g. speed column)
-                if (series > 1.0001).any():
-                    continue
-                shifted = series.round().shift(1).fillna(0)
-                block_starts = (series == 1) & (shifted != 1)
-                num_blocks = block_starts.sum()
-                column_counts[col] = num_blocks
-            results[key] = pd.Series(column_counts)
-        
-        count_df = pd.DataFrame.from_dict(results, orient='index')
-        return_dict[tab_dict_key] = count_df
-        #final_df = final_df.reindex(columns=sorted(final_df.columns))
-    
-    return return_dict['supervised'], return_dict['unsupervised']
-    
-
+  
 def count_transitions(
     tab_dict: table_dict,
     exp_conditions: dict,
@@ -1038,18 +982,7 @@ def count_transitions(
         for i in range(0,tab.shape[1]):
             for j in range(0, tab.shape[1]):
                 if i==j:
-                    if diagonal_behavior_counting == "Frames":
-                        associations[i,j]= np.sum(extended_behaviors[i,:])
-                    elif diagonal_behavior_counting == "Time":
-                        associations[i,j]= np.sum(extended_behaviors[i,:])/frame_rate
-                    elif diagonal_behavior_counting == "Events":
-                        associations[i,j] = count_events(extended_behaviors[i,:])
-                        # Frame_to_frame_transitions
-                    elif diagonal_behavior_counting == "Transitions":
-                        prev = extended_behaviors[i,:-1]
-                        curr = extended_behaviors[i,1:]
-                        associations[i,j]= np.sum((prev == 1) & (curr == 1))
-                            
+                    associations[i,j]=count_events(extended_behaviors[i,:], mode=diagonal_behavior_counting, frame_rate=frame_rate)                            
                 else:
                     preceding_active=extended_behaviors[i,:]
                     proximate_active=extended_behaviors[j,:]
@@ -1080,17 +1013,45 @@ def count_transitions(
     return transitions_dict, columns, combined_columns
 
 
-def count_events(binary_behavior: np.ndarray) -> int:
-    """Counts the number of continuous blocks of 1s in a binary behavior vector"""
-    L = len(binary_behavior)
-    behavior_onsets = np.zeros(L, dtype=np.int8)
-    behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
-    behavior_onset_pos = np.where(behavior_onsets == 1)[0]
-    num_events=len(behavior_onset_pos)
-    if binary_behavior[0].astype(np.int8)==1:
-        num_events=num_events+1
-    return num_events
+def count_events(binary_behavior: np.ndarray, mode: str = "Events", frame_rate: int = 1) -> int:
+    """Counts the number of continuous blocks of 1s in a binary behavior vector in different ways
+    
+    Args:
+        binary_behavior (numpy.ndarray): Binary 1D Array containing behavior detections.
+        mode (str): Counting mode. Options are:
+        - "Frames": Counts total number of frames in all events
+        - "Time": Counts total time duration of all events (requires frame_rare input)
+        - "Events": Counts number of continuous blocks of 1s
+        - "Transitions": Counts number of frame-to-frame transitions within the events e.g. an event of 10 frames in length would have 9 transitions.
+        frame_rate (float): Frame rate of the recording.
 
+    Returns:
+        - num_events (float): counted events
+
+    """
+    
+    # Counts total number of frames in all events
+    if mode == "Frames":
+        num_events= np.sum(binary_behavior)
+    # Counts total time duration of all events
+    elif mode == "Time":
+        num_events= np.sum(binary_behavior)/frame_rate
+    # Counts number of continuous blocks of 1s
+    elif mode == "Events":
+        L = len(binary_behavior)
+        behavior_onsets = np.zeros(L, dtype=np.int8)
+        behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
+        behavior_onset_pos = np.where(behavior_onsets == 1)[0]
+        num_events=len(behavior_onset_pos)
+        if binary_behavior[0].astype(np.int8)==1:
+            num_events=num_events+1
+    # Counts number of frame-to-frame transitions within the events
+    elif mode == "Transitions":
+        prev = np.array(binary_behavior[:-1])
+        curr = np.array(binary_behavior[1:])
+        num_events= np.sum((prev == 1) & (curr == 1))
+
+    return num_events
 
 
 def rotate(
