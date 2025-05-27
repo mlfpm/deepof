@@ -169,6 +169,7 @@ Formatting your data
 
 Supervised and unsupervised pipelines
 -------------------------------------
+* `Supervised behaviors in DeepOF - using predefined behaviors <tutorial_notebooks/deepof_behavior_tutorial.ipynb>`_
 * `DeepOF supervised pipeline: detecting pre-defined behaviors <tutorial_notebooks/deepof_supervised_tutorial.ipynb>`_
 * `DeepOF unsupervised pipeline: exploring the behavioral space <tutorial_notebooks/deepof_unsupervised_tutorial.ipynb>`_
 
