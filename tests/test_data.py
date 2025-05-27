@@ -499,45 +499,55 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
 
     prun = prun.create(force=True, test=True)
 
-    center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
-    algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
-    polar = sampler.draw(st.booleans())
-    speed = sampler.draw(st.integers(min_value=1, max_value=3))
-    rois = sampler.draw(st.one_of(st.just(None),st.integers(min_value=1, max_value=2)))
-
-    #get table info
-    start_times_dict=prun.get_start_times()
-    end_times_dict=prun.get_end_times()
-    table_lengths_dict=prun.get_table_lengths()
-
     selected_id = None
     if mode == "multi" and nodes == "all" and not ego:
         selected_id = "B"
     elif mode == "madlc" and nodes == "all" and not ego:
         selected_id = "mouse_black_tail"
 
+    center = sampler.draw(st.one_of(st.just("arena"), st.just("Center")))
+    algn = sampler.draw(st.one_of(st.just(False), st.just("Spine_1")))
+    polar = sampler.draw(st.booleans())
+    speed = sampler.draw(st.integers(min_value=1, max_value=3))
+    rois = sampler.draw(st.one_of(st.just(None),st.integers(min_value=1, max_value=2)))
+    animals_in_roi = sampler.draw(st.one_of(st.just(None),st.just(selected_id)))
+
+    #get table info
+    start_times_dict=prun.get_start_times()
+    end_times_dict=prun.get_end_times()
+    table_lengths_dict=prun.get_table_lengths()
+
     coords = prun.get_coords(
         center=center,
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
         selected_id=selected_id,
-        roi_number = rois
+        roi_number = rois,
+        animals_in_roi = animals_in_roi,
     )
     speeds = prun.get_coords(
         speed=(speed if not ego and nodes == "all" else 0),
         selected_id=selected_id,
-        roi_number = rois
+        roi_number = rois,
+        animals_in_roi = animals_in_roi,
     )
     distances = prun.get_distances(
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         selected_id=selected_id,
+        roi_number = rois,
+        animals_in_roi = animals_in_roi,
     )
     angles = prun.get_angles(
         degrees=sampler.draw(st.booleans()),
         speed=sampler.draw(st.integers(min_value=0, max_value=2)),
         selected_id=selected_id, 
+        roi_number = rois,
+        animals_in_roi = animals_in_roi,
     )
-    areas = prun.get_areas()
+    areas = prun.get_areas(
+        roi_number = rois,
+        animals_in_roi = animals_in_roi,
+    )
     merged = coords.merge(speeds, distances, angles, areas)
 
 
