@@ -967,6 +967,9 @@ def count_transitions(
             if col.endswith('_speed') or col == 'speed':
                 tab=tab.drop(columns=[col])
 
+        # Update columns
+        columns = tab.columns
+
         tab_numpy=np.nan_to_num(tab.to_numpy().T)
         extended_behaviors=extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
         L = extended_behaviors.shape[1]

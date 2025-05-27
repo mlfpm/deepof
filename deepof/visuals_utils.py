@@ -956,6 +956,8 @@ def get_unsupervised_behaviors_in_roi(
     cur_unsupervised=copy.copy(cur_unsupervised)
     if type(animal_ids)==str:
         animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""] 
 
     if len(cur_unsupervised.shape)==1:
         for aid in animal_ids:
@@ -984,7 +986,9 @@ def get_beheavior_frames_in_roi(
     """
 
     if isinstance(animal_ids, str):
-        animal_ids=[animal_ids]   
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""]   
 
     local_bin_info = copy.copy(local_bin_info)
     frames = copy.copy(local_bin_info["time"])
