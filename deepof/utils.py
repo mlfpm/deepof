@@ -748,14 +748,12 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_dist(
-    pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
+    pair_array: np.array
 ) -> pd.DataFrame:
     """Return a pandas.DataFrame with the scaled distances between a pair of body parts.
 
     Args:
         pair_array (numpy.array): np.array of shape N * 4 containing X, y positions over time for a given pair of body parts.
-        arena_abs (int): Diameter of the real arena in cm.
-        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between a pair of body parts.
@@ -771,14 +769,12 @@ def compute_dist(
 
 
 def bpart_distance(
-    dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
+    dataframe: pd.DataFrame
 ) -> pd.DataFrame:
     """Return a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
     Args:
         dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions over time for a given set of bp body parts.
-        arena_abs (int): Diameter of the real arena in cm.
-        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between all pairs of body parts.
@@ -787,7 +783,7 @@ def bpart_distance(
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
     for idx in indexes:
-        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]), arena_abs, arena_rel)
+        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]))
         dist.columns = [idx]
         dists.append(dist)
 
@@ -892,27 +888,42 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
 @nb.njit()
 def extend_behaviors_numba(
     behaviors: np.ndarray,
-    frame_rate: float,
     delta_T: float = 2.0,
+    frame_rate: float = 1,
 ) -> np.ndarray: # pragma: no cover
+    """
+    Takes a booelan array of behavior detections and extends each behavior detection by delta_T.
+
+    Args:
+        behaviors (np.ndarray): Boolean array of shape [N_behaviors, N_frames] containing the detection results (True / False) of each behavior for each frame.
+        delta_T: Time by which each behavior should be expanded
+        frame_rate (float): Frame rate of the corresponding project
+
+    Returns:
+        extended_behaviors (np.ndarray): Boolean array of shape [N_behaviors, N_frames] containing the detection results (True / False) of each behavior for each frame after extension.
+    """
     
+    # Inits
     delta_T_frames = int(frame_rate * delta_T)
     n_behaviors, n_frames = behaviors.shape
-    active_behaviors = behaviors.copy()
+    extended_behaviors = behaviors.copy()
     
+    # Iterate over all behaviors
     for i in range(n_behaviors):
-        behavior = active_behaviors[i]
-        onsets = np.zeros(n_frames, dtype=np.int8)
+        
+        # Determine behavior offset positions
+        behavior = extended_behaviors[i]
+        on_and_offsets = np.zeros(n_frames, dtype=np.int8)
         current_behavior = behavior.astype(np.int8)
-        onsets[1:] = np.diff(current_behavior)
+        on_and_offsets[1:] = np.diff(current_behavior)  
+        offset_pos = np.where(on_and_offsets == -1)[0]
         
-        offset_pos = np.where(onsets == -1)[0]
-        
+        # Extend behavior instances by delta_T_frames at their offset positions
         for offset in offset_pos:
             end = min(offset + delta_T_frames, n_frames)
             behavior[offset:end] = 1
     
-    return active_behaviors
+    return extended_behaviors
 
   
 def count_transitions(
@@ -925,9 +936,35 @@ def count_transitions(
     silence_diagonal: bool = False,
     aggregate: str = True,
     normalize: str = True,
-    diagonal_behavior_counting: str = "Frames"
+    diagonal_behavior_counting: str = "Transitions"
 ):
-    """Count transitions between successive behaviors"""
+    """
+    Count transitions between successive behaviors for all experiments in tab_dict.
+
+    Args:
+        tab_dict (table_dict): Dictionary with behavior data (supervised or unsupervised soft_counts)
+        exp_conditions (dict): Dictionary containg the experiment conditions for each experiment.
+        bin_info (dict): dictionary containing indices to plot for all experiments
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        delta_T: Time by which each behavior should be expanded
+        frame_rate (float): Frame rate of the corresponding project
+        silence_diagonal (bool): If True, diagonals are set to zero.
+        aggregate (bool): If True, sums matrices per experimental condition; else per experiment.
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.
+
+    Returns:
+        transitions_dict (dict): Dictionary of transition matrices. Keys:
+            - If aggregate=True: Condition labels (e.g., {'control': array(...)})
+            - If aggregate=False: Experiment IDs (e.g., {'exp1': array(...)})
+        columns (list): Behavior names (columns after dropping non-binary features).
+        combined_columns (list): All possible behavior transition pairs (e.g., ['BehaviorA-x-BehaviorB', ...]).
+
+    """
     # create tabdict dictionary to iterate over options
     load_range = None
 
@@ -971,7 +1008,7 @@ def count_transitions(
         columns = tab.columns
 
         tab_numpy=np.nan_to_num(tab.to_numpy().T)
-        extended_behaviors=extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
+        extended_behaviors=extend_behaviors_numba(tab_numpy,delta_T,frame_rate)
         L = extended_behaviors.shape[1]
 
         if z==0 and aggregate: 
@@ -985,7 +1022,7 @@ def count_transitions(
         for i in range(0,tab.shape[1]):
             for j in range(0, tab.shape[1]):
                 if i==j:
-                    associations[i,j]=count_events(extended_behaviors[i,:], mode=diagonal_behavior_counting, frame_rate=frame_rate)                            
+                    associations[i,j]=count_events(extended_behaviors[i,:], counting_mode=diagonal_behavior_counting, frame_rate=frame_rate)                            
                 else:
                     preceding_active=extended_behaviors[i,:]
                     proximate_active=extended_behaviors[j,:]
@@ -1016,12 +1053,12 @@ def count_transitions(
     return transitions_dict, columns, combined_columns
 
 
-def count_events(binary_behavior: np.ndarray, mode: str = "Events", frame_rate: int = 1) -> int:
+def count_events(binary_behavior: np.ndarray, counting_mode: str = "Events", frame_rate: int = 1) -> int:
     """Counts the number of continuous blocks of 1s in a binary behavior vector in different ways
     
     Args:
         binary_behavior (numpy.ndarray): Binary 1D Array containing behavior detections.
-        mode (str): Counting mode. Options are:
+        counting_mode (str): Counting mode. Options are:
         - "Frames": Counts total number of frames in all events
         - "Time": Counts total time duration of all events (requires frame_rare input)
         - "Events": Counts number of continuous blocks of 1s
@@ -1029,18 +1066,17 @@ def count_events(binary_behavior: np.ndarray, mode: str = "Events", frame_rate: 
         frame_rate (float): Frame rate of the recording.
 
     Returns:
-        - num_events (float): counted events
-
+        num_events (float): counted events
     """
     
     # Counts total number of frames in all events
-    if mode == "Frames":
+    if counting_mode == "Frames":
         num_events= np.sum(binary_behavior)
     # Counts total time duration of all events
-    elif mode == "Time":
+    elif counting_mode == "Time":
         num_events= np.sum(binary_behavior)/frame_rate
     # Counts number of continuous blocks of 1s
-    elif mode == "Events":
+    elif counting_mode == "Events":
         L = len(binary_behavior)
         behavior_onsets = np.zeros(L, dtype=np.int8)
         behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
@@ -1049,7 +1085,7 @@ def count_events(binary_behavior: np.ndarray, mode: str = "Events", frame_rate: 
         if binary_behavior[0].astype(np.int8)==1:
             num_events=num_events+1
     # Counts number of frame-to-frame transitions within the events
-    elif mode == "Transitions":
+    elif counting_mode == "Transitions":
         prev = np.array(binary_behavior[:-1])
         curr = np.array(binary_behavior[1:])
         num_events= np.sum((prev == 1) & (curr == 1))
@@ -1244,6 +1280,8 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
         in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
         roi_polygon (np.ndarray): 2D numpy array containing the coordinats of the ROI
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
+    Returns:
+        mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
     """
 
     if aid != "":
@@ -1451,7 +1489,6 @@ def rename_track_bps(
 
 
 def scale_table(
-    coordinates: coordinates,
     feature_array: np.ndarray,
     scale: str,
     global_scaler: Any = None,
@@ -1459,10 +1496,12 @@ def scale_table(
     """Scales features in a table controlling for both individual body size and interanimal variability.
 
     Args:
-        coordinates (coordinates): a deepof coordinates object.
         feature_array (np.ndarray): array to scale. Should be shape (instances x features).
         scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
         global_scaler (Any): global scaler, fit in the whole dataset.
+    
+    Returns:
+        feature_array_scaled (np.ndarray): array after scaling.
 
     """
     exp_temp = feature_array.to_numpy()
@@ -1476,7 +1515,7 @@ def scale_table(
         # Scale all experiments together, to control for differential stats
         exp_temp = global_scaler.transform(exp_temp)
 
-    current_tab = np.concatenate(
+    feature_array_scaled = np.concatenate(
         [
             exp_temp,
             feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
@@ -1484,7 +1523,7 @@ def scale_table(
         axis=1,
     )
 
-    return current_tab
+    return feature_array_scaled
 
 
 def scale_animal(feature_array: np.ndarray, scale: str):
@@ -1533,7 +1572,6 @@ def kleinberg(
         n: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         T: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         k: maximum burst level
-
     """
     if s <= 1:
         raise ValueError("s must be greater than 1!")
@@ -1713,7 +1751,7 @@ def smooth_boolean_array(
             batch_size (int): Batch size for input processing
     
         Returns:
-            a (numpy.ndarray): Smoothened boolean instances.
+            a (numpy.ndarray): Smoothed boolean instances.
 
     """
 
@@ -1755,9 +1793,8 @@ def multi_step_paired_smoothing(
         ) -> np.array:
     """This filtering approach will first gradually merge together very close behavioral instances (how close is regulated by min_length), 
     then filter out remaining short instances. In this way multiple instances close to each other are kept and united and isolated very 
-    short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea but without the drawback of potentially 
-    mashing multiple single and relatively far away behavior instances together into one big single behavior occurence, that is often mostly 
-    false positive (as the merging distance is limted by min_length and not only by window length).
+    short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea as kleinberg was too susceptible to 
+    merge events together that were relatively distant on teh time scale.
 
         Args:
             behavior_in (numpy.ndarray): Boolean instances of detected raw behavior.
@@ -1886,7 +1923,7 @@ def extract_windows(
         window_step (int): specifies the stride of the sliding window.
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
         shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
-
+        windows_desc (str): Progress bar label
 
     Returns:
         to_window (dict): Dictionary containing stacks of windowed data samples for each table. Shape of the stacks: [N_samples, window_size, N_features]
@@ -1945,24 +1982,10 @@ def smooth_mult_trajectory(
     if alpha is None:
         return series
 
-    # savgol_filter cannot handle NaNs (i.e. it turns vast chuncks of neighboring frames
-    # of nans to nans after processing). Hence this workaround.
-    # get positions of nans in signal
-    # nan_positions = np.isnan(series)
-
-    # interpolate nans
-    # interpolated_series = pd.DataFrame(series)
-    # interpolated_series.interpolate(
-    #    method="linear", limit_direction="both", inplace=True
-    # )
-
     # apply filter
     smoothed_series = savgol_filter(
         series, polyorder=(w_length - alpha), window_length=w_length, axis=0
     )
-
-    # re-add nans
-    # smoothed_series[nan_positions]=np.nan
 
     assert smoothed_series.shape == series.shape
 
@@ -1986,7 +2009,7 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
 
 @nb.njit()
 def binary_moving_median_numba(time_series, lag): # pragma: no cover
-    """will applay a moving emdian like filter on a binary signal, i.e. if a window of size lag 
+    """will applay a moving median like filter on a binary signal, i.e. if a window of size lag 
     has more 1s than 0s set the frame to 1 for that window, set it to 0 otherwise. 
     Will only work for windows of uneven length N i.e. returns the same for lag=N and lag=N+1"""
     pad = (lag - 1) // 2
@@ -2168,6 +2191,7 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
     Args:
         columns (list): List of columns to filter.
         selected_id (str): Animal ID to filter for.
+        table_type (str): Type of the table (relevant if "supervised")
 
     Returns:
         filtered_columns (list): List of filtered columns.
@@ -2565,6 +2589,7 @@ def get_arenas(
 
 
 def _scale_arenas_to_mm(arena_params, scales, arena):
+    """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
         if "polygonal" in arena:
@@ -2575,6 +2600,7 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
 
 
 def _scale_rois_to_mm(roi_dicts, scales):
+    """Scales ROIS from pixel to mm"""
     for key in roi_dicts.keys():
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][3]/scales[key][2]
@@ -2882,6 +2908,8 @@ def retrieve_corners_from_image(
         cur_vid (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
         current_roi (int): Current ROI to be extracted. 0 is the global arena ROI
+        arena_dims (float): Distance as taken from video in pixels
+        norm_dist (float): Same distance as arena_dims for normalization in mm
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
     Returns:
@@ -3049,6 +3077,8 @@ def extract_polygonal_arena_coordinates(
         videos (list): List of videos to be processed.
         list_of_rois (int): list of roi numbers to draw,
         get_arena (bool): retrieve arena or skip step (default is True)
+        arena_dims (float): Distance as taken from video in pixels
+        norm_dist (float): Same distance as arena_dims for normalization in mm
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
 
@@ -3146,11 +3176,11 @@ def arena_parameter_extraction(
 
     Returns:
         IF arena_type=="circular":
-        center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
-        axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
-        ellipse_angle (float): Angle of the ellipse.
+            center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
+            axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
+            ellipse_angle (float): Angle of the ellipse.
         ELIF arena_type=="polygonal"        
-        np.ndarray: (x,y) coordinates of all points of the polygon
+            np.ndarray: (x,y) coordinates of all points of the polygon
 
     """
     # Obtain contours from the image, and retain the largest one
@@ -3175,7 +3205,6 @@ def rolling_speed(
     window: int = 3,
     rounds: int = 3,
     deriv: int = 1,
-    center: str = None,
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
@@ -3184,11 +3213,9 @@ def rolling_speed(
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.
         frame_rate (int): Number of frames per second.
-
         window (int): Number of frames to average over.
         rounds (int): Float rounding decimals.
         deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
-        center (str): For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames to a specific body part.
         shift (int): Window shift for rolling speed calculation.
         typ (str): Type of dataset. Intended for internal usage only.
 

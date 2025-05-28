@@ -790,13 +790,13 @@ class Project:
 
         distance_dict = {}                
         with tqdm(total=len(tab_dict), desc=f"{'Computing distances':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
-            for i, (key, tab) in enumerate(tab_dict.items()):
+            for key, tab in tab_dict.items():
 
                 #load active table
                 tab = get_dt(tab_dict, key)
 
                 #get distances for this table
-                distance_tab=self.get_distances_tab(tab,self.scales[key][2:])
+                distance_tab=self.get_distances_tab(tab)
 
                 #save distances for active table
                 distance_path = os.path.join(self.project_path, self.project_name, 'Tables',key, key + '_dist')
@@ -808,21 +808,17 @@ class Project:
 
         return distance_dict
     
-    def get_distances_tab(self, tab: pd.DataFrame, scale: np.ndarray=None) -> dict:
+    def get_distances_tab(self, tab: pd.DataFrame) -> dict:
         """Compute the distances between all selected body parts over time for a single table.
 
         Args:
             tab (pd.DataFrame): Pandas DataFrame containing the trajectories of all bodyparts.
-            scale (np.ndarray): Array that contains info for scaling of this dataset
 
         Returns:
             distance_tab: Pandas DataFrame containing the distances between all bodyparts.
 
         """
 
-
-        if scale is None:
-            scale=[1,1]
 
         nodes = self.distances
         if nodes == "all":
@@ -832,7 +828,7 @@ class Project:
             i in tab.columns.levels[0] for i in nodes
         ], "Nodes should correspond to existent bodyparts"
 
-        distance_tab = deepof.utils.bpart_distance(tab, scale[1], scale[0])
+        distance_tab = deepof.utils.bpart_distance(tab)
         distance_tab = distance_tab.loc[
                 :, [np.all([i in nodes for i in j]) for j in distance_tab.columns]
             ]
@@ -3440,7 +3436,6 @@ class TableDict(dict):
 
                     # Scale each experiment independently, to control for animal size
                     current_tab = deepof.utils.scale_table(
-                        coordinates=self,
                         feature_array=tab,
                         scale=scale,
                         global_scaler=None,
@@ -3487,7 +3482,6 @@ class TableDict(dict):
                 if scale:
 
                     current_tab = deepof.utils.scale_table(
-                        coordinates=self,
                         feature_array=tab,
                         scale=scale,
                         global_scaler=global_scaler,

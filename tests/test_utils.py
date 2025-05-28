@@ -114,12 +114,10 @@ def test_tab2polar(mult, cartdf):
         ),
         elements=st.floats(min_value=-1000, max_value=1000, allow_nan=False),
     ),
-    arena_abs=st.integers(min_value=1, max_value=1000),
-    arena_rel=st.integers(min_value=1, max_value=1000),
 )
-def test_compute_dist(pair_array, arena_abs, arena_rel):
+def test_compute_dist(pair_array):
     assert np.allclose(
-        deepof.utils.compute_dist(pair_array, arena_abs, arena_rel),
+        deepof.utils.compute_dist(pair_array),
         pd.DataFrame(distance.cdist(pair_array[:, :2], pair_array[:, 2:]).diagonal())
     )
 
@@ -285,7 +283,7 @@ def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
             
         return True
 
-    tab_extended=deepof.utils.extend_behaviors_numba(tab_numpy,frame_rate,delta_T)
+    tab_extended=deepof.utils.extend_behaviors_numba(tab_numpy,delta_T,frame_rate)
     extension=int(frame_rate*delta_T)
 
     # An extended table always has equal or more ones than their unextended equivalent

@@ -1645,7 +1645,7 @@ def count_all_events(
             # skip non-binary columns (e.g. speed column)
             if (series > 1.0001).any():
                 continue
-            column_counts[col]=deepof.utils.count_events(series, mode=counting_mode, frame_rate=coordinates._frame_rate)   
+            column_counts[col]=deepof.utils.count_events(series, counting_mode=counting_mode, frame_rate=coordinates._frame_rate)   
 
         results[key] = pd.Series(column_counts)
     
@@ -1856,7 +1856,7 @@ def plot_associations(
                 included_behaviors=tab.columns
             if association_metric=="FSTTC":
                 tab_numpy=np.nan_to_num(tab.to_numpy().T)
-                extended_behaviors=deepof.utils.extend_behaviors_numba(tab_numpy,coordinates._frame_rate,delta_T)
+                extended_behaviors=deepof.utils.extend_behaviors_numba(tab_numpy,delta_T,coordinates._frame_rate)
 
             for i in range(0,tab.shape[1]):
                 for j in range(0, tab.shape[1]):

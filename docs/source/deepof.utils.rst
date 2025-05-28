@@ -6,47 +6,71 @@ deepof.utils module
    :recursive:
 
    deepof.utils
-   deepof.utils.align_trajectories
-   deepof.utils.angle
-   deepof.utils.arena_parameter_extraction
-   deepof.utils.automatically_recognize_arena
-   deepof.utils.bp2polar
-   deepof.utils.bpart_distance
-   deepof.utils.closest_side
-   deepof.utils.cluster_transition_matrix
-   deepof.utils.compute_animal_presence_mask
-   deepof.utils.compute_areas
-   deepof.utils.compute_dist
+   deepof.utils.MouseTrackingImputer
+   deepof.utils.rts_smoother_numba
+   deepof.utils.enforce_skeleton_constraints_numba
    deepof.utils.connect_mouse
    deepof.utils.edges_to_weighted_adj
    deepof.utils.enumerate_all_bridges
-   deepof.utils.extract_polygonal_arena_coordinates
-   deepof.utils.filter_columns
-   deepof.utils.filter_short_bouts
-   deepof.utils.fit_ellipse_to_polygon
+   deepof.utils.str2bool
+   deepof.utils.compute_animal_presence_mask
+   deepof.utils.iterative_imputation
+   deepof.utils.set_missing_animals
+   deepof.utils.bp2polar
+   deepof.utils.tab2polar
+   deepof.utils.compute_dist
+   deepof.utils.bpart_distance
+   deepof.utils.angle
+   deepof.utils.compute_areas
+   deepof.utils.compute_areas_numba
+   deepof.utils.polygon_area_numba
+   deepof.utils.extend_behaviors_numba
+   deepof.utils.count_transitions
+   deepof.utils.count_events
+   deepof.utils.rotate
+   deepof.utils.rotate_all_numba
+   deepof.utils.rotate_numba
+   deepof.utils.point_in_polygon
+   deepof.utils.point_in_polygon_numba
+   deepof.utils._is_point_inside_numba
+   deepof.utils.mouse_in_roi
+   deepof.utils.align_trajectories
+   deepof.utils.load_table
+   deepof.utils.rename_track_bps
+   deepof.utils.scale_table
+   deepof.utils.scale_animal
+   deepof.utils.kleinberg
+   deepof.utils.kleinberg_core_numba
+   deepof.utils.smooth_boolean_array
+   deepof.utils.multi_step_paired_smoothing
+   deepof.utils.rolling_window
+   deepof.utils.extract_windows
+   deepof.utils.smooth_mult_trajectory
+   deepof.utils.moving_average
+   deepof.utils.binary_moving_median_numba
+   deepof.utils.mask_outliers
    deepof.utils.full_outlier_mask
+   deepof.utils.remove_outliers
+   deepof.utils.filter_animal_id_in_table
+   deepof.utils.load_segmentation_model
    deepof.utils.get_arenas
+   deepof.utils._scale_arenas_to_mm
+   deepof.utils._scale_rois_to_mm
+   deepof.utils.simplify_polygon
+   deepof.utils.closest_side
+   deepof.utils.automatically_recognize_arena
+   deepof.utils.display_message
+   deepof.utils.get_roi_colors
+   deepof.utils.retrieve_corners_from_image
+   deepof.utils.extract_polygonal_arena_coordinates
+   deepof.utils.fit_ellipse_to_polygon
+   deepof.utils.get_first_length
+   deepof.utils.arena_parameter_extraction
+   deepof.utils.rolling_speed
+   deepof.utils.filter_short_bouts
+   deepof.utils.filter_short_true_segments
+   deepof.utils.filter_short_true_segments_numba
    deepof.utils.gmm_compute
    deepof.utils.gmm_model_selection
-   deepof.utils.interpolate_outliers
-   deepof.utils.iterative_imputation
-   deepof.utils.kleinberg
-   deepof.utils.load_segmentation_model
-   deepof.utils.load_table
-   deepof.utils.mask_outliers
-   deepof.utils.moving_average
-   deepof.utils.rename_track_bps
-   deepof.utils.retrieve_corners_from_image
-   deepof.utils.rolling_speed
-   deepof.utils.rolling_window
-   deepof.utils.rotate
-   deepof.utils.rupture_per_experiment
-   deepof.utils.scale_animal
-   deepof.utils.scale_table
-   deepof.utils.set_missing_animals
-   deepof.utils.simplify_polygon
-   deepof.utils.smooth_boolean_array
-   deepof.utils.smooth_mult_trajectory
-   deepof.utils.split_with_breakpoints
-   deepof.utils.str2bool
-   deepof.utils.tab2polar
+   deepof.utils.cluster_transition_matrix
+   deepof.utils.get_total_Frames

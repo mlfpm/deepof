@@ -336,7 +336,13 @@ def get_time_on_cluster(
     ]
 )
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animals_in_roi: list = None, roi_mode: str = "mousewise"
+    embedding: np.ndarray, 
+    reduce_dim: bool = False, 
+    agg: str = "mean", 
+    bin_info: Union[dict,np.ndarray] = None, 
+    roi_number:int = None, 
+    animals_in_roi: list = None, 
+    roi_mode: str = "mousewise"
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -347,6 +353,8 @@ def get_aggregated_embedding(
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
         bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                       
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
 
     Returns:
@@ -1098,7 +1106,7 @@ def annotate_time_chunks(
     # use up to 200% of requested samples to factor in data reduction by filtering downstream
     N_windows_tab = int(samples*2/len(comprehensive_features))
     sampled_features, bin_info=comprehensive_features.sample_windows_from_data(
-        bin_info={}, 
+        time_bin_info={}, 
         N_windows_tab=N_windows_tab, 
         no_nans=True
         )
@@ -1123,7 +1131,7 @@ def annotate_time_chunks(
 
 
     # Filter instances with less confidence than specified
-    sampled_soft_counts, _=soft_counts.sample_windows_from_data(bin_info=bin_info)
+    sampled_soft_counts, _=soft_counts.sample_windows_from_data(time_bin_info=bin_info)
     sampled_hard_counts=pd.Series(np.argmax(sampled_soft_counts, axis=1))
 
     qual_filter = (sampled_soft_counts.max(axis=1) > min_confidence)
