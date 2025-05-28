@@ -417,6 +417,18 @@ def immobility(
 
 
 def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
+    """Expands a given set of features with leading and lagging features on the time axis. Will only return speed based features.
+
+    Args:
+        X_huddle (pandas.DataFrame): mouse features over time.
+        window (int): steps to go forward and backward in time for each feature
+        step (int): step size for the window
+        window_out (int): total length of the output window
+
+    Returns:
+        X_augmented (pandas.DataFrame): mouse features over time including leading and lagging features (only speed features) for each frame
+
+    """    
     cols = X_huddle.columns.tolist()
     L = 2 * window + 1
     b = L / window_out
@@ -452,7 +464,7 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
     # Concatenate all DataFrames at once
     X_augmented = pd.concat(augmented_dfs, axis=1)
 
-    # Filter columns that contain '0' or 'speed'
+    # Filter columns that contain 'speed'
     filtered_columns = [col for col in X_augmented.columns if 'speed' in col]
 
     # Select only the filtered columns
@@ -464,28 +476,26 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
 def digging(
     speed_dframe: pd.DataFrame,
     dist_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
     mouse_identity: str,
     close_range: np.ndarray,
-    likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
     min_length: int,
     center_name: str = "Center",
     animal_id: str = "",
 ): # pragma: no cover
-    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
-
-    Design considerations:
-        Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
-        The main problem arises from getting a lot of "flickering" out of the detections, as bodyparts from frame to frame may be
-        just above or below that threshold. Respectively most of the detect_activity algorithm is a series of filtering steps to
-        alternatingly smooth the predictions and sharpening the edges of predicted behavior. 
+    """Return true when the mouse is digging. Experimental and currently not included.
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
+        dist_dframe (pandas.DataFrame): distance between body parts over time
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        mouse_identity (str): animal id without the _
+        close_range (np.ndarray): boolean array that denotes if the nose of the current mouse is close to any other mouse for each frame.
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        min_length (int): minimum length that True segments need to have to not get filtered out.
         center_name (str): Body part to center coordinates on. "Center" by default.
         animal_id (str): ID of the current animal.
 
@@ -569,16 +579,15 @@ def digging(
 def stationary_lookaround(
     speed_dframe: pd.DataFrame,
     dist_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
     mouse_identity: str,
     close_range: np.ndarray,
-    likelihood_dframe: pd.DataFrame,
     tol_speed: float,
     tol_likelihood: float,
     min_length: int,
-    center_name: str = "Center",
     animal_id: str = "",
 ):
-    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
+    """Return true when the mouse is standing still and looking around (moving nose without head being tilted too much).
 
     Design considerations:
         Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
@@ -588,15 +597,17 @@ def stationary_lookaround(
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
+        dist_dframe (pandas.DataFrame): distance between body parts over time
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        mouse_identity (str): animal id without the _
+        close_range (np.ndarray): boolean array that denotes if the nose of the current mouse is close to any other mouse for each frame.
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
-        center_name (str): Body part to center coordinates on. "Center" by default.
+        min_length (int): minimum length that True segments need to have to not get filtered out.
         animal_id (str): ID of the current animal.
 
     Returns:
-        stationary_active (np.array): True if the animal is standing still and is active, False otherwise
-        stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
+        stationary_lookaround (np.array): True if the animal is standing still and looking around (moving nose without head being tilted too much), False otherwise
 
     """
     if animal_id != "":
@@ -681,7 +692,7 @@ def detect_activity(
     center_name: str = "Center",
     animal_id: str = "",
 ):
-    """Return true when the mouse is standing still and either moving (active) or not moving (passive).
+    """Return true when the mouse is either moving (moving), standing still and either moving (active) or not moving (passive).
 
     Design considerations:
         Detecting immobility and activity is relatively straightforward by mostly just checking speed thresholds on bodyparts.
@@ -694,12 +705,14 @@ def detect_activity(
         likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
         tol_speed (float): Maximum tolerated speed for the center of the mouse
         tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        min_length (int): minimum length that True segments need to have to not get filtered out.
         center_name (str): Body part to center coordinates on. "Center" by default.
         animal_id (str): ID of the current animal.
 
     Returns:
         stationary_active (np.array): True if the animal is standing still and is active, False otherwise
         stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
+        mobile (np.array): True if the animal is not standing still, False otherwise
 
     """
     if animal_id != "":
@@ -758,7 +771,7 @@ def sniff_around(
     center_name: str = "Center",
     animal_id: str = "",
 ):
-    """Return true when the mouse is looking around using simple rules.
+    """Return true when the mouse is sniffing around using simple rules.
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time
@@ -769,7 +782,7 @@ def sniff_around(
         animal_id (str): ID of the current animal.
 
     Returns:
-        lookaround (np.array): True if the animal is standing still and looking around, False otherwise
+        lookaround (np.array): True if the animal is standing still and sniffing around, False otherwise
 
     """
     if animal_id != "":
@@ -1228,13 +1241,12 @@ def supervised_tagging(
         tag_dict[_id + undercond + "stat-lookaround"] = stationary_lookaround(
         speeds,
         dists,
+        likelihoods,
         _id + undercond,
         close_range,
-        likelihoods,
         params["stationary_threshold"],
         params["nose_likelihood"],
         params["min_follow_frames"],
-        center_name=center,
         animal_id=_id,
         )
 
@@ -1281,7 +1293,19 @@ def supervised_tagging(
     return tag_df
 
 
-def calculate_close_range(df, mouse_id, bodypart, threshold):
+def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, threshold: float):
+    """Detects for a given set of mouse coordinates if the selected bodypart of the selected mouse is close to any bodypart of any other mouse for each frame.
+
+    Args:
+        df (pd.DataFrame): Dataframe containing coordinates of multiple mice
+        mouse_id (str): Id of teh target mouse
+        bodypart (str): Bodypart of the target mouse that should be used for distance calculation
+        threshold (float): Maximum distance that triggers "closeness"
+
+    Returns:
+        proximity_mask (np.array): Boolean numpy array set to True for each frame in which the lected bodypart of the selected mosue was closer than threshold to any otehr mouse, False otehrwise.
+
+    """    
     target = f"{mouse_id}{bodypart}"
     relevant_cols = []
     
