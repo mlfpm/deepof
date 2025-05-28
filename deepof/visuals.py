@@ -1368,10 +1368,9 @@ def return_transitions(
     normalize:bool = True,
     # Visualization parameters
     visualization="networks",
-    ax: list = None,
-    save: bool = False,
 
 ):
+    """Returns data of plot_transitions with same Input options"""
 
     grouped_transitions, _, combined_columns, _, _ = _preprocess_transitions(
         coordinates=coordinates,
@@ -1428,7 +1427,7 @@ def plot_transitions(
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
@@ -1437,8 +1436,15 @@ def plot_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.      
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         kwargs: additional arguments to pass to the seaborn kdeplot function.
@@ -1586,7 +1592,25 @@ def count_all_events(
     # Others
     counting_mode = "Events",
 ):
+    """Counts all events in supervised or soft_counts dataset and returns a data table.
 
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        supervised_annotations (table_dict): table dict with supervised annotations.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        counting_mode (str): How to count behaviors. Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.     
+
+    """
     _check_enum_inputs(
         coordinates,
         supervised_annotations=supervised_annotations,
@@ -1653,7 +1677,7 @@ def count_all_events(
     
     return count_df
 
-
+"""
 def plot_associations(
     coordinates: coordinates,
     supervised_annotations: table_dict = None,
@@ -1679,7 +1703,7 @@ def plot_associations(
     save: bool = False,
     **kwargs,
 ):
-    """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+    Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
@@ -1702,7 +1726,7 @@ def plot_associations(
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
-    """
+    
     if isinstance(condition_values,str):
         condition_values=[condition_values]  
     
@@ -1947,7 +1971,7 @@ def plot_associations(
             return associations
         else:
             return None
-                                
+"""                                
 
 def plot_stationary_entropy(
     coordinates: coordinates,

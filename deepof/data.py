@@ -1662,9 +1662,7 @@ class Coordinates:
             vel = deepof.utils.rolling_speed(
                 tab,
                 frame_rate=self._frame_rate,
-
                 deriv=speed,
-                center=center,
             )
             tab = vel  
 

@@ -946,7 +946,7 @@ def count_transitions(
         exp_conditions (dict): Dictionary containg the experiment conditions for each experiment.
         bin_info (dict): dictionary containing indices to plot for all experiments
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
-        delta_T: Time by which each behavior should be expanded
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
         frame_rate (float): Frame rate of the corresponding project
         silence_diagonal (bool): If True, diagonals are set to zero.
         aggregate (bool): If True, sums matrices per experimental condition; else per experiment.

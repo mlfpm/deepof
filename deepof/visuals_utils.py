@@ -2273,7 +2273,7 @@ def _preprocess_transitions(
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
@@ -2282,9 +2282,16 @@ def _preprocess_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        silence_diagonal (bool): If True, diagonals are set to zero.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.      
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
         visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         kwargs: additional arguments to pass to the seaborn kdeplot function.
-
     """
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
