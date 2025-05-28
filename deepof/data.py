@@ -126,11 +126,34 @@ def load_project(
         video_scale: int = 1,
         number_of_rois = 0,
         fast_implementations_threshold: int = 50000,) -> coordinates:  # pragma: no cover
-    """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version
+    """Load a pre-saved pickled Coordinates object. Will update Coordinate objects from older versions of deepof (down to 0.7) to work with this version. 
+    Very old projects will be recreated during loading with the current version of Deepof. For this purpose input arguments can be set just as in a recular project definition.
 
     Args:
-        project_path (str): name of the file to load.
-        Otherwise same as Project init inputs, will only be used in case of a version upgrade
+
+        animal_ids (list): list of animal ids.
+        arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
+        bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
+        iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
+        exclude_bodyparts (list): list of bodyparts to exclude from analysis.
+        exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+        remove_outliers (bool): whether outliers should be removed during project creation.
+        interpolation_limit (int): maximum number of missing frames to interpolate.
+        interpolation_std (int): maximum number of standard deviations to interpolate.
+        likelihood_tol (float): likelihood threshold for outlier detection.
+        model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
+        project_name (str): name of the current project.
+        project_path (str): path to the folder containing the motion tracking output data.
+        video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
+        table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
+        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+        sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
+        smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
+        table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
+        video_format (str): video format. Defaults to '.mp4'.
+        video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).            
+        number_of_rois (int): number of behavior rois to be drawn during project creation, default = 0,
+        fast_implementations_threshold (int): If the total number of frames in the project is larger than this, numba implementations of all functions with a numba option will be used.
 
     Returns:
         coordinates (deepof_coordinates): Pre-run coordinates object.
@@ -243,7 +266,7 @@ class Project:
             iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
-            interpolate_outliers (bool): whether to interpolate missing data.
+            remove_outliers (bool): whether outliers should be removed during project creation.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
@@ -257,8 +280,9 @@ class Project:
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
+            video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).            
             number_of_rois (int): number of behavior rois to be drawn during project creation, default = 0,
-            video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).
+            fast_implementations_threshold (int): If the total number of frames in the project is larger than this, numba implementations of all functions with a numba option will be used.
 
         """
         # Set version
@@ -2975,6 +2999,7 @@ class TableDict(dict):
             arena_dims (np.array): Dimensions of the arena in mm.
             animal_ids (list): list of animal ids.
             center (str): Type of the center. Handled internally.
+            connectivity (nx.Graph): Bodypart graph of a mouse.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
             shapes (Dict): Dictionary containing the shapes of all stored tables
@@ -3337,8 +3362,10 @@ class TableDict(dict):
 
 
         Returns:
-            X_train (np.ndarray): Table dict with 3D datasets with shape (instances, sliding_window_size, features) generated from all training videos.
-            X_test (np.ndarray): Table dict with 3D datasets 3D dataset with shape (instances, sliding_window_size, features) generated from all test videos (0 by default).
+            (X_train, X_test) (np.ndarray,np.ndarray): Table dict with 3D datasets with shape (instances, sliding_window_size, features) generated from all training and all test videos (0 by default).
+            (train_shape, test_shape) (np.ndarray,np.ndarray): Shape information for all trainign and test tables, when stacked upon each other.
+            global_scaler: global scaler that was used for scaling
+        
         """
         
         #get available memory -10% as buffer
@@ -3555,12 +3582,12 @@ class TableDict(dict):
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
 
-    def sample_windows_from_data(self, bin_info: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
+    def sample_windows_from_data(self, time_bin_info: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
         """
         Sample a set of windows / rows from all entries of table dict to avoid breaking memory.
 
         Args:
-            bin_info (dict): Dictionary containing integer arrays for each experiment, denoting the indices of the tables to sample
+            time_bin_info (dict): Dictionary containing integer arrays for each experiment, denoting the indices of the tables to sample
             N_windows_tab (int): Maximum number of windows / rows to include from each recording. Will be skipped if bin_info is given
             return_edges (bool): Return second sampled set corresponding to edges [only relevant for internal use] (default: False)
             no_nans (bool): only sample windows / rows that do not contain Nans. Notice: Turning on this option will result in the sampled windows not being completely successive anyomre (default: False). Will be skipped if bin_info is given
@@ -3568,10 +3595,11 @@ class TableDict(dict):
         Returns:
             X_data (np.array): Main dataset
             a_data (np.array): Edges dataset (if return_edges is True)
+            time_bin_info (dict): time bin info for all datasets
         """
         X_data, a_data = [], []
         use_input_samples=False
-        if len(bin_info) > 0 and set(self.keys()).issubset(bin_info.keys()):
+        if len(time_bin_info) > 0 and set(self.keys()).issubset(time_bin_info.keys()):
             use_input_samples=True 
 
         for key in self.keys():
@@ -3587,17 +3615,17 @@ class TableDict(dict):
             #Quick block to process if input samples are given
             if use_input_samples:
                 if isinstance(tab, np.ndarray):
-                    X_data.append(tab[bin_info[key]])
+                    X_data.append(tab[time_bin_info[key]])
                     if return_edges and isinstance(tab_tuple, tuple):
-                        a_data.append(tab_tuple[1][bin_info[key]])
+                        a_data.append(tab_tuple[1][time_bin_info[key]])
                     elif return_edges:
                         a_frame = np.zeros(X_data[-1].shape)
                         a_data.append(a_frame)
 
                 elif isinstance(tab, pd.DataFrame):
-                    X_data.append(tab.iloc[bin_info[key]])
+                    X_data.append(tab.iloc[time_bin_info[key]])
                     if return_edges and isinstance(tab_tuple, tuple):
-                        a_data.append(tab_tuple[1].iloc[bin_info[key]])
+                        a_data.append(tab_tuple[1].iloc[time_bin_info[key]])
                     elif return_edges:
                         a_frame = np.zeros(X_data[-1].shape)
                         a_frame = pd.DataFrame(a_frame)
@@ -3627,7 +3655,7 @@ class TableDict(dict):
                 X_data.append(tab.iloc[start:start + N_windows_tab, :])
 
             #collect idcs 
-            bin_info[key]=np.where(possible_idcs)[0][start:start + N_windows_tab]
+            time_bin_info[key]=np.where(possible_idcs)[0][start:start + N_windows_tab]
 
             # Handle test dataset, if existent
             if return_edges and isinstance(tab_tuple, tuple):
@@ -3645,9 +3673,9 @@ class TableDict(dict):
 
         if return_edges:
             a_data = np.concatenate(a_data, axis=0)
-            return X_data, a_data, bin_info
+            return X_data, a_data, time_bin_info
         else:
-            return X_data, bin_info
+            return X_data, time_bin_info
 
 
 if __name__ == "__main__":

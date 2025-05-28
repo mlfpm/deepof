@@ -689,9 +689,9 @@ def test_get_graph_dataset(mode, sampler, random_id):
 def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_nans, dtype, is_tab_tuple):
 
     #create bin_info object
-    bin_info={}
+    time_bin_info={}
     if use_bin_info:
-        bin_info={i: np.arange(4,N_windows_tab-4) for i in range(10)}
+        time_bin_info={i: np.arange(4,N_windows_tab-4) for i in range(10)}
 
     my_dict = {i: np.random.normal(size=[100, 10]) for i in range(10)}
     #add nans
@@ -715,19 +715,19 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
 
     a_data=None
     if return_edges:
-        X_data, a_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+        X_data, a_data, bin_info_out = tab_dict.sample_windows_from_data(time_bin_info, N_windows_tab, return_edges, no_nans)
     else:
-        X_data, bin_info_out = tab_dict.sample_windows_from_data(bin_info, N_windows_tab, return_edges, no_nans)
+        X_data, bin_info_out = tab_dict.sample_windows_from_data(time_bin_info, N_windows_tab, return_edges, no_nans)
 
 
     if use_bin_info:
-        assert X_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+        assert X_data.shape[0]==np.sum([len(time_bin_info[i]) for i in time_bin_info.keys()])
     else:
         assert X_data.shape[0]<=10*N_windows_tab 
 
     if a_data is not None:
         if use_bin_info:
-            assert a_data.shape[0]==np.sum([len(bin_info[i]) for i in bin_info.keys()])
+            assert a_data.shape[0]==np.sum([len(time_bin_info[i]) for i in time_bin_info.keys()])
         else:
             assert a_data.shape[0]<=10*N_windows_tab
 
