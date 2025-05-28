@@ -881,7 +881,7 @@ def get_supervised_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
     animal_ids: Union[str, list], 
-    special_case: bool =True,
+    roi_mode: str = "mousewise",
 ):
     """Filter supervised behaviors based on rois given by animal_ids.
 
@@ -889,7 +889,8 @@ def get_supervised_behaviors_in_roi(
         cur_supervised (pd.DataFrame): data frame with supervised behaviors.
         local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
         animal_ids (Union[str, list]): single or multiple animal ids
-    
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+ 
     Returns:
         cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
     """
@@ -909,7 +910,7 @@ def get_supervised_behaviors_in_roi(
     for col in cur_supervised.columns:
         level0 = col[0] if isinstance(col, tuple) else col
         for aid in animal_ids_edited:
-            if not special_case or f"{aid}" in level0:
+            if not roi_mode == "behaviorwise" or f"{aid}" in level0:
                 valid_cols.add(col)
                 break  # skip checking for more ids in column
 
@@ -919,7 +920,7 @@ def get_supervised_behaviors_in_roi(
             continue #skip "time" array that contains time binning info
 
         aid_2_cols = []
-        if special_case:
+        if roi_mode == "behaviorwise":
             for col in valid_cols:
                 level0 = col[0] if isinstance(col, tuple) else col
                 if aid_2 in level0:
@@ -1990,7 +1991,7 @@ def output_videos_per_cluster(
     min_bout_duration: int = None,
     display_time: bool = False,
     out_path: str = ".",
-    special_case: bool = False,
+    roi_mode: str = "mousewise",
 ): # pragma: no cover
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
 
@@ -2003,6 +2004,7 @@ def output_videos_per_cluster(
         bin_info (dict): dictionary containing indices to plot for all experiments
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
@@ -2099,7 +2101,7 @@ def output_videos_per_cluster(
             frames = None
             if bin_info is not None:
                 if roi_number is not None:
-                    if special_case:
+                    if roi_mode == "behaviorwise":
                         behavior_in=behaviors[0]
                     else:
                         behavior_in=None

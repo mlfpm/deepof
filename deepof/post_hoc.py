@@ -336,7 +336,7 @@ def get_time_on_cluster(
     ]
 )
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animals_in_roi: list = None, special_case: bool = False
+    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None, roi_number:int = None, animals_in_roi: list = None, roi_mode: str = "mousewise"
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -347,7 +347,7 @@ def get_aggregated_embedding(
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
         bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
- 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
 
     Returns:
         A dataframe with the aggregated embeddings for each experiment.
@@ -381,7 +381,7 @@ def get_aggregated_embedding(
         #current_embedding=get_dt(embedding,key,load_range=arr_range)
         current_embedding=preloaded[key]
         if roi_number is not None and type(current_embedding)==pd.DataFrame:
-            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, special_case)
+            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
         elif roi_number is not None and type(current_embedding)==np.ndarray:
             current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
 
@@ -612,8 +612,8 @@ def enrichment_across_conditions(
     bin_info: dict = None,
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     normalize: bool = False,
-    special_case: bool = False
 ):
     """Compute the population of each cluster across conditions.
 
@@ -625,6 +625,7 @@ def enrichment_across_conditions(
         bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROIs
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -656,7 +657,7 @@ def enrichment_across_conditions(
             #load and cut current data set
             current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
             if roi_number is not None:
-                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,special_case)
+                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,roi_mode)
 
             #only keep speed column or only drop speed column
             if plot_speed:

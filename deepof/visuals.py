@@ -325,6 +325,7 @@ def _plot_experiment_gantt(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -345,6 +346,7 @@ def _plot_experiment_gantt(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -365,10 +367,8 @@ def _plot_experiment_gantt(
         roi_number=roi_number,
     )
 
-    special_case=False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
@@ -475,7 +475,7 @@ def _plot_experiment_gantt(
     elif plot_type == "supervised":
         supervised_binned = data_frame.iloc[bin_indices]
         if roi_number is not None:
-            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, special_case)
+            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, roi_mode)
 
 
     # Iterate over features and plot
@@ -523,6 +523,7 @@ def _plot_behavior_gantt(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -543,6 +544,7 @@ def _plot_behavior_gantt(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)        
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -564,10 +566,8 @@ def _plot_behavior_gantt(
         roi_number=roi_number,
     )
 
-    special_case=False,
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
@@ -675,7 +675,7 @@ def _plot_behavior_gantt(
 
             supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
             if roi_number is not None:
-                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animals_in_roi, special_case)
+                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animals_in_roi, roi_mode)
             gantt[rows] = supervised_binned[behavior_id]
 
         gantt[rows][gantt[rows]>0]+=rows
@@ -888,6 +888,7 @@ def plot_enrichment(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise", 
     # Visualization parameters
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -912,6 +913,7 @@ def plot_enrichment(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
@@ -931,10 +933,8 @@ def plot_enrichment(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    special_case = False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case = True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -997,7 +997,7 @@ def plot_enrichment(
         roi_number = roi_number,
         animals_in_roi = animals_in_roi,
         normalize = normalize,
-        special_case=special_case,
+        roi_mode=roi_mode,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
@@ -2251,6 +2251,7 @@ def plot_embeddings(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: Union[str,list] = None,
+    roi_mode: str = "mousewise",
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -2279,6 +2280,7 @@ def plot_embeddings(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                          
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -2306,10 +2308,8 @@ def plot_embeddings(
         raise ValueError(
             '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
         )
-    special_case=False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -2493,11 +2493,11 @@ def plot_embeddings(
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, special_case=special_case,
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, roi_mode=roi_mode,
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, special_case=special_case,
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, roi_mode=roi_mode,
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -3139,6 +3139,7 @@ def export_annotated_video(
     # ROI functionality
     roi_number: int =None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     #others
     behaviors: list = None,
     experiment_id: str = None,
@@ -3160,6 +3161,7 @@ def export_annotated_video(
         frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         behaviors (list): Behaviors or Clusters to that get exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations. If multiple behaviors are given as a list, one video can get annotated with multiple different behaviors
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
@@ -3179,10 +3181,8 @@ def export_annotated_video(
         roi_number=roi_number,
     )
 
-    special_case=False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode=="behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
@@ -3253,7 +3253,7 @@ def export_annotated_video(
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = cur_tab.columns[0]
         if roi_number is not None:
-            if special_case:
+            if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
                 if len(behaviors)>1:
                     print('\033[33mInfo! The first behavior was automatically chosen for ROI application!\033[0m')
@@ -3314,7 +3314,7 @@ def export_annotated_video(
             min_bout_duration=min_bout_duration,
             out_path=out_path,
             display_time=display_time,
-            special_case=special_case,
+            roi_mode=roi_mode,
         )
 
         return None
@@ -3488,6 +3488,7 @@ def plot_behavior_trends(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization
     hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
@@ -3513,6 +3514,7 @@ def plot_behavior_trends(
     custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
     roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
     animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+    roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
     hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.    
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
@@ -3538,10 +3540,8 @@ def plot_behavior_trends(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
     )
-    special_case=False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -3724,7 +3724,7 @@ def plot_behavior_trends(
         elif plot_type == "supervised":
             data_set=get_dt(supervised_annotations,key)
             if roi_number is not None:
-                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, special_case=special_case)
+                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
@@ -4187,6 +4187,7 @@ def get_roi_data(
     # ROI functionality
     roi_number: int,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -4202,6 +4203,7 @@ def get_roi_data(
         table_dict (table_dict): table dict with information for ROi extraction. Can be supervised or unsupervised data.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
@@ -4221,10 +4223,8 @@ def get_roi_data(
             "Iteration accross all experiments is currently not supported for very large projects! However, by setting \"experiment_id\" you can still export single tables"
         )
 
-    special_case=False
-    if animals_in_roi is None:
+    if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
-        special_case=True
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
@@ -4248,7 +4248,7 @@ def get_roi_data(
         tab = get_dt(table_dict, key)
         if type(tab)==pd.DataFrame:
             supervised_binned = pd.DataFrame(tab.iloc[bin_info[key]["time"]])
-            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animals_in_roi, special_case=special_case)
+            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animals_in_roi, roi_mode=roi_mode)
         elif type(tab)==np.ndarray:
             unsupervised_binned = tab[bin_info[key]["time"]]
             time_binned = get_unsupervised_behaviors_in_roi(unsupervised_binned, bin_info[key], animals_in_roi)
