@@ -238,7 +238,7 @@ class Project:
         bodypart_graph: Union[str, dict] = "deepof_14",
         iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
-        exp_conditions: dict = None,
+        exp_conditions: Union[str, dict] = None,
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
@@ -367,7 +367,10 @@ class Project:
         self.connectivity = None
         self.distances = "all"
         self.ego = False
-        self.exp_conditions = exp_conditions
+        if isinstance(exp_conditions, str):
+            self.load_exp_conditions(exp_conditions)
+        else:
+            self.exp_conditions = exp_conditions
         self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
@@ -440,6 +443,22 @@ class Project:
             raise OSError(
                 "Project already exists. Delete it or specify a different name."
             )  # pragma: no cover
+    
+    def load_exp_conditions(self, filepath):  # pragma: no cover
+        """Load experimental conditions from a wide-format csv table.
+
+        Args:
+            filepath (str): Path to the file containing the experimental conditions.
+
+        """
+        exp_conditions = pd.read_csv(filepath, index_col=0)
+        exp_conditions = {
+            exp_id: pd.DataFrame(
+                exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
+            ).T
+            for exp_id in exp_conditions.iloc[:, 0]
+        }
+        self.exp_conditions = exp_conditions
 
     @property
     def distances(self):

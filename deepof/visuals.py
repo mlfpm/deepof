@@ -1532,15 +1532,18 @@ def plot_transitions(
                 clustered_transitions = grouped_transitions[exp_condition]
             else:
                 clustered_transitions = grouped_transitions
-            # Cluster rows and columns and reorder
-            row_link = linkage(
-                clustered_transitions, method="average", metric="euclidean"
-            )  # computing the linkage
-            row_order = dendrogram(row_link, no_plot=True)["leaves"]
-            clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
-                row_order, row_order
-            ]
-            reordered_columns = np.array(columns)[row_order]
+            if soft_counts is not None:
+                # Cluster rows and columns and reorder
+                row_link = linkage(
+                    clustered_transitions, method="average", metric="euclidean"
+                )  # computing the linkage
+                row_order = dendrogram(row_link, no_plot=True)["leaves"]
+                clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
+                    row_order, row_order
+                ]
+                reordered_columns = np.array(columns)[row_order]
+            else:
+                reordered_columns = np.array(columns)
 
             sns.heatmap(
                 clustered_transitions,

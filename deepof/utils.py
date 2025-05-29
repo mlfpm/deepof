@@ -969,6 +969,8 @@ def count_transitions(
     load_range = None
 
     transitions_dict = {}
+    paired_events_dict = {}
+    normalize_events = False
                
     for z, key in enumerate(tab_dict.keys()):
 
@@ -996,8 +998,12 @@ def count_transitions(
             if columns is None:
                 columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
             tab=pd.DataFrame(tab_soft, columns=columns)
+            if normalize:
+                normalize_events=False
         else:
             columns = tab.columns
+            if normalize:
+                normalize_events=True
         
         # Drop non-binary columns (speed column in supervised)
         for col in columns:
@@ -1014,8 +1020,10 @@ def count_transitions(
         if z==0 and aggregate: 
             for exp_cond in set(exp_conditions.values()):
                 transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
+                paired_events_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
 
         associations = np.zeros([tab.shape[1],tab.shape[1]])
+        paired_events = np.zeros([tab.shape[1],tab.shape[1]])
         combined_columns = [f"{var_i}-x-{var_j}" for var_i in columns for var_j in columns]
 
 
@@ -1031,22 +1039,33 @@ def count_transitions(
                     prox_onset_pos = np.where(proximate_onsets == 1)[0]
                     association_ij=np.sum(preceding_active[prox_onset_pos])
                     associations[i,j]=association_ij
+                if normalize_events:
+                    paired_events[i,j]=count_events(extended_behaviors[i,:], counting_mode="Events", frame_rate=frame_rate) + count_events(extended_behaviors[j,:], counting_mode="Events", frame_rate=frame_rate)
 
         if silence_diagonal:
             np.fill_diagonal(associations, 0)
+
 
         # Aggregate based on experimental condition if specified
         if aggregate:
             exp_cond=exp_conditions[key]
             transitions_dict[exp_cond] += associations
+            paired_events_dict[exp_cond] += paired_events
         else:
-            transitions_dict[key] = associations    
+            transitions_dict[key] = associations
+            paired_events_dict[key] = paired_events    
         
     # Normalize rows if specified
-    if normalize:
+    if normalize and not normalize_events:
 
         transitions_dict = {
             key: np.nan_to_num(value.astype(float) / value.astype(float).sum(axis=1)[:, np.newaxis])
+            for key, value in transitions_dict.items()
+        } 
+    elif normalize_events:
+
+        transitions_dict = {
+            key: np.nan_to_num(value.astype(float) / (paired_events_dict[key]-1))
             for key, value in transitions_dict.items()
         } 
              
@@ -1082,7 +1101,7 @@ def count_events(binary_behavior: np.ndarray, counting_mode: str = "Events", fra
         behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
         behavior_onset_pos = np.where(behavior_onsets == 1)[0]
         num_events=len(behavior_onset_pos)
-        if binary_behavior[0].astype(np.int8)==1:
+        if L>0 and binary_behavior[0].astype(np.int8)==1:
             num_events=num_events+1
     # Counts number of frame-to-frame transitions within the events
     elif counting_mode == "Transitions":
