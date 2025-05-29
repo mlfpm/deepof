@@ -366,6 +366,10 @@ def _get_polygon_coords(data, animal_id=""):
         animal_id = ""
 
     bodypart_list=list(data.columns.levels[0])
+    # Remove animal ids from bodyparts to compare with different types of raw bodypart lists
+    if any([bp.startswith(animal_id) for bp in bodypart_list]):
+        id_start = len(animal_id)
+        bodypart_list=list(set([bp[id_start:] for bp in bodypart_list]))
     bodypart_list.sort()
     if bodypart_list == DEEPOF_11_BODYPARTS:
         head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 

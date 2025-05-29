@@ -184,14 +184,14 @@ def test_filter_embeddings(keys,exp_condition):
 
 
 @given(
-    template=st.one_of(st.just("deepof_14"),st.just("deepof_11")), #deepof_8 does not have all required body parts
+    template=st.one_of(st.just("deepof_14"),st.just("deepof_11"),st.just("deepof_8")), #deepof_8 does not have all required body parts
     animal_id=st.one_of(st.text(alphabet='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', min_size=1, max_size=20), st.just(None)),
 )
 def test_get_polygon_coords(template,animal_id):
     
     # Get body parts and coords
-    features=connect_mouse(template).nodes()
-    features=[feature[10:] for feature in features]
+    features=connect_mouse(animal_ids=animal_id, graph_preset=template).nodes()
+    features=list(features)
     coordinates = ['x', 'y']
 
     # Create a MultiIndex for the columns
@@ -204,22 +204,22 @@ def test_get_polygon_coords(template,animal_id):
     data = np.random.rand(len(features)*len(coordinates),len(features)*len(coordinates))
     df = pd.DataFrame(data, columns=multi_index_columns)
     
-    #to include None-case in testing for that 1 line of extra coverage
-    if animal_id is None:
-        a_id=""
-    else:
-        a_id=animal_id+"_"
-
-    # add animal ids
-    df.columns = pd.MultiIndex.from_tuples(
-        [(f"{a_id}{feature}", coordinate) for feature, coordinate in df.columns]
-    )
-
     [head, body, tail]=_get_polygon_coords(df,animal_id)
 
-    assert head.shape[1]==8
-    assert body.shape[1]==12
-    assert tail.shape[1]==4
+    if template=="deepof_14":
+        assert head.shape[1]==8
+        assert body.shape[1]==12
+        assert tail.shape[1]==8
+    elif template=="deepof_11":
+        assert head.shape[1]==8
+        assert body.shape[1]==12
+        assert tail.shape[1]==4
+    elif template=="deepof_8":
+        assert head.shape[1]==6
+        assert body.shape[1]==6
+        assert tail.shape[1]==4
+
+test_get_polygon_coords()
 
 
 @settings(max_examples=20, deadline=None)
