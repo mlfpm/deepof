@@ -1391,7 +1391,7 @@ def _check_enum_inputs(
                 str(roi_mode_options_list)
             )
         )
-    if roi_mode is not None and roi_number is None:
+    if not roi_mode == "mousewise" and roi_number is None:
         print(
         '\033[33mInfo! The input "roi_mode" only has an effect if a ROI is selected by setting "roi_number"!\033[0m'
         )     
@@ -2163,6 +2163,7 @@ def output_annotated_video(
     frame_rate: float = 25,
     frames: np.array = None,
     display_time: bool = False,
+    display_counter: bool = False,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
@@ -2174,6 +2175,7 @@ def output_annotated_video(
         frame_rate: frame rate of the video
         frames: frames that should be exported.
         display_time (bool): Displays current time in top left corner of the video frame
+        display_counter (bool): Displays event counter for each displayed event.       
         out_path: out_path: path to the output directory.
 
     """
@@ -2218,10 +2220,14 @@ def output_annotated_video(
 
     # Prepare text
     font = cv2.FONT_HERSHEY_DUPLEX
-    font_scale = 0.75
-    thickness = 2
+    font_scale = 0.5
+    thickness = 1
     text_widths=[cv2.getTextSize(behavior, font, font_scale, thickness)[0][0] for behavior in behaviors]
-    (text_width, text_height), baseline = cv2.getTextSize(behaviors[np.argmax(text_widths)], font, font_scale, thickness)
+    widest_text=behaviors[np.argmax(text_widths)]
+    if display_counter:
+        behavior_array=np.zeros(len(behaviors))
+        widest_text=widest_text+' 00:00.00'
+    (text_width, text_height), baseline = cv2.getTextSize(widest_text, font, font_scale, thickness)
     (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
     x = 10  # 10 pixels from left
     y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
@@ -2248,20 +2254,25 @@ def output_annotated_video(
                         hex_to_BGR(bg_color[z]),  # Blue color (BGR format)
                         -1)  # Filled rectangle
 
+                    behavior_text=str(behavior_df[behavior][frames[i]])
+                    if display_counter:
+                        behavior_array[z]=behavior_array[z]+1
+                        behavior_text = behavior_text + ' ' + seconds_to_time(behavior_array[z]/frame_rate, cut_milliseconds=False)[3:11]
+
                     # Draw black outline
-                    cv2.putText(frame, str(behavior_df[behavior][frames[i]]), (v_width - text_width - padding, y+ystep), font, font_scale, (0, 0, 0), thickness + 2)
+                    #cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (0, 0, 0), thickness + 2)
                     # Draw white main text
-                    cv2.putText(frame, str(behavior_df[behavior][frames[i]]), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
+                    cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
                 if shift_name_box:
-                    ystep=ystep+50
+                    ystep=ystep+int(text_height*2)
             
             if display_time:
 
                 disp_time = "time: "  + seconds_to_time(frames[i]/frame_rate)
                 # Draw black outline
-                cv2.putText(frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
+                cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (0, 0, 0), thickness + 2)
                 # Draw white main text
-                cv2.putText(frame, disp_time, (x, y), font, font_scale, (255, 255, 255), thickness)
+                cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (255, 255, 255), thickness)
 
             out.write(frame)
         except IndexError:

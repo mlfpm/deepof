@@ -3181,6 +3181,7 @@ def export_annotated_video(
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
     display_time: bool = False,
+    display_counter: bool = False,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -3202,6 +3203,7 @@ def export_annotated_video(
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         display_time (bool): Displays current time in top left corner of teh video frame
+        display_counter (bool): Displays event counter for each displayed event.
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -3323,6 +3325,7 @@ def export_annotated_video(
             out_path=out_path,
             frames=frames,
             display_time=display_time,
+            display_counter=display_counter,
         )
         get_beheavior_frames_in_roi._warning_issued = False
 
