@@ -1,6 +1,139 @@
 Changelog
 =========
 
+[0.8.1] - 2025-06-XX
+====================
+
+Added
+-------
+- File `data_loading.py` with functionality to manage loading of large and small tables. 
+- Added `data_manager.py` and `data_explorer.py`
+- Utilities to improve experience when working with large data sets.
+  - Added more detailed progress bars for various functions
+  - Added binning options to `get_graph_dataset`, `preprocess` and `deep_unsupervised_embedding` functions to allow selection of relevant intervals for model training
+  - Added `samples_max` input parameter to most plot functions to avoid accidentally plotting hours worth of data at once
+- All supervised behaviors were reworked and new behaviors were added 
+  - `stat_lookaround` (mouse is standing still and looking around)
+  - `stat_active` (mouse is standing still and being active (e.g. is digging)
+  - `stat_passive` (mouse is standing still and is inactive)
+  - `moving` (mouse is moving)
+  - `immobility` (mouse is immobile for at least 1 second)        
+- Added real world distance display during arena (or ROI) creation.
+- Added new Region of interest (ROI) functionality for most plot functions and data extraction functions
+- Added new function for counting behavior events
+- Added new functionality for investigating associations between behaviors
+- Added automatic saving for supervised annotations after generation
+- New project attribute `version` to keep track of version number
+- New project attribute `very_large_project` to determine if tables can stay in working memory or need to be saved on the storage drive
+- New project attribute `roi_dicts` to contain ROI polygons
+- New Tests, among others for polygonal arenas
+- Increased Test coverage to 95%
+- Added compatibility measures in load_project to be able to load 0.7 projects
+- Functions added: `get_dt`,  `save_dt`, `load_dt`, `load_dt_metainfo`, `get_metainfo_from_loaded_dt`, `_init_metainfo`, `sample_windows_from_data`, `extract_windows`, `count_all_events`, `return_transitions`, `preprocess_transitions` and many more
+
+Changed
+-------
+- Improved data handling
+  - Videos and source Tables get no longer copied during project creation. Videos and source Tables are only read but not changed. Processed tables are saved in the database.
+  - Table and video paths as well as scaling data for arenas are now saved as dictionaries which makes processing more robust         
+- Reworked supervised behaviors
+  - The algorithms for all supervised behaviors were updated and many behaviors were changed completely
+  - `sniffing` was renamed to `sniff-arena`
+  - `climbing` was renamed to `climb-arena`
+  - A bug in `lookaround` was fixed (see Fixes) and the behavior was renamed to `sniffing`
+  - Threshold values for `nose2nose`, `sidebyside`, `sidereside`, `nose2tail`, `nose2body` and `following` were updated    
+- New color maps for supervised behaviors, being consistently applied across functions.
+- Experiment conditions can now also be given as a path (and not only as an already loaded dict) during project definition, which will load the experiment conditions automatically
+- Replaced old `Kleinberg smoothing` with simpler `median filter` to avoid otherwise occurring merging of distant behavior occurences
+- Updated setting of supervised parameters for supervised behaviors to be easier to handle, also added an explanation for this in behavior tutorial.
+- Upated `export_annotated_videos` to allow for the export of videos with supervised annotations and to give more options e.g. for the export of multiple behaviors at once 
+- Updated outputs of `get_graph_dataset` and `preprocess` to only return concatenated arrays up to a maximum size
+- `_preprocess_time_bins` now only returns a single `bin_info` object that is used for all types of processing instead of a variety of different binning object types. 
+- More plot inputs are now covered by specific exceptions (e.g. entering a non-existent behavior will now result in in an Exception displaying valid options to choose from)
+- Changed digit limit in `time_to_seconds` to 6 for hours, minutes and seconds
+- The `plot_Gantt` function now also allows to also compare one behavior across different animals
+- Frames are now not classified with a supervised ML-classifier if 10% or more of data in that frame needs to be interpolated
+- Reformatted large sections of code
+
+Deprecated
+----------
+- Currently no removals of features are planned.
+
+Removed
+-------
+- Unused `breaks` input option from all functions
+- Unused `rupture` syntax and functionality
+- Unused `propagate labels` and `propagate annotation` functionality
+- Several packages that are no longer used after the Rework (see below) 
+- Old `huddle` behavior (as it was not sufficiently clearly defined)
+
+Bug Fixes
+---------
+- **Bug in lookaround behavior that led to lookaround being frequently detected when the mouse was not moving.**
+- Bug with open-cv not being able to display the arena selection in Linux systems
+- Bug in `plot_heatmaps` which led to the inversion of the y-axis if an axis was already provided as a plot input.
+- Bugs related to the `deepof_8` labeling schema
+- Bug in table windowing for model training that could lead to start- and end-sections of different tables to get concatenated into one training example
+- Minor bug with arena selection display, making the display a lot more responsive
+- Minor bug that led to too many warnings getting filtered
+- Minor bug in `seconds_to_time` that led to inaccuracies in edge cases
+- Added assertion in `preprocess_tables` to ensure that all tables have the same number of animals
+- Fixed issue with speed rolling window causing body parts in frames near NaNs being set to 0-speed
+- And more minor fixes
+
+Performance
+-----------
+- Major rework of data loading to allow for the processing of significantly longer videos (videos and tables may cover multiple days of recording)
+  - A parallel loading structure was implemented that saves tables as files for large datasets
+  - All tables can now be accessed with `get_dt` which automatically loads a given dictionary entry independent of the exact table storage and can return whole tables, specific lines, or only meta info such as the number of rows. 
+  - The number of times tables are loaded and saved within the code was greatly reduced to improve performance for large tables
+  - Implemented models will generally sample a number of rows from all tables for processing (the functionality remains the same for smaller datasets as in these cases simply all rows are sampled) 
+  - Plot functions will sample or cut data automatically to a maximum number of samples (depending on the plot). This limit can be changed and an info message will be displayed to inform the user
+- Improved execution speed of some functions by refactoring e.g.
+  - `align_deepof_kinematics_with_unsupervised_labels` (ca. 2 times faster)
+  - `output_videos_per_cluster` (ca. 10 times faster) 
+  - `plot_Gantt` (ca. 100 times faster)
+- Improved execution speed of automatic tests (ca. 8 times faster)
+
+Documentation
+-------------
+- Updated tutorials to contain adjusted functions
+- Added new event counting functionality to preprocessing tutorial
+- Added explanation of new transition functionality to supervised tutorial
+- Added new tutorial explaining the new supervised behaviors with example video snippets and a full explanation of their algorithms
+- Added new tutorial for working with large data sets
+- Added new tutorial for working with ROIs
+- Updated `tutorial_files` for compatibility with deepof 0.8
+
+Dependencies
+------------
+- Added new dependency library `pyarrow` [version 17.0.0+]
+- Added new dependency `duckdb` [version 1.2.2+]
+- Added new dependency `xgboost` [version 2.1.4]
+- Upgraded several package version requirements
+- Removed dependency libraries: `ruptures`, `POT`, `dask`, `dask_image`, `sktime`
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+
+Upgrade Notes
+-------------
+- This current version has compatibility measures added in load_project to be able to load 0.7 projects. However, loading pickled project files with other methods will result in these project files missing attributes that are required for 0.8 and have to be set manually. The project will then be recreated as 0.8 version during loading. 
+- This version is a major upgrade from the last released version (`deepof 0.7.2`) and has significant changes in functionality.
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2024-08-21
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
 [0.7.1] - 2024-08-27
 ====================
 
