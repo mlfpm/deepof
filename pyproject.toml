@@ -10,13 +10,13 @@ python = ">=3.9,<3.11"
 scikit-learn = "1.2.0"
 scipy = "1.9.3"
 numpy = "^1.25.2"
-numba = "0.58.1"
+numba = "0.59.1"
 tqdm = "^4.64.1"
 pandas = "^1.5.0"
 Shapely = "^1.8.4"
 regex = "^2022.9.13"
 opencv-python = "^4.6.0.66"
-llvmlite = "^0.41.1"
+llvmlite = "^0.42.0"
 shap = "^0.44.1"
 networkx = "^2.8.7"
 seglearn = "^1.2.5"
@@ -27,7 +27,7 @@ keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' and pl
 keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or platform_system != 'Darwin'"}
 tensorflow-probability = "0.22.1"
 tensorflow-io-gcs-filesystem = [
-    {version = "0.34.0", markers="sys_platform != 'Darwin'"},
+    {version = "0.31.0", markers="sys_platform != 'Darwin'"},
     {version = "0.37.1", markers="sys_platform == 'Darwin'"}
 ]
 tensorflow-addons = "0.22.0"
@@ -77,8 +77,8 @@ sphinx-press-theme = "^0.8.0"
 coverage = "^6.5.0"
 sphinxcontrib-napoleon = "^0.7"
 nbsphinx = "^0.8.9"
-Sphinx = "^5.2.3"
-sphinx-rtd-theme = "^1.0.0"
+Sphinx = "^6.2.1"
+sphinx-rtd-theme = "^3.0.0"
 jupyter = "^1.0.0"
 ipykernel = "^6.16.0"
 tornado = "6.1"
