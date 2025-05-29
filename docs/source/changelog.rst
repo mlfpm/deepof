@@ -70,6 +70,7 @@ Removed
 Bug Fixes
 ---------
 - **Bug in lookaround behavior that led to lookaround being frequently detected when the mouse was not moving.**
+- **Bug that led to the angles being distorted. As the angles so far were not used within deepof no other features except from the angle extraction itself were impacted by this.**
 - Bug with open-cv not being able to display the arena selection in Linux systems
 - Bug in `plot_heatmaps` which led to the inversion of the y-axis if an axis was already provided as a plot input.
 - Bugs related to the `deepof_8` labeling schema
