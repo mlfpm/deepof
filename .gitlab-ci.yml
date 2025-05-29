@@ -43,7 +43,7 @@ test:
 
   script:
     # - pip install pyarrow
-    - pip install xgboost==2.1.4
+    # - pip install xgboost==2.1.4
     - pip install duckdb
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py
@@ -85,7 +85,7 @@ tutorials:
   script:
     # - pip install pyarrow
     - pip install duckdb
-    - pip install xgboost==2.1.4
+    # - pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_behavior_tutorial.ipynb behavior_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
