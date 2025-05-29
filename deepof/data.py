@@ -356,7 +356,7 @@ class Project:
 
         if frames_sum > fast_implementations_threshold:
             self.run_numba = True
-        if frames_max > 360000: #roughly 4 hour video at 25 fps
+        if frames_max > 360000 or frames_sum > 900000: #roughly one 4 hour video at 25 fps or 10 hours of recording material in total
             self.very_large_project = True
 
         # Init the rest of the parameters
