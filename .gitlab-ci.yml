@@ -87,7 +87,9 @@ tutorials:
     - pip install duckdb
     - pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_behavior_tutorial.ipynb behavior_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_supervised_tutorial.ipynb supervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb custom_labels_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_roi_tutorial.ipynb roi_output.ipynb
