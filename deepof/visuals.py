@@ -3592,15 +3592,16 @@ def plot_behavior_trends(
                 for key, val in coordinates.get_exp_conditions.items()
             ]
         )
-        if len(condition_values) > 2:
-            condition_values = condition_values[0:2]
-            warning_message = (
-                "\033[38;5;208m\n"
-                "Warning! No exp conditions were chosen for comparison and the experiment contains more than two conditions!\n"
-                f"Therefore, the following conditions were set to be compared automatically: {condition_values}"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
+    if len(condition_values) > 2:
+        condition_values = condition_values[0:2]
+        warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! No exp conditions were chosen for comparison and the experiment contains more than two conditions!\n"
+            f"Therefore, the following conditions were set to be compared automatically: {condition_values}\n"
+            "You can manually change this by setting condition_values explicitely with a list of two conditions."
+            "\033[0m"
+        )
+        warnings.warn(warning_message)
 
     # Init plot type based on inputs
     if (
@@ -3741,6 +3742,11 @@ def plot_behavior_trends(
     # Iterate over all experiments via keys
     for key in keys:
 
+        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+        #skip excluded experiment condition values
+        if cond not in condition_values:
+            continue
+
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
             if roi_number is not None:
@@ -3755,8 +3761,6 @@ def plot_behavior_trends(
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
-
-        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
 
         # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
         for i, (bin_start, bin_end) in enumerate(custom_time_bins):

@@ -25,7 +25,7 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS
 
 
 
@@ -365,35 +365,47 @@ def _get_polygon_coords(data, animal_id=""):
     elif animal_id is None:
         animal_id = ""
 
-    head = np.concatenate(
-        [
-            data.xs(f"{animal_id}Nose", 1).values,
-            data.xs(f"{animal_id}Left_ear", 1).values,
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Right_ear", 1).values,
-        ],
-        axis=1,
-    )
+    bodypart_list=list(data.columns.levels[0])
+    bodypart_list.sort()
+    if bodypart_list == DEEPOF_11_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Spine_1", f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Spine_1", f"{animal_id}Left_fhip", 
+                      f"{animal_id}Left_bhip", f"{animal_id}Spine_2", 
+                      f"{animal_id}Right_bhip", f"{animal_id}Right_fhip"]
+        tail_names = [f"{animal_id}Spine_2", f"{animal_id}Tail_base"]
+    elif bodypart_list == DEEPOF_14_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Spine_1", f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Spine_1", f"{animal_id}Left_fhip", 
+                      f"{animal_id}Left_bhip", f"{animal_id}Spine_2", 
+                      f"{animal_id}Right_bhip", f"{animal_id}Right_fhip"]
+        tail_names = [f"{animal_id}Spine_2", f"{animal_id}Tail_base",
+                      f"{animal_id}Tail_1",f"{animal_id}Tail_2",
+                      f"{animal_id}Tail_tip"]
+    elif bodypart_list == DEEPOF_8_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Left_fhip", f"{animal_id}Right_fhip", 
+                      f"{animal_id}Tail_base"]
+        tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_tip"]
+    else:
+        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")
 
-    body = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Left_fhip", 1).values,
-            data.xs(f"{animal_id}Left_bhip", 1).values,
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Right_bhip", 1).values,
-            data.xs(f"{animal_id}Right_fhip", 1).values,
-        ],
-        axis=1,
-    )
-
-    tail = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Tail_base", 1).values,
-        ],
-        axis=1,
-    )
+    # Helper function to safely extract body parts
+    def extract_parts(names):
+        parts = []
+        for name in names:
+            try:
+                parts.append(data.xs(name, axis=1).values)
+            except KeyError:
+                continue
+        return np.concatenate(parts, axis=1) if parts else np.empty((data.shape[0], 0))
+    
+    # Extract all segments
+    head = extract_parts(head_names)
+    body = extract_parts(body_names)
+    tail = extract_parts(tail_names)
 
     return [head, body, tail]
 

@@ -74,6 +74,8 @@ Bug Fixes
 - Bug in `plot_heatmaps` which led to the inversion of the y-axis if an axis was already provided as a plot input.
 - Bugs related to the `deepof_8` labeling schema
 - Bug in table windowing for model training that could lead to start- and end-sections of different tables to get concatenated into one training example
+- Bug in `plot_behavior_trends` that led to projects with more than 2 experiment conditions causing an error with this plot 
+- Bug in `animate_skeleton` that caused issues if bodyparts were missing
 - Minor bug with arena selection display, making the display a lot more responsive
 - Minor bug that led to too many warnings getting filtered
 - Minor bug in `seconds_to_time` that led to inaccuracies in edge cases
