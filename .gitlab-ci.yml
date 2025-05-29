@@ -42,7 +42,7 @@ test:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
-    # - pip install pyarrow
+    - pip install pyarrow
     # - pip install xgboost==2.1.4
     - pip install duckdb
     - coverage run --source deepof -m pytest
@@ -83,7 +83,7 @@ tutorials:
     - unzip tutorial_files.zip
 
   script:
-    # - pip install pyarrow
+    - pip install pyarrow
     - pip install duckdb
     # - pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
