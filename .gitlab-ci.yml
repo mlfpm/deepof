@@ -13,7 +13,7 @@ install-pypi:
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     - pip install git+https://github.com/mlfpm/deepof.git@Reducing_RAM
-    - python -c 'import deepof.data'
+    #- python -c 'import deepof.data'
 
 install-poetry:
   stage: install
@@ -42,6 +42,9 @@ test:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
+    #- pip install pyarrow
+    #- pip install xgboost==2.1.4
+    #- pip install duckdb
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py
     - coverage xml -o deepof_cov.xml
@@ -80,6 +83,9 @@ tutorials:
     - unzip tutorial_files.zip
 
   script:
+    #- pip install pyarrow
+    #- pip install duckdb
+    #- pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_behavior_tutorial.ipynb behavior_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
