@@ -231,6 +231,8 @@ def plot_heatmaps(
 def plot_gantt(
     coordinates: project,
     instance_id: str,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -239,9 +241,8 @@ def plot_gantt(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
-    soft_counts: table_dict = None,
-    supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
@@ -253,14 +254,15 @@ def plot_gantt(
     Args:
         coordinates (project): deepOF project where the data is stored.
         instance_id (str): Name of the instance to display (can either be an experiment or a behavior).
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.      
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
@@ -288,6 +290,7 @@ def plot_gantt(
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
         animals_in_roi = animals_in_roi,
+        roi_mode = roi_mode,
         ax=ax,
         save=save)
 
@@ -309,6 +312,7 @@ def plot_gantt(
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
         animals_in_roi = animals_in_roi,
+        roi_mode = roi_mode,
         ax=ax,
         save=save)
 
@@ -365,6 +369,7 @@ def _plot_experiment_gantt(
         behaviors=behaviors_to_plot,
         animals_in_roi = animals_in_roi,
         roi_number=roi_number,
+        roi_mode = roi_mode,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -564,6 +569,7 @@ def _plot_behavior_gantt(
         experiment_ids=experiments_to_plot,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode = roi_mode,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -932,6 +938,7 @@ def plot_enrichment(
         exp_condition_order=exp_condition_order,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode = roi_mode,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -2330,6 +2337,7 @@ def plot_embeddings(
         colour_by=colour_by,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode=roi_mode,
     )
     if supervised_annotations is not None and roi_number is not None and animals_in_roi is not None:
         raise ValueError(
@@ -3206,6 +3214,7 @@ def export_annotated_video(
         experiment_ids=experiment_id,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode=roi_mode,
     )
 
     if animals_in_roi is None or roi_mode=="behaviorwise":
@@ -3566,6 +3575,7 @@ def plot_behavior_trends(
         behaviors=behavior_to_plot,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode=roi_mode,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -4248,6 +4258,7 @@ def get_roi_data(
         experiment_ids=experiment_id,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        roi_mode=roi_mode,
     )
     if coordinates._very_large_project and experiment_id is None:
         raise NotImplementedError(

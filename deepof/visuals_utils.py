@@ -378,11 +378,10 @@ def _get_polygon_coords(data, animal_id=""):
         head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
                       f"{animal_id}Spine_1", f"{animal_id}Right_ear"]
         body_names = [f"{animal_id}Spine_1", f"{animal_id}Left_fhip", 
-                      f"{animal_id}Left_bhip", f"{animal_id}Spine_2", 
+                      f"{animal_id}Left_bhip", f"{animal_id}Tail_base", 
                       f"{animal_id}Right_bhip", f"{animal_id}Right_fhip"]
-        tail_names = [f"{animal_id}Spine_2", f"{animal_id}Tail_base",
-                      f"{animal_id}Tail_1",f"{animal_id}Tail_2",
-                      f"{animal_id}Tail_tip"]
+        tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_1",
+                      f"{animal_id}Tail_2", f"{animal_id}Tail_tip"]
     elif bodypart_list == DEEPOF_8_BODYPARTS:
         head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
                       f"{animal_id}Right_ear"]
@@ -1127,6 +1126,7 @@ def _check_enum_inputs(
     colour_by: str = None,
     roi_number: int = None,
     animals_in_roi: list = None,
+    roi_mode: str = None,
 ): # pragma: no cover
     """
     Checks and validates enum-like input parameters for the different plot functions.
@@ -1243,6 +1243,8 @@ def _check_enum_inputs(
         visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
     aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
     colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
+    roi_mode_options_list = ["mousewise", "behaviorwise"]
+
 
     # check if given values are valid. Throw exception and suggest correct values if not
     if experiment_ids is not None and not experiment_ids == [None] and not set(
@@ -1378,7 +1380,17 @@ def _check_enum_inputs(
             )
         else:
             raise ValueError("No regions of interest (ROI)s were defined for this project!\n You can define ROIs during project creation if you have set number_of_rois\n to a number between 1 and 20 during project definition before")
-    
+
+    if roi_mode is not None and roi_mode not in roi_mode_options_list:
+        raise ValueError(
+            '"roi_mode" needs to be one of the following: {}'.format(
+                str(roi_mode_options_list)
+            )
+        )
+    if roi_mode is not None and roi_number is None:
+        print(
+        '\033[33mInfo! The input "roi_mode" only has an effect if a ROI is selected by setting "roi_number"!\033[0m'
+        )     
 
 def plot_arena(
     coordinates: coordinates, center: str, color: str, ax: Any, key: str, roi_number: int = None,
