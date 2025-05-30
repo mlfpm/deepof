@@ -44,7 +44,7 @@ imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
 h5py = "^3.7.0"
-tables = {version = "3.8.0", markers="platform_machine != 'arm64' or platform_system != 'darwin' or platform_system != 'Darwin'"}
+tables = {version = "3.8.0", markers="platform_machine != 'arm64' or (platform_system != 'darwin' and platform_system != 'Darwin')"}
 catboost = "^1.1.1"
 pomegranate = "1.0.4"
 segment-anything = "^1.0"

@@ -6,6 +6,7 @@
 /.hypothesis
 /.dockerignore
 /dof/
+/dof2/
 /h5/
 /For_testing_old_deepOF/
 /tutorial_files/
@@ -23,5 +24,4 @@
 /PolarPlots/
 /SI/
 /Very_Large/
-
 

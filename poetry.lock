@@ -414,6 +414,7 @@ description = "Python wrapper for the C-Blosc2 library."
 optional = false
 python-versions = ">=3.8, <4"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "blosc2-2.0.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:4085e5c1df186e1747d8a8578b0cc1c8b7668391d635e9f89e17156912fba85a"},
     {file = "blosc2-2.0.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:cec4c0570543921ce6b8c9ffdbf9f2170de37ecaf8e2b213e867e3130b81f205"},
@@ -1187,6 +1188,7 @@ description = "The Cython compiler for writing C extensions in the Python langua
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "cython-3.1.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0de7adff5b42d2556d073e9f321c2faa639a17fb195ec1de130327f60ec209d8"},
     {file = "cython-3.1.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:9b61b99205308c96b1162de59bd67ecadcad3d166a4a1f03a3d9e826c39cd375"},
@@ -3697,6 +3699,7 @@ description = "MessagePack serializer"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "msgpack-1.1.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:7ad442d527a7e358a469faf43fda45aaf4ac3249c8310a82f0ccff9164e5dccd"},
     {file = "msgpack-1.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:74bed8f63f8f14d75eec75cf3d04ad581da6b914001b474a5d3cd3372c8cc27d"},
@@ -4139,6 +4142,7 @@ description = "Fast numerical expression evaluator for NumPy"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "numexpr-2.10.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:b5b0e82d2109c1d9e63fcd5ea177d80a11b881157ab61178ddbdebd4c561ea46"},
     {file = "numexpr-2.10.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:3fc2b8035a0c2cdc352e58c3875cb668836018065cbf5752cb531015d9a568d8"},
@@ -4988,6 +4992,7 @@ description = "Get CPU info with pure Python"
 optional = false
 python-versions = "*"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "py-cpuinfo-9.0.0.tar.gz", hash = "sha256:3cdbbf3fac90dc6f118bfd64384f309edeadd902d7c8fb17f02ffa1fc3f49690"},
     {file = "py_cpuinfo-9.0.0-py3-none-any.whl", hash = "sha256:859625bc251f64e21f077d099d4162689c762b5d6a4c3c97553d56241c9674d5"},
@@ -6839,6 +6844,7 @@ description = "Hierarchical datasets for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
+markers = "platform_machine != \"arm64\" or platform_system != \"darwin\" and platform_system != \"Darwin\""
 files = [
     {file = "tables-3.8.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:01e82e40f9845f71de137b4472210909e35c440bbcd0858bdd2871715daef4c7"},
     {file = "tables-3.8.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:db185d855afd45a7259ddd0b53e5f2f8993bb134b370002c6c19532f27ce92ac"},
@@ -8045,4 +8051,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "eacd805ca20c416f072cbe6077aaa02a52eaa13e33f2d7415965d42e016497c8"
+content-hash = "1fed5b7b19d83612e78a7f1ea0e5161dd5a28c25545fec95c4a1df1cb6bcbfd4"
