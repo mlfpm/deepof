@@ -22,6 +22,7 @@ from shapely.geometry import Point, Polygon
 
 import deepof.annotation_utils
 import deepof.data
+import deepof.utils
 
 
 @settings(deadline=None)
@@ -185,11 +186,13 @@ def test_single_animal_traits(animal_id):
     )["test"]
     speed_dframe = prun.get_coords(speed=1, selected_id=animal_id)["test"]
 
-    with open(
-        "./deepof/trained_models/deepof_supervised/deepof_supervised_huddle_estimator.pkl",
-        "rb",
-    ) as handle:
-        huddle_clf = pickle.load(handle)
+    # Downloads immobility model if not already loaded
+    huddle_clf = deepof.utils.load_precompiled_model(
+        None,
+        download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
+        model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
+        model_name="Immobility classifier"
+    ) 
 
     huddling, sleeping = deepof.annotation_utils.immobility(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",

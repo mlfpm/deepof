@@ -607,7 +607,12 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
         tables=coords._tables,
         vid_key=video_key,
         path=path,
-        segmentation_model=deepof.utils.load_segmentation_model(None),
+        segmentation_model=deepof.utils.load_precompiled_model(
+            None,
+            download_path="https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download",
+            model_path=os.path.join("trained_models", "arena_segmentation","sam_vit_h_4b8939.pth"),
+            model_name="Arena segmentation model"
+            ),
         arena_type=detection_mode,
     )
     #adjust scaling
