@@ -2718,6 +2718,15 @@ class Coordinates:
                     )
                     pbar.update() 
 
+        # get immobility classifer
+        self._trained_model_path = resource_filename(__name__, "trained_models")    
+        immobility_estimator = deepof.utils.load_precompiled_model(
+            None,
+            download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
+            model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
+            model_name="Immobility classifier"
+            ) 
+
         with tqdm(total=N_processing_steps, desc=f"{'supervised annotations':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             # noinspection PyTypeChecker
             for key in self._tables.keys():
@@ -2735,7 +2744,6 @@ class Coordinates:
                     tag_index = get_dt(raw_coords,key, only_metainfo=True, load_index=True)['index_column']
                 else:
                     tag_index = raw_coords[key].index
-                self._trained_model_path = resource_filename(__name__, "trained_models")
 
                 supervised_tags = deepof.annotation_utils.supervised_tagging(
                     self,
@@ -2746,7 +2754,7 @@ class Coordinates:
                     full_features=features_dict,
                     speeds=speeds,
                     key=key, 
-                    trained_model_path=self._trained_model_path,
+                    immobility_estimator=immobility_estimator,
                     center=center,
                     params=params,
                     run_numba=self._run_numba,

@@ -5,6 +5,7 @@
 """Functions and general utilities for the deepof package."""
 import argparse
 import copy
+import pickle
 import math
 import multiprocessing
 import os
@@ -2244,18 +2245,16 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
     return columns_to_keep
 
 
-def load_segmentation_model(path):
+def load_precompiled_model(path, download_path, model_path, model_name):
     """Loads model for automatic arena segmentation"""
 
-    model_url = "https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download"
+    model_url = download_path
 
     if path is None:
         installation_path = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(
             installation_path,
-            "trained_models",
-            "arena_segmentation",
-            "sam_vit_h_4b8939.pth",
+            model_path
         )
 
     if not os.path.exists(path):
@@ -2264,7 +2263,7 @@ def load_segmentation_model(path):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        print("Arena segmentation model not found. Downloading...")
+        print(model_name + " not found. Downloading...")
 
         response = requests.get(model_url, stream=True)
         response.raise_for_status()
@@ -2279,10 +2278,21 @@ def load_segmentation_model(path):
                 if chunk:
                     file.write(chunk)
 
-    # Load the model using PyTorch
-    sam = sam_model_registry["vit_h"](checkpoint=path)
-    sam.to(device="cpu")
-    predictor = SamPredictor(sam)
+    # Arena segemntation model
+    if path.endswith(".pth"):
+        # Load the model using PyTorch
+        sam = sam_model_registry["vit_h"](checkpoint=path)
+        sam.to(device="cpu")
+        predictor = SamPredictor(sam)
+    # Immobility estimator model
+    elif path.endswith(".pkl"):
+        with open(
+            os.path.join(
+            path,
+            ),
+            "rb",
+        ) as est:
+            predictor = pickle.load(est)
 
     return predictor
 
@@ -2486,7 +2496,12 @@ def get_arenas(
 
 
         # Load SAM 
-        segmentation_model = load_segmentation_model(segmentation_model_path)                           
+        segmentation_model = load_precompiled_model(
+            segmentation_model_path,
+            download_path="https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download",
+            model_path=os.path.join("trained_models", "arena_segmentation","sam_vit_h_4b8939.pth"),
+            model_name="Arena segmentation model"
+            )                           
         with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
                 
             vid_idx = 0

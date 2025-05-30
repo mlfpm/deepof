@@ -417,53 +417,6 @@ def immobility(
     return y_huddle, y_sleep
 
 
-# Not yet implemented
-def load_immobility_model(path):
-    """Loads model for automatic arena segmentation"""
-
-    model_url = "https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download"
-
-    if path is None:
-        installation_path = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(
-            installation_path,
-            "trained_models",
-            "deepof_supervised",
-            "deepof_supervised_huddle_estimator.pkl",
-        )
-
-    if not os.path.exists(path):
-        # Creating directory if it does not exist
-        directory = os.path.dirname(path)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-        print("Immobility classifier not found. Downloading...")
-
-        response = requests.get(model_url, stream=True)
-        response.raise_for_status()
-
-        with open(path, "wb") as file:
-            total_length = int(response.headers.get("content-length"))
-            for chunk in tqdm(
-                response.iter_content(chunk_size=1024),
-                total=total_length // 1024,
-                unit="KB",
-            ):
-                if chunk:
-                    file.write(chunk)
-
-    with open(
-        os.path.join(
-        path,
-        ),
-        "rb",
-    ) as est:
-        huddle_estimator = pickle.load(est)
-
-    return huddle_estimator
-
-
 def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
     """Expands a given set of features with leading and lagging features on the time axis. Will only return speed based features.
 
@@ -976,7 +929,7 @@ def supervised_tagging(
     speeds: table_dict,
     full_features: dict,
     key: str,
-    trained_model_path: str = None,
+    immobility_estimator: str = None,
     center: str = "Center",
     params: dict = {},
     run_numba: bool = False,
@@ -994,7 +947,7 @@ def supervised_tagging(
         speeds (deepof.data.table_dict): table_dict with already processed speeds
         full_features (dict): A dictionary of aligned kinematics, where the keys are the names of the experimental conditions. The values are the aligned kinematics for each condition.
         key (str): key to the experiment to tag and current set of objects (videos, tables, distances etc.)
-        trained_model_path (str): path indicating where all pretrained models are located
+        immobility_estimator (str): classifier to determine if a mouse is immobile or not.
         center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
@@ -1005,7 +958,7 @@ def supervised_tagging(
     """
     # Load pre-trained models for ML annotated traits
 
-    huddle_estimator = load_immobility_model(None)
+    immobility_estimator = immobility_estimator
 
     # Extract arena information from coordinates object
     arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
@@ -1271,7 +1224,7 @@ def supervised_tagging(
 
         tag_dict[_id + undercond + "immobility"], _ = immobility(
             current_features,
-            huddle_estimator=huddle_estimator,
+            huddle_estimator=immobility_estimator,
             animal_id=_id + undercond,
             median_filter_width = params["median_filter_width"],
             min_immobility = params["min_immobility"],
