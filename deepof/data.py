@@ -2650,6 +2650,15 @@ class Coordinates:
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported by the current version of deepof"""
             )
+        
+        # get immobility classifer
+        self._trained_model_path = resource_filename(__name__, "trained_models")    
+        immobility_estimator = deepof.utils.load_precompiled_model(
+            None,
+            download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
+            model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
+            model_name="Immobility classifier"
+            ) 
     
         N_preprocessing_steps=4+len(self._animal_ids)
         N_processing_steps=len(self._tables.keys())
@@ -2717,15 +2726,6 @@ class Coordinates:
                         return_path=self._very_large_project
                     )
                     pbar.update() 
-
-        # get immobility classifer
-        self._trained_model_path = resource_filename(__name__, "trained_models")    
-        immobility_estimator = deepof.utils.load_precompiled_model(
-            None,
-            download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
-            model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
-            model_name="Immobility classifier"
-            ) 
 
         with tqdm(total=N_processing_steps, desc=f"{'supervised annotations':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             # noinspection PyTypeChecker
@@ -3449,6 +3449,8 @@ class TableDict(dict):
                         list(np.where(tab.var(axis=0) > filter_low_variance)[0])
                         + list(np.where(["pheno" in str(col) for col in tab.columns])[0]),
                     ]
+
+                    assert len(tab.columns) > 0, "Error! During preprocessing the entire table was filtered out due to low variance!\nThis may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
 
                 if scale:
                     if verbose:

@@ -552,7 +552,11 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
 
 
     # deepof.table testing
-    if speeds['test'].notnull().any().all() and speeds['test2'].notnull().any().all():
+    samples_max=sampler.draw(st.integers(min_value=10, max_value=500000))
+    bin_info_time=deepof.visuals_utils._preprocess_time_bins(coordinates=prun, bin_size=None, bin_index=None, samples_max=samples_max)
+
+    # at least two entries per column need to be not nan to make sure that not the entire entire table is filtered out due to low variance
+    if (np.sum(speeds['test'].iloc[bin_info_time['test'],:].notnull())>1).any() and (np.sum(speeds['test2'].iloc[bin_info_time['test2'],:].notnull())>1).any() :
         prep = coords.preprocess(
             prun,
             window_size=11,
@@ -565,7 +569,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             filter_low_variance=1e-3,
             interpolate_normalized=5,
             shuffle=sampler.draw(st.booleans()),
-            samples_max=sampler.draw(st.integers(min_value=10, max_value=500000)),
+            samples_max=samples_max,
         )
         first_key=list(prep[0][0].keys())[0]
         prep_data=deepof.data_loading.get_dt(prep[0][0],first_key)
