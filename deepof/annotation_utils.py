@@ -20,6 +20,7 @@ from natsort import os_sorted
 from shapely.geometry import Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
+import requests
 
 import deepof.post_hoc
 import deepof.utils
@@ -414,6 +415,53 @@ def immobility(
     y_sleep = y_huddle #deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=max_immobility)
     #y_huddle[y_sleep] = False
     return y_huddle, y_sleep
+
+
+# Not yet implemented
+def load_immobility_model(path):
+    """Loads model for automatic arena segmentation"""
+
+    model_url = "https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download"
+
+    if path is None:
+        installation_path = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(
+            installation_path,
+            "trained_models",
+            "deepof_supervised",
+            "deepof_supervised_huddle_estimator.pkl",
+        )
+
+    if not os.path.exists(path):
+        # Creating directory if it does not exist
+        directory = os.path.dirname(path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        print("Immobility classifier not found. Downloading...")
+
+        response = requests.get(model_url, stream=True)
+        response.raise_for_status()
+
+        with open(path, "wb") as file:
+            total_length = int(response.headers.get("content-length"))
+            for chunk in tqdm(
+                response.iter_content(chunk_size=1024),
+                total=total_length // 1024,
+                unit="KB",
+            ):
+                if chunk:
+                    file.write(chunk)
+
+    with open(
+        os.path.join(
+        path,
+        ),
+        "rb",
+    ) as est:
+        huddle_estimator = pickle.load(est)
+
+    return huddle_estimator
 
 
 def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
@@ -957,15 +1005,7 @@ def supervised_tagging(
     """
     # Load pre-trained models for ML annotated traits
 
-    with open(
-        os.path.join(
-            trained_model_path,
-            "deepof_supervised",
-            "deepof_supervised_huddle_estimator.pkl",
-        ),
-        "rb",
-    ) as est:
-        huddle_estimator = pickle.load(est)
+    huddle_estimator = load_immobility_model(None)
 
     # Extract arena information from coordinates object
     arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
