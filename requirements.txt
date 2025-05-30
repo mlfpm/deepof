@@ -7,10 +7,10 @@ imblearn>=0.0
 joblib>=1.2.0
 jupyter-sphinx==0.4.0
 jupyter_sphinx>=0.4.0
-keras==2.12.0
+keras==2.14.0
 keras-tcn-macos>=1.0;platform_machine == 'arm64' and platform_system == 'Darwin'
 keras-tcn>=3.5.0;platform_machine != 'arm64' or platform_system != 'Darwin'
-keras_tuner>=1.3.3
+keras_tuner>=1.4.7
 matplotlib==3.7.1
 natsort==8.4.0
 nbsphinx>=0.8.7
@@ -43,10 +43,10 @@ sphinxcontrib-serializinghtml==1.1.9
 statannotations>=0.5.0
 statsmodels>=0.13
 tables>=3.7.0
-tensorboard>=2.11.2
-tensorflow-macos==2.12.0;platform_machine == 'arm64' and platform_system == 'Darwin'
-tensorflow==2.12.0;platform_machine != 'arm64' or platform_system != 'Darwin'
-tensorflow_probability==0.20.1
+tensorboard>=2.14
+tensorflow-macos==2.14.0;platform_machine == 'arm64' and platform_system == 'Darwin'
+tensorflow==2.14.0;platform_machine != 'arm64' or platform_system != 'Darwin'
+tensorflow_probability==0.22.1
 tensorflow-io-gcs-filesystem==0.34.0;platform_system != 'Darwin'
 tensorflow-io-gcs-filesystem==0.37.1;platform_system == 'Darwin'
 torch==2.2.2
@@ -58,4 +58,4 @@ xgboost==2.1.4
 duckdb==1.1.3
 av==14.4.0
 numba==0.59.1
-
+psutil==6.1.1

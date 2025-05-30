@@ -1130,7 +1130,7 @@ def _check_enum_inputs(
     colour_by: str = None,
     roi_number: int = None,
     animals_in_roi: list = None,
-    roi_mode: str = None,
+    roi_mode: str = "mousewise",
 ): # pragma: no cover
     """
     Checks and validates enum-like input parameters for the different plot functions.
@@ -2055,7 +2055,7 @@ def output_videos_per_cluster(
     if isinstance(behaviors, str):
         behaviors = [behaviors]
     elif meta_info.get('columns') is not None:
-        behaviors=meta_info['columns']
+        behaviors =[behavior for behavior in behaviors if behavior in meta_info['columns']]
     else:
         behaviors = np.array(range(meta_info['num_cols']))
 
