@@ -2006,10 +2006,11 @@ def output_cluster_video(
 
 
 def output_videos_per_cluster(
-    video_paths: dict,
+    coordinates: coordinates,
+    exp_conditions: dict,
     behavior_dict: table_dict,
     behaviors: Union[str,list],
-    frame_rate: float = 25,
+    behavior_names: list,
     frame_limit_per_video: int = np.inf,
     bin_info: dict = None,
     roi_number: int = None,
@@ -2018,26 +2019,31 @@ def output_videos_per_cluster(
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     display_time: bool = False,
+    display_arena: bool = False,
+    display_markers: bool = False,
     out_path: str = ".",
     roi_mode: str = "mousewise",
 ): # pragma: no cover
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
 
     Args:
-        video_paths: dict of paths to the videos
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         behavior_dict: table_dict containing data tables with behavior information (presence or absence of behaviors (columns) for each frame (rows))
         behaviors (Union[str,list]): list of behaviors to annotate
-        frame_rate: frame rate of the videos
+        behavior_names (list): Names of behaviors, potentially renamed by user.
         frame_limit_per_video: number of frames to render per video.
         bin_info (dict): dictionary containing indices to plot for all experiments
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
         display_time (bool): Displays current time in top left corner of the video frame
+        display_arena (bool): Displays arena for each video.
+        display_markers (bool): Displays mouse body parts on top of the mice.    
         out_path: path to the output directory.
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
     """
 
     #manual laoding bar for inner loop
@@ -2051,9 +2057,37 @@ def output_videos_per_cluster(
         if current == total - 1:
             print()  # Newline when complete
 
+    def filter_experimental_conditions(
+        coordinates: coordinates, videos: list, conditions: list
+    ):
+        """Return a list of videos that match the provided experimental conditions."""
+        filtered_videos = videos
+
+        for condition, state in conditions.items():
+
+            filtered_videos = [
+                video
+                for video in filtered_videos
+                if state
+                == np.array(
+                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
+                        condition
+                    ]
+                )
+            ]
+
+        return filtered_videos
+
+    video_paths = filter_experimental_conditions(
+        coordinates, coordinates.get_videos(full_paths=True), exp_conditions
+    )
+    frame_rate=coordinates._frame_rate
+
     meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
     if isinstance(behaviors, str):
         behaviors = [behaviors]
+    elif meta_info.get('columns') is not None and behaviors is None:
+        behaviors = meta_info['columns']
     elif meta_info.get('columns') is not None:
         behaviors =[behavior for behavior in behaviors if behavior in meta_info['columns']]
     else:
@@ -2084,10 +2118,12 @@ def output_videos_per_cluster(
 
             _loading_basic(i, bar_len)
             
-            cur_soft_counts = get_dt(behavior_dict,key)
+            cur_tab=copy.deepcopy(get_dt(behavior_dict, key))
 
             # If a specific behavior is requested, annotate that behavior
-            if type(cur_soft_counts)==np.ndarray:
+            if type(cur_tab)==np.ndarray:
+
+                cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)
 
                 # Get Cluster number from behavior input
                 if type(cur_behavior) == str:
@@ -2095,19 +2131,21 @@ def output_videos_per_cluster(
                 else:
                     cur_behavior_idx = cur_behavior
 
-                hard_counts = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
-                idx = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
-                confidence = pd.Series(cur_soft_counts[:, cur_behavior_idx])
+                hard_counts = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
+                idx = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
+                confidence = pd.Series(cur_tab[:, cur_behavior_idx])
             else:
-                hard_counts = cur_soft_counts[cur_behavior]>0.1
-                idx = cur_soft_counts[cur_behavior]>0.1
-                confidence = cur_soft_counts[cur_behavior]
+
+                cur_tab.columns = behavior_names
+
+                hard_counts = cur_tab[cur_behavior]>0.1
+                idx = cur_tab[cur_behavior]>0.1
+                confidence = cur_tab[cur_behavior]
             
             hard_counts = hard_counts.astype(str)
             hard_counts[idx]=str(cur_behavior)
             hard_counts[~idx]=""
-
-            
+          
             # Get hard counts and confidence estimates per cluster
             confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
@@ -2135,19 +2173,44 @@ def output_videos_per_cluster(
                         behavior_in=None
                     frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
                 else:
-                    frames=bin_info[key]["time"]
+                    frames=bin_info[key]["time"]          
 
-            output_cluster_video(
-                cap,
-                out,
-                confidence_mask,
-                v_width,
-                v_height,
-                video_paths[key],
-                frame_limit_per_video,
-                frames,
-                display_time,
-            )
+            selected_frames=frames[confidence_mask[frames]]
+            if len(selected_frames)>0:
+                output_annotated_video(
+                    coordinates,
+                    key,                
+                    cur_tab,
+                    [cur_behavior],
+                    out_path=out_path,
+                    frames=selected_frames,
+                    display_behavior_names=False,
+                    display_video_name=True,
+                    display_time=display_time,
+                    display_counter=False,
+                    display_arena=display_arena,
+                    display_markers=display_markers,
+                    display_loading_bar=False,
+                    v_width=v_width,
+                    v_height=v_height,
+                    cap=cap,
+                    out=out,
+                    frame_limit=frame_limit_per_video
+                )
+
+            #output_cluster_video(
+            #    cap,
+            #    out,
+            #    confidence_mask,
+            #    v_width,
+            #    v_height,
+            #    video_paths[key],
+            #    frame_limit_per_video,
+            #    frames,
+            #    display_time=display_time,
+            #    display_arena=display_arena,
+            #    display_markers=display_markers,
+            #)
         
 
         out.release()
@@ -2157,28 +2220,53 @@ def output_videos_per_cluster(
 
 
 def output_annotated_video(
-    video_path: str,
+    coordinates: coordinates,
+    experiment_id: str,
     tab: np.ndarray,
     behaviors: list,
-    frame_rate: float = 25,
     frames: np.array = None,
+    display_behavior_names: bool = True,
+    display_video_name: bool = False,
     display_time: bool = False,
     display_counter: bool = False,
+    display_arena: bool = False,
+    display_markers: bool = False,
+    display_loading_bar: bool = True,
+    cap: Any = None,
+    out: Any = None,
+    v_width: int = None,
+    v_height: int = None,
+    frame_limit: int = np.inf,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
 
     Args:
-        video_path: full path to the video
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        experiment_id: id of the experiment to export
         soft_counts: soft cluster assignments for a specific video
         behavior (str): Behavior or Cluster to that gets exported. If none is given, all Clusters get exported for softcounts and only nose2nose gets exported for supervised annotations.
-        frame_rate: frame rate of the video
         frames: frames that should be exported.
+        display_behavior_names (bool): Display the names of teh respective behaviors
+        display_video_name (bool): Display teh name of the video
         display_time (bool): Displays current time in top left corner of the video frame
-        display_counter (bool): Displays event counter for each displayed event.       
+        display_counter (bool): Displays event counter for each displayed event.   
+        display_arena (bool): Displays arena for each video.
+        display_markers (bool): Displays mouse body parts on top of the mice.
+        display_loading_bar (bool): Displays the laoding bar during writing of the video
+        cap (Any): video capture object for reading the video, can be provided. Will be created from video at experiment_id otherwise.
+        out (Any): video capture object for writing teh video, can be provided.
+        v_width (int): video width
+        v_height (int): video height    
+        frame_limit (int): Maximum number of frames that can be included in a video. No limit per default
         out_path: out_path: path to the output directory.
 
     """
+
+    video_path=coordinates.get_videos(full_paths=True)[experiment_id]
+    # for display
+    re_path = re.findall(r".+[/\\]([^/.]+?)(?=\.|DLC)", video_path)[0]
+
     # if every frame has only one distinct behavior assigned to it, plot all behaviors
     shift_name_box=True
     if behaviors is None and not (np.sum(tab, 1)>1.9).any():
@@ -2200,13 +2288,21 @@ def output_annotated_video(
     # Ensure that no frames are requested that are outside of the provided data
     if np.max(frames) >= len(behavior_df):
         frames = np.where(frames<len(behavior_df))[0]
+    if len(frames) >= frame_limit:
+        frames = frames[0:frame_limit]
 
     # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
-    cap = cv2.VideoCapture(video_path)
+    if cap is None:
+        cap = cv2.VideoCapture(video_path)
 
     # Get width and height of current video
-    v_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    v_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    resize_frame=True    
+    if v_width is None and v_height is None:
+        resize_frame=False    
+    if v_width is None:
+        v_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    if v_height is None:  
+        v_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  
 
     video_out = os.path.join(
         out_path,
@@ -2214,9 +2310,11 @@ def output_annotated_video(
         + "_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
     )
 
-    out = cv2.VideoWriter(
-        video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
-    )
+    frame_rate=coordinates._frame_rate
+    if out is None:
+        out = cv2.VideoWriter(
+            video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
+        )
 
     # Prepare text
     font = cv2.FONT_HERSHEY_DUPLEX
@@ -2227,6 +2325,17 @@ def output_annotated_video(
     if display_counter:
         behavior_array=np.zeros(len(behaviors))
         widest_text=widest_text+' 00:00.00'
+    if display_arena:
+        arena_params = coordinates._arena_params[experiment_id]
+        # scale arena_params back o video res
+        scaling_ratio = coordinates._scales[experiment_id][2]/coordinates._scales[experiment_id][3]
+        if "polygonal" in coordinates._arena:
+            arena_params=np.array(arena_params)*scaling_ratio
+        elif "circular" in coordinates._arena:
+            # scale from mm to original pixel resolution
+            arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
+    if display_markers:
+        pass
     (text_width, text_height), baseline = cv2.getTextSize(widest_text, font, font_scale, thickness)
     (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
     x = 10  # 10 pixels from left
@@ -2235,7 +2344,7 @@ def output_annotated_video(
     bg_color = get_behavior_colors(behaviors, tab)
 
     diff_frames = np.diff(frames)
-    for i in tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
+    for i in (tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame")) if display_loading_bar else range(len(frames)):
 
         if i == 0 or diff_frames[i-1] != 1:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frames[i])
@@ -2245,27 +2354,68 @@ def output_annotated_video(
             break
 
         try:
-            ystep=0
-            for z, behavior in enumerate(behaviors):
-                if len(behavior_df[behavior][frames[i]])>0:
-                    cv2.rectangle(frame, 
-                        (v_width - text_width - x , y - text_height - padding +ystep),  # Top-left corner
-                        (v_width - padding, y + baseline +ystep),  # Bottom-right corner
-                        hex_to_BGR(bg_color[z]),  # Blue color (BGR format)
-                        -1)  # Filled rectangle
 
-                    behavior_text=str(behavior_df[behavior][frames[i]])
-                    if display_counter:
-                        behavior_array[z]=behavior_array[z]+1
-                        behavior_text = behavior_text + ' ' + seconds_to_time(behavior_array[z]/frame_rate, cut_milliseconds=False)[3:11]
+            if display_arena:
+                
+                if coordinates._arena.startswith("circular"):
+                    # Print arena for debugging
+                    cv2.ellipse(
+                        img=frame,
+                        center=np.round(arena_params[0]).astype(int),
+                        axes=np.round(arena_params[1]).astype(int),
+                        angle=arena_params[2],
+                        startAngle=0,
+                        endAngle=360,
+                        color=(40, 86, 236),
+                        thickness=3,
+                    )
 
-                    # Draw black outline
-                    #cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (0, 0, 0), thickness + 2)
-                    # Draw white main text
-                    cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
-                if shift_name_box:
-                    ystep=ystep+int(text_height*2)
-            
+                elif coordinates._arena.startswith("polygonal"):
+
+                    # Draw polygon
+                    cv2.polylines(
+                        img=frame,
+                        pts=[np.array(arena_params, dtype=np.int32)],
+                        isClosed=True,
+                        color=(40, 86, 236),
+                        thickness=3,
+                    )
+
+
+            if display_behavior_names:
+                
+                ystep=0
+                for z, behavior in enumerate(behaviors):
+                    if len(behavior_df[behavior][frames[i]])>0:
+                        cv2.rectangle(frame, 
+                            (v_width - text_width - x , y - text_height - padding +ystep),  # Top-left corner
+                            (v_width - padding, y + baseline +ystep),  # Bottom-right corner
+                            hex_to_BGR(bg_color[z]),  # Blue color (BGR format)
+                            -1)  # Filled rectangle
+
+                        behavior_text=str(behavior_df[behavior][frames[i]])
+                        if display_counter:
+                            behavior_array[z]=behavior_array[z]+1
+                            behavior_text = behavior_text + ' ' + seconds_to_time(behavior_array[z]/frame_rate, cut_milliseconds=False)[3:11]
+
+                        # Draw white main text
+                        cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
+                    if shift_name_box:
+                        ystep=ystep+int(text_height*2)
+
+
+            if display_video_name:
+                cv2.putText(
+                    frame,
+                    re_path,
+                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.75,
+                    (255, 255, 255),
+                    2,
+                )
+
+
             if display_time:
 
                 disp_time = "time: "  + seconds_to_time(frames[i]/frame_rate)
@@ -2273,6 +2423,14 @@ def output_annotated_video(
                 cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (0, 0, 0), thickness + 2)
                 # Draw white main text
                 cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (255, 255, 255), thickness)
+
+
+            if display_markers:
+                pass
+
+            #resize frame if resolution is specified, needs to be done at the end to also rescale all annotations
+            if resize_frame:
+                frame = cv2.resize(frame, [v_width, v_height])
 
             out.write(frame)
         except IndexError:

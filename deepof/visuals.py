@@ -3182,6 +3182,8 @@ def export_annotated_video(
     min_bout_duration: int = None,
     display_time: bool = False,
     display_counter: bool = False,
+    display_arena: bool = False,
+    display_markers: bool = False,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -3204,6 +3206,8 @@ def export_annotated_video(
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         display_time (bool): Displays current time in top left corner of teh video frame
         display_counter (bool): Displays event counter for each displayed event.
+        display_arena (bool): Displays arena for each video.
+        display_markers (bool): Displays mouse body parts on top of the mice.
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -3234,29 +3238,7 @@ def export_annotated_video(
 
     # If no bout duration is provided, use half the frame rate
     if min_bout_duration is None:
-        min_bout_duration = int(np.round(coordinates._frame_rate // 2))
-
-    def filter_experimental_conditions(
-        coordinates: coordinates, videos: list, conditions: list
-    ):
-        """Return a list of videos that match the provided experimental conditions."""
-        filtered_videos = videos
-
-        for condition, state in conditions.items():
-
-            filtered_videos = [
-                video
-                for video in filtered_videos
-                if state
-                == np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
-                        condition
-                    ]
-                )
-            ]
-
-        return filtered_videos
-    
+        min_bout_duration = int(np.round(coordinates._frame_rate // 2))  
     
     # set cluster names dependend on tab dict type (supervised or soft counts)
     if soft_counts is not None:
@@ -3289,7 +3271,7 @@ def export_annotated_video(
         # get frames for this experiment id
         if behaviors is None and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-            behaviors = cur_tab.columns[0]
+            behaviors = [cur_tab.columns[0]]
         if roi_number is not None:
             if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
@@ -3302,8 +3284,6 @@ def export_annotated_video(
             frames=bin_info[experiment_id]["time"]
         # get current tab and video path
         cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-        video_path=coordinates.get_videos(full_paths=True)[experiment_id]
-
         
         # reformat current tab into data table with cluster names as column names
         if soft_counts is not None:
@@ -3318,14 +3298,16 @@ def export_annotated_video(
                 frames = frames[0:frame_limit_per_video]
 
         video = output_annotated_video(
-            video_path,                
+            coordinates,
+            experiment_id,                
             cur_tab,
             behaviors,
-            frame_rate=coordinates._frame_rate,
             out_path=out_path,
             frames=frames,
             display_time=display_time,
             display_counter=display_counter,
+            display_arena=display_arena,
+            display_markers=display_markers,
         )
         get_beheavior_frames_in_roi._warning_issued = False
 
@@ -3333,17 +3315,15 @@ def export_annotated_video(
 
     else:
         # If experiment_id is not provided, output a video per cluster for each experiment
-        filtered_videos = filter_experimental_conditions(
-            coordinates, coordinates.get_videos(full_paths=True), exp_conditions
-        )
         if frame_limit_per_video is None:
             frame_limit_per_video = 250
 
         output_videos_per_cluster(
-            filtered_videos,
+            coordinates,
+            exp_conditions,
             tab_dict,
             behaviors,
-            frame_rate=coordinates._frame_rate,
+            behavior_names=cluster_names,
             single_output_resolution=(500, 500),
             frame_limit_per_video=frame_limit_per_video,
             bin_info=bin_info,
@@ -3353,6 +3333,8 @@ def export_annotated_video(
             min_bout_duration=min_bout_duration,
             out_path=out_path,
             display_time=display_time,
+            display_arena=display_arena,
+            display_markers=display_markers,
             roi_mode=roi_mode,
         )
 
