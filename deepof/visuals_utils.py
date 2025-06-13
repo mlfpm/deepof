@@ -2123,8 +2123,6 @@ def output_videos_per_cluster(
             # If a specific behavior is requested, annotate that behavior
             if type(cur_tab)==np.ndarray:
 
-                cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)
-
                 # Get Cluster number from behavior input
                 if type(cur_behavior) == str:
                     cur_behavior_idx=int(re.search(r'\d+', cur_behavior)[0])
@@ -2134,6 +2132,8 @@ def output_videos_per_cluster(
                 hard_counts = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
                 idx = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
                 confidence = pd.Series(cur_tab[:, cur_behavior_idx])
+
+                cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)
             else:
 
                 cur_tab.columns = behavior_names
