@@ -2021,6 +2021,7 @@ def output_videos_per_cluster(
     display_time: bool = False,
     display_arena: bool = False,
     display_markers: bool = False,
+    display_mouse_labels: bool = False,
     out_path: str = ".",
     roi_mode: str = "mousewise",
 ): # pragma: no cover
@@ -2041,7 +2042,8 @@ def output_videos_per_cluster(
         min_bout_duration: minimum duration of a bout to be considered.
         display_time (bool): Displays current time in top left corner of the video frame
         display_arena (bool): Displays arena for each video.
-        display_markers (bool): Displays mouse body parts on top of the mice.    
+        display_markers (bool): Displays mouse body parts on top of the mice. 
+        display_mouse_labels (bool): Displays identities of the mice
         out_path: path to the output directory.
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
     """
@@ -2188,6 +2190,7 @@ def output_videos_per_cluster(
                     display_counter=False,
                     display_arena=display_arena,
                     display_markers=display_markers,
+                    display_mouse_labels=display_mouse_labels,
                     display_loading_bar=False,
                     v_width=v_width,
                     v_height=v_height,
@@ -2229,6 +2232,7 @@ def output_annotated_video(
     display_counter: bool = False,
     display_arena: bool = False,
     display_markers: bool = False,
+    display_mouse_labels: bool = False,
     display_loading_bar: bool = True,
     cap: Any = None,
     out: Any = None,
@@ -2251,6 +2255,7 @@ def output_annotated_video(
         display_counter (bool): Displays event counter for each displayed event.   
         display_arena (bool): Displays arena for each video.
         display_markers (bool): Displays mouse body parts on top of the mice.
+        display_mouse_labels (bool): Displays identities of the mice
         display_loading_bar (bool): Displays the laoding bar during writing of the video
         cap (Any): video capture object for reading the video, can be provided. Will be created from video at experiment_id otherwise.
         out (Any): video capture object for writing teh video, can be provided.
@@ -2333,7 +2338,7 @@ def output_annotated_video(
         elif "circular" in coordinates._arena:
             # scale from mm to original pixel resolution
             arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
-    if display_markers:
+    if display_markers or display_mouse_labels:
         scaling_ratio = coordinates._scales[experiment_id][2]/coordinates._scales[experiment_id][3]
         cur_coords=cur_coords*scaling_ratio
     (text_width, text_height), baseline = cv2.getTextSize(widest_text, font, font_scale, thickness)
@@ -2384,10 +2389,11 @@ def output_annotated_video(
                         thickness=3,
                     )
 
+
             if display_markers:
                 # Print body parts for debuging
                 for bpart in cur_coords.columns.levels[0]:
-
+                    pass
                     if not np.isnan(cur_coords[bpart]["x"][frames[i]]):
                         cv2.circle(
                             frame,
@@ -2398,6 +2404,27 @@ def output_annotated_video(
                             ),
                             thickness=-1,
                         )
+                
+            
+            if display_mouse_labels:
+
+                for bpart in cur_coords.columns.levels[0]:
+
+                    if bpart.endswith("Center") and not np.isnan(cur_coords[bpart]["x"][frames[i]]):
+
+                        mouse_id=[id for id in coordinates._animal_ids if bpart.startswith(id)][0]
+                        mouse_pos=(int(cur_coords[bpart]["x"][frames[i]]), int(cur_coords[bpart]["y"][frames[i]]))
+                        (id_text_width, id_text_height), id_baseline = cv2.getTextSize(mouse_id, font, font_scale, thickness)
+
+                        cv2.rectangle(frame, 
+                            (mouse_pos[0], mouse_pos[1] - id_text_height - padding),  # Top-left corner
+                            (mouse_pos[0] + id_text_width, mouse_pos[1] + id_baseline),  # Bottom-right corner
+                            (BODYPART_COLORS[[bpart.startswith(id) for id in coordinates._animal_ids].index(True)]),  # Blue color (BGR format)
+                            -1)  # Filled rectangle
+                        
+                        cv2.putText(frame, mouse_id, mouse_pos, font, font_scale, (255, 255, 255), thickness)
+
+
 
             #####
             #resize frame if resolution is specified, needs to be done after drawn annotations but before written annotations

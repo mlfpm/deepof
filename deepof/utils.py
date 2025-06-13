@@ -39,7 +39,7 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from scipy.stats import chi2_contingency
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 
@@ -2904,30 +2904,6 @@ def display_message(message: List[str]): # pragma: no cover
     if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) >= 1:
         cv2.destroyWindow(window_name)
 
-def get_roi_colors():
-    """Does nothing else than returning an array of colors"""
-    
-    #hard coded as these colors seem to be defined at compilation time, otherwise open cv crashes
-    return [(204,  20,  20),
-       (204, 131,  20),
-       (167, 204,  20),
-       ( 57, 204,  20),
-       ( 20, 204,  94),
-       ( 20, 204, 204),
-       ( 20,  94, 204),
-       ( 57,  20, 204),
-       (167,  20, 204),
-       (204,  20, 131),
-       (153,  15,  15),
-       (153,  98,  15),
-       (125, 153,  15),
-       (43, 153,  15),
-       (15, 153,  70),
-       (15, 153, 153),
-       (15,  70, 153),
-       (43,  15, 153),
-       (125,  15, 153),
-       (153,  15,  98)]
 
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False
@@ -2952,7 +2928,7 @@ def retrieve_corners_from_image(
     """
     corners = []
 
-    roi_colors=get_roi_colors()
+    roi_colors=ROI_COLORS
 
     #early return of set of square corners
     if test:

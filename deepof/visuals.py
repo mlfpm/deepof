@@ -3185,6 +3185,7 @@ def export_annotated_video(
     display_counter: bool = False,
     display_arena: bool = False,
     display_markers: bool = False,
+    display_mouse_labels: bool = False,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -3209,6 +3210,7 @@ def export_annotated_video(
         display_counter (bool): Displays event counter for each displayed event.
         display_arena (bool): Displays arena for each video.
         display_markers (bool): Displays mouse body parts on top of the mice.
+        display_mouse_labels (bool): Displays identities of the mice
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -3309,6 +3311,7 @@ def export_annotated_video(
             display_counter=display_counter,
             display_arena=display_arena,
             display_markers=display_markers,
+            display_mouse_labels=display_mouse_labels,
         )
         get_beheavior_frames_in_roi._warning_issued = False
 
@@ -3336,6 +3339,7 @@ def export_annotated_video(
             display_time=display_time,
             display_arena=display_arena,
             display_markers=display_markers,
+            display_mouse_labels=display_mouse_labels,
             roi_mode=roi_mode,
         )
 
