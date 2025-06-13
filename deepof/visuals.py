@@ -34,6 +34,7 @@ from statannotations.Annotator import Annotator
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
+from deepof.config import ROI_COLORS
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -214,7 +215,7 @@ def plot_heatmaps(
 
     if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
         for hmap in heatmaps:
-            color = BGR_to_hex(deepof.utils.get_roi_colors()[roi_number-1])
+            color = BGR_to_hex(ROI_COLORS[roi_number-1])
             plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
 
     if not ax:

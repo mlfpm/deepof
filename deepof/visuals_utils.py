@@ -25,7 +25,7 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS, BODYPART_COLORS
 
 
 
@@ -2284,6 +2284,7 @@ def output_annotated_video(
     behavior_df[~idx]=""
     # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
 
+    cur_coords=get_dt(coordinates._tables,experiment_id)
     
     # Ensure that no frames are requested that are outside of the provided data
     if np.max(frames) >= len(behavior_df):
@@ -2335,7 +2336,8 @@ def output_annotated_video(
             # scale from mm to original pixel resolution
             arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
     if display_markers:
-        pass
+        scaling_ratio = coordinates._scales[experiment_id][2]/coordinates._scales[experiment_id][3]
+        cur_coords=cur_coords*scaling_ratio
     (text_width, text_height), baseline = cv2.getTextSize(widest_text, font, font_scale, thickness)
     (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
     x = 10  # 10 pixels from left
@@ -2355,6 +2357,9 @@ def output_annotated_video(
 
         try:
 
+            #####
+            # drawn annotations before rescaling
+            #####
             if display_arena:
                 
                 if coordinates._arena.startswith("circular"):
@@ -2381,7 +2386,31 @@ def output_annotated_video(
                         thickness=3,
                     )
 
+            if display_markers:
+                # Print body parts for debuging
+                for bpart in cur_coords.columns.levels[0]:
 
+                    if not np.isnan(cur_coords[bpart]["x"][frames[i]]):
+                        cv2.circle(
+                            frame,
+                            (int(cur_coords[bpart]["x"][frames[i]]), int(cur_coords[bpart]["y"][frames[i]])),
+                            radius=3,
+                            color=(
+                                BODYPART_COLORS[[bpart.startswith(id) for id in coordinates._animal_ids].index(True)] #first index of animal id that fits
+                            ),
+                            thickness=-1,
+                        )
+
+            #####
+            #resize frame if resolution is specified, needs to be done after drawn annotations but before written annotations
+            #####
+            if resize_frame:
+                frame = cv2.resize(frame, [v_width, v_height])
+
+
+            #####
+            # written annotations after rescaling
+            #####
             if display_behavior_names:
                 
                 ystep=0
@@ -2423,14 +2452,6 @@ def output_annotated_video(
                 cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (0, 0, 0), thickness + 2)
                 # Draw white main text
                 cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (255, 255, 255), thickness)
-
-
-            if display_markers:
-                pass
-
-            #resize frame if resolution is specified, needs to be done at the end to also rescale all annotations
-            if resize_frame:
-                frame = cv2.resize(frame, [v_width, v_height])
 
             out.write(frame)
         except IndexError:
