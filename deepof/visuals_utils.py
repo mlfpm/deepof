@@ -135,7 +135,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     # Find maximum Cluster
     Cluster_max=1
     if len(clusters) > 0:
-        Cluster_max=np.max([int(re.search(r'\d+', cluster)[0]) for cluster in clusters])
+        Cluster_max=np.max([int(re.search(r'\d+', cluster)[0]) for cluster in clusters])+1
     # Generate color map of appropriate length
     cluster_colors = np.tile(
         list(sns.color_palette("tab20").as_hex()),
@@ -2090,9 +2090,10 @@ def output_videos_per_cluster(
         behaviors = meta_info['columns']
     elif meta_info.get('columns') is not None:
         behaviors =[behavior for behavior in behaviors if behavior in meta_info['columns']]
+    elif behaviors is not None:
+        behaviors = [behavior for behavior in behaviors if behavior in behavior_names] 
     else:
-        behaviors = np.array(range(meta_info['num_cols']))
-
+        behaviors=behavior_names
 
     # Iterate over all clusters, and output a masked video for each
     for cur_behavior in tqdm(behaviors, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="video"):
@@ -2120,34 +2121,31 @@ def output_videos_per_cluster(
             
             cur_tab=copy.deepcopy(get_dt(behavior_dict, key))
 
-            # If a specific behavior is requested, annotate that behavior
+            # Turn numpy arrays (in case of unsupervised data) into dataframes
             if type(cur_tab)==np.ndarray:
+                cur_tab=pd.DataFrame(cur_tab,columns=behavior_names) 
 
-                # Get Cluster number from behavior input
-                if type(cur_behavior) == str:
-                    cur_behavior_idx=int(re.search(r'\d+', cur_behavior)[0])
-                else:
-                    cur_behavior_idx = cur_behavior
-
-                hard_counts = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
-                idx = pd.Series(cur_tab[:, cur_behavior_idx]>0.1)
-                confidence = pd.Series(cur_tab[:, cur_behavior_idx])
-
-                cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)
+                # Get positions at which the current cluster is teh most likely one 
+                max_entry_columns = cur_tab.idxmax(axis=1)
+                behavior_mask = (cur_behavior == max_entry_columns)
+                idx = (cur_behavior == max_entry_columns)
+                confidence = cur_tab[cur_behavior]    
+        
             else:
-
                 cur_tab.columns = behavior_names
 
-                hard_counts = cur_tab[cur_behavior]>0.1
+                # Get positions at which teh current behaviro occurs
+                behavior_mask = cur_tab[cur_behavior]>0.1
                 idx = cur_tab[cur_behavior]>0.1
-                confidence = cur_tab[cur_behavior]
-            
-            hard_counts = hard_counts.astype(str)
-            hard_counts[idx]=str(cur_behavior)
-            hard_counts[~idx]=""
+                confidence = cur_tab[cur_behavior]  
+
+            # Convert mask to contain either selected behavior or nothing for each frame     
+            behavior_mask = behavior_mask.astype(str)
+            behavior_mask[idx]=str(cur_behavior)
+            behavior_mask[~idx]=""
           
             # Get hard counts and confidence estimates per cluster
-            confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
+            confidence_indices = np.ones(behavior_mask.shape[0], dtype=bool)
 
             # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
             cap = cv2.VideoCapture(video_paths[key])
@@ -2161,7 +2159,7 @@ def output_videos_per_cluster(
                 min_confidence,
                 min_bout_duration,
             )
-            confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
+            confidence_mask = (behavior_mask == str(cur_behavior)) & confidence_indices
 
             # get frames for current video
             frames = None
