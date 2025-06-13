@@ -86,6 +86,7 @@ from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.model_utils
 import deepof.models
 import deepof.utils
+import deepof.arena_utils
 import deepof.visuals
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
@@ -495,7 +496,7 @@ class Project:
         #if verbose:
         #    print("Detecting arena...")
 
-        return deepof.utils.get_arenas(
+        return deepof.arena_utils.get_arenas(
             self,
             tables,
             self.arena,
@@ -2245,7 +2246,7 @@ class Coordinates:
                 "Editing {} arena{}".format(len(video_keys), "s" if len(video_keys) > 1 else "")
             )
 
-        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.utils.get_arenas(
+        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
             coordinates=self,
             tables=self._tables,
             arena=arena_type,
