@@ -9,6 +9,7 @@ import os
 from copy import deepcopy
 from math import atan2, dist
 from typing import Any, List, NewType, Tuple, Union
+from dataclasses import dataclass
 
 
 import cv2
@@ -639,176 +640,6 @@ def display_message(message: List[str]): # pragma: no cover
         cv2.destroyWindow(window_name)
 
 
-def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False
-):  # pragma: no cover
-    """Open a window and waits for the user to click on all corners of the polygonal arena.
-
-    The user should click on the corners in sequential order.
-
-    Args:
-        frame (np.ndarray): Frame to display.
-        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
-        cur_vid (int): Index of the current video in the list of videos.
-        videos (list): List of videos to be processed.
-        current_roi (int): Current ROI to be extracted. 0 is the global arena ROI
-        arena_dims (float): Distance as taken from video in pixels
-        norm_dist (float): Same distance as arena_dims for normalization in mm
-        test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
-
-    Returns:
-        corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
-
-    """
-    corners = []
-
-    roi_colors=ROI_COLORS
-
-    #early return of set of square corners
-    if test:
-        return [(111, 49), (541, 31), (553, 438), (126, 452)]
-    
-    if current_roi == 0:
-        display_text="deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            )
-        color = (40, 86, 236)
-
-    # current roi > 0
-    elif current_roi<21:
-        display_text="deepof - Select polygonal region of interest corners for roi {} - (q: exit / d: delete{}) - {}/{} processed".format(
-                current_roi,
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            )
-        color = roi_colors[current_roi-1]
-    else:
-        raise ValueError(
-            "only up to 20 ROIs are allowed (what for do you even need so many ROIs?)"
-        )
-
-
-    def click_on_corners(event, x, y, flags, param):
-        # Callback function to store the coordinates of the clicked points
-        nonlocal corners, frame
-
-        if event == cv2.EVENT_LBUTTONDOWN:
-            corners.append((x, y))
-
-    # Resize frame to a standard size
-    frame = frame.copy()
-
-    # Create a window and display the image
-    cv2.startWindowThread()
-
-    alpha=0.3
-    while True:
-        frame_copy = frame.copy()
-
-        cv2.imshow(
-            display_text,
-            frame_copy,
-        )
-
-        cv2.setMouseCallback(
-            display_text,
-            click_on_corners,
-        )
-
-        # Display already selected corners
-        if len(corners) > 0:
-            for c, corner in enumerate(corners):
-                cv2.circle(frame_copy, (corner[0], corner[1]), 4, color, -1)
-                # Display lines between the corners
-                if len(corners) > 1 and c > 0:
-                    if "polygonal" in arena_type or len(corners) < 5:
-                        cv2.line(
-                            frame_copy,
-                            (corners[c - 1][0], corners[c - 1][1]),
-                            (corners[c][0], corners[c][1]),
-                            color,
-                            2,
-                        )
-
-        if len(corners) > 1 and "polygonal" in arena_type:
-            if norm_dist is None:
-                norm_dist=get_first_length(corners)
-            cur_dist=math.dist(corners[-2], corners[-1])
-            text="last edge in mm: " + str(np.round((cur_dist*(arena_dims/norm_dist))*100)/100)
-            cv2.putText(
-                frame_copy,
-                text,
-                (10, 25),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA
-            )
-
-        # Close the polygon
-        if len(corners) > 2:
-            if "polygonal" in arena_type or len(corners) < 5:
-                cv2.line(
-                    frame_copy,
-                    (corners[0][0], corners[0][1]),
-                    (corners[-1][0], corners[-1][1]),
-                    color,
-                    2,
-                )
-
-        if len(corners) >= 5 and "circular" in arena_type:
-            cv2.ellipse(
-                frame_copy,
-                *fit_ellipse_to_polygon(corners),
-                startAngle=0,
-                endAngle=360,
-                color=color,
-                thickness=3,
-            )
-        
-        # Create filled overlay for ROIs (these are always polygonal)
-        if current_roi > 0 and len(corners) > 2:         
-            overlay = frame_copy.copy()
-            pts = np.array(corners, dtype=np.int32).reshape((-1, 1, 2))
-            cv2.fillPoly(overlay, [pts], color)           
-            # Blend overlay with original frame
-            cv2.addWeighted(overlay, alpha, frame_copy, 1 - alpha, 0, frame_copy)
-
-        cv2.imshow(
-            display_text,
-            frame_copy,
-        )
-
-        key = cv2.waitKey(1) & 0xFF
-        # Remove last added coordinate if user presses 'd'
-        if key == ord("d"):
-            corners = corners[:-1]
-
-        # Exit is user presses 'q'
-        if len(corners) > 2:
-            if key == ord("q"):
-                break
-
-        # Exit and copy all coordinates if user presses 'c'
-        if cur_vid > 0 and key == ord("p"):
-            corners = None
-            break
-
-    cv2.destroyAllWindows()
-    cv2.waitKey(1)
-
-    if norm_dist is None and corners is not None and len(corners) >= 5 and "circular" in arena_type:
-        cur_arena_params = fit_ellipse_to_polygon(corners)
-        norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
-
-    # Return the corners
-    return corners, norm_dist
-
-
 def extract_polygonal_arena_coordinates(
     video_path: str, arena_type: str, video_index: int, videos: list, list_of_rois: list = 0, get_arena: bool = True, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False, 
 ):  # pragma: no cover
@@ -874,6 +705,7 @@ def extract_polygonal_arena_coordinates(
                 current_roi=k,
                 arena_dims=arena_dims,
                 norm_dist=norm_dist_new,
+                arena_corners=arena_corners,
                 test=test,
             )
             roi_corners[k] =cur_roi_corners
@@ -941,3 +773,472 @@ def arena_parameter_extraction(
 
     elif "polygonal" in arena_type:
         return np.squeeze(cnts[main_cnt])
+    
+
+def create_inner_polygon(outer_vertices, target_area_ratio=0.7, tolerance=0.01, max_iterations=100, return_inner=True):
+    """
+    Creates an inner polygon that covers approximately target_area_ratio Percent of the outer polygon's area.
+    Returns either the inner polygon or the difference between outer and inner polygon.
+    
+    Args:
+        outer_vertices (numpy.ndarray): Nx2 array of vertices defining the outer polygon
+        target_area_ratio (float): Target ratio of inner to outer polygon area (default: 0.7)
+        tolerance (float): Acceptable tolerance for area ratio (default: 0.01)
+        max_iterations (int): Maximum number of iterations for binary search (default: 100)
+        return_inner (bool): If True, returns inner polygon; if False, returns outer ring (default: True)
+    
+    Returns:
+        vertices (numpy.ndarray): Mx2 array of vertices defining either the inner polygon or outer ring
+    """
+    
+    # Create shapely polygon from vertices
+    outer_polygon = Polygon(outer_vertices)
+    
+    # Ensure the polygon is valid
+    if not outer_polygon.is_valid:
+        # Try to fix the polygon
+        outer_polygon = outer_polygon.buffer(0)
+        if not outer_polygon.is_valid:
+            raise ValueError("Invalid polygon provided")
+    
+    # Get the area of the outer polygon
+    outer_area = outer_polygon.area
+    target_area = outer_area * target_area_ratio
+    
+    # Binary search for the correct offset distance
+    minx, miny, maxx, maxy = outer_polygon.bounds
+    max_dimension = max(maxx - minx, maxy - miny)
+    
+    # Initial bounds for binary search
+    offset_min = 0
+    offset_max = max_dimension / 2
+    
+    best_offset = 0
+    best_polygon = None
+    best_ratio = 0
+    
+    for iteration in range(max_iterations):
+        offset = (offset_min + offset_max) / 2
+        
+        # Create offset polygon (negative offset for shrinking)
+        inner_polygon = outer_polygon.buffer(-offset, join_style=2, mitre_limit=5.0)
+        
+        # Handle cases where the polygon might split into multiple parts
+        if inner_polygon.is_empty:
+            offset_max = offset
+            continue
+            
+        # If the result is a MultiPolygon, take the largest part
+        if inner_polygon.geom_type == 'MultiPolygon':
+            largest_area = 0
+            largest_poly = None
+            for poly in inner_polygon.geoms:
+                if poly.area > largest_area:
+                    largest_area = poly.area
+                    largest_poly = poly
+            inner_polygon = largest_poly
+        
+        if inner_polygon is None or inner_polygon.is_empty:
+            offset_max = offset
+            continue
+        
+        # Calculate area ratio
+        inner_area = inner_polygon.area
+        area_ratio = inner_area / outer_area
+        
+        # Check if we're within tolerance
+        if abs(area_ratio - target_area_ratio) < tolerance:
+            best_offset = offset
+            best_polygon = inner_polygon
+            best_ratio = area_ratio
+            break
+        
+        # Update search bounds
+        if area_ratio > target_area_ratio:
+            offset_min = offset
+        else:
+            offset_max = offset
+        
+        # Keep track of best result so far
+        if best_polygon is None or abs(area_ratio - target_area_ratio) < abs(best_ratio - target_area_ratio):
+            best_offset = offset
+            best_polygon = inner_polygon
+            best_ratio = area_ratio
+    
+    if best_polygon is None:
+        raise ValueError("Could not create inner ROI polygon with desired area ratio")
+        
+    if return_inner:
+        result_polygon = best_polygon
+        vertices = np.array(result_polygon.exterior.coords[:-1])  # Remove duplicate last point
+    else:
+        # Create a ring polygon by combining outer and inner boundaries
+        # First get the outer boundary vertices (clockwise)
+        outer_boundary = np.array(outer_polygon.exterior.coords[:-1])
+        # Then get the inner boundary vertices (counter-clockwise)
+        inner_boundary = np.array(best_polygon.exterior.coords[:-1])[::-1]
+        # Combine them with a connecting point to create a valid ring
+        vertices = np.vstack([
+            outer_boundary,
+            outer_boundary[0],  # Connection point
+            inner_boundary,
+            inner_boundary[0]   # Close the inner boundary
+        ])
+    
+    # Verify the area ratio
+    actual_ratio = best_polygon.area / outer_area
+    
+    return vertices
+
+
+##################################################
+# Custom GUI elements to avoid having to use PyQt5
+##################################################
+
+
+@dataclass
+class DropdownConfig:
+    # Position from right edge (will be calculated in init)
+    margin_right: int = 10
+    margin_top: int = 10
+    width: int = 60  # Smaller width
+    height: int = 25  # Smaller height
+    option_height: int = 25  # Matching height
+    font_scale: float = 0.5  # Smaller font
+    font_thickness: int = 1
+    border_color: Tuple[int, int, int] = (100, 100, 100)
+    fill_color: Tuple[int, int, int] = (200, 200, 200)
+    text_color: Tuple[int, int, int] = (0, 0, 0)
+    main_box_color: Tuple[int, int, int] = (220, 220, 220)  # Light gray background
+
+class DropdownUI:
+    def __init__(self, window_name: str, options: List[str], window_width: int, hidden: bool = False, config: DropdownConfig = None):
+        self.window_name = window_name
+        self.options = options
+        self.config = config or DropdownConfig()
+        
+        # Calculate x position from right edge
+        self.x = window_width - self.config.width - self.config.margin_right
+        self.y = self.config.margin_top
+        
+        self.selected_option = options[0]
+        self.is_open = False
+        self.slider_value = 70
+        self.slider_active = False
+        self.hidden = hidden
+
+    def _is_point_in_rect(self, point: Tuple[int, int], 
+                         rect: Tuple[int, int, int, int]) -> bool:
+        x, y = point
+        rx, ry, rw, rh = rect
+        return rx <= x <= rx + rw and ry <= y <= ry + rh
+
+    def draw(self, img: np.ndarray) -> None:
+        if not self.hidden:
+            cfg = self.config
+            
+            # Draw main box with background
+            cv2.rectangle(img, 
+                        (self.x, self.y),
+                        (self.x + cfg.width, self.y + cfg.height),
+                        cfg.main_box_color, -1)  # Filled rectangle
+            cv2.rectangle(img, 
+                        (self.x, self.y),
+                        (self.x + cfg.width, self.y + cfg.height),
+                        cfg.border_color, 1)  # Border
+            
+            # Calculate text size to center it
+            text_size = cv2.getTextSize(self.selected_option, 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 
+                                    cfg.font_scale, 
+                                    cfg.font_thickness)[0]
+            text_x = self.x + (cfg.width - text_size[0]) // 2
+            text_y = self.y + (cfg.height + text_size[1]) // 2
+            
+            cv2.putText(img, self.selected_option,
+                        (text_x, text_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        cfg.font_scale, cfg.text_color, cfg.font_thickness)
+            
+            if self.is_open:
+                for i, option in enumerate(self.options):
+                    y = self.y + cfg.height * (i + 1)
+                    # Background
+                    cv2.rectangle(img,
+                                (self.x, y),
+                                (self.x + cfg.width, y + cfg.option_height),
+                                cfg.fill_color, -1)
+                    # Border
+                    cv2.rectangle(img,
+                                (self.x, y),
+                                (self.x + cfg.width, y + cfg.option_height),
+                                cfg.border_color, 1)
+                    # Centered text
+                    text_size = cv2.getTextSize(option, 
+                                            cv2.FONT_HERSHEY_SIMPLEX, 
+                                            cfg.font_scale, 
+                                            cfg.font_thickness)[0]
+                    text_x = self.x + (cfg.width - text_size[0]) // 2
+                    text_y = y + (cfg.option_height + text_size[1]) // 2
+                    
+                    cv2.putText(img, option,
+                            (text_x, text_y),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            cfg.font_scale, cfg.text_color, cfg.font_thickness)
+
+    def handle_mouse(self, event: int, x: int, y: int):
+        """Returns the newly selected option if changed, None otherwise"""        
+        if event != cv2.EVENT_LBUTTONDOWN or self.hidden:
+            return None
+            
+        # Check main dropdown box click
+        if self._is_point_in_rect((x, y), 
+                                 (self.x, self.y, self.config.width, self.config.height)):
+            self.is_open = not self.is_open
+            return "Disable"
+            
+        if not self.is_open:
+            return None
+            
+        # Check option clicks
+        for i, option in enumerate(self.options):
+            opt_y = self.y + self.config.height * (i + 1)
+            if self._is_point_in_rect((x, y),
+                                    (self.x, opt_y, self.config.width, self.config.option_height)):
+                old_option = self.selected_option
+                self.selected_option = option
+                self.is_open = False
+                return option if option != old_option else None
+                
+        self.is_open = False
+        return None
+    
+
+def retrieve_corners_from_image(
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, test: bool = False
+):  # pragma: no cover
+    """Open a window and waits for the user to click on all corners of the polygonal arena.
+
+    The user should click on the corners in sequential order.
+
+    Args:
+        frame (np.ndarray): Frame to display.
+        arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
+        cur_vid (int): Index of the current video in the list of videos.
+        videos (list): List of videos to be processed.
+        current_roi (int): Current ROI to be extracted. 0 is the global arena ROI
+        arena_dims (float): Distance as taken from video in pixels
+        norm_dist (float): Same distance as arena_dims for normalization in mm
+        arena_corners (np.ndarray): Corners of arena, relevant for automatic ROIs
+        test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
+
+    Returns:
+        corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
+
+    """
+    corners = []
+
+    roi_colors=ROI_COLORS
+
+    #early return of set of square corners
+    if test:
+        return [(111, 49), (541, 31), (553, 438), (126, 452)]
+    
+    if current_roi == 0:
+        display_text="deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
+            )
+        color = (40, 86, 236)
+
+    # current roi > 0
+    elif current_roi<21:
+        display_text="deepof - Select polygonal region of interest corners for roi {} - (q: exit / d: delete{}) - {}/{} processed".format(
+                current_roi,
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
+            )
+        color = roi_colors[current_roi-1]
+    else:
+        raise ValueError(
+            "only up to 20 ROIs are allowed (what for do you even need so many ROIs?)"
+        )
+
+
+    def click_on_corners(event, x, y, flags, param):
+        # Callback function to store the coordinates of the clicked points
+        nonlocal corners, frame
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            corners.append((x, y))
+
+    def mouse_callback(event, x, y, flags, param):
+        # Callback function to store the coordinates of the clicked points
+        nonlocal corners, frame
+
+        image_name = param[0]
+        dropdown = param[1]
+        new_option = dropdown.handle_mouse(event, x, y)
+
+        if dropdown.selected_option == "Manual" and new_option is None:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                corners.append((x, y))
+
+        
+        
+        if new_option is not None:
+            # Handle option change
+            if new_option == "Inner" or new_option == "Outer":
+                cv2.createTrackbar("Diameter", image_name, dropdown.slider_value, 100, lambda x: None)
+                dropdown.slider_active = True
+            elif dropdown.slider_active:
+                dropdown.slider_value = cv2.getTrackbarPos("Diameter", image_name)
+                cv2.destroyWindow(image_name)
+                cv2.namedWindow(image_name)
+                cv2.setMouseCallback(image_name, mouse_callback, [image_name, dropdown])
+                dropdown.slider_active = False
+
+    # Resize frame to a standard size
+    frame = frame.copy() 
+
+    options = ["Manual", "Inner", "Outer"]
+    
+    arena_available = False
+    if arena_corners is not None:
+        arena_available = True
+
+
+    # Create dropdown
+    dropdown = DropdownUI(display_text, options, window_width=frame.shape[1], hidden=not arena_available)
+
+    # Create a window and display the image
+    cv2.startWindowThread()
+
+    alpha=0.3
+    while True:
+        try:
+            frame_copy = frame.copy()
+            
+            cv2.namedWindow(display_text, cv2.WINDOW_AUTOSIZE)
+            cv2.setMouseCallback(
+                display_text,
+                mouse_callback, 
+                [display_text, dropdown],
+            )
+
+            # Draw dropdown
+            dropdown.draw(frame_copy)
+
+            # Draw additional content based on selected option
+            if (dropdown.selected_option == "Inner" or dropdown.selected_option == "Outer") and dropdown.slider_active:
+                return_inner=True
+                if dropdown.selected_option == "Outer":
+                    return_inner=False
+                # remove manual corners
+                corners_manual = corners.copy()
+                dropdown.slider_value = cv2.getTrackbarPos("Diameter", display_text)
+                corner_array = create_inner_polygon(np.array(arena_corners), dropdown.slider_value/100, return_inner=return_inner).astype(int)
+                corners=[tuple([point[0].item(),point[1].item()]) for point in corner_array]
+
+            # Display already selected corners
+            if len(corners) > 0:
+                for c, corner in enumerate(corners):
+                    cv2.circle(frame_copy, (corner[0], corner[1]), 4, color, -1)
+                    # Display lines between the corners
+                    if len(corners) > 1 and c > 0:
+                        if "polygonal" in arena_type or len(corners) < 5:
+                            cv2.line(
+                                frame_copy,
+                                (corners[c - 1][0], corners[c - 1][1]),
+                                (corners[c][0], corners[c][1]),
+                                color,
+                                2,
+                            )
+
+            if len(corners) > 1 and "polygonal" in arena_type:
+                if norm_dist is None:
+                    norm_dist=get_first_length(corners)
+                cur_dist=math.dist(corners[-2], corners[-1])
+                text="last edge in mm: " + str(np.round((cur_dist*(arena_dims/norm_dist))*100)/100)
+                cv2.putText(
+                    frame_copy,
+                    text,
+                    (10, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA
+                )
+
+            # Close the polygon
+            if len(corners) > 2:
+                if "polygonal" in arena_type or len(corners) < 5:
+                    cv2.line(
+                        frame_copy,
+                        (corners[0][0], corners[0][1]),
+                        (corners[-1][0], corners[-1][1]),
+                        color,
+                        2,
+                    )
+
+            if len(corners) >= 5 and "circular" in arena_type:
+                cv2.ellipse(
+                    frame_copy,
+                    *fit_ellipse_to_polygon(corners),
+                    startAngle=0,
+                    endAngle=360,
+                    color=color,
+                    thickness=3,
+                )
+            
+            # Create filled overlay for ROIs (these are always polygonal)
+            if current_roi > 0 and len(corners) > 2:         
+                overlay = frame_copy.copy()
+                pts = np.array(corners, dtype=np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(overlay, [pts], color)           
+                # Blend overlay with original frame
+                cv2.addWeighted(overlay, alpha, frame_copy, 1 - alpha, 0, frame_copy)
+
+            cv2.imshow(
+                display_text,
+                frame_copy,
+            )
+
+            key = cv2.waitKey(1) & 0xFF
+            # Remove last added coordinate if user presses 'd'
+            if key == ord("d"):
+                corners = corners[:-1]
+
+            # Exit is user presses 'q'
+            if len(corners) > 2:
+                if key == ord("q"):
+                    break
+
+            # Exit and copy all coordinates if user presses 'c'
+            if cur_vid > 0 and key == ord("p"):
+                corners = None
+                break
+
+        # If user closes the window, recreate the dropdown menu.
+        except cv2.error:
+            dropdown = DropdownUI(display_text, options, window_width=frame.shape[1], hidden=not arena_available)
+            cv2.namedWindow(display_text, cv2.WINDOW_AUTOSIZE)
+            cv2.setMouseCallback(
+                display_text,
+                mouse_callback, 
+                [display_text, dropdown],
+            )
+        
+
+    cv2.destroyAllWindows()
+    cv2.waitKey(1)
+
+    if norm_dist is None and corners is not None and len(corners) >= 5 and "circular" in arena_type:
+        cur_arena_params = fit_ellipse_to_polygon(corners)
+        norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
+
+    # Return the corners
+    return corners, norm_dist
