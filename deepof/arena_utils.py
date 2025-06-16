@@ -322,6 +322,7 @@ def get_arenas(
                         get_arena=False,
                         arena_dims=arena_dims,
                         norm_dist=arena_dists[key],
+                        arena_params=arena_params[key],
                         test=test,
                     )
 
@@ -641,7 +642,16 @@ def display_message(message: List[str]): # pragma: no cover
 
 
 def extract_polygonal_arena_coordinates(
-    video_path: str, arena_type: str, video_index: int, videos: list, list_of_rois: list = 0, get_arena: bool = True, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False, 
+    video_path: str, 
+    arena_type: str, 
+    video_index: int, 
+    videos: list, 
+    list_of_rois: list = 0, 
+    get_arena: bool = True, 
+    arena_dims: float = 1.0, 
+    norm_dist: float = None,
+    arena_params: np.ndarray = None,
+    test: bool = False, 
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
 
@@ -654,6 +664,7 @@ def extract_polygonal_arena_coordinates(
         get_arena (bool): retrieve arena or skip step (default is True)
         arena_dims (float): Distance as taken from video in pixels
         norm_dist (float): Same distance as arena_dims for normalization in mm
+        arena_params (np.ndarray): nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
 
@@ -672,7 +683,6 @@ def extract_polygonal_arena_coordinates(
     _, numpy_im = current_video_cap.read()
     current_video_cap.release()
 
-    arena_corners = None
     roi_corners = None
     norm_dist_new = None
 
@@ -688,6 +698,10 @@ def extract_polygonal_arena_coordinates(
             norm_dist=None,
             test=test,
         )
+    elif arena_params is not None:
+        arena_corners = extract_corners_from_arena(arena_params)
+    else:
+        arena_corners = None
     if norm_dist_new is None:
         norm_dist_new = norm_dist
 
@@ -801,6 +815,11 @@ def create_inner_polygon(outer_vertices, target_area_ratio=0.7, tolerance=0.01, 
         if not outer_polygon.is_valid:
             raise ValueError("Invalid polygon provided")
     
+    if target_area_ratio==0.0 and return_inner==False:
+        return outer_vertices
+    elif target_area_ratio==0.0 and return_inner:
+        return np.array([])
+    
     # Get the area of the outer polygon
     outer_area = outer_polygon.area
     target_area = outer_area * target_area_ratio
@@ -889,6 +908,91 @@ def create_inner_polygon(outer_vertices, target_area_ratio=0.7, tolerance=0.01, 
     actual_ratio = best_polygon.area / outer_area
     
     return vertices
+
+
+def extract_corners_from_arena(
+    arena_params: Union[tuple, np.ndarray], 
+    num_points: int = 100
+):
+    """
+    Extracts polygon corner coordinates from given arena parameters.
+
+    In case of polygonal arenas: Input is returned directly
+    In case of circular arenas: Input is converted into a polygon with num_points.
+
+    Args:
+        params (Union[Tuple, np.ndarray]):
+            - For a circular arena: A tuple containing ((center_x, center_y), (diameter_x, diameter_y), angle_degrees).
+            - For a polygonal arena: A NumPy array of shape (N, 2) with vertex coordinates.
+        num_points (int): Number of vertices for the ellipse. Defaults to 100.
+
+    Returns:
+        polygon (np.ndarray): A NumPy array of shape (M, 2) representing the polygon vertices.
+
+    Raises:
+        TypeError: If the input `params` is not a recognized type or format.
+    """
+    # Case 1: Input is already a polygon array
+    if isinstance(arena_params, np.ndarray):
+        if len(arena_params.shape) == 2 and arena_params.shape[1] == 2:
+            return arena_params
+        else:
+            raise TypeError(
+                f"Input NumPy array must have shape (N, 2), but got {arena_params.shape}"
+            )
+
+    # Case 2: Input is an ellipse tuple
+    if isinstance(arena_params, tuple):
+        # Validate the structure of the ellipse tuple
+        try:
+            (center, diameters, angle) = arena_params
+            if not (isinstance(center, (tuple, list)) and len(center) == 2 and
+                    isinstance(diameters, (tuple, list)) and len(diameters) == 2 and
+                    isinstance(angle, (float, int))):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise TypeError(
+                "Ellipse parameters must be a tuple in the format "
+                "((center_x, center_y), (diameter_x, diameter_y), angle_degrees)."
+            )
+
+        # Unpack parameters
+        center_x, center_y = center
+        radius_x, radius_y = diameters
+               
+        # Convert angle from degrees to radians for numpy's trig functions
+        angle_rad = np.deg2rad(angle)
+
+        # Generate points on the ellipse
+        # Create an array of angles from 0 to 2*pi
+        theta = np.linspace(0, 2 * np.pi, num_points)
+
+        # Parametric equation for a standard (non-rotated) ellipse
+        x_unrotated = radius_x * np.cos(theta)
+        y_unrotated = radius_y * np.sin(theta)
+
+        # Apply rotation matrix
+        # x' = x*cos(a) - y*sin(a)
+        # y' = x*sin(a) + y*cos(a)
+        cos_a = np.cos(angle_rad)
+        sin_a = np.sin(angle_rad)
+        
+        x_rotated = x_unrotated * cos_a - y_unrotated * sin_a
+        y_rotated = x_unrotated * sin_a + y_unrotated * cos_a
+
+        # Translate the ellipse to its center
+        x = x_rotated + center_x
+        y = y_rotated + center_y
+
+        # Stack the x and y coordinates to form the (N, 2) polygon array
+        polygon = np.vstack((x, y)).T
+        
+        return polygon
+
+    # If input is neither, raise an error
+    raise TypeError(
+        f"Input must be a NumPy array or a tuple, but got {type(arena_params)}"
+    )
 
 
 ##################################################
@@ -1091,10 +1195,10 @@ def retrieve_corners_from_image(
         if new_option is not None:
             # Handle option change
             if new_option == "Inner" or new_option == "Outer":
-                cv2.createTrackbar("Diameter", image_name, dropdown.slider_value, 100, lambda x: None)
+                cv2.createTrackbar("Approx. Ratio", image_name, dropdown.slider_value, 100, lambda x: None)
                 dropdown.slider_active = True
             elif dropdown.slider_active:
-                dropdown.slider_value = cv2.getTrackbarPos("Diameter", image_name)
+                dropdown.slider_value = cv2.getTrackbarPos("Approx. Ratio", image_name)
                 cv2.destroyWindow(image_name)
                 cv2.namedWindow(image_name)
                 cv2.setMouseCallback(image_name, mouse_callback, [image_name, dropdown])
@@ -1138,7 +1242,7 @@ def retrieve_corners_from_image(
                     return_inner=False
                 # remove manual corners
                 corners_manual = corners.copy()
-                dropdown.slider_value = cv2.getTrackbarPos("Diameter", display_text)
+                dropdown.slider_value = cv2.getTrackbarPos("Approx. Ratio", display_text)
                 corner_array = create_inner_polygon(np.array(arena_corners), dropdown.slider_value/100, return_inner=return_inner).astype(int)
                 corners=[tuple([point[0].item(),point[1].item()]) for point in corner_array]
 
@@ -1239,6 +1343,11 @@ def retrieve_corners_from_image(
     if norm_dist is None and corners is not None and len(corners) >= 5 and "circular" in arena_type:
         cur_arena_params = fit_ellipse_to_polygon(corners)
         norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
+
+    # fit ellipse and extract corner points from fitted ellipse (for smoothing)
+    if "circular" in arena_type:
+        arena_ellipse = fit_ellipse_to_polygon(corners)
+        corners = extract_corners_from_arena(arena_ellipse)
 
     # Return the corners
     return corners, norm_dist
