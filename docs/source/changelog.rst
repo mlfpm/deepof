@@ -1,6 +1,43 @@
 Changelog
 =========
 
+
+[0.8.2] - 2025-XX-XX
+====================
+
+Added
+-------
+- Options display_arena, display_markers, display_mouse_labels to `output_annotated_video`
+- Automatic inner and outer ROI as a selectable percentage of total arena area during ROI creation
+- Functions added: `create_inner_polygon`, `extract_corners_from_arena`
+- Classes added `DropdownConfig`, `DropdownUI`
+
+Changed
+-------
+- Refactored export for annotated videos
+- Moved arena functionality out of `utils.py` into new file `arena_utils.py`
+
+Bug Fixes
+---------
+- Fixed a bug in video annotation for annotating with soft counts
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2025-XX-XX
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
 [0.8.1] - 2025-06-XX
 ====================
 
