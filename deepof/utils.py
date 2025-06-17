@@ -2908,26 +2908,26 @@ def get_roi_colors():
     """Does nothing else than returning an array of colors"""
     
     #hard coded as these colors seem to be defined at compilation time, otherwise open cv crashes
-    return [(204,  20,  20),
-       (204, 131,  20),
-       (167, 204,  20),
-       ( 57, 204,  20),
-       ( 20, 204,  94),
-       ( 20, 204, 204),
-       ( 20,  94, 204),
-       ( 57,  20, 204),
-       (167,  20, 204),
-       (204,  20, 131),
-       (153,  15,  15),
-       (153,  98,  15),
-       (125, 153,  15),
-       (43, 153,  15),
-       (15, 153,  70),
+    return [(204, 20, 20),
+       (204, 131, 20),
+       (167, 204, 20),
+       (57, 204, 20),
+       (20, 204, 94),
+       (20, 204, 204),
+       (20, 94, 204),
+       (57, 20, 204),
+       (167, 20, 204),
+       (204, 20, 131),
+       (153, 15, 15),
+       (153, 98, 15),
+       (125, 153, 15),
+       (43, 153, 15),
+       (15, 153, 70),
        (15, 153, 153),
-       (15,  70, 153),
-       (43,  15, 153),
-       (125,  15, 153),
-       (153,  15,  98)]
+       (15, 70, 153),
+       (43, 15, 153),
+       (125, 15, 153),
+       (153, 15, 98)]
 
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False
