@@ -6,13 +6,22 @@
 /.hypothesis
 /.dockerignore
 /dof/
+/dof2/
 /h5/
 /For_testing_old_deepOF/
 /tutorial_files/
-/tutorial_files_full/
+/tutorial_files_old/
+/tutorial_files_old_other/
 /deepof/__pycache__/
 /big_data/
 /Short/
-/tutorial_files_old/
 /TwoLargeVideos_h5/
+/Bartek2/
+/JJ/
+/demo/
+/jCSDS/
+/Old/
+/PolarPlots/
+/SI/
+/Very_Large/
 

@@ -78,7 +78,7 @@ def test_get_dt_and_subfunctions(table_type, return_path, only_metainfo, load_in
         adj_load_range=np.arange(0,100)
 
     #check functionality
-    assert isinstance(path, str)
+    assert isinstance(path, (str, dict))
     if only_metainfo:
         assert isinstance(data, dict)
         assert 'num_rows' in data

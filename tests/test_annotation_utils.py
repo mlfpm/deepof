@@ -22,6 +22,7 @@ from shapely.geometry import Point, Polygon
 
 import deepof.annotation_utils
 import deepof.data
+import deepof.utils
 
 
 @settings(deadline=None)
@@ -185,15 +186,18 @@ def test_single_animal_traits(animal_id):
     )["test"]
     speed_dframe = prun.get_coords(speed=1, selected_id=animal_id)["test"]
 
-    with open(
-        "./deepof/trained_models/deepof_supervised/deepof_supervised_huddle_estimator.pkl",
-        "rb",
-    ) as handle:
-        huddle_clf = pickle.load(handle)
+    # Downloads immobility model if not already loaded
+    huddle_clf = deepof.utils.load_precompiled_model(
+        None,
+        download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
+        model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
+        model_name="Immobility classifier"
+    ) 
 
-    huddling = deepof.annotation_utils.cowering(
+    huddling, sleeping = deepof.annotation_utils.immobility(
         features, huddle_estimator=huddle_clf, animal_id=animal_id+"_",
-    ).astype(int)
+    )
+    huddling = huddling.astype(int)
 
     rmtree(
         os.path.join(
@@ -293,15 +297,27 @@ def test_max_behaviour(behaviour_dframe, window_size, stepped):
 
 def test_get_hparameters():
     #create fake coords 
-    class FakeCoords:
-        def __init__(self, frame_rate):
-            self._frame_rate = frame_rate
-        
-    fake_coords=FakeCoords(25)
+    prun = deepof.data.Project(
+    project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+    video_path=os.path.join(
+        ".", "tests", "test_examples", "test_multi_topview", "Videos"
+    ),
+    table_path=os.path.join(
+        ".", "tests", "test_examples", "test_multi_topview", "Tables"
+    ),
+    arena="circular-autodetect",
+    animal_ids=["B", "W"],
+    video_scale=380,
+    video_format=".mp4",
+    table_format=".h5",
+    exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+    ).create(force=True, test=True)
 
-    assert isinstance(deepof.annotation_utils.get_hparameters(fake_coords), dict)
+    prun.reset_supervised_parameters()
+    assert isinstance(prun.get_supervised_parameters(), dict)
+    prun.set_supervised_parameters({"close_contact_tol": 20})
     assert (
-        deepof.annotation_utils.get_hparameters(fake_coords,{"speed_pause": 20})["speed_pause"]
+        prun.get_supervised_parameters()["close_contact_tol"]
         == 20
     )
 
@@ -320,7 +336,7 @@ def test_frame_corners(w, h):
 
 
 @settings(deadline=None)
-@given(multi_animal=st.just(False), video_output=st.booleans())
+@given(multi_animal=st.booleans(), video_output=st.booleans())
 def test_rule_based_tagging(multi_animal, video_output):
 
     if video_output:
@@ -352,50 +368,5 @@ def test_rule_based_tagging(multi_animal, video_output):
     rmtree(os.path.join(path, "deepof_project"))
 
     assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (24 if multi_animal else 7)
+    assert list(hardcoded_tags.values())[0].shape[1] == (29 if multi_animal else 10)
 
-
-# list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations
-polygons = [
-    [[0, 0], [1, 0], [1, 1], [0, 1]],  # Square
-    [[0, 0], [2, 0], [1, 2], [0, 0]],  # Triangle
-    [[-4, 0], [2, 0], [2, 2], [-4, 2], [-4, 0]],  # Rectangle
-    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]],  # Complex polygon
-    [[0, 0], [6, 0], [6, 4], [4, 4], [4, 2], [2, 2], [2, 4], [0, 4], [0, 0]],  # U-shape
-    [
-        [0, 0],
-        [6, 0],
-        [6, 6],
-        [0, 6],
-        [0, 3],
-        [2, 3],
-        [2, 4],
-        [4, 4],
-        [4, 2],
-        [2, 2],
-        [2, 3],
-        [0, 3],
-        [0, 0],
-    ],  # ring polygon
-]
-
-
-@settings(max_examples=100, deadline=None)
-@given(
-    points=st.lists(
-        st.lists(
-            st.floats(min_value=-100, max_value=100, width=32), min_size=2, max_size=2
-        ),
-        min_size=1,
-        max_size=100,
-    ),
-    polygons=st.sampled_from(polygons),
-)
-def test_point_in_polygon(points, polygons):
-
-    points = np.array(points)
-    polygons = np.array(polygons)
-    assert all(
-        deepof.annotation_utils.point_in_polygon_numba(points, polygons)
-        == deepof.annotation_utils.point_in_polygon(points, Polygon(polygons))
-    )

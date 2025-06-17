@@ -33,7 +33,7 @@ from statannotations.Annotator import Annotator
 
 import deepof.post_hoc
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt, _suppress_warning
+from deepof.data_loading import get_dt, _suppress_warning
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -45,8 +45,17 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
-    output_unsupervised_annotated_video,
+    output_annotated_video,
     output_videos_per_cluster,
+    get_behavior_colors,
+    get_supervised_behaviors_in_roi,
+    get_unsupervised_behaviors_in_roi,
+    get_beheavior_frames_in_roi,
+    _apply_rois_to_bin_info,
+    BGR_to_hex,
+    _preprocess_transitions,
+    calculate_FSTTC,
+    calculate_simple_association,
 )
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -68,15 +77,21 @@ def plot_heatmaps(
     align: str = None,
     exp_condition: str = None,
     condition_value: str = None,
-    display_arena: bool = True,
-    xlim: float = None,
-    ylim: float = None,
-    save: bool = False,
     experiment_id: int = "average",
+    # Time selection paramaters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int = 20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    display_rois: bool = True,
+    # Others
+    display_arena: bool = True,
+    xlim: float = None,
+    ylim: float = None,
+    save: bool = False,
     dpi: int = 100,
     ax: Any = None,
     show: bool = True,
@@ -91,14 +106,18 @@ def plot_heatmaps(
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
         condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
+        experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        display_rois (bool): Display the active ROI, if a ROI was selected. Defaults to True.              
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
         save (str):  if provided, the figure is saved to the specified path.
-        experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
         show (bool): whether to show the created figure. If False, returns al axes.
@@ -114,12 +133,14 @@ def plot_heatmaps(
         origin="plot_heatmaps",
         bodyparts=bodyparts,
         center=center,
+        animals_in_roi=animals_in_roi,
         experiment_ids=experiment_id,
         exp_condition=exp_condition,
         condition_values=[condition_value],
+        roi_number=roi_number,
     )
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animals_in_roi=animals_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -135,7 +156,7 @@ def plot_heatmaps(
     e_id=None
     if not experiment_id=="average":
         e_id=experiment_id
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, samples_max=samples_max
     )
 
@@ -165,7 +186,7 @@ def plot_heatmaps(
         tab = get_dt(coords, key)  
         
         #cut slice from table
-        tab=tab.iloc[bin_info[key]]
+        tab=tab.iloc[bin_info_time[key]]
 
         #append table
         sampled_tabs.append(tab)
@@ -191,6 +212,11 @@ def plot_heatmaps(
         for hmap in heatmaps:
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
+    if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
+        for hmap in heatmaps:
+            color = BGR_to_hex(deepof.utils.get_roi_colors()[roi_number-1])
+            plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
+
     if not ax:
         plt.gca().invert_yaxis()
     else:
@@ -205,14 +231,18 @@ def plot_heatmaps(
 def plot_gantt(
     coordinates: project,
     instance_id: str,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
-    soft_counts: table_dict = None,
-    supervised_annotations: table_dict = None,
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     instances_to_plot: list = None,
@@ -224,12 +254,15 @@ def plot_gantt(
     Args:
         coordinates (project): deepOF project where the data is stored.
         instance_id (str): Name of the instance to display (can either be an experiment or a behavior).
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.      
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         instances_to_plot (list): list of either behaviors or experiments to plot. If instance_id is an experiment this needs to be a list of behaviors and vice versa. If None, all options are plotted.
@@ -252,9 +285,12 @@ def plot_gantt(
         # Visualization parameters
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
+        roi_number=roi_number,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
+        animals_in_roi = animals_in_roi,
+        roi_mode = roi_mode,
         ax=ax,
         save=save)
 
@@ -271,9 +307,12 @@ def plot_gantt(
         # Visualization parameters
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
+        roi_number=roi_number,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
+        animals_in_roi = animals_in_roi,
+        roi_mode = roi_mode,
         ax=ax,
         save=save)
 
@@ -287,6 +326,10 @@ def _plot_experiment_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -305,6 +348,9 @@ def _plot_experiment_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -321,7 +367,18 @@ def _plot_experiment_gantt(
         soft_counts=soft_counts,
         experiment_ids=experiment_id,
         behaviors=behaviors_to_plot,
+        animals_in_roi = animals_in_roi,
+        roi_number=roi_number,
+        roi_mode = roi_mode,
     )
+
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
+        )
+
 
     # set active axes if provided
     if ax:
@@ -330,10 +387,11 @@ def _plot_experiment_gantt(
     # Determine plot type and length of the whole dataset
     if soft_counts is None and supervised_annotations is not None:
         plot_type = "supervised"
+        #get entire supervised behavior data or only the data from a specific ROI
         data_frame=get_dt(supervised_annotations,experiment_id)
-        
+       
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -344,10 +402,11 @@ def _plot_experiment_gantt(
         )
     elif soft_counts is not None and supervised_annotations is None:
         plot_type = "unsupervised"
+
         data_frame=get_dt(soft_counts,experiment_id)
 
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -361,15 +420,16 @@ def _plot_experiment_gantt(
         raise NotImplementedError(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
-
+    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # get indices to be plotted
-    bin_indices=bin_info[experiment_id]
+    bin_indices=bin_info[experiment_id]["time"]
 
 
     # set behavior ids
     if plot_type == "unsupervised":
-        hard_counts = get_dt(soft_counts,experiment_id).argmax(axis=1)
+        hard_counts = np.array([row.argmax() if not np.isnan(row).any() else -1 for row in data_frame])
         behavior_ids = [f"Cluster {str(k)}" for k in range(0, hard_counts.max() + 1)]
     elif plot_type == "supervised":
         behavior_ids = [
@@ -406,14 +466,26 @@ def _plot_experiment_gantt(
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = np.tile(
-        list(sns.color_palette("tab20").as_hex()),
-        int(np.ceil(n_available_features / 20)),
-    )
+    colors = get_behavior_colors(behaviors_to_plot, coordinates._animal_ids)
+
+    # apply time and roi bins to data 
+    if plot_type == "unsupervised":
+        time_binned = hard_counts[bin_indices]
+        if roi_number is not None:
+            time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[experiment_id], animals_in_roi)
+            #reset function warning
+            get_unsupervised_behaviors_in_roi._warning_issued = False
+
+    
+    elif plot_type == "supervised":
+        supervised_binned = data_frame.iloc[bin_indices]
+        if roi_number is not None:
+            supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, roi_mode)
+
 
     # Iterate over features and plot
     rows = 0
-    for feature, color in zip(range(n_available_features), colors):
+    for feature in range(n_available_features):
 
         # skip if feature is not selected for plotting
         if behavior_ids[feature] not in behaviors_to_plot:
@@ -421,11 +493,10 @@ def _plot_experiment_gantt(
 
         # fill gantt row
         if plot_type == "unsupervised":
-            gantt[rows] = hard_counts[bin_indices] == feature
+            gantt[rows] = time_binned == feature
         elif plot_type == "supervised":
-            gantt[rows] = data_frame[
-                behavior_ids[feature]
-            ].iloc[bin_indices]
+            gantt[rows] = supervised_binned[behavior_ids[feature]]
+
         gantt[rows][gantt[rows]>0]+=rows
 
         rows+=1
@@ -454,6 +525,10 @@ def _plot_behavior_gantt(
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -472,6 +547,9 @@ def _plot_behavior_gantt(
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)        
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -489,7 +567,17 @@ def _plot_behavior_gantt(
         soft_counts=soft_counts,
         behaviors=behavior_id,
         experiment_ids=experiments_to_plot,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode = roi_mode,
     )
+
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
+        )
 
     # set active axes if provided
     if ax:
@@ -501,7 +589,7 @@ def _plot_behavior_gantt(
         all_experiments=list(supervised_annotations.keys())
         
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -514,7 +602,7 @@ def _plot_behavior_gantt(
         all_experiments=list(soft_counts.keys())
 
         # preprocess information given for time binning
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
         coordinates, 
         bin_size, 
         bin_index, 
@@ -528,6 +616,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -541,12 +630,16 @@ def _plot_behavior_gantt(
         experiments_to_plot = all_experiments
 
     # get common indices between all selected experiments
-    bin_indices=bin_info[list(bin_info.keys())[0]]
+    bin_indices=bin_info[list(bin_info.keys())[0]]["time"]
     max_index=np.max(bin_indices)
     for exp_id in experiments_to_plot:
-        if max_index > np.max(bin_info[exp_id]):
-            max_index=np.max(bin_info[exp_id])
-            bin_indices=bin_info[exp_id][bin_info[exp_id]<max_index]
+        if max_index > np.max(bin_info[exp_id]["time"]):
+            max_index=np.max(bin_info[exp_id]["time"])
+            bin_indices=bin_info[exp_id]["time"][bin_info[exp_id]["time"]<max_index]
+    
+    for exp_id in bin_info.keys():
+        for id in bin_info[exp_id].keys():
+            bin_info[exp_id][id]=bin_info[exp_id][id][0:len(bin_indices)]
 
     # set gantt matrix
     n_available_experiments = len(all_experiments)
@@ -559,9 +652,11 @@ def _plot_behavior_gantt(
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = np.tile(
-        list(sns.color_palette("tab20").as_hex()),
-        int(np.ceil(n_available_experiments / 20)),
+    colors = list(
+        np.tile(
+            list(sns.color_palette("tab20").as_hex()),
+            int(np.ceil(n_available_experiments / 20)),
+        )
     )
 
     # Iterate over experiments and plot
@@ -574,14 +669,27 @@ def _plot_behavior_gantt(
 
         # fill gantt row
         if plot_type == "unsupervised":
+
             hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
-            gantt[rows] = hard_counts[bin_indices] == cluster_no
+            time_binned = hard_counts[bin_indices]
+            if roi_number is not None:
+                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[all_experiments[exp_id]], animals_in_roi)
+            gantt[rows] = time_binned == cluster_no
+
         elif plot_type == "supervised":
-            gantt[rows] = get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices]
+
+            supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
+            if roi_number is not None:
+                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animals_in_roi, roi_mode)
+            gantt[rows] = supervised_binned[behavior_id]
+
         gantt[rows][gantt[rows]>0]+=rows
         
         rows += 1
+    
+    #reset function warning
+    get_unsupervised_behaviors_in_roi._warning_issued = False
 
     gantt_plotter(
         coordinates=coordinates,
@@ -620,7 +728,7 @@ def gantt_plotter(
         coordinates (project): deepOF project where the data is stored.
         gantt_matrix (np.ndarray): 2D integer matrix denoting time sections with present or absent behavior
         plot_type (str): type of plot, either "supervised" or "unsupervised"
-        behavior_id (str): Name of the experiment or behavior to display.
+        instance_id (str): Name of the experiment or behavior to display.
         n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
         instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
         colors (list): list of color hexcodes for plotting
@@ -634,7 +742,9 @@ def gantt_plotter(
   
     #only add "white" as base color if there are frames with no behaviors
     if (gantt_matrix==0).any():
-        colors=colors=['#FFFFFF'] + colors.tolist()
+        colors=colors=['#FFFFFF'] + colors
+    
+    colors = [color for color in colors if color is not None]
 
     N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
@@ -662,10 +772,13 @@ def gantt_plotter(
                 color="black",
             )
 
-        # plot line for axis to separate between features
-        plt.axhline(y=rows, color="k", linewidth=0.5)
+
 
         rows += 1
+    
+    for k in range(gantt_matrix.shape[0]):
+        # plot line for axis to separate between features
+        plt.axhline(y=k, color="k", linewidth=0.5)
 
 
     # Iterate over additional checkpoints and plot
@@ -773,15 +886,19 @@ def plot_enrichment(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
-    polar_depiction: bool = False,
-    plot_speed: bool = False,
-    add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=100000,
+    samples_max: int =100000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise", 
     # Visualization parameters
+    polar_depiction: bool = False,
+    plot_speed: bool = False,
+    add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
     exp_condition_order: list = None,
     normalize: bool = False,
@@ -796,13 +913,16 @@ def plot_enrichment(
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per animal experiment across time.
-        polar_depiction (bool): if True, display as polar plot.
-        plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        polar_depiction (bool): if True, display as polar plot.
+        plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
@@ -816,7 +936,16 @@ def plot_enrichment(
         coordinates,
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode = roi_mode,
     )
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
     if normalize and plot_speed:
         print(
             '\033[33mInfo! When plotting speed the normalization option "normalize" is ignored!\033[0m'
@@ -849,24 +978,33 @@ def plot_enrichment(
 
     # Preprocess information given for time binning
     if supervised_annotations is not None:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
-        bin_info = _preprocess_time_bins(
+        tab_dict_for_binning = soft_counts
+        if soft_counts is None:
+            tab_dict_for_binning = embeddings
+        
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=embeddings, samples_max=samples_max,
+            tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
         )
+    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
-        soft_counts=soft_counts,
-        supervised_annotations=supervised_annotations,
-        exp_conditions=exp_conditions,
-        plot_speed=plot_speed,
+        soft_counts = soft_counts,
+        supervised_annotations = supervised_annotations,
+        exp_conditions = exp_conditions,
+        plot_speed = plot_speed,
         bin_info = bin_info,
-        normalize=normalize,
+        roi_number = roi_number,
+        animals_in_roi = animals_in_roi,
+        normalize = normalize,
+        roi_mode=roi_mode,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
@@ -1175,12 +1313,13 @@ def plot_enrichment(
             )
             X_size = bbox.width
             N_X_ticks = len(ax.xaxis.get_ticklabels())
+            rotation_angle = int(np.clip((N_X_ticks / X_size - 1) * 30, 0, 90))
+            ha = 'right' if rotation_angle != 0 else 'center'
             ax.set_xticks(
-                ax.get_xticks(),
-                ax.get_xticklabels(),
-                rotation=int(
-                    np.max([np.min([90.0, (N_X_ticks / X_size - 1) * 30]), 0.0])
-                ),
+                ax.get_xticks(), 
+                ax.get_xticklabels(), 
+                rotation=rotation_angle, 
+                ha=ha
             )
         else:
             X_size = plt.gcf().get_size_inches()[1]
@@ -1216,19 +1355,77 @@ def plot_enrichment(
         plt.show()
 
 
-def plot_transitions(
+def return_transitions(
     coordinates: coordinates,
-    embeddings: table_dict,
-    soft_counts: table_dict,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
-    samples_max=20000,
-    # Visualization parameters
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Selection parameters
     exp_condition: str = None,
+    delta_T: float = 0.0,
+    silence_diagonal: bool = False,
+    diagonal_behavior_counting: str = "Transitions",
+    normalize:bool = True,
+    # Visualization parameters
     visualization="networks",
-    silence_diagonal=False,
+
+):
+    """Returns data of plot_transitions with same Input options"""
+
+    grouped_transitions, _, combined_columns, _, _ = _preprocess_transitions(
+        coordinates=coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        roi_number=roi_number,
+        animals_in_roi=animals_in_roi,      
+        exp_condition=exp_condition,
+        delta_T=delta_T,        
+        silence_diagonal=silence_diagonal,
+        diagonal_behavior_counting=diagonal_behavior_counting,
+        normalize=normalize,
+        visualization=visualization,
+    )
+
+    results={}
+    for key in grouped_transitions.keys():
+
+        results[key]=grouped_transitions[key].ravel()  # Flatten the matrix into a 1D array in row-major order  
+    count_df = pd.DataFrame.from_dict(results, orient='index', columns=combined_columns)
+    
+    return count_df      
+
+
+def plot_transitions(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Selection parameters
+    exp_condition: str = None,
+    delta_T: float = 0.0,
+    silence_diagonal: bool = False,
+    diagonal_behavior_counting: str = "Transitions",
+    normalize:bool = True,
+    # Visualization parameters
+    visualization="networks",
     ax: list = None,
     save: bool = False,
     **kwargs,
@@ -1237,53 +1434,45 @@ def plot_transitions(
 
     Args:
         coordinates (coordinates): deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        supervised_annotations (table_dict): table dict with supervised annotations.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.      
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
         kwargs: additional arguments to pass to the seaborn kdeplot function.
 
     """
-    # initial check if enum-like inputs were given correctly
-    _check_enum_inputs(
-        coordinates,
-        origin="plot_transitions",
+    grouped_transitions, columns, _, exp_conditions, normalize = _preprocess_transitions(
+        coordinates=coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        bin_size=bin_size,
+        bin_index=bin_index,
+        precomputed_bins=precomputed_bins,
+        samples_max=samples_max,
+        roi_number=roi_number,
+        animals_in_roi=animals_in_roi,      
         exp_condition=exp_condition,
-        visualization=visualization,
-    )
-
-    # Get requested experimental condition. If none is provided, default to the first one available.
-    if coordinates.get_exp_conditions is not None and exp_condition is None:
-        exp_condition = coordinates.get_exp_conditions[
-            list(coordinates.get_exp_conditions.keys())[0]
-        ].columns[0]
-
-    exp_conditions = {
-        key: str(val.loc[:, exp_condition].values[0])
-        for key, val in coordinates.get_exp_conditions.items()
-    }
-
-    # preprocess information given for time binning
-
-
-    bin_info = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
-    )
-
-    grouped_transitions = deepof.post_hoc.compute_transition_matrix_per_condition(
-        soft_counts,
-        exp_conditions,
-        bin_info=bin_info,
+        delta_T=delta_T,        
         silence_diagonal=silence_diagonal,
-        aggregate=(exp_conditions is not None),
-        normalize=True,
+        diagonal_behavior_counting=diagonal_behavior_counting,
+        normalize=normalize,
+        visualization=visualization,
     )
 
     if exp_conditions is None:
@@ -1314,9 +1503,9 @@ def plot_transitions(
 
         for exp_condition, ax in iters:
 
-            try:
+            if isinstance(grouped_transitions, dict):
                 G = nx.DiGraph(grouped_transitions[exp_condition])
-            except nx.NetworkXError:
+            else:
                 G = nx.DiGraph(grouped_transitions)
             weights = [G[u][v]["weight"] * 10 for u, v in G.edges()]
 
@@ -1340,30 +1529,40 @@ def plot_transitions(
 
     elif visualization == "heatmaps":
 
+        if normalize:
+            vmax=0.5 
+        else:
+            vmax=None
         for exp_condition, ax in iters:
 
             if isinstance(grouped_transitions, dict):
                 clustered_transitions = grouped_transitions[exp_condition]
             else:
                 clustered_transitions = grouped_transitions
-            # Cluster rows and columns and reorder
-            row_link = linkage(
-                clustered_transitions, method="average", metric="euclidean"
-            )  # computing the linkage
-            row_order = dendrogram(row_link, no_plot=True)["leaves"]
-            clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
-                row_order, row_order
-            ]
+            if soft_counts is not None:
+                # Cluster rows and columns and reorder
+                row_link = linkage(
+                    clustered_transitions, method="average", metric="euclidean"
+                )  # computing the linkage
+                row_order = dendrogram(row_link, no_plot=True)["leaves"]
+                clustered_transitions = pd.DataFrame(clustered_transitions).iloc[
+                    row_order, row_order
+                ]
+                reordered_columns = np.array(columns)[row_order]
+            else:
+                reordered_columns = np.array(columns)
 
             sns.heatmap(
                 clustered_transitions,
                 cmap="coolwarm",
                 vmin=0,
-                vmax=0.35,
+                vmax=vmax,
                 ax=ax,
                 **kwargs,
             )
             ax.set_title(exp_condition)
+            ax.set_xticklabels(reordered_columns, rotation=90)
+            ax.set_yticklabels(reordered_columns, rotation=0)
 
     if ax is None:
 
@@ -1388,17 +1587,416 @@ def plot_transitions(
         plt.show()
 
 
+def count_all_events(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Others
+    counting_mode = "Events",
+):
+    """Counts all events in supervised or soft_counts dataset and returns a data table.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        supervised_annotations (table_dict): table dict with supervised annotations.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        counting_mode (str): How to count behaviors. Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.     
+
+    """
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+    Counting_mode_options=["Frames","Time","Events","Transitions"]  
+    if counting_mode not in Counting_mode_options:
+        raise ValueError(
+            '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
+                str(Counting_mode_options)[1:-1]
+            )
+        )
+    if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
+        raise ValueError(
+            "Need either supervised_annotations or soft_counts, not both or neither!"
+        )
+    elif supervised_annotations is not None:
+        tab_dict=supervised_annotations
+    else:
+        tab_dict=soft_counts
+
+    # preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
+    )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    # create tabdict dictionary to iterate over options
+    load_range = None
+            
+    results={}
+    for key in tab_dict.keys():
+
+        # for each tab, first cut tab in requested shape based on bin_info
+        if bin_info is not None:
+            load_range = bin_info[key]["time"]
+            if len(bin_info[key]) > 1:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+        tab = get_dt(tab_dict,key,load_range=load_range)
+        
+        # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
+        if isinstance(tab,np.ndarray):
+            max_indices = tab.argmax(axis=1)
+            tab_soft = np.zeros_like(tab, dtype=int)
+            tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
+            columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+            tab=pd.DataFrame(tab_soft, columns=columns)
+        
+        # count events in all columns
+        column_counts={}
+        for col in tab.columns:
+            series = tab[col]
+            series.fillna(0,inplace=True)
+            # skip non-binary columns (e.g. speed column)
+            if (series > 1.0001).any():
+                continue
+            column_counts[col]=deepof.utils.count_events(series, counting_mode=counting_mode, frame_rate=coordinates._frame_rate)   
+
+        results[key] = pd.Series(column_counts)
+    
+    count_df = pd.DataFrame.from_dict(results, orient='index')
+    
+    return count_df
+
+"""
+def plot_associations(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Visualization parameters
+    exp_condition: str = None,
+    condition_values: list = None,
+    experiment_id: str = None,
+    behaviors: list = None,
+    exclude_given_behaviors: bool = False,
+    delta_T: float = 0.5,
+    association_metric:str = "FSTTC",
+    return_values = False,
+    ax: list = None,
+    save: bool = False,
+    **kwargs,
+):
+    Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
+        condition_values (list): Experimental condition values to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition. If two condition values are given as a list, the difference between both sets of corresponding experiments is plotted
+        experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
+        behaviors (list): List of behaviors to include in the plot. Should be given as "[Cluster_0, Cluster_1..." in case of soft_counts.
+        exclude_given_behaviors (bool): If True, will instead of only including given behaviors in the plot exclude tehse behaviors and plot all other behaviors. Defaults to False.
+        delta_T (float): Maximum time delay after teh end of any behavior instance during which following behaviors are still counted as associated. 
+        association_metric (str): Association metric that should be used to determine if two behaviors are associated. Options are "odds_ratio" and "FSTTC". Defaults to FSTTC.
+        get_values (bool): Determines if the plotted matrix should also be returned as an 2D array. Defaults to False.
+        ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
+        save (bool): Saves a time-stamped vectorized version of the figure if True.
+
+    
+    if isinstance(condition_values,str):
+        condition_values=[condition_values]  
+    
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
+        behaviors=behaviors,
+        experiment_ids=experiment_id,
+        exp_condition=exp_condition,
+        condition_values = condition_values,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animals_in_roi is only relevant if a ROI was selected!\033[0m'
+        )
+    
+    # set active axes if provided
+    if ax:
+        plt.sca(ax)
+
+    # Determine plot type and length of the whole dataset
+    if soft_counts is None and supervised_annotations is not None:
+        plot_type = "supervised"
+        tab_dict = supervised_annotations
+        # Extract the first key from the tab dictionary
+        first_experiment_key = list(tab_dict.keys())[0]
+        available_behaviors=get_dt(tab_dict,first_experiment_key,only_metainfo=True)["columns"]
+  
+        # preprocess information given for time binning
+        bin_info_time = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=supervised_annotations, 
+        samples_max=samples_max,
+        )
+    elif soft_counts is not None and supervised_annotations is None:
+        plot_type = "unsupervised"
+        tab_dict = soft_counts
+        # Extract the first key from the tab dictionary
+        first_experiment_key = list(tab_dict.keys())[0]
+        num_cols=get_dt(tab_dict,first_experiment_key,only_metainfo=True)["num_cols"]
+        available_behaviors = ["Cluster_" + k for k in range(0,num_cols)]
+
+        # preprocess information given for time binning
+        bin_info_time = _preprocess_time_bins(
+        coordinates, 
+        bin_size, 
+        bin_index, 
+        precomputed_bins=precomputed_bins, 
+        tab_dict_for_binning=soft_counts, 
+        samples_max=samples_max,
+        )
+    else:
+        plot_type = "mixed"
+        raise NotImplementedError(
+            "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    if behaviors is None:
+        behaviors=[]
+    # invert behavior list to contain only excluded behaviors if non-exclusion was chosen
+    elif not exclude_given_behaviors:
+        behaviors = list(set(available_behaviors)-set(behaviors))
+    # Always exclude
+    always_exclude=["speed"]
+    if coordinates._animal_ids is not None:
+        always_exclude = [id + "_" + "speed" for id in coordinates._animal_ids]
+    behaviors = behaviors + always_exclude
+
+    if experiment_id is not None:
+        # Filter to only the specified experiment ID
+        tab_dicts = [{experiment_id: get_dt(tab_dict, experiment_id)}]
+        
+        if exp_condition is not None:
+            # Warn about ignored exp_condition parameters
+            warning_message = (
+                "\033[38;5;208m\nWarning! Both exp_condition and experiment_id were provided. "
+                "exp_condition related inputs will be ignored!\n\033[0m"
+            )
+            warnings.warn(warning_message)
+
+    elif exp_condition is not None:
+
+        if condition_values is None:
+            condition_df = tab_dict.get_exp_conditions[first_experiment_key]
+            condition_values = [condition_df.iloc[0, 0]]
+            
+            print(
+                f"\033[33mInfo! Automatically set condition_value to {condition_values[0]} "
+                f"as only exp_condition was provided!\033[0m"
+            )
+        elif len(condition_values) > 2:
+            condition_values = [condition_values[0]]
+            
+            print(
+                f"\033[33mInfo! Automatically set condition_value to {condition_values[0]} "
+                f"as too many condition_values (max 2) were provided!\033[0m"
+            )
+
+        if condition_values is not None and (len(condition_values)==1 or len(condition_values)==2):
+            # Filter experiments based on condition value
+            filtered_experiments = [
+                experiment_key
+                for experiment_key, conditions in coordinates.get_exp_conditions.items()
+                if conditions[exp_condition].values.astype(str) == condition_values[0]
+            ]
+            tab_dicts = [tab_dict.filter_videos(filtered_experiments)]
+            if len(condition_values)==2: 
+                filtered_experiments = [
+                    experiment_key
+                    for experiment_key, conditions in coordinates.get_exp_conditions.items()
+                    if conditions[exp_condition].values.astype(str) == condition_values[1]
+                ]
+                tab_dicts.append(tab_dict.filter_videos(filtered_experiments))
+
+    else:
+        tab_dicts = [tab_dict]
+
+    #collect transitions for all experiments
+    first_key=list(tab_dicts[0].keys())[0]
+    num_behaviors=get_dt(tab_dicts[0],first_key,only_metainfo=True)['num_cols']
+    if behaviors is not None:
+        num_behaviors=num_behaviors-len(np.unique(behaviors))
+
+    for z, tab_dict in enumerate(tab_dicts): 
+        associations = np.zeros([num_behaviors,num_behaviors])    
+        for key in tab_dict.keys():
+            load_range = bin_info[key]["time"]
+            if roi_number is not None:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
+            #reformat tab in unsupervised case
+            if plot_type=="unsupervised":
+                pass
+            #remove excluded behaviors
+            if behaviors is not None:
+                tab=tab.drop(columns=behaviors)
+            #save behavior order
+            if key == first_key:
+                included_behaviors=tab.columns
+            if association_metric=="FSTTC":
+                tab_numpy=np.nan_to_num(tab.to_numpy().T)
+                extended_behaviors=deepof.utils.extend_behaviors_numba(tab_numpy,delta_T,coordinates._frame_rate)
+
+            for i in range(0,tab.shape[1]):
+                for j in range(0, tab.shape[1]):
+                    if i==j:
+                        association_ij=np.NaN
+                    else: 
+                        if association_metric=="FSTTC":
+                            preceding_behavior=extended_behaviors[i,:]
+                            proximate_behavior=extended_behaviors[j,:]
+                            association_ij=calculate_FSTTC(
+                                preceding_behavior,
+                                proximate_behavior,
+                                coordinates._frame_rate,
+                                delta_T
+                                )
+                        elif association_metric=="odds_ratio":
+                            preceding_behavior=tab.iloc[:,i]
+                            proximate_behavior=tab.iloc[:,j]
+                            association_ij=calculate_simple_association(
+                                np.nan_to_num(preceding_behavior.to_numpy()).astype(bool),
+                                np.nan_to_num(proximate_behavior.to_numpy()).astype(bool),
+                                coordinates._frame_rate,
+                                )
+                        else:
+                            raise NotImplementedError(
+                            "currently, only FSTTC is implemented as a valid association metric!"
+                        )
+                    #skip cases in which nans are returned (treat them as zeros i.e. no association)
+                    if not np.isnan(association_ij):
+                        associations[i,j]+=association_ij
+
+        associations=associations/len(tab_dict)
+        if z==0:
+            associations_prev=copy.copy(associations)
+        else:
+            associations=associations_prev-associations
+
+    # Use seaborn to plot heatmaps across both conditions
+    if ax is None:
+        fig, ax = plt.subplots(
+            1,
+            1,
+            figsize=(16, 8),
+        )
+
+    sns.heatmap(
+        associations,
+        cmap=sns.diverging_palette(145, 20, as_cmap=True),
+        vmin=-1.0,
+        vmax=1.0,
+        ax=ax,
+        **kwargs,
+    )
+    if experiment_id is not None:
+        ax.set_title(experiment_id)
+    elif exp_condition is not None and len(condition_values)==1:
+        ax.set_title(condition_values[0])
+    elif exp_condition is not None and len(condition_values)==2:
+        ax.set_title(condition_values[0]+ " - "+ condition_values[1])
+    else:
+        ax.set_title("all")
+    ax.set_xticklabels(included_behaviors, rotation=90)
+    ax.set_yticklabels(included_behaviors, rotation=0)
+
+
+    if ax is None:
+
+        plt.tight_layout()
+
+        if save:
+            plt.savefig(
+                os.path.join(
+                    coordinates._project_path,
+                    coordinates._project_name,
+                    "Figures",
+                    "deepof_associations{}_bin_size={}_bin_index={}_{}.pdf".format(
+                        (f"_{save}" if isinstance(save, str) else ""),
+                        bin_size,
+                        bin_index,
+                        calendar.timegm(time.gmtime()),
+                    ),
+                )
+            )
+
+        plt.show() 
+
+        if return_values:
+            return associations
+        else:
+            return None
+"""                                
+
 def plot_stationary_entropy(
     coordinates: coordinates,
     embeddings: table_dict,
     soft_counts: table_dict,
-    add_stats: str = "Mann-Whitney",
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
     # Visualization parameters
+    add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
     verbose: bool = False,
     ax: Any = None,
@@ -1410,11 +2008,13 @@ def plot_stationary_entropy(
         coordinates (coordinates): deepOF project where the data is stored.
         embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
-        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                           
+        add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -1425,7 +2025,16 @@ def plot_stationary_entropy(
     _check_enum_inputs(
         coordinates,
         exp_condition=exp_condition,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
     )
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+
 
     # Get requested experimental condition. If none is provided, default to the first one available.
     if exp_condition is None:
@@ -1442,11 +2051,12 @@ def plot_stationary_entropy(
     soft_counts = soft_counts.filter_videos(embeddings.keys())
 
     # preprocess information given for time binning
-    bin_info = _preprocess_time_bins(
+    bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
-    if (any([np.sum(bin_info[key]) < 2 for key in bin_info.keys()])):
+    if (any([np.sum(bin_info[key]["time"]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
 
     # Get ungrouped entropy scores for the full videos
@@ -1454,6 +2064,8 @@ def plot_stationary_entropy(
         soft_counts,
         exp_conditions,
         bin_info=bin_info,
+        roi_number=roi_number,
+        animals_in_roi=animals_in_roi,
         aggregate=False,
         normalize=True,
     )
@@ -1670,6 +2282,10 @@ def plot_embeddings(
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: Union[str,list] = None,
+    roi_mode: str = "mousewise",
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -1696,6 +2312,9 @@ def plot_embeddings(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                          
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -1716,7 +2335,22 @@ def plot_embeddings(
         exp_condition=exp_condition,
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
     )
+    if supervised_annotations is not None and roi_number is not None and animals_in_roi is not None:
+        raise ValueError(
+            '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
+        )
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+    if type(animals_in_roi)==str:
+        animals_in_roi=[animals_in_roi]
     # prevents crash due to axis issues
     if (
         not aggregate_experiments
@@ -1739,15 +2373,18 @@ def plot_embeddings(
 
     # preprocess information given for time binning
     if supervised_annotations is not None:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
     else:
-        bin_info = _preprocess_time_bins(
+        bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
     (
@@ -1776,12 +2413,17 @@ def plot_embeddings(
         # make sure that not more samples are drawn than are available
         shortest = samples
         for key in bin_info.keys():
+            for aid in bin_info[key].keys():
 
-            num_rows=len(bin_info[key])
+                if aid == "time":
+                    num_rows=len(bin_info[key]["time"])
+                elif roi_number is not None and aid in animals_in_roi:
+                    num_rows=np.sum(bin_info[key][aid])
 
-            if num_rows < shortest:
-                shortest = num_rows
+                if num_rows < shortest:
+                    shortest = num_rows
         if samples > shortest:
+            assert shortest > 0, "Selected time bin and / or ROI are too restrictive, cannot draw enough samples for all experiments!" 
             samples = shortest
             print(
                 "\033[33mInfo! Set samples to {} to not exceed data length!\033[0m".format(
@@ -1790,10 +2432,16 @@ def plot_embeddings(
             )
 
         # Sample per animal, to avoid alignment issues
+        valid_samples={}
         for key in emb_to_plot.keys():
 
             #get correct section of current embedding 
-            current_emb=get_dt(emb_to_plot,key)[bin_info[key]]
+            current_emb=get_dt(emb_to_plot,key)
+            if roi_number is not None:
+                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
+            else:
+                valid_samples[key]=bin_info[key]["time"]
+            current_emb=current_emb[valid_samples[key]]
 
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
@@ -1801,6 +2449,7 @@ def plot_embeddings(
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
+        get_beheavior_frames_in_roi._warning_issued = False
                
 
         # Concatenate experiments and align experimental conditions
@@ -1813,7 +2462,7 @@ def plot_embeddings(
         # Get cluster assignments from soft counts
         cluster_assignments = np.argmax(
             np.concatenate(
-                [get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]]
+                [get_dt(counts_to_plot,key)[valid_samples[key]][samples_dict[key]]
                 for key in counts_to_plot], 
                 axis=0
             ), 
@@ -1823,7 +2472,7 @@ def plot_embeddings(
         # Compute confidence in assigned clusters
         confidence = np.concatenate(
             [
-                np.max(get_dt(counts_to_plot,key)[bin_info[key]][samples_dict[key]], axis=1)
+                np.max(get_dt(counts_to_plot,key)[valid_samples[key]][samples_dict[key]], axis=1)
                 for key in counts_to_plot
             ]
         )
@@ -1873,17 +2522,17 @@ def plot_embeddings(
         # Aggregate experiments by time on cluster
         if aggregate_experiments == "time on cluster":
             aggregated_embeddings = deepof.post_hoc.get_time_on_cluster(
-                counts_to_plot, reduce_dim=True, bin_info=bin_info
+                counts_to_plot, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi,
             )
 
         else:
             if emb_to_plot is not None:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info
+                    emb_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, roi_mode=roi_mode,
                 )
             else:
                 aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info 
+                    sup_annots_to_plot, agg=aggregate_experiments, reduce_dim=True, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi, roi_mode=roi_mode,
                 )
 
         # Generate unifier dataset using the reduced aggregated embeddings and experimental conditions
@@ -1894,6 +2543,7 @@ def plot_embeddings(
                 "experimental condition": concat_hue,
             }
         )
+        embedding_dataset=embedding_dataset.dropna()
         embedding_dataset.sort_values(by=embedding_dataset.columns[2], inplace=True)
 
         if normative_model:
@@ -2012,16 +2662,19 @@ def animate_skeleton(
     experiment_id: str,
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
-    animal_id: list = None,
-    center: str = "arena",
-    align: str = None,
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
     samples_max: int =20000,  
+    # ROI functionality
+    roi_number: int = None,  
+    animals_in_roi: list = None,
+    # other parameters
+    animal_id: list = None,
+    center: str = "arena",
+    align: str = None,
     sampling_rate: float = None, 
-    #otehr parameters
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
     selected_cluster: np.ndarray = None,
@@ -2037,13 +2690,15 @@ def animate_skeleton(
         experiment_id (str): Name of the experiment to display.
         embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
         soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
+        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).       
         sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
@@ -2060,11 +2715,23 @@ def animate_skeleton(
         experiment_ids=experiment_id,
         animal_id=animal_id,
         center=center,
+        roi_number=roi_number,
     )
+    if animal_id is None:
+        animal_id = coordinates._animal_ids
+    if type(animal_id)==str:
+        animal_id=[animal_id]
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    if type(animals_in_roi)==str:
+        animals_in_roi=[animals_in_roi]
 
-    bin_info = _preprocess_time_bins(
+
+    bin_info_time = _preprocess_time_bins(
     coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
     )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
     if sampling_rate is None:
         sampling_rate=coordinates._frame_rate
 
@@ -2076,15 +2743,17 @@ def animate_skeleton(
         cur_embeddings=None
         cur_soft_counts=None
 
-    #for legacy reasons scales is not a dictionary which complicates things
+    #scales is now a dictionary which simplifies things
     coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
+
+    # Filter requested animals
+    coords_list=[]
+    for aid in animal_id:
+        coords_list.append(deepof.utils.filter_animal_id_in_table(table=coords, selected_id=aid))
+    coords=pd.concat(coords_list,axis=1)
 
     # Sort column index to allow for multiindex slicing
     coords = coords.sort_index(ascending=True, inplace=False, axis=1)
-
-    # Filter requested animals
-    if animal_id:
-        coords = coords.filter_id(animal_id)
 
     # Get output scale
     x_dv = np.maximum(
@@ -2151,40 +2820,36 @@ def animate_skeleton(
 
     # If there are more than one animal in the representation, display each in a different color
     hue = None
-    cmap = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
+    cmap_all = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
+    positions = [coordinates._animal_ids.index(item) for item in animal_id]
+    cmap = ListedColormap([cmap_all(pos)for pos in positions])
+    #cmap = cmap[]
 
-    if not animal_id and coordinates._animal_ids[0]:
-        animal_ids = coordinates._animal_ids
+    polygons = [_get_polygon_coords(coords, aid) for aid in animal_id]
 
-    else:
-        animal_ids = [animal_id]
+    hue = np.zeros(len(np.array(init_x)))
+    for i, id in enumerate(animal_id):
 
-    polygons = [_get_polygon_coords(coords, aid) for aid in animal_ids]
+        hue[coords.columns.levels[0].str.startswith(id)] = i
 
-    if animal_id is None:
-        hue = np.zeros(len(np.array(init_x)))
-        for i, id in enumerate(coordinates._animal_ids):
+        # Set a custom legend outside the plot, with the color of each animal
 
-            hue[coords.columns.levels[0].str.startswith(id)] = i
-
-            # Set a custom legend outside the plot, with the color of each animal
-
-            if legend:
-                custom_labels = [
-                    plt.scatter(
-                        [np.inf],
-                        [np.inf],
-                        color=cmap(i / len(coordinates._animal_ids)),
-                        lw=3,
-                    )
-                    for i in range(len(coordinates._animal_ids))
-                ]
-                ax2.legend(custom_labels, coordinates._animal_ids, loc="upper right")
+        if legend:
+            custom_labels = [
+                plt.scatter(
+                    [np.inf],
+                    [np.inf],
+                    color=cmap(i / len(animal_id)),
+                    lw=3,
+                )
+                for i in range(len(animal_id))
+            ]
+            ax2.legend(custom_labels, animal_id, loc="upper right")
 
     skeleton_scatter = ax2.scatter(
         x=np.array(init_x),
         y=np.array(init_y),
-        cmap=(cmap if animal_id is None else None),
+        cmap=cmap,
         label="Original",
         c=hue,
     )
@@ -2245,15 +2910,23 @@ def animate_skeleton(
 
         return skeleton_scatter
 
+    #get frames to display based on binning
+    if roi_number is None:
+        frames = bin_info[experiment_id]["time"]
+    else:
+        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
+        frames = get_beheavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
+        get_beheavior_frames_in_roi._warning_issued = False
+
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=bin_info[experiment_id],
+        frames=frames,
         interval=int(np.round(1000 // sampling_rate)),
     )
 
     ax2.set_title(
-        f"deepOF animation - {(f'{animal_id} - ' if animal_id is not None else '')}{experiment_id}",
+        f"deepOF animation - {(f'{str(animal_id)} - ')}{experiment_id}",
         fontsize=15,
     )
     ax2.set_xlabel("x")
@@ -2492,31 +3165,66 @@ def plot_shap_swarm_per_cluster(
 def export_annotated_video(
     coordinates: coordinates,
     soft_counts: dict = None,
+    supervised_annotations: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    frame_limit_per_video: int = None,
+    # ROI functionality
+    roi_number: int =None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    #others
+    behaviors: list = None,
     experiment_id: str = None,
     min_confidence: float = 0.75,
     min_bout_duration: int = None,
-    frame_limit_per_video: int = np.inf,
+    display_time: bool = False,
+    display_counter: bool = False,
     exp_conditions: dict = {},
-    cluster_names: dict = {},
+    cluster_names: str = None,
 ):
     """Export annotated videos from both supervised and unsupervised pipelines.
 
     Args:
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        behaviors (list): Behaviors or Clusters to that get exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations. If multiple behaviors are given as a list, one video can get annotated with multiple different behaviors
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
+        display_time (bool): Displays current time in top left corner of teh video frame
+        display_counter (bool): Displays event counter for each displayed event.
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
+    if isinstance(behaviors,str):
+        behaviors=[behaviors]
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
     )
+
+    if animals_in_roi is None or roi_mode=="behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For the video export animal_id is only relevant if a ROI was selected!\033[0m'
+        )
 
     # Create output directory if it doesn't exist
     proj_path = os.path.join(coordinates._project_path, coordinates._project_name)
@@ -2527,14 +3235,6 @@ def export_annotated_video(
     # If no bout duration is provided, use half the frame rate
     if min_bout_duration is None:
         min_bout_duration = int(np.round(coordinates._frame_rate // 2))
-
-    # Compute sliding window lenth, to determine the frame/annotation offset
-    first_key = list(coordinates.get_quality().keys())[0]
-    window_length = (
-        coordinates.get_table_lengths()[first_key]
-        - get_dt(soft_counts, first_key, only_metainfo=True)['num_rows']
-        + 1
-    )
 
     def filter_experimental_conditions(
         coordinates: coordinates, videos: list, conditions: list
@@ -2556,44 +3256,107 @@ def export_annotated_video(
             ]
 
         return filtered_videos
-
-    # Unsupervised annotation output
+    
+    
+    # set cluster names dependend on tab dict type (supervised or soft counts)
     if soft_counts is not None:
-        if experiment_id is not None:
-            # If experiment_id is provided, only output a video for that experiment
-            cur_soft_counts=get_dt(soft_counts, experiment_id)
-            video_path=coordinates.get_videos(full_paths=True)[experiment_id]
 
-            deepof.visuals.output_unsupervised_annotated_video(
-                video_path,                
-                cur_soft_counts,
-                frame_rate=coordinates._frame_rate,
-                window_length=window_length,
-                cluster_names=cluster_names,
-                out_path=out_path,
-                frame_limit=frame_limit_per_video,
-            )
-        else:
-            # If experiment_id is not provided, output a video per cluster for each experiment
-            filtered_videos = filter_experimental_conditions(
-                coordinates, coordinates.get_videos(full_paths=True), exp_conditions
-            )
+        first_key=list(soft_counts.keys())[0]
+        if isinstance(soft_counts[first_key], dict):
+            soft_counts[first_key] = get_dt(soft_counts,first_key)
 
-            deepof.visuals.output_videos_per_cluster(
-                filtered_videos,
-                soft_counts,
-                frame_rate=coordinates._frame_rate,
-                single_output_resolution=(500, 500),
-                window_length=window_length // 2,
-                frame_limit_per_video=frame_limit_per_video,
-                min_confidence=min_confidence,
-                min_bout_duration=min_bout_duration,
-                out_path=out_path,
-            )
-
-    # Supervised annotation output
+        if cluster_names is None or len(cluster_names) != soft_counts[first_key].shape[1]:
+            cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
+        #unify tab_dict name
+        tab_dict=soft_counts
+ 
     else:
-        raise NotImplementedError
+        first_key=list(supervised_annotations.keys())[0]
+        if cluster_names is None or len(cluster_names) != supervised_annotations[first_key].shape[1]:
+                cluster_names=supervised_annotations[first_key].columns
+        tab_dict=supervised_annotations
+
+    #preprocess time bins            
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict,
+        )
+    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    
+    # special case: an experiment id was given
+    if experiment_id is not None:
+
+        # get frames for this experiment id
+        if behaviors is None and supervised_annotations is not None:
+            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+            behaviors = cur_tab.columns[0]
+        if roi_number is not None:
+            if roi_mode == "behaviorwise":
+                behavior_in=behaviors[0]
+                if len(behaviors)>1:
+                    print('\033[33mInfo! The first behavior was automatically chosen for ROI application!\033[0m')
+            else:
+                behavior_in=None
+            frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
+        else:
+            frames=bin_info[experiment_id]["time"]
+        # get current tab and video path
+        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+        video_path=coordinates.get_videos(full_paths=True)[experiment_id]
+
+        
+        # reformat current tab into data table with cluster names as column names
+        if soft_counts is not None:
+            cur_tab=pd.DataFrame(cur_tab,columns=cluster_names)
+        else: 
+            cur_tab.columns = cluster_names
+        # handle defaults
+        if frame_limit_per_video is None:
+            frame_limit_per_video = np.inf
+
+        if len(frames) >= frame_limit_per_video:
+                frames = frames[0:frame_limit_per_video]
+
+        video = output_annotated_video(
+            video_path,                
+            cur_tab,
+            behaviors,
+            frame_rate=coordinates._frame_rate,
+            out_path=out_path,
+            frames=frames,
+            display_time=display_time,
+            display_counter=display_counter,
+        )
+        get_beheavior_frames_in_roi._warning_issued = False
+
+        return video
+
+    else:
+        # If experiment_id is not provided, output a video per cluster for each experiment
+        filtered_videos = filter_experimental_conditions(
+            coordinates, coordinates.get_videos(full_paths=True), exp_conditions
+        )
+        if frame_limit_per_video is None:
+            frame_limit_per_video = 250
+
+        output_videos_per_cluster(
+            filtered_videos,
+            tab_dict,
+            behaviors,
+            frame_rate=coordinates._frame_rate,
+            single_output_resolution=(500, 500),
+            frame_limit_per_video=frame_limit_per_video,
+            bin_info=bin_info,
+            roi_number=roi_number,
+            animals_in_roi=animals_in_roi,
+            min_confidence=min_confidence,
+            min_bout_duration=min_bout_duration,
+            out_path=out_path,
+            display_time=display_time,
+            roi_mode=roi_mode,
+        )
+
+        return None
 
 
 def plot_distance_between_conditions(
@@ -2755,18 +3518,24 @@ def plot_distance_between_conditions(
 
 def plot_behavior_trends(
     coordinates: coordinates,
-    embedding: table_dict = None,
+    embeddings: table_dict = None,
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
+    # Time selection parameters
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    # Visualization
+    hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
     show_histogram: bool = True,
     exp_condition: str = None,
     condition_values: list = None,
     behavior_to_plot: str = None,
     normalize: bool = False,
-    N_time_bins: int = 24,
-    custom_time_bins: List[List[Union[int, str]]] = None,
-    hide_time_bins: List[bool] = None,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     ax: Any = None,
@@ -2780,15 +3549,18 @@ def plot_behavior_trends(
     embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
     soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
     supervised_annotations (table_dict): Table dict with supervised annotations per video.
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+    roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.    
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
     exp_condition (str): Experimental condition to compare.
     condition_values (list): List of two strings containing the condition values to compare.
     behavior_to_plot (str): Behavior to compare for selected condition.
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
-    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
-    hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
     error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
@@ -2804,7 +3576,16 @@ def plot_behavior_trends(
         exp_condition=exp_condition,
         condition_values=condition_values,
         behaviors=behavior_to_plot,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
     )
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
 
     #####
     # Set defaults based on inputs
@@ -2824,19 +3605,20 @@ def plot_behavior_trends(
                 for key, val in coordinates.get_exp_conditions.items()
             ]
         )
-        if len(condition_values) > 2:
-            condition_values = condition_values[0:2]
-            warning_message = (
-                "\033[38;5;208m\n"
-                "Warning! No exp conditions were chosen for comparison and the experiment contains more than two conditions!\n"
-                f"Therefore, the following conditions were set to be compared automatically: {condition_values}"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
+    if len(condition_values) > 2:
+        condition_values = condition_values[0:2]
+        warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! No exp conditions were chosen for comparison and the experiment contains more than two conditions!\n"
+            f"Therefore, the following conditions were set to be compared automatically: {condition_values}\n"
+            "You can manually change this by setting condition_values explicitely with a list of two conditions."
+            "\033[0m"
+        )
+        warnings.warn(warning_message)
 
     # Init plot type based on inputs
     if (
-        any([embedding is None, soft_counts is None])
+        any([embeddings is None, soft_counts is None])
         and supervised_annotations is not None
     ):
         plot_type = "supervised"
@@ -2844,7 +3626,7 @@ def plot_behavior_trends(
             get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
         )
     elif (
-        embedding is not None
+        embeddings is not None
         and soft_counts is not None
         and supervised_annotations is None
     ):
@@ -2915,7 +3697,7 @@ def plot_behavior_trends(
             all(isinstance(x, int) and x >= 0 for x in sublist)
             for sublist in custom_time_bins
         ) or not all(  # Lists consist of positive integers
-            sublist[0] < sublist[1] for sublist in custom_time_bins
+            sublist[0] <= sublist[1] for sublist in custom_time_bins
         ):  # List elements increase
             raise ValueError(
                 f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
@@ -2940,6 +3722,27 @@ def plot_behavior_trends(
         raise ValueError(
             f'"custom_time_bins" needs to be a list of at least 4 elments with each element being a list!'
         )
+    
+    #####
+    # Get ROI bin info
+    ##### 
+
+    if roi_number is not None:
+        #create full time bins covering entire signal
+        if supervised_annotations is not None:
+            bin_info_time = _preprocess_time_bins(
+            coordinates, None, None, None, 
+            tab_dict_for_binning=supervised_annotations,
+            )
+        else:            
+            bin_info_time = _preprocess_time_bins(
+                coordinates, None, None, None,  
+                tab_dict_for_binning=soft_counts,
+            )
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+
 
     #####
     # Collect data for plotting
@@ -2952,18 +3755,25 @@ def plot_behavior_trends(
     # Iterate over all experiments via keys
     for key in keys:
 
+        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+        #skip excluded experiment condition values
+        if cond not in condition_values:
+            continue
+
         if plot_type == "unsupervised":
             data_set=get_dt(soft_counts,key)
+            if roi_number is not None:
+                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
             data_set=get_dt(supervised_annotations,key)
+            if roi_number is not None:
+                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
-
-        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
 
         # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
         for i, (bin_start, bin_end) in enumerate(custom_time_bins):
@@ -2971,7 +3781,7 @@ def plot_behavior_trends(
             #get current snippet
             data_snippet=data_set[bin_start:bin_end]
 
-            behavior_timebin = np.sum(index_dict_fn(data_snippet))
+            behavior_timebin = np.nansum(index_dict_fn(data_snippet))
             if normalize or behavior_to_plot == "speed":
                 behavior_timebin = behavior_timebin / len(
                     index_dict_fn(data_snippet)
@@ -2987,9 +3797,12 @@ def plot_behavior_trends(
                 ]
             )
             df = pd.concat([df, new_row], ignore_index=True)
+    get_unsupervised_behaviors_in_roi._warning_issued = False
 
     # Normalize frames to reflect seconds
     df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
+    
+    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
     # Calculate mean values and errors accross samples
     time_bin_means = (
@@ -3410,3 +4223,89 @@ def plot_behavior_trends(
     # If no axes are given, show plot
     if show:
         plt.show()
+
+
+def get_roi_data(
+    coordinates: coordinates,
+    table_dict: table_dict,
+    # ROI functionality
+    roi_number: int,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =100000,
+    # Visualization parameters
+    experiment_id: str = None,
+):
+    """get data in Rois.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        table_dict (table_dict): table dict with information for ROi extraction. Can be supervised or unsupervised data.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        bin_size (Union[int,str]): bin size for time filtering.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
+        experiment_id (str): Name of the experiment id to extract. If None (default) a dictionary of all entries will be exported.
+
+    """
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        experiment_ids=experiment_id,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
+    )
+    if coordinates._very_large_project and experiment_id is None:
+        raise NotImplementedError(
+            "Iteration accross all experiments is currently not supported for very large projects! However, by setting \"experiment_id\" you can still export single tables"
+        )
+
+    if animals_in_roi is None or roi_mode == "behaviorwise":
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+    # Get requested experimental condition. If none is provided, default to the first one available.
+    if experiment_id is None:
+        exp_ids = list(table_dict.keys())
+    else:
+        exp_ids = [experiment_id]
+
+    # Preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, 
+        tab_dict_for_binning=table_dict, samples_max=samples_max,
+    )
+
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)    
+
+    object_out={}
+    for key in exp_ids:
+        tab = get_dt(table_dict, key)
+        if type(tab)==pd.DataFrame:
+            supervised_binned = pd.DataFrame(tab.iloc[bin_info[key]["time"]])
+            time_binned = get_supervised_behaviors_in_roi(supervised_binned, bin_info[key], animals_in_roi, roi_mode=roi_mode)
+        elif type(tab)==np.ndarray:
+            unsupervised_binned = tab[bin_info[key]["time"]]
+            time_binned = get_unsupervised_behaviors_in_roi(unsupervised_binned, bin_info[key], animals_in_roi)
+        else:
+            raise NotImplementedError(
+                "This function only supports supervised and unsupervides table dicts!"
+            )
+        if len(exp_ids)>1:
+            object_out[key]=time_binned
+        else:
+            object_out=time_binned
+
+    get_unsupervised_behaviors_in_roi._warning_issued = False
+
+    return object_out

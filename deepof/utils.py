@@ -5,6 +5,7 @@
 """Functions and general utilities for the deepof package."""
 import argparse
 import copy
+import pickle
 import math
 import multiprocessing
 import os
@@ -14,6 +15,7 @@ from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
 from typing import Any, List, NewType, Tuple, Union
+
 
 import cv2
 import h5py
@@ -26,18 +28,20 @@ import requests
 import sleap_io as sio
 import torch
 from joblib import Parallel, delayed
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, medfilt
 from scipy.spatial.distance import cdist
 from segment_anything import SamPredictor, sam_model_registry
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from scipy.stats import chi2_contingency
 from tqdm import tqdm
 
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
-from deepof.data_loading import get_dt, load_dt, save_dt, _suppress_warning
+from deepof.data_loading import get_dt, save_dt, _suppress_warning
 
 
 
@@ -50,7 +54,7 @@ table_dict = NewType("deepof_table_dict", Any)
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 
-@nb.njit
+@nb.njit()
 def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
@@ -129,7 +133,7 @@ def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     return smoothed_states
 
 
-@nb.njit
+@nb.njit()
 def enforce_skeleton_constraints_numba(
     data, skeleton_constraints, original_pos, tolerance=0.1, correction_factor=0.5
 ):  # pragma: no cover
@@ -639,14 +643,14 @@ def iterative_imputation(
                 imputed = imputed.drop(("Row", "y"), axis=1)
                 imputed_tabs[k].update(imputed)
 
-                if tab.shape[1] != imputed.shape[1]:
+                if tab.shape[1] != imputed.shape[1]: # pragma: no cover
                     warnings.warn(
                         "Some of the body parts have zero measurements. Iterative imputation skips these,"
                         " which could bring problems downstream. A possible solution could be to refine "
                         "DLC tracklets."
                     )
 
-            except ValueError:
+            except ValueError: # pragma: no cover
                 warnings.warn(
                     f"Animal {animal_id} in experiment {k} has not enough data. Skipping imputation."
                 )
@@ -724,12 +728,20 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
         result (pandas.DataFrame): Equivalent to input, but with values in polar coordinates.
 
     """
+    original_shape = cartesian_df.shape
+    if type(cartesian_df.columns) == pd.MultiIndex:
+        #"levels" seems to be bugged and still finds columns that are not included in the datframe anymore
+        body_parts = [column[0] for column in cartesian_df.columns]
+        body_parts = np.array(body_parts)[np.unique(body_parts, return_index=True)[1]]
+    else:
+        body_parts = cartesian_df.columns
+
     result = []
-    for df in list(cartesian_df.columns.levels[0]):
+    for df in list(body_parts):
         result.append(bp2polar(cartesian_df[df]))
     result = pd.concat(result, axis=1)
     idx = pd.MultiIndex.from_product(
-        [list(cartesian_df.columns.levels[0]), ["rho", "phi"]]
+        [list(body_parts), ["rho", "phi"]]
     )
     result.columns = idx
     result.index = cartesian_df.index
@@ -737,14 +749,12 @@ def tab2polar(cartesian_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_dist(
-    pair_array: np.array, arena_abs: int = 1, arena_rel: int = 1
+    pair_array: np.array
 ) -> pd.DataFrame:
     """Return a pandas.DataFrame with the scaled distances between a pair of body parts.
 
     Args:
         pair_array (numpy.array): np.array of shape N * 4 containing X, y positions over time for a given pair of body parts.
-        arena_abs (int): Diameter of the real arena in cm.
-        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between a pair of body parts.
@@ -760,14 +770,12 @@ def compute_dist(
 
 
 def bpart_distance(
-    dataframe: pd.DataFrame, arena_abs: int = 1, arena_rel: int = 1
+    dataframe: pd.DataFrame
 ) -> pd.DataFrame:
     """Return a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
     Args:
         dataframe (pandas.DataFrame): pd.DataFrame of shape N*(2*bp) containing X,y positions over time for a given set of bp body parts.
-        arena_abs (int): Diameter of the real arena in cm.
-        arena_rel (int): Diameter of the captured arena in pixels.
 
     Returns:
         result (pd.DataFrame): pandas.DataFrame with the absolute distances between all pairs of body parts.
@@ -776,7 +784,7 @@ def bpart_distance(
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
     for idx in indexes:
-        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]), arena_abs, arena_rel)
+        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]))
         dist.columns = [idx]
         dists.append(dist)
 
@@ -854,7 +862,7 @@ def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no c
     return polygon_areas
 
 
-@nb.njit
+@nb.njit()
 def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
     """
     Calculate the area of a single polygon given its vertices.
@@ -876,6 +884,233 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
     area = abs(area) / 2
 
     return area
+
+
+@nb.njit()
+def extend_behaviors_numba(
+    behaviors: np.ndarray,
+    delta_T: float = 2.0,
+    frame_rate: float = 1,
+) -> np.ndarray: # pragma: no cover
+    """
+    Takes a booelan array of behavior detections and extends each behavior detection by delta_T.
+
+    Args:
+        behaviors (np.ndarray): Boolean array of shape [N_behaviors, N_frames] containing the detection results (True / False) of each behavior for each frame.
+        delta_T: Time by which each behavior should be expanded
+        frame_rate (float): Frame rate of the corresponding project
+
+    Returns:
+        extended_behaviors (np.ndarray): Boolean array of shape [N_behaviors, N_frames] containing the detection results (True / False) of each behavior for each frame after extension.
+    """
+    
+    # Inits
+    delta_T_frames = int(frame_rate * delta_T)
+    n_behaviors, n_frames = behaviors.shape
+    extended_behaviors = behaviors.copy()
+    
+    # Iterate over all behaviors
+    for i in range(n_behaviors):
+        
+        # Determine behavior offset positions
+        behavior = extended_behaviors[i]
+        on_and_offsets = np.zeros(n_frames, dtype=np.int8)
+        current_behavior = behavior.astype(np.int8)
+        on_and_offsets[1:] = np.diff(current_behavior)  
+        offset_pos = np.where(on_and_offsets == -1)[0]
+        
+        # Extend behavior instances by delta_T_frames at their offset positions
+        for offset in offset_pos:
+            end = min(offset + delta_T_frames, n_frames)
+            behavior[offset:end] = 1
+    
+    return extended_behaviors
+
+  
+def count_transitions(
+    tab_dict: table_dict,
+    exp_conditions: dict,
+    bin_info: dict = None,
+    animals_in_roi: list = None,
+    delta_T: float = 0.5,
+    frame_rate: float = 1,
+    silence_diagonal: bool = False,
+    aggregate: str = True,
+    normalize: str = True,
+    diagonal_behavior_counting: str = "Transitions"
+):
+    """
+    Count transitions between successive behaviors for all experiments in tab_dict.
+
+    Args:
+        tab_dict (table_dict): Dictionary with behavior data (supervised or unsupervised soft_counts)
+        exp_conditions (dict): Dictionary containg the experiment conditions for each experiment.
+        bin_info (dict): dictionary containing indices to plot for all experiments
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        frame_rate (float): Frame rate of the corresponding project
+        silence_diagonal (bool): If True, diagonals are set to zero.
+        aggregate (bool): If True, sums matrices per experimental condition; else per experiment.
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.
+
+    Returns:
+        transitions_dict (dict): Dictionary of transition matrices. Keys:
+            - If aggregate=True: Condition labels (e.g., {'control': array(...)})
+            - If aggregate=False: Experiment IDs (e.g., {'exp1': array(...)})
+        columns (list): Behavior names (columns after dropping non-binary features).
+        combined_columns (list): All possible behavior transition pairs (e.g., ['BehaviorA-x-BehaviorB', ...]).
+
+    """
+    # create tabdict dictionary to iterate over options
+    load_range = None
+
+    transitions_dict = {}
+    paired_events_dict = {}
+    normalize_events = False
+               
+    for z, key in enumerate(tab_dict.keys()):
+
+        columns = None
+        # for each tab, first cut tab in requested shape based on bin_info
+        if bin_info is not None:
+            load_range = bin_info[key]["time"]
+            if len(bin_info[key]) > 1:
+                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            # Create empty tab, in case load range does not contain any valid frames
+        if load_range is not None and len(load_range)==0:
+            meta_info = get_dt(tab_dict,key,only_metainfo=True)
+            tab = np.zeros([1,meta_info["num_cols"]])
+            if "columns" in meta_info:
+                columns = meta_info["columns"]
+        else:
+            tab = get_dt(tab_dict,key,load_range=load_range)
+        # skip non-binary columns (e.g. speed column)
+        
+        # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
+        if isinstance(tab,np.ndarray):
+            max_indices = tab.argmax(axis=1)
+            tab_soft = np.zeros_like(tab, dtype=int)
+            tab_soft[np.arange(tab.shape[0]), max_indices] = 1 # set maximum column to 1 for each row
+            if columns is None:
+                columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
+            tab=pd.DataFrame(tab_soft, columns=columns)
+            if normalize:
+                normalize_events=False
+        else:
+            columns = tab.columns
+            if normalize:
+                normalize_events=True
+        
+        # Drop non-binary columns (speed column in supervised)
+        for col in columns:
+            if col.endswith('_speed') or col == 'speed':
+                tab=tab.drop(columns=[col])
+
+        # Update columns
+        columns = tab.columns
+
+        tab_numpy=np.nan_to_num(tab.to_numpy().T)
+        extended_behaviors=extend_behaviors_numba(tab_numpy,delta_T,frame_rate)
+        L = extended_behaviors.shape[1]
+
+        if z==0 and aggregate: 
+            for exp_cond in set(exp_conditions.values()):
+                transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
+                paired_events_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
+
+        associations = np.zeros([tab.shape[1],tab.shape[1]])
+        paired_events = np.zeros([tab.shape[1],tab.shape[1]])
+        combined_columns = [f"{var_i}-x-{var_j}" for var_i in columns for var_j in columns]
+
+
+        for i in range(0,tab.shape[1]):
+            for j in range(0, tab.shape[1]):
+                if i==j:
+                    associations[i,j]=count_events(extended_behaviors[i,:], counting_mode=diagonal_behavior_counting, frame_rate=frame_rate)                            
+                else:
+                    preceding_active=extended_behaviors[i,:]
+                    proximate_active=extended_behaviors[j,:]
+                    proximate_onsets = np.zeros(L, dtype=np.int8)
+                    proximate_onsets[:-1] = np.diff(proximate_active.astype(np.int8))
+                    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+                    association_ij=np.sum(preceding_active[prox_onset_pos])
+                    associations[i,j]=association_ij
+                if normalize_events:
+                    paired_events[i,j]=count_events(extended_behaviors[i,:], counting_mode="Events", frame_rate=frame_rate) + count_events(extended_behaviors[j,:], counting_mode="Events", frame_rate=frame_rate)
+
+        if silence_diagonal:
+            np.fill_diagonal(associations, 0)
+
+
+        # Aggregate based on experimental condition if specified
+        if aggregate:
+            exp_cond=exp_conditions[key]
+            transitions_dict[exp_cond] += associations
+            paired_events_dict[exp_cond] += paired_events
+        else:
+            transitions_dict[key] = associations
+            paired_events_dict[key] = paired_events    
+        
+    # Normalize rows if specified
+    if normalize and not normalize_events:
+
+        transitions_dict = {
+            key: np.nan_to_num(value.astype(float) / value.astype(float).sum(axis=1)[:, np.newaxis])
+            for key, value in transitions_dict.items()
+        } 
+    elif normalize_events:
+
+        transitions_dict = {
+            key: np.nan_to_num(value.astype(float) / (paired_events_dict[key]-1))
+            for key, value in transitions_dict.items()
+        } 
+             
+    return transitions_dict, columns, combined_columns
+
+
+def count_events(binary_behavior: np.ndarray, counting_mode: str = "Events", frame_rate: int = 1) -> int:
+    """Counts the number of continuous blocks of 1s in a binary behavior vector in different ways
+    
+    Args:
+        binary_behavior (numpy.ndarray): Binary 1D Array containing behavior detections.
+        counting_mode (str): Counting mode. Options are:
+        - "Frames": Counts total number of frames in all events
+        - "Time": Counts total time duration of all events (requires frame_rare input)
+        - "Events": Counts number of continuous blocks of 1s
+        - "Transitions": Counts number of frame-to-frame transitions within the events e.g. an event of 10 frames in length would have 9 transitions.
+        frame_rate (float): Frame rate of the recording.
+
+    Returns:
+        num_events (float): counted events
+    """
+    
+    # Counts total number of frames in all events
+    if counting_mode == "Frames":
+        num_events= np.sum(binary_behavior)
+    # Counts total time duration of all events
+    elif counting_mode == "Time":
+        num_events= np.sum(binary_behavior)/frame_rate
+    # Counts number of continuous blocks of 1s
+    elif counting_mode == "Events":
+        L = len(binary_behavior)
+        behavior_onsets = np.zeros(L, dtype=np.int8)
+        behavior_onsets[:-1] = np.diff(binary_behavior.astype(np.int8))
+        behavior_onset_pos = np.where(behavior_onsets == 1)[0]
+        num_events=len(behavior_onset_pos)
+        if L>0 and binary_behavior[0].astype(np.int8)==1:
+            num_events=num_events+1
+    # Counts number of frame-to-frame transitions within the events
+    elif counting_mode == "Transitions":
+        prev = np.array(binary_behavior[:-1])
+        curr = np.array(binary_behavior[1:])
+        num_events= np.sum((prev == 1) & (curr == 1))
+
+    return num_events
 
 
 def rotate(
@@ -939,7 +1174,7 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: n
     return aligned_trajs
 
 
-@nb.njit
+@nb.njit()
 def rotate_numba(
     p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
 ) -> np.array:  # pragma: no cover
@@ -978,6 +1213,110 @@ def rotate_numba(
             rotated[j][i] = rotated_centered[j][i] + origin[i]
 
     return rotated
+
+
+def point_in_polygon(points: np.array, polygon: Polygon) -> np.array:
+    """
+    Check if a set of points is inside a polygon.
+
+    Args:
+        points (np.ndarray): An array of shape (M, 2) containing the coordinates of the points.
+        polygon (shapely.geometry.polygon.Polygon): Shapely polygon.
+
+    Returns:
+        np.ndarray: A boolean array of shape (M,) indicating whether each point is inside the polygon.
+    """
+    if type(polygon != Polygon):
+        polygon=Polygon(polygon)
+    inside = np.array([polygon.contains(Point(n)) for n in points])
+    return inside
+
+
+@nb.njit(parallel=True)
+def point_in_polygon_numba(
+    points: np.array, polygon: np.array
+) -> np.array:  # pragma: no cover
+    """
+    This function was generated by Perplexity.ai
+    Check if a set of points is inside a polygon.
+
+    Args:
+        points (np.ndarray): An array of shape (M, 2) containing the coordinates of the points.
+        polygon (np.ndarray): An array of shape (N, 2) containing the coordinates of the polygon vertices.
+
+    Returns:
+        np.ndarray: A boolean array of shape (M,) indicating whether each point is inside the polygon.
+    """
+    M = points.shape[0]
+    N = polygon.shape[0]
+    inside = np.zeros(M, dtype=np.bool_)
+
+    for i in nb.prange(M):
+        x, y = points[i]
+        inside[i] = _is_point_inside_numba(x, y, polygon)
+
+    return inside
+
+
+@nb.njit()
+def _is_point_inside_numba(
+    x: float, y: float, polygon: np.array
+) -> bool:  # pragma: no cover
+    """
+    This function was generated by Perplexity.ai
+    Check if a point is inside a polygon using the ray casting algorithm.
+
+    Args:
+        x (float): The x-coordinate of the point.
+        y (float): The y-coordinate of the point.
+        polygon (np.ndarray): An array of shape (N, 2) containing the coordinates of the polygon vertices.
+
+    Returns:
+        bool: True if the point is inside the polygon, False otherwise.
+    """
+    N = polygon.shape[0]
+    inside = False
+
+    for i in range(N):
+        j = (i + 1) % N
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[j]
+
+        if y > min(y1, y2) and y <= max(y1, y2) and x <= max(x1, x2):
+            if y1 != y2:
+                xinters = (y - y1) * (x2 - x1) / (y2 - y1) + x1
+            if x1 == x2 or x <= xinters:
+                inside = not inside
+
+    return inside
+
+
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
+    """Checks if a given animal for a given table is in a given roi by given criterion.
+
+    Args:
+        tab (dataTable): Datatable containing mouse tracking data.
+        aid (str): ainimal id of the mouse to check
+        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        roi_polygon (np.ndarray): 2D numpy array containing the coordinats of the ROI
+        run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
+    Returns:
+        mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
+    """
+
+    if aid != "":
+        points=np.array(tab[aid+"_"+in_roi_criterion])
+    else:
+        points=np.array(tab[in_roi_criterion])
+    if type(roi_polygon)==tuple:
+        roi_polygon=np.array(roi_polygon)
+
+    if run_numba:
+        mouse_in_polygon=deepof.utils.point_in_polygon_numba(points,roi_polygon)
+    else:
+        mouse_in_polygon=deepof.utils.point_in_polygon(points,roi_polygon)
+
+    return mouse_in_polygon
 
 
 # noinspection PyArgumentList
@@ -1170,7 +1509,6 @@ def rename_track_bps(
 
 
 def scale_table(
-    coordinates: coordinates,
     feature_array: np.ndarray,
     scale: str,
     global_scaler: Any = None,
@@ -1178,10 +1516,12 @@ def scale_table(
     """Scales features in a table controlling for both individual body size and interanimal variability.
 
     Args:
-        coordinates (coordinates): a deepof coordinates object.
         feature_array (np.ndarray): array to scale. Should be shape (instances x features).
         scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
         global_scaler (Any): global scaler, fit in the whole dataset.
+    
+    Returns:
+        feature_array_scaled (np.ndarray): array after scaling.
 
     """
     exp_temp = feature_array.to_numpy()
@@ -1195,7 +1535,7 @@ def scale_table(
         # Scale all experiments together, to control for differential stats
         exp_temp = global_scaler.transform(exp_temp)
 
-    current_tab = np.concatenate(
+    feature_array_scaled = np.concatenate(
         [
             exp_temp,
             feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
@@ -1203,7 +1543,7 @@ def scale_table(
         axis=1,
     )
 
-    return current_tab
+    return feature_array_scaled
 
 
 def scale_animal(feature_array: np.ndarray, scale: str):
@@ -1252,7 +1592,6 @@ def kleinberg(
         n: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         T: used to adjust the fixed cost function (not dependent of the given offsets). Which is needed if you want to compare bursts for different inputs.
         k: maximum burst level
-
     """
     if s <= 1:
         raise ValueError("s must be greater than 1!")
@@ -1347,7 +1686,7 @@ def kleinberg(
     return bursts
 
 
-@nb.njit
+@nb.njit()
 def kleinberg_core_numba(
     gaps: np.array, s: np.float64, gamma: np.float64, n: int, T: np.float64, k: int
 ) -> np.array:  # pragma: no cover
@@ -1423,15 +1762,16 @@ def kleinberg_core_numba(
 def smooth_boolean_array(
     a: np.array, scale: int = 1, sigma = 2.0, batch_size: int = 50000
 ) -> np.array:
-    """Return a boolean array in which isolated appearances of a feature are smoothed.
+    """LEGACY FILTER FOR BEHAVIORAL ANALYSIS. REPLACED BY multi_step_paired_smoothing 
+    Return a boolean array in which isolated appearances of a feature are smoothed.
 
         Args:
             a (numpy.ndarray): Boolean instances.
             scale (int): Kleinberg scale parameter. Higher values result in stricter smoothing.
             batch_size (int): Batch size for input processing
-    :+
+    
         Returns:
-            a (numpy.ndarray): Smoothened boolean instances.
+            a (numpy.ndarray): Smoothed boolean instances.
 
     """
 
@@ -1463,6 +1803,100 @@ def smooth_boolean_array(
 
     return a_smooth
 
+
+def multi_step_paired_smoothing(
+        behavior_in: np.array,
+        not_behavior: np.array = None,
+        exclude: np.array =None,
+        min_length: int =6,
+        get_both: bool =False
+        ) -> np.array:
+    """This filtering approach will first gradually merge together very close behavioral instances (how close is regulated by min_length), 
+    then filter out remaining short instances. In this way multiple instances close to each other are kept and united and isolated very 
+    short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea as kleinberg was too susceptible to 
+    merge events together that were relatively distant on teh time scale.
+
+        Args:
+            behavior_in (numpy.ndarray): Boolean instances of detected raw behavior.
+            not_behavior (numpy.ndarray): Boolean instances of raw behavior not occuring.
+            exclude (numpy.ndarray): Additional boolean instances that will always be rated as "no behavior".
+            min_length (int): Determines the degree of smoothing. The smaller, the more short behavioral instances are kept and the sharper the behavioral edges remain.
+            get_both (bool): If True, will also return the not_behavior instances that get smoothed along with the behavior instances.
+    
+        Returns:
+            behavior (numpy.ndarray): Smoothened boolean instances.
+            not_behavior (numpy.ndarray): Smoothened boolean not-behavior instances.
+
+    """
+
+    @nb.njit()
+    def _resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg): # pragma: no cover
+        """Determines if conflicting frames (behavior and not_behavior are True) are either one or the other
+        based on the identity of surrounding frames represented by behavior_avg and not_behavior_avg"""
+        n = len(behavior)
+        for i in range(n):
+            if behavior[i] and not_behavior[i]:
+                if behavior_avg[i] >= not_behavior_avg[i]:
+                    not_behavior[i] = False
+                else:
+                    behavior[i] = False
+        return behavior, not_behavior
+    
+    if exclude is None:
+        exclude=np.ones(len(behavior_in)).astype(np.bool_)
+   
+    if not_behavior is None:
+        behavior = exclude & behavior_in.astype(np.bool_)
+        not_behavior = exclude & ~(behavior_in.astype(np.bool_))
+    else:
+        behavior = behavior_in.astype(np.bool_)
+
+    # Type corrections
+    if type(behavior) == pd.core.series.Series:
+        behavior = behavior.to_numpy()
+    if type(not_behavior) == pd.core.series.Series:
+        not_behavior = not_behavior.to_numpy()
+    if type(exclude) == pd.core.series.Series:
+        exclude = exclude.to_numpy()
+
+    #widens all behavior detections
+    behavior = moving_average(behavior, lag=min_length).astype(np.bool_)
+    not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
+
+    # Due to the widening step, it will happen that frames are simutaneously beheavior and not behavior.
+    # To resolve tehse conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
+    behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
+    not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
+
+    # Then resolve these conflicting frames based on their surrounding frames
+    behavior, not_behavior = _resolve_conflicts(behavior, not_behavior, behavior_avg, not_behavior_avg) #merges close blcoks and narrows blocks
+    
+    # Re-apply exclude mask to re-sharpen edges
+    behavior &= exclude
+    not_behavior &= exclude
+    
+    # To ensure that sections are labeled more consistently as either behavior or not_behavior (with less not_behavior blips during behavior), 
+    # use a moving median to get rid of very short not_behavior detections in behavior sections, then adjust not_behavior Frames accordingly
+    behavior_med = binary_moving_median_numba(behavior.astype(np.float64), lag=min_length * 4 + 1) #widens blocks
+    behavior = (behavior_med >= 0.5).astype(np.bool_)
+    
+    # Remove overlaps
+    overlap = not_behavior & behavior
+    not_behavior[overlap] = False
+    
+    # Filter short segments.
+    behavior = filter_short_true_segments_numba(behavior, min_length)
+    not_behavior = filter_short_true_segments_numba(not_behavior, min_length) #removes short blocks
+    
+    # Final exclude mask
+    behavior &= exclude
+    not_behavior &= exclude
+    
+    if get_both:
+        return behavior, not_behavior
+    else:
+        return behavior
+    
 
 def rolling_window(
     a: np.ndarray,
@@ -1496,6 +1930,7 @@ def extract_windows(
     window_step: int,
     save_as_paths: bool = False,
     shuffle: bool = False,
+    windows_desc : str = "Get windows"
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
 
@@ -1508,7 +1943,7 @@ def extract_windows(
         window_step (int): specifies the stride of the sliding window.
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
         shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
-
+        windows_desc (str): Progress bar label
 
     Returns:
         to_window (dict): Dictionary containing stacks of windowed data samples for each table. Shape of the stacks: [N_samples, window_size, N_features]
@@ -1518,11 +1953,16 @@ def extract_windows(
     # Iterate over all experiments and populate them
     out_len=0
 
-    with tqdm(total=len(to_window.keys()), desc="Get windows   ", unit="table") as pbar:
+    with tqdm(total=len(to_window.keys()), desc=f"{windows_desc:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
         for key in to_window.keys():
-                
+                            
             #load tab from disk if not already loaded
-            tab, tab_path = get_dt(to_window, key, True)  
+            tab, tab_path = get_dt(to_window, key, True) 
+            if isinstance(tab_path, dict):
+                duckdb_file = tab_path.get("duckdb_file")
+                table = tab_path.get("table")
+                dir_path = os.path.dirname(duckdb_file) 
+                tab_path = os.path.join(dir_path, table)  
             tab=np.array(tab)
 
             tab = rolling_window(
@@ -1562,24 +2002,10 @@ def smooth_mult_trajectory(
     if alpha is None:
         return series
 
-    # savgol_filter cannot handle NaNs (i.e. it turns vast chuncks of neighboring frames
-    # of nans to nans after processing). Hence this workaround.
-    # get positions of nans in signal
-    # nan_positions = np.isnan(series)
-
-    # interpolate nans
-    # interpolated_series = pd.DataFrame(series)
-    # interpolated_series.interpolate(
-    #    method="linear", limit_direction="both", inplace=True
-    # )
-
     # apply filter
     smoothed_series = savgol_filter(
         series, polyorder=(w_length - alpha), window_length=w_length, axis=0
     )
-
-    # re-add nans
-    # smoothed_series[nan_positions]=np.nan
 
     assert smoothed_series.shape == series.shape
 
@@ -1600,6 +2026,22 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
     moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
 
     return moving_avg
+
+@nb.njit()
+def binary_moving_median_numba(time_series, lag): # pragma: no cover
+    """will applay a moving median like filter on a binary signal, i.e. if a window of size lag 
+    has more 1s than 0s set the frame to 1 for that window, set it to 0 otherwise. 
+    Will only work for windows of uneven length N i.e. returns the same for lag=N and lag=N+1"""
+    pad = (lag - 1) // 2
+    padded = np.zeros(len(time_series), dtype=np.bool_)
+    for i in range(pad,len(time_series)-pad):
+        s = 0
+        for k in time_series[i-pad:i+pad+1]:
+            if k:
+                s += 1
+        padded[i] = s > pad
+
+    return padded
 
 
 def mask_outliers(
@@ -1740,7 +2182,7 @@ def remove_outliers(
     return interpolated_exp, warn_nans
 
 
-def filter_animal_id_in_table(table: pd.DataFrame, selected_id: str = None):
+def filter_animal_id_in_table(table: pd.DataFrame, selected_id: str = None, table_type: str = None):
     """Filter a DataFrame to keep only those columns related to the selected id.
 
     Leave labels untouched if present.
@@ -1748,13 +2190,14 @@ def filter_animal_id_in_table(table: pd.DataFrame, selected_id: str = None):
     Args:
         table (pd.DataFrame): a dataFrame to be filtered
         selected_id (str): select a single animal on multi animal settings. Defaults to None (all animals are processed).
+        table_type (str): type of the tableDict
 
     Returns:
         pd.DataFrame: Filtered dataFrame, keeping only the selected animal.
     """
 
     #filter columns, only keep the ones having a specific animal id    
-    columns_to_keep = filter_columns(table.columns, selected_id)
+    columns_to_keep = filter_columns(table.columns, selected_id, table_type=table_type)
     table = table.loc[
         :, [bpa for bpa in table.columns if bpa in columns_to_keep]
     ]
@@ -1762,12 +2205,13 @@ def filter_animal_id_in_table(table: pd.DataFrame, selected_id: str = None):
     return table
 
 
-def filter_columns(columns: list, selected_id: str) -> list:
+def filter_columns(columns: list, selected_id: str, table_type:str = None) -> list:
     """Given a set of TableDict columns, returns those that correspond to a given animal, specified in selected_id.
 
     Args:
         columns (list): List of columns to filter.
         selected_id (str): Animal ID to filter for.
+        table_type (str): Type of the table (relevant if "supervised")
 
     Returns:
         filtered_columns (list): List of filtered columns.
@@ -1779,13 +2223,15 @@ def filter_columns(columns: list, selected_id: str) -> list:
     columns_to_keep = []
     for column in columns:
         # Speed transformed columns
-        if selected_id == "supervised" and column in [
+        if selected_id == "supervised" and column in [ #maybe bug but need to confirm
             "nose2nose",
             "sidebyside",
             "sidereside",
         ]:
             columns_to_keep.append(column)
-        if type(column) == str and column.startswith(selected_id):
+        if type(column) == str and table_type=="supervised" and selected_id in column:
+            columns_to_keep.append(column)
+        elif type(column) == str and column.startswith(selected_id):
             columns_to_keep.append(column)
         # Raw coordinate columns
         if column[0].startswith(selected_id) and column[1] in ["x", "y", "rho", "phi"]:
@@ -1799,18 +2245,16 @@ def filter_columns(columns: list, selected_id: str) -> list:
     return columns_to_keep
 
 
-def load_segmentation_model(path):
+def load_precompiled_model(path, download_path, model_path, model_name):
     """Loads model for automatic arena segmentation"""
 
-    model_url = "https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download"
+    model_url = download_path
 
     if path is None:
         installation_path = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(
             installation_path,
-            "trained_models",
-            "arena_segmentation",
-            "sam_vit_h_4b8939.pth",
+            model_path
         )
 
     if not os.path.exists(path):
@@ -1819,7 +2263,7 @@ def load_segmentation_model(path):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        print("Arena segmentation model not found. Downloading...")
+        print(model_name + " not found. Downloading...")
 
         response = requests.get(model_url, stream=True)
         response.raise_for_status()
@@ -1834,10 +2278,21 @@ def load_segmentation_model(path):
                 if chunk:
                     file.write(chunk)
 
-    # Load the model using PyTorch
-    sam = sam_model_registry["vit_h"](checkpoint=path)
-    sam.to(device="cpu")
-    predictor = SamPredictor(sam)
+    # Arena segemntation model
+    if path.endswith(".pth"):
+        # Load the model using PyTorch
+        sam = sam_model_registry["vit_h"](checkpoint=path)
+        sam.to(device="cpu")
+        predictor = SamPredictor(sam)
+    # Immobility estimator model
+    elif path.endswith(".pkl"):
+        with open(
+            os.path.join(
+            path,
+            ),
+            "rb",
+        ) as est:
+            predictor = pickle.load(est)
 
     return predictor
 
@@ -1847,6 +2302,7 @@ def get_arenas(
     tables: table_dict,
     arena: str,
     arena_dims: int,
+    number_of_rois: int,
     segmentation_model_path: str,
     video_path: str,
     videos: list = None,
@@ -1860,6 +2316,7 @@ def get_arenas(
         tables (table_dict): TableDict object containing tracklets per animal.
         arena (str): Arena type (must be either "polygonal-manual", "circular-manual", "polygonal-autodetect", or "circular-autodetect").
         arena_dims (int): Arena dimensions.
+        number_of_rois (int): number of behavior rois,
         segmentation_model_path (str): Path to segmentation model used for automatic arena detection.
         video_path (str): Path to folder with videos.
         videos (dict): Dictionary of videos to extract arena parameters from. Defaults to None (all videos are used).
@@ -1892,8 +2349,20 @@ def get_arenas(
     """
     scales = {}
     arena_params = {}
+    roi_dicts = {}
     video_resolution = {}
+    list_of_rois=list(range(1,number_of_rois+1))
 
+    get_arena = True
+    propagate_rois=[]
+    arena_dist = None
+    
+
+
+    def get_first_length(arena_corners):
+        return math.dist(arena_corners[0], arena_corners[1])
+    
+    
     def get_first_length(arena_corners):
         return math.dist(arena_corners[0], arena_corners[1])
     
@@ -1917,60 +2386,65 @@ def get_arenas(
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
         display_message(multi_line_message)
-        
-        propagate_last = False
-        with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
+                
+        with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
             for vid_idx, key in enumerate(videos.keys()):
+                  
+                # let user draw arena
+                arena_corners, roi_corners, arena_dist, h, w = extract_polygonal_arena_coordinates(
+                    os.path.join(video_path, videos[key]),
+                    arena,
+                    vid_idx,
+                    videos,
+                    list_of_rois=list_of_rois,
+                    get_arena=get_arena,
+                    arena_dims=arena_dims,
+                    norm_dist=arena_dist,
+                    test=test,
+                )
 
-                if not propagate_last:
-                    arena_corners, h, w = extract_polygonal_arena_coordinates(
-                        os.path.join(video_path, videos[key]),
-                        arena,
-                        vid_idx,
-                        videos,
-                        test=test,
-                    )
-
-                    if arena_corners is None:
-                        propagate_last = True
-
-                    else:
-                        arena_dist=get_first_length(arena_corners)
-
-                        cur_scales=[
-                            *(np.mean(arena_corners, axis=0)*(arena_dims/arena_dist)),
-                            arena_dist,
-                            arena_dims,
-                        ]
-
-                if propagate_last:  
+                # if no new arena was detected, skip future detections and set all new dictionary values to teh previous entry
+                if arena_corners is None:
+                    get_arena = False
                     cur_arena_params = arena_params[list(arena_params.keys())[-1]]
                     cur_scales = scales[list(scales.keys())[-1]]
-                else:
+                    
+                elif arena == "circular-manual":
+                    cur_arena_params = fit_ellipse_to_polygon(arena_corners)
+                    cur_scales=list(
+                        np.array(
+                            [
+                                cur_arena_params[0][0]*(arena_dims/arena_dist),
+                                cur_arena_params[0][1]*(arena_dims/arena_dist),
+                                arena_dist
+                            ]
+                        )
+                    ) + [arena_dims]
+                elif arena == "polygonal-manual":
                     cur_arena_params = arena_corners
-
-                if arena == "circular-manual":
-
-                    if not propagate_last:
-                        cur_arena_params = fit_ellipse_to_polygon(cur_arena_params)
-
-                    arena_diameter=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
-
-                    scales[key]=list(
-                            np.array(
-                                [
-                                    cur_arena_params[0][0]*(arena_dims/arena_diameter),
-                                    cur_arena_params[0][1]*(arena_dims/arena_diameter),
-                                    arena_diameter
-                                ]
-                            )
-                        ) + [arena_dims]
-                        
-
+                    cur_scales=[
+                        *(np.mean(cur_arena_params, axis=0)*(arena_dims/arena_dist)),
+                        arena_dist,
+                        arena_dims,
+                    ]
                 else:
-                    scales[key]=cur_scales
+                    raise(NotImplementedError)
 
+                for roi in copy.copy(list_of_rois):
+                    if roi_corners[roi] is None:
+                        propagate_rois.append(roi)
+                        list_of_rois.remove(roi)
+                
+                cur_roi_corners={}
+                for roi in list(range(1,number_of_rois+1)):
+                    if roi in propagate_rois:
+                        cur_roi_corners[roi]=roi_dicts[list(roi_dicts.keys())[-1]][roi]
+                    else:
+                        cur_roi_corners[roi]=roi_corners[roi]                           
+
+                scales[key] = cur_scales
                 arena_params[key]=cur_arena_params
+                roi_dicts[key]=cur_roi_corners
                 video_resolution[key]=(h, w)
                 pbar.update()
 
@@ -1978,44 +2452,80 @@ def get_arenas(
 
         # Open GUI for manual labelling of two scaling points in the first video
         arena_reference = None
-        if arena == "polygonal-autodetect" and not test:  # pragma: no cover
+        if not test:  # pragma: no cover
 
-            display_message(multi_line_message)
-
-            first_key=list(videos.keys())[0]
-            arena_reference = extract_polygonal_arena_coordinates(
-                os.path.join(video_path, videos[first_key]),
-                arena,
-                0,
-                [videos[first_key]],
-                test=test,
-            )[0]
+            #skip arena retival if circular-autodetect was selected
+            get_arena=True
+            if arena == "circular-autodetect":
+                get_arena=False
+            else:
+                display_message(multi_line_message)
 
         # Early return in test mode to avoid redundant slow arena detection
         if test:
+            get_arena=False
             if "polygonal" in arena:
                 scales={'test2': [279.5, 213.5, 420.12, 380], 'test': [279.5, 213.5, 420.12, 380]}
-                arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (539, 29), (533, 438), (104, 431))}
+                arena_params={'test2': ((108, 30), (539, 29), (533, 438), (104, 431)), 'test': ((108, 30), (323, 29), (539, 29), (533, 434), (323, 434), (104, 431))}
                 video_resolution={'test2': (480, 640), 'test': (480, 640)}
+                rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
+                roi_dicts={'test': rois, 'test2': rois} 
+                #scale rois and arenas to mm
+                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
+
                 if test == "detect_arena":
                     arena_reference=np.array([(108, 30), (539, 29), (533, 438), (104, 431)])
                 else:
-                    return scales, arena_params, video_resolution
+                    return scales, arena_params, roi_dicts, video_resolution
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
                 arena_params={'test2': ((200, 195), (167, 169), 14.071887016296387), 'test': ((200, 195), (167, 169), 14.071887016296387)}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
+                rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
+                roi_dicts={'test': rois, 'test2': rois} 
+                #scale rois and arenas to mm
+                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
+
                 if test == "detect_arena":
                     pass
                 else:
-                    return scales, arena_params, video_resolution
+                    return scales, arena_params, roi_dicts, video_resolution
 
 
         # Load SAM 
-        segmentation_model = load_segmentation_model(segmentation_model_path)                             
-        with tqdm(total=len(videos), desc="Detecting arenas    ", unit="arena") as pbar:
-            for key in videos.keys():
+        segmentation_model = load_precompiled_model(
+            segmentation_model_path,
+            download_path="https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download",
+            model_path=os.path.join("trained_models", "arena_segmentation","sam_vit_h_4b8939.pth"),
+            model_name="Arena segmentation model"
+            )                           
+        with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
+                
+            vid_idx = 0
+            key = list(videos.keys())[0]
+            if not test:
+                arena_corners, _, arena_dist, _ , _ = extract_polygonal_arena_coordinates(
+                    os.path.join(video_path, videos[key]),
+                    arena,
+                    vid_idx,
+                    videos,
+                    list_of_rois=[],
+                    get_arena=get_arena,
+                    arena_dims=arena_dims,
+                    norm_dist=None,
+                    test=test,
+                )
+                get_arena=False
+
+                if arena_corners is not None:
+                    arena_reference = arena_corners
+
+            arena_dists={}
+            for key in videos.keys():    
+                
                 arena_parameters, h, w = automatically_recognize_arena(
                     coordinates=coordinates,
                     tables=tables,
@@ -2041,38 +2551,95 @@ def get_arenas(
                             arena_dist,
                             arena_dims,
                         ]
-                    
+                                    
 
                 elif "circular" in arena:
                     # scales contains the coordinates of the center of the arena,
                     # the absolute diameter measured from the video in pixels, and
                     # the provided diameter in mm (1 -default- equals not provided)
 
-                    arena_diameter=np.mean([arena_parameters[1][0], arena_parameters[1][1]])* 2
+                    arena_dist=np.mean([arena_parameters[1][0], arena_parameters[1][1]])* 2
 
                     scales[key]=list(
                             np.array(
                                 [
-                                    arena_parameters[0][0]*(arena_dims/arena_diameter),
-                                    arena_parameters[0][1]*(arena_dims/arena_diameter),
-                                    arena_diameter,
+                                    arena_parameters[0][0]*(arena_dims/arena_dist),
+                                    arena_parameters[0][1]*(arena_dims/arena_dist),
+                                    arena_dist,
                                 ]
                             )
                         )+ [arena_dims]
-                            
+
+                arena_dists[key] = arena_dist                           
                 arena_params[key]=arena_parameters
                 video_resolution[key]=(h, w)
                 pbar.update()
 
+            for vid_idx, key in enumerate(videos.keys()):
+                
+                if not test:
+                    arena_corners, roi_corners, _, _ , _ = extract_polygonal_arena_coordinates(
+                        os.path.join(video_path, videos[key]),
+                        arena,
+                        vid_idx,
+                        videos,
+                        list_of_rois=list_of_rois,
+                        get_arena=False,
+                        arena_dims=arena_dims,
+                        norm_dist=arena_dists[key],
+                        test=test,
+                    )
+
+                    for roi in copy.copy(list_of_rois):
+                        if roi_corners[roi] is None:
+                            propagate_rois.append(roi)
+                            list_of_rois.remove(roi)
+                
+                    cur_roi_corners={}
+                    for roi in list(range(1,number_of_rois+1)): # pragma: no cover
+                        if roi in propagate_rois:
+                            cur_roi_corners[roi]=roi_dicts[list(roi_dicts.keys())[-1]][roi]
+                        else:
+                            cur_roi_corners[roi]=roi_corners[roi]
+                        
+                    roi_dicts[key]=cur_roi_corners
+
+                    if arena_corners is not None:
+                        arena_reference = arena_corners
+
     elif not arena:
-        return None, None, None
+        return None, None, None, None
 
     else:  # pragma: no cover
         raise NotImplementedError(
             "arenas must be set to one of: 'polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect'"
         )
+    
+    #scale rois and arenas to mm
+    arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+    roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
-    return scales, arena_params, video_resolution
+    return scales, arena_params, roi_dicts, video_resolution
+
+
+def _scale_arenas_to_mm(arena_params, scales, arena):
+    """Scales arenas from pixel to mm"""
+    for key in arena_params.keys():
+        scaling_ratio = scales[key][3]/scales[key][2]
+        if "polygonal" in arena:
+            arena_params[key]=np.array(arena_params[key])*scaling_ratio
+        elif "circular" in arena:
+            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+    return arena_params
+
+
+def _scale_rois_to_mm(roi_dicts, scales):
+    """Scales ROIS from pixel to mm"""
+    for key in roi_dicts.keys():
+        for k, roi in roi_dicts[key].items():
+            scaling_ratio = scales[key][3]/scales[key][2]
+            roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    return roi_dicts
 
 
 def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
@@ -2285,7 +2852,7 @@ def automatically_recognize_arena(
     return arena, h, w
 
 
-def display_message(message: List[str]):
+def display_message(message: List[str]): # pragma: no cover
     """
     Opens a window that displays a message for the user
 
@@ -2337,9 +2904,33 @@ def display_message(message: List[str]):
     if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) >= 1:
         cv2.destroyWindow(window_name)
 
+def get_roi_colors():
+    """Does nothing else than returning an array of colors"""
+    
+    #hard coded as these colors seem to be defined at compilation time, otherwise open cv crashes
+    return [(204,  20,  20),
+       (204, 131,  20),
+       (167, 204,  20),
+       ( 57, 204,  20),
+       ( 20, 204,  94),
+       ( 20, 204, 204),
+       ( 20,  94, 204),
+       ( 57,  20, 204),
+       (167,  20, 204),
+       (204,  20, 131),
+       (153,  15,  15),
+       (153,  98,  15),
+       (125, 153,  15),
+       (43, 153,  15),
+       (15, 153,  70),
+       (15, 153, 153),
+       (15,  70, 153),
+       (43,  15, 153),
+       (125,  15, 153),
+       (153,  15,  98)]
 
 def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, test: bool = False
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False
 ):  # pragma: no cover
     """Open a window and waits for the user to click on all corners of the polygonal arena.
 
@@ -2350,6 +2941,9 @@ def retrieve_corners_from_image(
         arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygon-manual".
         cur_vid (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
+        current_roi (int): Current ROI to be extracted. 0 is the global arena ROI
+        arena_dims (float): Distance as taken from video in pixels
+        norm_dist (float): Same distance as arena_dims for normalization in mm
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
     Returns:
@@ -2358,9 +2952,34 @@ def retrieve_corners_from_image(
     """
     corners = []
 
+    roi_colors=get_roi_colors()
+
     #early return of set of square corners
     if test:
         return [(111, 49), (541, 31), (553, 438), (126, 452)]
+    
+    if current_roi == 0:
+        display_text="deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
+            )
+        color = (40, 86, 236)
+
+    # current roi > 0
+    elif current_roi<21:
+        display_text="deepof - Select polygonal region of interest corners for roi {} - (q: exit / d: delete{}) - {}/{} processed".format(
+                current_roi,
+                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+                cur_vid,
+                len(videos),
+            )
+        color = roi_colors[current_roi-1]
+    else:
+        raise ValueError(
+            "only up to 20 ROIs are allowed (what for do you even need so many ROIs?)"
+        )
+
 
     def click_on_corners(event, x, y, flags, param):
         # Callback function to store the coordinates of the clicked points
@@ -2375,31 +2994,24 @@ def retrieve_corners_from_image(
     # Create a window and display the image
     cv2.startWindowThread()
 
+    alpha=0.3
     while True:
         frame_copy = frame.copy()
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            ),
+            display_text,
             frame_copy,
         )
 
         cv2.setMouseCallback(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            ),
+            display_text,
             click_on_corners,
         )
 
         # Display already selected corners
         if len(corners) > 0:
             for c, corner in enumerate(corners):
-                cv2.circle(frame_copy, (corner[0], corner[1]), 4, (40, 86, 236), -1)
+                cv2.circle(frame_copy, (corner[0], corner[1]), 4, color, -1)
                 # Display lines between the corners
                 if len(corners) > 1 and c > 0:
                     if "polygonal" in arena_type or len(corners) < 5:
@@ -2407,9 +3019,25 @@ def retrieve_corners_from_image(
                             frame_copy,
                             (corners[c - 1][0], corners[c - 1][1]),
                             (corners[c][0], corners[c][1]),
-                            (40, 86, 236),
+                            color,
                             2,
                         )
+
+        if len(corners) > 1 and "polygonal" in arena_type:
+            if norm_dist is None:
+                norm_dist=get_first_length(corners)
+            cur_dist=math.dist(corners[-2], corners[-1])
+            text="last edge in mm: " + str(np.round((cur_dist*(arena_dims/norm_dist))*100)/100)
+            cv2.putText(
+                frame_copy,
+                text,
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
 
         # Close the polygon
         if len(corners) > 2:
@@ -2418,51 +3046,61 @@ def retrieve_corners_from_image(
                     frame_copy,
                     (corners[0][0], corners[0][1]),
                     (corners[-1][0], corners[-1][1]),
-                    (40, 86, 236),
+                    color,
                     2,
                 )
+
         if len(corners) >= 5 and "circular" in arena_type:
             cv2.ellipse(
                 frame_copy,
                 *fit_ellipse_to_polygon(corners),
                 startAngle=0,
                 endAngle=360,
-                color=(40, 86, 236),
+                color=color,
                 thickness=3,
             )
+        
+        # Create filled overlay for ROIs (these are always polygonal)
+        if current_roi > 0 and len(corners) > 2:         
+            overlay = frame_copy.copy()
+            pts = np.array(corners, dtype=np.int32).reshape((-1, 1, 2))
+            cv2.fillPoly(overlay, [pts], color)           
+            # Blend overlay with original frame
+            cv2.addWeighted(overlay, alpha, frame_copy, 1 - alpha, 0, frame_copy)
 
         cv2.imshow(
-            "deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            ),
+            display_text,
             frame_copy,
         )
 
+        key = cv2.waitKey(1) & 0xFF
         # Remove last added coordinate if user presses 'd'
-        if cv2.waitKey(1) & 0xFF == ord("d"):
+        if key == ord("d"):
             corners = corners[:-1]
 
         # Exit is user presses 'q'
         if len(corners) > 2:
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            if key == ord("q"):
                 break
 
         # Exit and copy all coordinates if user presses 'c'
-        if cur_vid > 0 and cv2.waitKey(1) & 0xFF == ord("p"):
+        if cur_vid > 0 and key == ord("p"):
             corners = None
             break
 
     cv2.destroyAllWindows()
     cv2.waitKey(1)
 
+    if norm_dist is None and corners is not None and len(corners) >= 5 and "circular" in arena_type:
+        cur_arena_params = fit_ellipse_to_polygon(corners)
+        norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
+
     # Return the corners
-    return corners
+    return corners, norm_dist
 
 
 def extract_polygonal_arena_coordinates(
-    video_path: str, arena_type: str, video_index: int, videos: list, test: bool = False, 
+    video_path: str, arena_type: str, video_index: int, videos: list, list_of_rois: list = 0, get_arena: bool = True, arena_dims: float = 1.0, norm_dist: float = None, test: bool = False, 
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
 
@@ -2471,6 +3109,10 @@ def extract_polygonal_arena_coordinates(
         arena_type (str): Type of arena to be used. Must be one of the following: "circular-manual", "polygonal-manual".
         video_index (int): Index of the current video in the list of videos.
         videos (list): List of videos to be processed.
+        list_of_rois (int): list of roi numbers to draw,
+        get_arena (bool): retrieve arena or skip step (default is True)
+        arena_dims (float): Distance as taken from video in pixels
+        norm_dist (float): Same distance as arena_dims for normalization in mm
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
 
@@ -2489,15 +3131,44 @@ def extract_polygonal_arena_coordinates(
     _, numpy_im = current_video_cap.read()
     current_video_cap.release()
 
+    arena_corners = None
+    roi_corners = None
+    norm_dist_new = None
+
     # open gui and let user pick corners
-    arena_corners = retrieve_corners_from_image(
-        numpy_im,
-        arena_type,
-        video_index,
-        videos,
-        test=test,
-    )
-    return arena_corners, numpy_im.shape[0], numpy_im.shape[1]
+    if get_arena:
+        arena_corners, norm_dist_new = retrieve_corners_from_image(
+            numpy_im,
+            arena_type,
+            video_index,
+            videos,
+            current_roi=0,
+            arena_dims=arena_dims,
+            norm_dist=None,
+            test=test,
+        )
+    if norm_dist_new is None:
+        norm_dist_new = norm_dist
+
+    #let user pick corners for rois
+    if len(list_of_rois) > 0:
+
+        roi_corners= {}
+
+        for k in list_of_rois:
+            cur_roi_corners, _ = retrieve_corners_from_image(
+                numpy_im,
+                "polygonal-manual",
+                video_index,
+                videos,
+                current_roi=k,
+                arena_dims=arena_dims,
+                norm_dist=norm_dist_new,
+                test=test,
+            )
+            roi_corners[k] =cur_roi_corners
+
+    return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1]
 
 
 def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
@@ -2522,6 +3193,10 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 
     return center_coordinates, axes_length, ellipse_angle
 
+def get_first_length(arena_corners):
+    """gets the length of the first edge in arena_corners"""
+    return math.dist(arena_corners[0], arena_corners[1])
+
 
 def arena_parameter_extraction(
     frame: np.ndarray,
@@ -2535,11 +3210,11 @@ def arena_parameter_extraction(
 
     Returns:
         IF arena_type=="circular":
-        center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
-        axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
-        ellipse_angle (float): Angle of the ellipse.
+            center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
+            axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
+            ellipse_angle (float): Angle of the ellipse.
         ELIF arena_type=="polygonal"        
-        np.ndarray: (x,y) coordinates of all points of the polygon
+            np.ndarray: (x,y) coordinates of all points of the polygon
 
     """
     # Obtain contours from the image, and retain the largest one
@@ -2564,7 +3239,6 @@ def rolling_speed(
     window: int = 3,
     rounds: int = 3,
     deriv: int = 1,
-    center: str = None,
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
@@ -2573,11 +3247,9 @@ def rolling_speed(
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.
         frame_rate (int): Number of frames per second.
-
         window (int): Number of frames to average over.
         rounds (int): Float rounding decimals.
         deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
-        center (str): For internal usage only; solves an issue with pandas.MultiIndex that arises when centering frames to a specific body part.
         shift (int): Window shift for rolling speed calculation.
         typ (str): Type of dataset. Intended for internal usage only.
 
@@ -2586,9 +3258,11 @@ def rolling_speed(
 
     """
     original_shape = dframe.shape
-    try:
-        body_parts = dframe.columns.levels[0]
-    except AttributeError:
+    if type(dframe.columns) == pd.MultiIndex:
+        #"levels" seems to be bugged and still finds columns that are not included in the datframe anymore
+        body_parts = [column[0] for column in dframe.columns]
+        body_parts = np.array(body_parts)[np.unique(body_parts, return_index=True)[1]]
+    else:
         body_parts = dframe.columns
 
     speeds = pd.DataFrame
@@ -2617,6 +3291,7 @@ def rolling_speed(
         )
         distances = pd.DataFrame(distances, index=dframe.index)
         speeds = np.round(distances.rolling(window).mean(), rounds)
+        del dframe
         dframe = speeds
 
     # Speed is in mm per frame
@@ -2627,7 +3302,7 @@ def rolling_speed(
 
 
 
-    return speeds.fillna(0.0)
+    return speeds#.fillna(0.0)
 
 
 def filter_short_bouts(
@@ -2719,8 +3394,8 @@ def filter_short_true_segments(array: np.ndarray, min_length: int):
     return output_array
 
 
-@nb.njit
-def filter_short_true_segments_numba(array: np.ndarray, min_length: int):
+@nb.njit()
+def filter_short_true_segments_numba(array: np.ndarray, min_length: int): # pragma: no cover
     """Filters out sahort "True" sections from boolean array "array"
 
     Args:

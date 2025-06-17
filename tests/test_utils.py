@@ -20,6 +20,8 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
+from shapely.geometry import Point, Polygon
+
 
 import deepof.data
 import deepof.utils
@@ -112,12 +114,10 @@ def test_tab2polar(mult, cartdf):
         ),
         elements=st.floats(min_value=-1000, max_value=1000, allow_nan=False),
     ),
-    arena_abs=st.integers(min_value=1, max_value=1000),
-    arena_rel=st.integers(min_value=1, max_value=1000),
 )
-def test_compute_dist(pair_array, arena_abs, arena_rel):
+def test_compute_dist(pair_array):
     assert np.allclose(
-        deepof.utils.compute_dist(pair_array, arena_abs, arena_rel),
+        deepof.utils.compute_dist(pair_array),
         pd.DataFrame(distance.cdist(pair_array[:, :2], pair_array[:, 2:]).diagonal())
     )
 
@@ -225,16 +225,246 @@ def test_align_trajectories(data, mode_idx):
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))))
-def test_smooth_boolean_array(a):
+@given(
+    a=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+    lag=st.integers(min_value=1, max_value=10),
+)
+def test_smooth_boolean_array_and_binary_moving_median(a, lag):
     a[0] = True  # make sure we have at least one True
     smooth = deepof.utils.smooth_boolean_array(a)
+    filtered = deepof.utils.binary_moving_median_numba(a, lag)
 
     def trans(x):
         """In situ function for computing boolean transitions"""
         return sum([i + 1 != i for i in range(x.shape[0] - 1)])
 
+    # Binary median filtered arrays have always less or equal the number of 0-1 and 0-1 transitions
     assert trans(a) >= trans(smooth)
+    assert trans(a) >= trans(filtered)
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    tab_numpy=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+)
+def test_count_events(tab_numpy):
+
+    num_events=deepof.utils.count_events(tab_numpy)
+
+    # Number of 1s in teh table is always larger than or equal to the number of counted events
+    assert(np.sum(tab_numpy) >= num_events)
+    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to teh numebr of events
+    assert len(np.where(np.diff(tab_numpy.astype(int))==1)[0]) <= num_events
+    assert len(np.where(np.diff(tab_numpy.astype(int))==-1)[0]) <= num_events
+    
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    tab_numpy=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=30),st.integers(min_value=3, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
+
+    def _has_no_short_ones(matrix, N):
+        """Counts consecutive ones and checks if the at least as long as N except for edge case (Borderline too complicated function for a test case)"""
+        for row in range(0,matrix.shape[0]):
+            # Count number of consecutive Ones
+            c_row=matrix[row,:]
+            c_row=np.concatenate(( [0], c_row, [0] ))
+            idx = np.flatnonzero(c_row[1:] != c_row[:-1])
+            len_ones=np.abs(idx[::2] - idx[1::2])
+            #remove last segment, if it ended at 1 (nd hence was correctly cut off)
+            if c_row[-2]==1:
+                len_ones=len_ones[:-1]
+            # Notify, if any segment was too short
+            if (len_ones<N).any():
+                return False
+            
+        return True
+
+    tab_extended=deepof.utils.extend_behaviors_numba(tab_numpy,delta_T,frame_rate)
+    extension=int(frame_rate*delta_T)
+
+    # An extended table always has equal or more ones than their unextended equivalent
+    assert(np.sum(tab_numpy)<=np.sum(tab_extended))
+    # All original 1s still exist
+    assert np.sum(tab_extended[tab_numpy])==np.sum(tab_numpy)
+    # An extended table cannot have more ones than all ones in the original table including extension length
+    assert(np.sum(tab_numpy)+np.sum(tab_numpy)*extension)>=np.sum(tab_extended)
+    # Make sure that no section of 1s remain that are shorter than extension +1 except the end segemnts
+    assert _has_no_short_ones(tab_extended, extension+1)
+
+
+@settings(deadline=None)
+@given(
+    num_features=st.integers(min_value=1, max_value=10),
+    exp_conditions=st.one_of(st.just({0:'Stressed'}),st.just({0:'Stressed',1:'VeryStressed'})),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ),
+    animals_in_roi = st.one_of(st.just(["A"]),st.just(["A","B"])),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    silence_diagonal=st.booleans(),
+    aggregate=st.booleans(),
+    normalize=st.booleans(),
+    diagonal_behavior_counting=st.one_of(st.just("Frames"),st.just("Time"),st.just("Events"),st.just("Transitions"))
+)
+def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting):
+
+    # Define a test embedding dictionary
+    tab_dict = {i: np.random.choice(a=[False, True], size=(100, num_features), p=[0.5,0.5]) for i in range(len(exp_conditions))}
+
+    # Create local_bin_info
+    bin_info = {i: {} for i in range(len(exp_conditions))}
+    for key in bin_info:
+        local_bin_info = {"time": np.array(bins)}
+        for k, animal_id in enumerate(animals_in_roi):
+            local_bin_info[animal_id] = np.ones(len(bins)).astype(bool)
+            if key==0:
+                local_bin_info[animal_id] = np.zeros(len(bins)).astype(bool)
+        bin_info[key]=local_bin_info
+
+    transitions_dict, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting=diagonal_behavior_counting
+    )
+
+    # Paired column combinations are the square of single columns
+    assert len(columns)**2 == len(combined_columns)
+    # Values are always larger than 0
+    assert (transitions_dict[list(transitions_dict.keys())[0]]>=0).all()
+
+    # Silencing the diagonal means all values on the diagonal are 0
+    if silence_diagonal:
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()==0).all()
+    # In aggregation mode, there is exactly one table for each experiment condition
+    if aggregate:
+        assert len(transitions_dict)==len(exp_conditions)
+    # Normalization implies no values greater 1
+    if normalize:
+        assert (transitions_dict[list(transitions_dict.keys())[0]]<=1).all()
+    # Diagonal behavior counting
+    if diagonal_behavior_counting == "Frames":
+
+        transitions_dict_transitions, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Transitions"
+        )
+
+        transitions_dict_time, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Time"
+        )
+
+        transitions_dict_events, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T=delta_T,
+        frame_rate=frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=aggregate,
+        normalize=normalize,
+        diagonal_behavior_counting="Events"
+        )
+
+        # The number of Frames will be always greater or equal than any otehr of the diagonal counting options
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_transitions[list(transitions_dict_transitions.keys())[0]].diagonal()).all()
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_time[list(transitions_dict_time.keys())[0]].diagonal()).all()
+        assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_events[list(transitions_dict_events.keys())[0]].diagonal()).all()
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    pos_in=st.lists(elements=st.integers(min_value=1, max_value=4), min_size=3, max_size=100),
+    min_length=st.integers(min_value=3,max_value=100),
+    get_both=st.booleans(),
+)
+def test_multi_step_paired_smoothing(pos_in,min_length,get_both):
+    pos_in[0] = 1  # make sure we have at least one True
+
+    if min_length > len(pos_in):
+        min_length = len(pos_in)
+
+    #construct non-overlapping oolean arrays from input integers
+    a=np.zeros(len(pos_in)).astype(bool)
+    b=np.zeros(len(pos_in)).astype(bool)
+    c=np.zeros(len(pos_in)).astype(bool)
+    f=np.array(pos_in)
+    a[f==1]=True
+    b[f==2]=True
+    c[f==3]=True
+    if not b.any()==True:
+        b=None
+    if not c.any()==True:
+        c=None
+
+    non_behavior=None
+    if get_both:
+        behavior, non_behavior = deepof.utils.multi_step_paired_smoothing(behavior_in=a, not_behavior=b, exclude=c, min_length=min_length, get_both=get_both)
+    else:
+        behavior = deepof.utils.multi_step_paired_smoothing(behavior_in=a, not_behavior=b, exclude=c, min_length=min_length, get_both=get_both)
+
+    def trans(x):
+        """In situ function for computing boolean transitions"""
+        return sum([i + 1 != i for i in range(x.shape[0] - 1)])
+
+    # make sure all arrays are smoothed
+    assert trans(a) >= trans(behavior)
+    if b is not None:
+        assert trans(b) >= trans(behavior)
+    if c is not None:
+        assert trans(c) >= trans(behavior)
+
+    # make sure behaviors and non_behaviors do not overlap
+    if get_both:
+        assert np.sum(non_behavior) + np.sum(behavior) <= len(pos_in)
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    array=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=3, max_value=100))),
+    min_length=st.integers(min_value=1, max_value=10),
+    )
+def test_filter_short_true_segments(array, min_length):
+    
+    filtered_a = deepof.utils.filter_short_true_segments(array, min_length)
+    filtered_b = deepof.utils.filter_short_true_segments_numba(array, min_length)
+
+    # Numba and non-numba version return identical results
+    assert (filtered_a==filtered_b).all()
+    # Arrays with removed short segments always have less or equal the number of "True" entries
+    assert np.sum(filtered_a) <= np.sum(array)
 
 
 @settings(deadline=None)
@@ -377,9 +607,20 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
         tables=coords._tables,
         vid_key=video_key,
         path=path,
-        segmentation_model=deepof.utils.load_segmentation_model(None),
+        segmentation_model=deepof.utils.load_precompiled_model(
+            None,
+            download_path="https://datashare.mpcdf.mpg.de/s/GccLGXXZmw34f8o/download",
+            model_path=os.path.join("trained_models", "arena_segmentation","sam_vit_h_4b8939.pth"),
+            model_name="Arena segmentation model"
+            ),
         arena_type=detection_mode,
     )
+    #adjust scaling
+    scaling_ratio = coords._scales[video_key][3]/coords._scales[video_key][2]
+    if "polygonal" in detection_mode:
+        arena_parameters=np.array(arena_parameters)*scaling_ratio
+    elif "circular" in detection_mode:
+        arena_parameters=(tuple(np.array(arena_parameters[0])*scaling_ratio),tuple(np.array(arena_parameters[1])*scaling_ratio),arena_parameters[2])
 
     rmtree(
         os.path.join(
@@ -580,3 +821,50 @@ def test_cluster_transition_matrix(sampler, autocorrelation, return_graph):
             assert isinstance(trans, nx.Graph)
         else:
             assert isinstance(trans, np.ndarray)
+
+# list of valid polygons as ill-defined polygons (e.g. lines) can lead to deviations
+polygons = [
+    [[0, 0], [1, 0], [1, 1], [0, 1]],  # Square
+    [[0, 0], [2, 0], [1, 2], [0, 0]],  # Triangle
+    [[-4, 0], [2, 0], [2, 2], [-4, 2], [-4, 0]],  # Rectangle
+    [[1, 1], [3, 1], [4, 3], [2, 4], [1, 3], [1, 1]],  # Complex polygon
+    [[0, 0], [6, 0], [6, 4], [4, 4], [4, 2], [2, 2], [2, 4], [0, 4], [0, 0]],  # U-shape
+    [
+        [0, 0],
+        [6, 0],
+        [6, 6],
+        [0, 6],
+        [0, 3],
+        [2, 3],
+        [2, 4],
+        [4, 4],
+        [4, 2],
+        [2, 2],
+        [2, 3],
+        [0, 3],
+        [0, 0],
+    ],  # ring polygon
+]
+
+@settings(max_examples=100, deadline=None)
+@given(
+    points=st.lists(
+        st.lists(
+            st.floats(min_value=-100, max_value=100, width=32), min_size=2, max_size=2
+        ),
+        min_size=1,
+        max_size=100,
+    ),
+    polygons=st.sampled_from(polygons),
+)
+def test_point_in_polygon(points, polygons):
+
+    points = np.array(points)
+    polygons = np.array(polygons)
+    assert all(
+        deepof.utils.point_in_polygon_numba(points, polygons)
+        == deepof.utils.point_in_polygon(points, Polygon(polygons))
+    )
+
+
+test_point_in_polygon()

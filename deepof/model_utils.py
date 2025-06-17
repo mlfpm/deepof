@@ -27,11 +27,12 @@ from tensorflow.keras.layers import (
     TimeDistributed,
 )
 
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
 import deepof.hypermodels
 import deepof.models
 import deepof.post_hoc
-from deepof.data_loading import get_dt, load_dt, save_dt
+from deepof.data_loading import get_dt, save_dt
 
 
 tfb = tfp.bijectors
@@ -1228,8 +1229,8 @@ def embedding_model_fitting(
         # Load data
         preprocessed_train, preprocessed_validation= preprocessed_object
         
-        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(bin_info=bin_info, return_edges=True)
-        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(bin_info=bin_info, return_edges=True)
+        X_train, a_train, _ = preprocessed_train.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
+        X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
 
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:
@@ -1525,6 +1526,13 @@ def embedding_per_video(
         soft_counts (table_dict): soft_counts per experiment.
 
     """
+
+    # at some point _check_enum_inputs will get moved somewhere else and be reworked to function as a general guard function 
+    deepof.visuals_utils._check_enum_inputs(
+        coordinates,
+        animal_id=animal_id,
+    )
+
     embeddings = {}
     soft_counts = {}
     #interim
@@ -1541,7 +1549,7 @@ def embedding_per_video(
             graph = True
 
     window_size = model.layers[0].input_shape[0][1]
-    for key in tqdm.tqdm(to_preprocess.keys(), desc="Computing embeddings", unit="table"):
+    for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
 
         #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
         print("")
@@ -1578,11 +1586,11 @@ def embedding_per_video(
                 [tab_tuple[0], tab_tuple[1]]
             ).numpy()
             # save paths for modified tables
-            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_softc')
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
             soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
         # save paths for modified tables
-        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables', key, key + '_' + file_name + '_embed')
+        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
         embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
 
         #to not flood the output with loading bars

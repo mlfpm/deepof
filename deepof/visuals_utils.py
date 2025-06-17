@@ -4,24 +4,29 @@
 
 """Plotting utility functions for the deepof package."""
 import calendar
+import copy
 import os
 import re
 import time
 import warnings
+import itertools
 from typing import Any, List, NewType, Tuple, Union
 from tqdm import tqdm
-
 import cv2
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter, FuncAnimation
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from IPython.display import clear_output
 from matplotlib.patches import Ellipse
 from natsort import os_sorted
 
 import deepof.post_hoc
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt
+from deepof.data_loading import get_dt
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -72,6 +77,154 @@ def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
         time_string = time_string[0:l_max]
 
     return time_string
+
+
+def hex_to_BGR(hex_color):
+    color = hex_color.lstrip('#')
+    return tuple(int(color[i:i+2], 16) for i in (4, 2, 0))
+
+def BGR_to_hex(bgr_color):
+    r, g, b = bgr_color[2], bgr_color[1], bgr_color[0]
+    return "#{:02X}{:02X}{:02X}".format(r, g, b)
+
+def RGB_to_hex(bgr_color):
+    r, g, b = bgr_color[0], bgr_color[1], bgr_color[2]
+    return "#{:02X}{:02X}{:02X}".format(r, g, b)
+
+def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None):
+    """
+    Gets corresponding colors for all supervised behaviors or clusters within behaviors list.
+
+    Args:
+        behaviors (list): List of strings containing behaviors
+        animal_ids Union[list,pd.DataFrame]: Either list of strings representing animal ids or supervised dataframe from which said list can be automatically extracted.
+
+    Returns:
+        list: A list of strings that contain hex color codes for each behavior. Will return None and display a warning for unknown behaviors.
+    """    
+
+
+    # Organize input
+    if type(behaviors)==str:
+        behaviors=[behaviors]
+    if animal_ids is None:
+        pass
+    elif type(animal_ids) == str:
+        animal_ids=[animal_ids]
+    elif type(animal_ids)==pd.DataFrame:
+        animal_ids_raw=animal_ids.columns
+        animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
+        # in case of only one animal what is found is only behavior names
+        if "speed" in animal_ids_raw:
+            animal_ids=None
+        else:
+            animal_ids=list(np.sort(np.unique(animal_ids_raw)))
+    else:
+        animal_ids=list(np.sort(animal_ids))
+        
+    #######
+    # Set cluster colors
+    #######
+
+    # Find all cluster behaviors if any
+    clusters=[re.search(r'Cluster(_| )\d+', behavior)[0] 
+                for behavior 
+                in behaviors
+                if (re.search(r'Cluster(_| )\d+', behavior)) is not None
+    ]
+    # Find maximum Cluster
+    Cluster_max=1
+    if len(clusters) > 0:
+        Cluster_max=np.max([int(re.search(r'\d+', cluster)[0]) for cluster in clusters])
+    # Generate color map of appropriate length
+    cluster_colors = np.tile(
+        list(sns.color_palette("tab20").as_hex()),
+        int(np.ceil(Cluster_max / 20)),
+    )
+
+    #######
+    # Set supervised colors
+    #######
+
+    # Behavior name lists. Should ideally be imported from elsewhere in the future
+    single_behaviors=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing", "speed"]
+    symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
+    asymmetric_behaviors=["nose2tail","nose2body","following"]
+
+    # create names of supervised behaviors from animal ids and raw behavior names in correct order
+    if animal_ids is None or len(animal_ids)==1:
+        supervised = single_behaviors
+        color_map = ONE_ANIMAL_COLOR_MAP
+    else:
+        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
+        color_map = TWO_ANIMALS_COLOR_MAP
+
+    supervised_max = 1
+    if len(supervised) > 0:
+        supervised_max = len(supervised)
+    # Generate color map of appropriate length
+    supervised_colors = np.tile(
+        color_map,
+        int(np.ceil(supervised_max / len(color_map))),
+    )
+
+    # Select appropriate color for all given behaviors
+    colors=[]
+    for behavior in behaviors:
+        if behavior in clusters:
+            colors.append(cluster_colors[int(re.search(r'\d+', behavior)[0])])
+        elif behavior in supervised:
+            colors.append(supervised_colors[supervised.index(behavior)])
+        else:
+            colors.append(None)
+
+    return colors
+
+
+def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_behaviors, single_behaviors):
+    """
+    Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
+
+    Args:
+        animal_ids (list): List of strings representing animal IDs.
+        symmetric_behaviors (list): List of symmetric paired behaviors.
+        asymmetric_behaviors (list): List of asymmetric paired behaviors.
+        single_behaviors (list): List of single mouse behaviors.
+
+    Returns:
+        list: A list of strings with the combined animal IDs and behaviors.
+    """
+    result = []
+    
+    # Process symmetric paired behaviors
+    for behavior in symmetric_behaviors:
+        for pair in itertools.combinations(animal_ids, 2):
+            # Sort the pair to ensure consistent order and avoid duplicates
+            sorted_pair = sorted(pair)
+            combined = f"{sorted_pair[0]}_{sorted_pair[1]}_{behavior}"
+            result.append(combined)
+    
+    # Process asymmetric paired behaviors
+    for behavior in asymmetric_behaviors:
+        for pair in itertools.permutations(animal_ids, 2):
+            combined = f"{pair[0]}_{pair[1]}_{behavior}"
+            result.append(combined)
+    
+    # Process single mouse behaviors
+    for animal_id in animal_ids:
+        for behavior in single_behaviors:
+            if behavior != "missing" and behavior != "speed":
+                combined = f"{animal_id}_{behavior}"
+                result.append(combined)
+    
+    # Add missing
+    if "missing" in single_behaviors:            
+        result = result + [id + "_missing" for id in animal_ids] 
+    # Add speed
+    if "speed" in single_behaviors:            
+        result = result + [id + "_speed" for id in animal_ids]           
+    
+    return result
 
 
 def calculate_average_arena(
@@ -212,35 +365,50 @@ def _get_polygon_coords(data, animal_id=""):
     elif animal_id is None:
         animal_id = ""
 
-    head = np.concatenate(
-        [
-            data.xs(f"{animal_id}Nose", 1).values,
-            data.xs(f"{animal_id}Left_ear", 1).values,
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Right_ear", 1).values,
-        ],
-        axis=1,
-    )
+    bodypart_list=list(data.columns.levels[0])
+    # Remove animal ids from bodyparts to compare with different types of raw bodypart lists
+    if any([bp.startswith(animal_id) for bp in bodypart_list]):
+        id_start = len(animal_id)
+        bodypart_list=list(set([bp[id_start:] for bp in bodypart_list]))
+    bodypart_list.sort()
+    if bodypart_list == DEEPOF_11_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Spine_1", f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Spine_1", f"{animal_id}Left_fhip", 
+                      f"{animal_id}Left_bhip", f"{animal_id}Spine_2", 
+                      f"{animal_id}Right_bhip", f"{animal_id}Right_fhip"]
+        tail_names = [f"{animal_id}Spine_2", f"{animal_id}Tail_base"]
+    elif bodypart_list == DEEPOF_14_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Spine_1", f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Spine_1", f"{animal_id}Left_fhip", 
+                      f"{animal_id}Left_bhip", f"{animal_id}Tail_base", 
+                      f"{animal_id}Right_bhip", f"{animal_id}Right_fhip"]
+        tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_1",
+                      f"{animal_id}Tail_2", f"{animal_id}Tail_tip"]
+    elif bodypart_list == DEEPOF_8_BODYPARTS:
+        head_names = [f"{animal_id}Nose", f"{animal_id}Left_ear", 
+                      f"{animal_id}Right_ear"]
+        body_names = [f"{animal_id}Left_fhip", f"{animal_id}Right_fhip", 
+                      f"{animal_id}Tail_base"]
+        tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_tip"]
+    else:
+        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")
 
-    body = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_1", 1).values,
-            data.xs(f"{animal_id}Left_fhip", 1).values,
-            data.xs(f"{animal_id}Left_bhip", 1).values,
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Right_bhip", 1).values,
-            data.xs(f"{animal_id}Right_fhip", 1).values,
-        ],
-        axis=1,
-    )
-
-    tail = np.concatenate(
-        [
-            data.xs(f"{animal_id}Spine_2", 1).values,
-            data.xs(f"{animal_id}Tail_base", 1).values,
-        ],
-        axis=1,
-    )
+    # Helper function to safely extract body parts
+    def extract_parts(names):
+        parts = []
+        for name in names:
+            try:
+                parts.append(data.xs(name, axis=1).values)
+            except KeyError:
+                continue
+        return np.concatenate(parts, axis=1) if parts else np.empty((data.shape[0], 0))
+    
+    # Extract all segments
+    head = extract_parts(head_names)
+    body = extract_parts(body_names)
+    tail = extract_parts(tail_names)
 
     return [head, body, tail]
 
@@ -677,6 +845,266 @@ def _preprocess_time_bins(
     return bin_info
 
 
+def _apply_rois_to_bin_info(
+    coordinates: coordinates,
+    roi_number: int,
+    bin_info_time: dict = None,
+    in_roi_criterion: str = "Center",
+):
+    """Retrieve annotated behaviors that occured within a given roi.
+
+    Args:
+        coordinates (coordinates): coordinates object for the current project. Used to get video paths.
+        roi_number (int): number of the roi 
+        bin_info_time (dict): A dictionary containing start and end positions or indices for plotting 
+        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+    """
+
+    animal_ids=coordinates._animal_ids
+    if animal_ids is None:
+        animal_ids=[""]
+
+    # if no time bin info object was given, create one
+    if bin_info_time is None:
+        bin_info_time={}
+        for key in coordinates._tables.keys():
+            bin_info_time[key] = np.array(range(0,len(coordinates._tables[key])), dtype=int)
+
+    #unify bin info format
+    for key in bin_info_time.keys():
+        if len(bin_info_time[key])==2 and bin_info_time[key][0]+1 < bin_info_time[key][1]:
+            bin_info_time[key] = np.array(range(bin_info_time[key][0],bin_info_time[key][1]+1), dtype=int)
+
+    bin_info = {}
+    for key in bin_info_time.keys():
+        bin_info[key] = {}
+        bin_info[key]["time"]=bin_info_time[key]
+        if roi_number is not None:
+            for aid in animal_ids:
+
+                tab = get_dt(coordinates._tables,key)
+                roi_polygon=coordinates._roi_dicts[key][roi_number]
+                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, coordinates._run_numba)
+
+                # only keep boolean indices that were within the time bins for this mouse
+                bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
+            
+    return bin_info
+
+
+def get_supervised_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+    roi_mode: str = "mousewise",
+):
+    """Filter supervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+ 
+    Returns:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
+    """
+    cur_supervised=copy.copy(cur_supervised)
+
+    if animal_ids is None or animal_ids=="" or animal_ids==[""]:
+        animal_ids=[""]
+        animal_ids_edited=[""]
+    elif type(animal_ids)==str:
+        animal_ids=[animal_ids]
+        animal_ids_edited=[animal_ids+"_"]
+    elif type(animal_ids)==list:
+        animal_ids_edited=[aid+"_" for aid in animal_ids]
+
+    # Create set of valid columns that contain any animal id
+    valid_cols = set()
+    for col in cur_supervised.columns:
+        level0 = col[0] if isinstance(col, tuple) else col
+        for aid in animal_ids_edited:
+            if not roi_mode == "behaviorwise" or f"{aid}" in level0:
+                valid_cols.add(col)
+                break  # skip checking for more ids in column
+
+    # Apply ROIs to each behavior for each mouse. Multiple animal behaviors require all involved animals to be in ROI
+    for aid_2 in local_bin_info.keys():
+        if aid_2 == "time":
+            continue #skip "time" array that contains time binning info
+
+        aid_2_cols = []
+        if roi_mode == "behaviorwise":
+            for col in valid_cols:
+                level0 = col[0] if isinstance(col, tuple) else col
+                if aid_2 in level0:
+                    aid_2_cols.append(col)
+        else:
+            if aid_2 in animal_ids:
+               aid_2_cols=list(valid_cols) 
+        # Apply ROI filter if there are columns to process
+        if aid_2_cols:
+            cur_supervised.loc[~local_bin_info[aid_2], aid_2_cols] = np.nan
+
+    # Set all behavior columns to NaN in which none of the requested animals was involved
+    invalid_cols = cur_supervised.columns.difference(valid_cols)
+    cur_supervised[invalid_cols] = np.nan
+            
+    return cur_supervised
+
+def get_unsupervised_behaviors_in_roi(
+        cur_unsupervised: np.array,
+        local_bin_info: dict,
+        animal_ids: str, 
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
+    """
+
+    cur_unsupervised=copy.copy(cur_unsupervised)
+    if type(animal_ids)==str:
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""] 
+
+    if len(cur_unsupervised.shape)==1:
+        for aid in animal_ids:
+            cur_unsupervised[~local_bin_info[aid]]=-1    
+    else:
+        for aid in animal_ids: 
+            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
+
+    return cur_unsupervised
+
+
+def get_beheavior_frames_in_roi(
+    behavior: str,
+    local_bin_info: dict,
+    animal_ids: Union[str, list],        
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        behavior (str): Behavior for which frames in ROi get determined.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
+    """
+
+    if isinstance(animal_ids, str):
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""]   
+
+    local_bin_info = copy.copy(local_bin_info)
+    frames = copy.copy(local_bin_info["time"])
+
+    is_supervised_behavior = False
+    if behavior is not None:
+        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
+       
+    if is_supervised_behavior:
+        for aid in local_bin_info.keys():
+            if aid == "time":
+                continue
+            if aid + "_" in behavior:
+                frames[~local_bin_info[aid]]=-1
+    else:
+        for aid in animal_ids:
+            frames[~local_bin_info[aid]]=-1
+    
+    frames=frames[frames >= 0]
+    return frames
+    
+
+def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):
+    """Calculates the association measure FSTTC between two behaviors given as boolean series"""
+    
+    # calculate delta T in frames
+    delta_T_frames=int(frame_rate*delta_T)
+    
+    # Get total length of interval in which behaviors can occur
+    L = len(preceding_behavior)+1
+    # Inits
+    preceding_onsets=np.zeros(L)
+    proximate_onsets=np.zeros(L)
+    preceding_active=np.concatenate(( [0], copy.copy(preceding_behavior.astype(int)), [0] ))
+    proximate_active=np.concatenate(( [0], copy.copy(proximate_behavior.astype(int)), [0] )) 
+
+    # Calculate positions of both behavior onsets
+    preceding_onsets=np.diff(preceding_active)
+    proximate_onsets=np.diff(proximate_active)
+    pre_offset_pos = np.where(preceding_onsets == -1)[0]   
+    prox_offset_pos = np.where(proximate_onsets == -1)[0]
+    prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+
+    # Calculate relevant interval of frames close to any behavior starts 
+    for pre_stop in pre_offset_pos:
+        preceding_active[pre_stop:np.min([pre_stop+delta_T_frames,L])]=1
+    for prox_stop in prox_offset_pos:
+        proximate_active[prox_stop:np.min([prox_stop+delta_T_frames,L])]=1
+
+    t_A = np.sum(preceding_active)/L #proportion of frames following preceding behavior onset of all frames
+    t_B = np.sum(proximate_active)/L #proportion of frames following proximate behavior onset of all frames
+    
+    if t_A==0 or t_B==0:
+        return 0
+    else:
+        # Calculate FSTTC
+        if len(prox_onset_pos) > 0:
+            p = np.sum(preceding_active[prox_onset_pos])/len(prox_onset_pos) #proportion of proximate behavior onsets that fall within preceding behavior onset interval
+            fsttc = 0.5*((p-t_B)/(1-p*t_B)+(p-t_A)/(1-p*t_A))
+        else:
+            fsttc = 0
+    return fsttc
+
+
+#@nb.njit(error_model='python')
+def calculate_simple_association(
+    preceding_behavior: np.ndarray,
+    proximate_behavior: np.ndarray,
+    frame_rate: float,
+    min_T: float = 10.0,
+):
+    """Calculates Yule's coefficient Q between two behaviors given as boolean arrays"""
+
+    # Early exit in case one of the behaviors is too rare to be meaningful. Returns 0 for no association
+    min_T_frames = int(frame_rate * min_T)
+    if np.sum(preceding_behavior) < min_T_frames or np.sum(proximate_behavior) < min_T_frames:
+        return 0.0
+    
+    #chi2, p, dof, expected = chi2_contingency(cont_table)
+    a = np.sum(preceding_behavior & proximate_behavior) # Both behaviors present
+    b = np.sum(preceding_behavior & ~proximate_behavior)  # A present, B absent
+    c = np.sum(~preceding_behavior & proximate_behavior)  # A absent, B present
+    d = np.sum(~preceding_behavior & ~proximate_behavior)  # Both absent
+
+    # For identical only True or only False arrays
+    if ((a * d) + (b * c)) == 0 and (a>0 or d > 0) and (b==0 and c == 0):
+        Q = 1
+    # For inverse arrays
+    elif ((a * d) + (b * c)) == 0 and (b>0 or c > 0) and (a==0 and d == 0):
+        Q = -1 
+    # Other badly defined cases 
+    elif ((a * d) + (b * c)) == 0:
+        Q = 0 
+    else:
+        Q = ((a * d) - (b * c)) / ((a * d) + (b * c))
+
+    return Q
+
+
 ######
 #Functions not included in property based testing for not having a clean return
 ######
@@ -700,6 +1128,9 @@ def _check_enum_inputs(
     normative_model: str = None,
     aggregate_experiments: str = None,
     colour_by: str = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
 ): # pragma: no cover
     """
     Checks and validates enum-like input parameters for the different plot functions.
@@ -721,6 +1152,9 @@ def _check_enum_inputs(
     normative_model (str): Name of the cohort to use as controls.
     aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
     colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
+    roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+       
 
     """
     # activate warnings (again, because just putting it at the beginning of the skript
@@ -738,6 +1172,8 @@ def _check_enum_inputs(
         behaviors=[behaviors]
     if isinstance(bodyparts, str):
         bodyparts=[bodyparts]
+    if isinstance(animals_in_roi, str):
+        animals_in_roi=[animals_in_roi]
      
 
     # Generate lists of possible options for all enum-likes (solution will be improved in the future)
@@ -756,7 +1192,7 @@ def _check_enum_inputs(
     if soft_counts is not None:
         first_key=list(soft_counts.keys())[0]
         N_clusters=get_dt(soft_counts,first_key,only_metainfo=True)['num_cols']
-        behaviors_options_list+=["Cluster "+str(i) for i in range(N_clusters)]
+        behaviors_options_list+=["Cluster_"+str(i) for i in range(N_clusters)]
 
 
     if coordinates.get_exp_conditions is not None:
@@ -781,13 +1217,18 @@ def _check_enum_inputs(
         )
     else:
         condition_value_options_list = []
+    if roi_number is not None and coordinates._roi_dicts is not None:    
+        first_key=list(coordinates._roi_dicts.keys())[0]
+        roi_number_options_list=list(coordinates._roi_dicts[first_key].keys())
+    else:
+        roi_number_options_list=[]
 
     #get lists of all body parts     
     bodyparts_options_list = np.unique(
         np.concatenate(
             [
             coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
-            if type(coordinates._tables[key]) != str   #if table is not a save path
+            if type(coordinates._tables[key]) != dict   #if table is not a save path
             else [t[0] for t in get_dt(coordinates._tables,key,only_metainfo=True)['columns']] #otherwise read in saved column headers and then extract first elements
             for key 
             in coordinates._tables.keys()
@@ -806,6 +1247,8 @@ def _check_enum_inputs(
         visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
     aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
     colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
+    roi_mode_options_list = ["mousewise", "behaviorwise"]
+
 
     # check if given values are valid. Throw exception and suggest correct values if not
     if experiment_ids is not None and not experiment_ids == [None] and not set(
@@ -885,6 +1328,15 @@ def _check_enum_inputs(
             )
         )
     
+    if animals_in_roi is not None and not animals_in_roi == [None] and not set(animals_in_roi).issubset(
+        set(animal_id_options_list)
+    ):
+        raise ValueError(
+            'One or more animal_ids in "animal_in_roi" are not part of: {}'.format(
+                str(animal_id_options_list)[1:-1]
+            )
+        )
+    
     if animal_id is not None and animal_id not in animal_id_options_list:
         raise ValueError(
             '"animal_id" needs to be one of the following: {}'.format(
@@ -923,9 +1375,29 @@ def _check_enum_inputs(
             )
         )
     
+    if roi_number is not None and roi_number not in roi_number_options_list:
+        if len(roi_number_options_list)>0:
+            raise ValueError(
+                'If you want to apply ROIs, "roi_number" needs to be one of the following: {}'.format(
+                    str(roi_number_options_list)
+                )
+            )
+        else:
+            raise ValueError("No regions of interest (ROI)s were defined for this project!\n You can define ROIs during project creation if you have set number_of_rois\n to a number between 1 and 20 during project definition before")
+
+    if roi_mode is not None and roi_mode not in roi_mode_options_list:
+        raise ValueError(
+            '"roi_mode" needs to be one of the following: {}'.format(
+                str(roi_mode_options_list)
+            )
+        )
+    if not roi_mode == "mousewise" and roi_number is None:
+        print(
+        '\033[33mInfo! The input "roi_mode" only has an effect if a ROI is selected by setting "roi_number"!\033[0m'
+        )     
 
 def plot_arena(
-    coordinates: coordinates, center: str, color: str, ax: Any, key: str
+    coordinates: coordinates, center: str, color: str, ax: Any, key: str, roi_number: int = None,
 ): # pragma: no cover
     """Plot the arena in the given canvas.
 
@@ -935,11 +1407,14 @@ def plot_arena(
         color (str): color of the displayed arena.
         ax (Any): axes where to plot the arena.
         key str: key of the animal to plot with optional "all of them" (if key=="average").
+        roi_number int: number of a roi, if given
     """
-    if key != "average":
-        arena = coordinates._arena_params[key]
+    if key != "average" and roi_number is None:
+        arena = copy.copy(coordinates._arena_params[key])
+    elif key != "average":
+        arena = copy.copy(coordinates._roi_dicts[key][roi_number])
 
-    if "circular" in coordinates._arena:
+    if "circular" in coordinates._arena and roi_number is None:
 
         if key == "average":
             arena = [
@@ -961,11 +1436,19 @@ def plot_arena(
             )
         )
 
-    elif "polygonal" in coordinates._arena:
+    elif "polygonal" in coordinates._arena or roi_number is not None:
 
         if center == "arena" and key == "average":
 
-            arena = calculate_average_arena(coordinates._arena_params)
+            if roi_number is None:
+                polygon_dictionary = copy.copy(coordinates._arena_params)
+            else:
+                polygon_dictionary = {
+                    exp: copy.copy(roi_data[roi_number]) 
+                    for exp, roi_data in coordinates._roi_dicts.items()
+                }
+
+            arena = calculate_average_arena(polygon_dictionary)
             avg_scaling = np.mean(np.array(list(coordinates._scales.values()))[:, :2], 0)
             arena -= avg_scaling
 
@@ -1208,8 +1691,8 @@ def _tag_annotated_frames(
             # Print arena for debugging
             cv2.ellipse(
                 img=frame,
-                center=arena[0],
-                axes=arena[1],
+                center=np.round(arena[0]).astype(int),
+                axes=np.round(arena[1]).astype(int),
                 angle=arena[2],
                 startAngle=0,
                 endAngle=360,
@@ -1295,18 +1778,18 @@ def _tag_annotated_frames(
 
         if flag:
 
-            if tag_dict[_id + undercond + "climb_arena"][fnum]:
-                write_on_frame("climb_arena", down_pos)
-            elif tag_dict[_id + undercond + "cowering"][fnum]:
-                write_on_frame("cowering", down_pos)
-            elif tag_dict[_id + undercond + "sniff_arena"][fnum]:
-                write_on_frame("sniff_arena", down_pos)
+            if tag_dict[_id + undercond + "climb-arena"][fnum]:
+                write_on_frame("climb-arena", down_pos)
+            elif tag_dict[_id + undercond + "immobility"][fnum]:
+                write_on_frame("immobility", down_pos)
+            elif tag_dict[_id + undercond + "sniff-arena"][fnum]:
+                write_on_frame("sniff-arena", down_pos)
 
         # Define the condition controlling the colour of the speed display
         if len(animal_ids) > 1:
             colcond = frame_speeds[_id] == max(list(frame_speeds.values()))
         else:
-            colcond = hparams["cower_speed"] < frame_speeds
+            colcond = hparams["stationary_threshold"] < frame_speeds
 
         write_on_frame(
             str(
@@ -1363,6 +1846,14 @@ def annotate_video(
         {_id: -np.inf for _id in animal_ids} if len(animal_ids) > 1 else -np.inf
     )
 
+
+    # scale arena_params back o video res
+    scaling_ratio = coordinates._scales[key][2]/coordinates._scales[key][3]
+    if "polygonal" in coordinates._arena:
+        arena_params=np.array(arena_params)*scaling_ratio
+    elif "circular" in coordinates._arena:
+        arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
+                              
     # Loop over the frames in the video
     with tqdm(total=frame_limit, desc="annotating Video", unit="frame") as pbar:
         while cap.isOpened() and fnum < frame_limit:
@@ -1376,12 +1867,11 @@ def annotate_video(
             font = cv2.FONT_HERSHEY_DUPLEX
 
             # Capture speeds
-            if len(animal_ids) == 1 or fnum % params["speed_pause"] == 0:
+            if len(animal_ids) == 1: #or fnum % params["speed_pause"] == 0:
                 frame_speeds = tag_dict["speed"][fnum]
             else:
                 for _id in animal_ids:
                     frame_speeds[_id] = tag_dict[_id + undercond + "speed"][fnum]
-
 
             # Display all annotations in the output video
             _tag_annotated_frames(
@@ -1397,7 +1887,7 @@ def annotate_video(
                 (arena_params, h, w),
                 coordinates._arena,
                 debug,
-                coordinates.get_coords(center=False)[key],
+                coordinates.get_coords_at_key(center=None, to_video=True, scale=coordinates._scales[key], key=key), #coordinates.get_coords(center="arena")[key],  
             )
 
             if writer is None:
@@ -1437,6 +1927,9 @@ def output_cluster_video(
     v_height: int,
     path: str,
     frame_limit: int = np.inf,
+    frames: np.array = None,
+    display_time: bool = False,
+
 ): # pragma: no cover
     """Output a video with the frames corresponding to the cluster.
 
@@ -1448,22 +1941,41 @@ def output_cluster_video(
         v_height: video height
         path: path to the video file
         frame_limit: maximum number of frames to render
+        frames: frames that can be selected from for export.
+        display_time (bool): Displays current time in top left corner of the video frame
 
     """
-    frame_idx = np.where(frame_mask)[0]
-    frame_limit = np.min([frame_limit, len(frame_idx)])
-    i = 0
-    while cap.isOpened() and i < frame_limit:
-        if i == 0 or (i > 0 and frame_idx[i] - frame_idx[i - 1] > 1):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx[i])
+    # if no frames are specified, take all of them
+    if frames is None:
+        frames = np.array(range(0,len(frame_mask)))
+
+    valid_frames = frames[frame_mask[frames]]
+    diff_frames=np.diff(valid_frames)
+
+    #ensure that no frames are requested that are outside of the provided data
+    if len(valid_frames) >= frame_limit:
+        valid_frames = valid_frames[0:frame_limit]
+
+    # Prepare text
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.75
+    thickness = 2
+    (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
+    x = 10  # 10 pixels from left
+    y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
+    frame_rate = cap.get(cv2.CAP_PROP_FPS)
+
+    for i in range(len(valid_frames)):
+        if i == 0 or diff_frames[i-1] != 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, valid_frames[i])
         ret, frame = cap.read()
-        if ret == False:
+        if not cap.isOpened() or ret == False:
             break
 
         try:
 
             res_frame = cv2.resize(frame, [v_width, v_height])
-            re_path = re.findall(r".+[/\\](.+)DLC", path)[0]
+            re_path = re.findall(r".+[/\\]([^/.]+?)(?=\.|DLC)", path)[0]
 
             if path is not None:
                 cv2.putText(
@@ -1476,12 +1988,18 @@ def output_cluster_video(
                     2,
                 )
 
+            if display_time:
+
+                disp_time = "time: "  + seconds_to_time(valid_frames[i]/frame_rate)
+                # Draw black outline
+                cv2.putText(res_frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
+                # Draw white main text
+                cv2.putText(res_frame, disp_time, (x, y), font, font_scale, (255, 255, 255), thickness)
+
             out.write(res_frame)
-            i += 1
 
         except IndexError:
             ret = False
-            i += 1
 
     cap.release()
     cv2.destroyAllWindows()
@@ -1489,51 +2007,108 @@ def output_cluster_video(
 
 def output_videos_per_cluster(
     video_paths: dict,
-    soft_counts: table_dict,
+    behavior_dict: table_dict,
+    behaviors: Union[str,list],
     frame_rate: float = 25,
     frame_limit_per_video: int = np.inf,
+    bin_info: dict = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
     single_output_resolution: tuple = None,
-    window_length: int = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
+    display_time: bool = False,
     out_path: str = ".",
+    roi_mode: str = "mousewise",
 ): # pragma: no cover
     """Given a list of videos, and a list of soft counts per video, outputs a video for each cluster.
 
     Args:
         video_paths: dict of paths to the videos
-        soft_counts: table_dict of soft counts per video
+        behavior_dict: table_dict containing data tables with behavior information (presence or absence of behaviors (columns) for each frame (rows))
+        behaviors (Union[str,list]): list of behaviors to annotate
         frame_rate: frame rate of the videos
         frame_limit_per_video: number of frames to render per video.
+        bin_info (dict): dictionary containing indices to plot for all experiments
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
-        window_length: window length used to compute the soft counts.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
+        display_time (bool): Displays current time in top left corner of the video frame
         out_path: path to the output directory.
-
     """
-    N_clusters=get_dt(soft_counts,list(soft_counts.keys())[0],only_metainfo=True)['num_cols']
+
+    #manual laoding bar for inner loop
+    def _loading_basic(current, total, bar_length=68):
+        progress = (current + 1) / total
+        filled_length = int(bar_length * progress)
+        arrow = '>' if filled_length < bar_length else ''
+        bar = '[' + '=' * filled_length + arrow + ' ' * (bar_length - filled_length - len(arrow)) + ']'
+        percent = f' {progress:.0%}'
+        print(bar + percent, end='\r')
+        if current == total - 1:
+            print()  # Newline when complete
+
+    meta_info=get_dt(behavior_dict,list(behavior_dict.keys())[0],only_metainfo=True)
+    if isinstance(behaviors, str):
+        behaviors = [behaviors]
+    elif meta_info.get('columns') is not None:
+        behaviors =[behavior for behavior in behaviors if behavior in meta_info['columns']]
+    else:
+        behaviors = np.array(range(meta_info['num_cols']))
+
+
     # Iterate over all clusters, and output a masked video for each
-    for cluster_id in range(N_clusters):
+    for cur_behavior in tqdm(behaviors, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="video"):
+    
+        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner one
+        print("")
 
         out = cv2.VideoWriter(
             os.path.join(
                 out_path,
-                "deepof_unsupervised_annotation_cluster={}_threshold={}_{}.mp4".format(
-                    cluster_id, min_confidence, calendar.timegm(time.gmtime())
+                "Behavior={}_threshold={}_{}.mp4".format(
+                    cur_behavior, min_confidence, calendar.timegm(time.gmtime())
                 ),
             ),
             cv2.VideoWriter_fourcc(*"mp4v"),
             frame_rate,
             single_output_resolution,
         )
+      
+        bar_len=len(behavior_dict.keys())
+        #this loop uses a manual loading bar as tqdm does not work here for some reason
+        for i, key in enumerate(behavior_dict.keys()):
 
-        for key in soft_counts.keys():
+            _loading_basic(i, bar_len)
+            
+            cur_soft_counts = get_dt(behavior_dict,key)
 
-            cur_soft_counts = get_dt(soft_counts,key)
+            # If a specific behavior is requested, annotate that behavior
+            if type(cur_soft_counts)==np.ndarray:
+
+                # Get Cluster number from behavior input
+                if type(cur_behavior) == str:
+                    cur_behavior_idx=int(re.search(r'\d+', cur_behavior)[0])
+                else:
+                    cur_behavior_idx = cur_behavior
+
+                hard_counts = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
+                idx = pd.Series(cur_soft_counts[:, cur_behavior_idx]>0.1)
+                confidence = pd.Series(cur_soft_counts[:, cur_behavior_idx])
+            else:
+                hard_counts = cur_soft_counts[cur_behavior]>0.1
+                idx = cur_soft_counts[cur_behavior]>0.1
+                confidence = cur_soft_counts[cur_behavior]
+            
+            hard_counts = hard_counts.astype(str)
+            hard_counts[idx]=str(cur_behavior)
+            hard_counts[~idx]=""
+
+            
             # Get hard counts and confidence estimates per cluster
-            hard_counts = np.argmax(cur_soft_counts, axis=1)
-            confidence = np.max(cur_soft_counts, axis=1)
             confidence_indices = np.ones(hard_counts.shape[0], dtype=bool)
 
             # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
@@ -1542,39 +2117,53 @@ def output_videos_per_cluster(
 
             # Compute confidence mask, filtering out also bouts that are too short
             confidence_indices = deepof.utils.filter_short_bouts(
-                hard_counts,
+                idx.astype(float),
                 confidence,
                 confidence_indices,
                 min_confidence,
                 min_bout_duration,
             )
-            confidence_mask = (hard_counts == cluster_id) & confidence_indices
+            confidence_mask = (hard_counts == str(cur_behavior)) & confidence_indices
 
-            # Add a prefix of zeros to the mask, to account for the frames lost by the sliding window
-            frame_mask = np.concatenate(
-                (np.zeros(window_length, dtype=bool), confidence_mask)
-            )
+            # get frames for current video
+            frames = None
+            if bin_info is not None:
+                if roi_number is not None:
+                    if roi_mode == "behaviorwise":
+                        behavior_in=behaviors[0]
+                    else:
+                        behavior_in=None
+                    frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
+                else:
+                    frames=bin_info[key]["time"]
 
             output_cluster_video(
                 cap,
                 out,
-                frame_mask,
+                confidence_mask,
                 v_width,
                 v_height,
                 video_paths[key],
                 frame_limit_per_video,
+                frames,
+                display_time,
             )
+        
 
         out.release()
+        #to not flood the output with loading bars
+        clear_output()
+    get_beheavior_frames_in_roi._warning_issued = False
 
 
-def output_unsupervised_annotated_video(
+def output_annotated_video(
     video_path: str,
-    soft_counts: np.ndarray,
+    tab: np.ndarray,
+    behaviors: list,
     frame_rate: float = 25,
-    frame_limit: int = np.inf,
-    window_length: int = None,
-    cluster_names: dict = {},
+    frames: np.array = None,
+    display_time: bool = False,
+    display_counter: bool = False,
     out_path: str = ".",
 ): # pragma: no cover
     """Given a video, and soft_counts per frame, outputs a video with the frames annotated with the cluster they belong to.
@@ -1582,19 +2171,35 @@ def output_unsupervised_annotated_video(
     Args:
         video_path: full path to the video
         soft_counts: soft cluster assignments for a specific video
+        behavior (str): Behavior or Cluster to that gets exported. If none is given, all Clusters get exported for softcounts and only nose2nose gets exported for supervised annotations.
         frame_rate: frame rate of the video
-        frame_limit: maximum number of frames to output.
-        window_length: window length used to compute the soft counts.
-        cluster_names: dictionary with user-defined names for each cluster (useful to output interpretation).
+        frames: frames that should be exported.
+        display_time (bool): Displays current time in top left corner of the video frame
+        display_counter (bool): Displays event counter for each displayed event.       
         out_path: out_path: path to the output directory.
 
     """
-    # Get cluster assignment per frame
-    hard_counts = np.argmax(soft_counts, axis=1)
+    # if every frame has only one distinct behavior assigned to it, plot all behaviors
+    shift_name_box=True
+    if behaviors is None and not (np.sum(tab, 1)>1.9).any():
+        behaviors = list(tab.columns)
+        shift_name_box=False
+    elif behaviors is None:
+        raise ValueError(
+            "Cannot accept no behavior for supervised annotations!"
+        )
+    # create behavior_df that lists in which frames each behavior occurs
+    behavior_df = tab[behaviors]>0.1
+    idx = tab[behaviors]>0.1 #OK, I know this looks weird, but it is actually not a bug and works
+    behavior_df = behavior_df.astype(str)
+    behavior_df[idx]=behaviors
+    behavior_df[~idx]=""
+    # Else if every frame has only one distinct behavior assigned to it, annotate all behaviors
 
-    # Name clusters, and update names using the provided dictionary
-    cluster_labels = {i: str(i) for i in set(hard_counts)}
-    cluster_labels.update(cluster_names)
+    
+    # Ensure that no frames are requested that are outside of the provided data
+    if np.max(frames) >= len(behavior_df):
+        frames = np.where(frames<len(behavior_df))[0]
 
     # Given a frame mask, output a subset of the given video to disk, corresponding to a particular cluster
     cap = cv2.VideoCapture(video_path)
@@ -1606,39 +2211,190 @@ def output_unsupervised_annotated_video(
     video_out = os.path.join(
         out_path,
         os.path.split(video_path)[-1].split(".")[0] 
-        + "_unsupervised_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
+        + "_annotated_{}.mp4".format(calendar.timegm(time.gmtime())),
     )
 
     out = cv2.VideoWriter(
         video_out, cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (v_width, v_height)
     )
 
-    i, j = 0, 0
-    while cap.isOpened() and i < frame_limit:
-        if j >= window_length:
-            j += 1
+    # Prepare text
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.5
+    thickness = 1
+    text_widths=[cv2.getTextSize(behavior, font, font_scale, thickness)[0][0] for behavior in behaviors]
+    widest_text=behaviors[np.argmax(text_widths)]
+    if display_counter:
+        behavior_array=np.zeros(len(behaviors))
+        widest_text=widest_text+' 00:00.00'
+    (text_width, text_height), baseline = cv2.getTextSize(widest_text, font, font_scale, thickness)
+    (text_width_time, text_height_time), baseline = cv2.getTextSize("time: 00:00:00", font, font_scale, thickness)
+    x = 10  # 10 pixels from left
+    y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
+    padding = 5
+    bg_color = get_behavior_colors(behaviors, tab)
 
-        else:
-            ret, frame = cap.read()
-            if ret == False:
-                break
+    diff_frames = np.diff(frames)
+    for i in tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame"):
 
-            try:
-                cv2.putText(
-                    frame,
-                    "Cluster {}".format(cluster_labels[hard_counts[i]]),
-                    (int(v_width * 0.3 / 10), int(v_height / 1.05)),
-                    cv2.FONT_HERSHEY_DUPLEX,
-                    0.75,
-                    (255, 255, 255),
-                    2,
-                )
-                out.write(frame)
+        if i == 0 or diff_frames[i-1] != 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frames[i])
+        ret, frame = cap.read()
 
-                i += 1
+        if ret == False or cap.isOpened() == False:
+            break
 
-            except IndexError:
-                ret = False
+        try:
+            ystep=0
+            for z, behavior in enumerate(behaviors):
+                if len(behavior_df[behavior][frames[i]])>0:
+                    cv2.rectangle(frame, 
+                        (v_width - text_width - x , y - text_height - padding +ystep),  # Top-left corner
+                        (v_width - padding, y + baseline +ystep),  # Bottom-right corner
+                        hex_to_BGR(bg_color[z]),  # Blue color (BGR format)
+                        -1)  # Filled rectangle
+
+                    behavior_text=str(behavior_df[behavior][frames[i]])
+                    if display_counter:
+                        behavior_array[z]=behavior_array[z]+1
+                        behavior_text = behavior_text + ' ' + seconds_to_time(behavior_array[z]/frame_rate, cut_milliseconds=False)[3:11]
+
+                    # Draw black outline
+                    #cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (0, 0, 0), thickness + 2)
+                    # Draw white main text
+                    cv2.putText(frame, str(behavior_text), (v_width - text_width - padding, y+ystep), font, font_scale, (255, 255, 255), thickness)
+                if shift_name_box:
+                    ystep=ystep+int(text_height*2)
+            
+            if display_time:
+
+                disp_time = "time: "  + seconds_to_time(frames[i]/frame_rate)
+                # Draw black outline
+                cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (0, 0, 0), thickness + 2)
+                # Draw white main text
+                cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (255, 255, 255), thickness)
+
+            out.write(frame)
+        except IndexError:
+            ret = False
 
     cap.release()
     cv2.destroyAllWindows()
+
+    #writevideo = FFMpegWriter(fps=frame_rate)
+    #animation.save(save, writer=writevideo)
+
+    return None
+
+
+def _preprocess_transitions(
+    coordinates: coordinates,
+    supervised_annotations: table_dict = None,
+    soft_counts: table_dict = None,
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    # Selection parameters
+    exp_condition: str = None,
+    delta_T: float = 0.5,
+    silence_diagonal: bool = False,
+    diagonal_behavior_counting: str = "Events",
+    normalize:bool = True,
+    # Visualization parameters
+    visualization="networks",
+): # pragma: no cover
+    """Compute and plots transition matrices for all data or per condition. Plots can be heatmaps or networks.
+
+    Args:
+        coordinates (coordinates): deepOF project where the data is stored.
+        supervised_annotations (table_dict): table dict with supervised annotations.
+        soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
+        bin_size (Union[int,str]): bin size for time filtering.
+        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        silence_diagonal (bool): If True, diagonals are set to zero.
+        diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
+            - "Frames": Total frames where behavior is active (after extension)
+            - "Time": Total time where behavior is active
+            - "Events": number of instances of the behavior occuring 
+            - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.      
+        normalize (bool): Row-normalizes transition probabilities if True. Default=True.
+        visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
+        kwargs: additional arguments to pass to the seaborn kdeplot function.
+    """
+    # initial check if enum-like inputs were given correctly
+    _check_enum_inputs(
+        coordinates,
+        origin="plot_transitions",
+        exp_condition=exp_condition,
+        visualization=visualization,
+        supervised_annotations=supervised_annotations,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+    )
+    diagonal_behavior_counting_options=["Frames","Time","Events","Transitions"]  
+    if diagonal_behavior_counting not in diagonal_behavior_counting_options:
+        raise ValueError(
+            '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
+                str(diagonal_behavior_counting_options)[1:-1]
+            )
+        )
+    if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
+        raise ValueError(
+            "Eet either supervised_annotations or soft_counts, not both or neither!"
+        )
+    elif supervised_annotations is not None:
+        tab_dict=supervised_annotations
+    else:
+        tab_dict=soft_counts
+    if visualization == "networks" and normalize ==False:
+        normalize=True
+        print(
+        '\033[33mInfo! Cannot use networks visulization without normalization!\033[0m'
+        )
+    if delta_T is None:
+        delta_T=0.0
+    if animals_in_roi is None:
+        animals_in_roi = coordinates._animal_ids
+    elif roi_number is None:
+        print(
+        '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
+        )
+
+    exp_conditions=None
+    if exp_condition is not None:
+        exp_conditions = {
+            key: str(val.loc[:, exp_condition].values[0])
+            for key, val in coordinates.get_exp_conditions.items()
+        }
+
+    # preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
+    )
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    grouped_transitions, columns, combined_columns = deepof.utils.count_transitions(
+        tab_dict=tab_dict,
+        exp_conditions=exp_conditions,
+        bin_info=bin_info,
+        animals_in_roi=animals_in_roi,
+        delta_T = delta_T,
+        frame_rate=coordinates._frame_rate,
+        silence_diagonal=silence_diagonal,
+        aggregate=(exp_conditions is not None), 
+        normalize=normalize,
+        diagonal_behavior_counting=diagonal_behavior_counting
+    )
+
+    return grouped_transitions, columns, combined_columns, exp_conditions, normalize

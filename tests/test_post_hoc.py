@@ -94,22 +94,49 @@ def test_get_time_on_cluster():
     assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1]
 
 
-@given(reduce_dim=st.booleans(), agg=st.sampled_from(["mean", "median"]))
-def test_get_aggregated_embedding(reduce_dim, agg):
+@given(
+    reduce_dim=st.booleans(),
+    agg=st.sampled_from(["mean", "median"]),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ),
+    roi_number = st.integers(min_value=1, max_value=2),
+    animals_in_roi = st.one_of(st.just(["A"]),st.just(["A","B"]))
+)
+def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animals_in_roi):
 
     # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
+
+    # Create local_bin_info
+    bin_info = {i: {} for i in range(10)}
+    for key in bin_info:
+        local_bin_info = {"time": np.array(bins)}
+        for k, animal_id in enumerate(animals_in_roi):
+            local_bin_info[animal_id] = np.ones(len(bins)).astype(bool)
+            if key==0:
+                local_bin_info[animal_id] = np.zeros(len(bins)).astype(bool)
+        bin_info[key]=local_bin_info
 
     aggregated_embeddings = deepof.post_hoc.get_aggregated_embedding(
-        embedding, reduce_dim, agg
+        embedding, reduce_dim, agg, bin_info, roi_number=roi_number, animals_in_roi = animals_in_roi
     )
 
     assert aggregated_embeddings.shape[0] == len(embedding)
+    # PCA reduced to 2 dimensions
+    if reduce_dim:
+        assert aggregated_embeddings.shape[1] == 2
+    # We purposefully set one experiment to all false in teh roi bins, so this experiment should have been removed
+    else:
+        assert aggregated_embeddings.dropna().shape[0] == 9
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
-    scan_mode=st.sampled_from(["growing-window", "per-bin"]),
+    scan_mode=st.sampled_from(["growing_window", "per-bin", "precomputed"]),
     agg=st.sampled_from(["time_on_cluster", "mean", "median"]),
     metric=st.sampled_from(["auc", "wasserstein"]),
 )
@@ -125,7 +152,8 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
 
-
+    # fallback for not defined scan mode
+    precomputed_bins=(np.ones(9)*11).astype(int)
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
 
@@ -137,6 +165,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
         end_bin=99,
         step_bin=11,
         scan_mode=scan_mode,
+        precomputed_bins=precomputed_bins,
         agg=agg,
         metric=metric,
         n_jobs=1,
@@ -183,7 +212,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     soft_counts=TableDict(soft_counts, typ='soft_counts')
 
-    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+    bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
 
     # Create test experimental conditions
@@ -243,7 +272,7 @@ def test_compute_transition_matrix_per_condition(
 
     #convert into used formats
     soft_counts=TableDict(soft_counts, typ='soft_counts')
-    bin_info={i: np.arange(0,bin_size) for i in range(10)}
+    bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
     
     transitions = deepof.post_hoc.compute_transition_matrix_per_condition(

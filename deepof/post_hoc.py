@@ -4,6 +4,7 @@
 
 """Data structures and functions for analyzing supervised and unsupervised model results."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import pickle
 import warnings
@@ -35,10 +36,12 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from typing import Optional, Union
 
 import deepof.data
 import deepof.utils
-from deepof.data_loading import get_dt, load_dt, save_dt
+import deepof.visuals_utils
+from deepof.data_loading import get_dt, save_dt
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -183,7 +186,7 @@ def recluster(
         try:
             hmm_model = DenseHMM([Normal() for _ in range(concat_soft_counts.shape[2])])
             hmm_model = hmm_model.fit(X=concat_embeddings, priors=concat_soft_counts)
-        except:
+        except: # pragma: no cover
             hmm_model = DenseHMM(
                 [
                     Normal(covariance_type="diag")
@@ -245,6 +248,8 @@ def get_time_on_cluster(
     normalize: bool = True,
     reduce_dim: bool = False,
     bin_info: Union[dict,np.ndarray] = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
 ):
     """Compute how much each animal spends on each cluster.
 
@@ -254,26 +259,49 @@ def get_time_on_cluster(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         normalize (bool): Whether to normalize the time by the total number of frames in each condition.
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
-        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings
+        bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings and ROIs
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+
  
     Returns:
         A dataframe with the time spent on each cluster for each experiment.
 
     """
     hard_count_counters={}
-    arr_range=None
-    if isinstance(bin_info, np.ndarray):
-        arr_range = bin_info 
+    arr_ranges={}
+    for key in soft_counts.keys():
+        if isinstance(bin_info, np.ndarray):
+            arr_ranges[key] = bin_info 
+        elif isinstance(bin_info, dict):
+            arr_ranges[key] = bin_info[key]["time"]
+        elif bin_info is None:
+            arr_ranges[key] = None
+
+    preloaded = {}
+
+    def load_single_key(key,arr_range):
+        return key, get_dt(soft_counts, key, load_range=arr_range)
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key, arr_ranges[key]): key for key in soft_counts}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
 
     for key in soft_counts.keys():
         
-        # Update range (if range can differ between samples)
-        if isinstance(bin_info, dict):
-            arr_range = bin_info[key]
-
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
-        hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
+        hard_counts = np.argmax(preloaded[key], axis=1)
+
+        if roi_number is not None:
+            hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
+            hard_counts=hard_counts[hard_counts >= 0]
+        
         
         # Create dictionary with number of bin_occurences per bin
         hard_count_counters[key] = Counter(hard_counts)
@@ -282,6 +310,8 @@ def get_time_on_cluster(
             hard_count_counters[key]={
                 k: v / sum(list(hard_count_counters[key].values())) for k, v in hard_count_counters[key].items()
                 }
+    #reset function warning
+    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
             
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
@@ -300,8 +330,19 @@ def get_time_on_cluster(
     return counter_df
 
 
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Mean of empty slice"
+    ]
+)
 def get_aggregated_embedding(
-    embedding: np.ndarray, reduce_dim: bool = False, agg: str = "mean", bin_info: Union[dict,np.ndarray] = None
+    embedding: np.ndarray, 
+    reduce_dim: bool = False, 
+    agg: str = "mean", 
+    bin_info: Union[dict,np.ndarray] = None, 
+    roi_number:int = None, 
+    animals_in_roi: list = None, 
+    roi_mode: str = "mousewise"
 ):
     """Aggregate the embeddings of a set of videos, using the specified aggregation method.
 
@@ -312,7 +353,9 @@ def get_aggregated_embedding(
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         agg (str): The aggregation method to use. Can be either "mean" or "median".
         bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
- 
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                       
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
 
     Returns:
         A dataframe with the aggregated embeddings for each experiment.
@@ -321,18 +364,34 @@ def get_aggregated_embedding(
     
     # Aggregate the provided embeddings and cast to a dataframe
     agg_embedding={}
-    arr_range=None
-    if isinstance(bin_info, np.ndarray):
-        arr_range = bin_info 
+    preloaded = {}
+
+    def load_single_key(key):
+        arr_range = None
+        if isinstance(bin_info, dict):
+            arr_range = bin_info[key]["time"]
+        else:
+            arr_range = bin_info
+        return key, get_dt(embedding, key, load_range=arr_range)
+
+
+    max_workers = min(32, (cpu_count() or 1) + 4) 
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(load_single_key, key): key for key in embedding}
+        for future in as_completed(futures):
+            key, result = future.result()
+            preloaded[key] = result
+
 
     for key in embedding.keys():
         
-        # Update range (if range can differ between samples)
-        if isinstance(bin_info, dict):
-            arr_range = bin_info[key]
-
         # Load full dataset (arr_range==None) or section
-        current_embedding=get_dt(embedding,key,load_range=arr_range)
+        #current_embedding=get_dt(embedding,key,load_range=arr_range)
+        current_embedding=preloaded[key]
+        if roi_number is not None and type(current_embedding)==pd.DataFrame:
+            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
+        elif roi_number is not None and type(current_embedding)==np.ndarray:
+            current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
 
         if agg == "mean":
             agg_embedding[key]=np.nanmean(current_embedding, axis=0)
@@ -340,16 +399,35 @@ def get_aggregated_embedding(
             agg_embedding[key]=np.nanmedian(current_embedding, axis=0)
     
     agg_embedding=pd.DataFrame(agg_embedding).T
+    n_rows=agg_embedding.shape[0]
 
+    if agg_embedding.isnull().any().any():
+        agg_embedding_clean=agg_embedding.dropna()
+        assert agg_embedding_clean.shape[0]>0, "agg_embeddings empty after NaN-row removal!"
+
+        warning_message = (
+            "\033[38;5;208m\n"  # Set text color to orange
+            "Warning! Some rows of aggregated embeddings contained NaNs that were dropped! This can happen if the\n"
+            "time bins are short or ROIs are strict, which leads to behaviors never occuring in the set parameters.\n"
+            f"In total {np.round((1-agg_embedding_clean.shape[0]/n_rows)*10000)/100} % of all rows were removed."
+            "\033[0m"  # Reset text color
+        )
+        warnings.warn(warning_message)
+    else:
+        agg_embedding_clean=agg_embedding
     
     if reduce_dim:
         agg_pipeline = Pipeline(
             [("PCA", PCA(n_components=2)), ("scaler", StandardScaler())]
         )
 
-        agg_embedding = pd.DataFrame(
-            agg_pipeline.fit_transform(agg_embedding), index=agg_embedding.index
+        agg_embedding_clean = pd.DataFrame(
+            agg_pipeline.fit_transform(agg_embedding_clean), index=agg_embedding_clean.index
         )
+    
+    agg_embedding = agg_embedding_clean.reindex(agg_embedding.index)
+
+    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
 
     return agg_embedding
 
@@ -377,7 +455,7 @@ def condition_distance_binning(
         end_bin (int): The index of the last bin to compute the distance for.
         step_bin (int): The step size of the bins to compute the distance for.
         scan_mode (str): The mode to use for computing the distance. Can be one of "growing-window" (used to select optimal binning), "per-bin" (used to evaluate how discriminability evolves in subsequent bins of a specified size) or "precomputed", which requires a numpy ndarray with bin IDs to be passed to precomputed_bins.
-        precomputed_bins (np.ndarray): numpy array with IDs mapping to different bins, not necessarily having the same size. Difference across conditions for each of these bins will be reported.
+        precomputed_bins (np.ndarray): numpy array with integer bin sizes in frames, do not necessarily need to have the same size. Difference across conditions for each of these bins will be reported.
         agg (str): The aggregation method to use. Can be either "mean", "median", or "time_on_cluster".
         metric (str): The distance metric to use. Can be either "auc" (where the reported 'distance' is based on performance of a classifier when separating aggregated embeddings), or "wasserstein" (which computes distances based on optimal transport).
         n_jobs (int): The number of jobs to use for parallel processing.
@@ -389,6 +467,8 @@ def condition_distance_binning(
     
     # Divide the embeddings in as many corresponding bins, and compute distances
     def embedding_distance(bin_index):
+
+        nonlocal precomputed_cumsums
 
         if scan_mode == "per-bin":
 
@@ -403,7 +483,7 @@ def condition_distance_binning(
                 "the precomputed_bins parameter"
             )
             
-            bin_info=precomputed_bins 
+            bin_info=np.array([precomputed_cumsums[bin_index],precomputed_cumsums[bin_index+1]])
 
         return separation_between_conditions(
             embedding,
@@ -419,7 +499,8 @@ def condition_distance_binning(
     elif scan_mode == "growing_window":
         bin_range = range(start_bin, end_bin, step_bin)
     else:
-        bin_range = pd.Series(precomputed_bins).unique()
+        bin_range = range(len(precomputed_bins))
+        precomputed_cumsums=np.insert(np.cumsum(precomputed_bins), 0, 0)
 
     exp_condition_distance_array = Parallel(n_jobs=n_jobs)(
         delayed(embedding_distance)(bin_index) for bin_index in bin_range
@@ -537,6 +618,9 @@ def enrichment_across_conditions(
     exp_conditions: dict = None,
     plot_speed: bool = False,
     bin_info: dict = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
     normalize: bool = False,
 ):
     """Compute the population of each cluster across conditions.
@@ -546,7 +630,10 @@ def enrichment_across_conditions(
         supervised_annotations (tableDict): table dict with supervised annotations per animal experiment across time.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding experimental conditions.
         plot_speed (bool): plot "speed" behavior
-        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROIs
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
     Returns:
@@ -569,14 +656,16 @@ def enrichment_across_conditions(
 
         # Extract time on cluster for all videos and add experimental information
         counter_df = get_time_on_cluster(
-            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info,
+            soft_counts, normalize=normalize, reduce_dim=False, bin_info=bin_info, roi_number=roi_number, animals_in_roi=animals_in_roi,
         )
     else:
         
         for key in supervised_annotations.keys():
         
             #load and cut current data set
-            current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]]
+            current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
+            if roi_number is not None:
+                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,roi_mode)
 
             #only keep speed column or only drop speed column
             if plot_speed:
@@ -608,20 +697,28 @@ def enrichment_across_conditions(
     return enrichment
 
 
-def get_transitions(state_sequence: list, n_states: int):
+def get_transitions(state_sequence: list, n_states: int, index_sequence: list=None):
     """Compute the transitions between states in a state sequence.
 
     Args:
         state_sequence (list): A list of states.
         n_states (int): The number of states.
+        index_sequence (list): An optional list of index positions for the states. Will ensure that state transitions between non-neighboring sequence entries are skipped
 
     Returns:
         The resulting transition matrix.
 
     """
     transition_matrix = np.zeros([n_states, n_states])
-    for cur_state, next_state in zip(state_sequence[:-1], state_sequence[1:]):
-        transition_matrix[cur_state, next_state] += 1
+    if index_sequence is None:
+        for cur_state, next_state in zip(state_sequence[:-1], state_sequence[1:]):
+            transition_matrix[cur_state, next_state] += 1
+    else:
+        for k, (cur_state, next_state) in enumerate(zip(state_sequence[:-1], state_sequence[1:])):
+            if index_sequence[k+1]-index_sequence[k]==1:
+                transition_matrix[cur_state, next_state] += 1
+            else:
+                continue
 
     return transition_matrix
 
@@ -631,6 +728,8 @@ def compute_transition_matrix_per_condition(
     exp_conditions: dict,
     silence_diagonal: bool = False,
     bin_info: dict = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
     aggregate: str = True,
     normalize: str = True,
 ):
@@ -640,7 +739,9 @@ def compute_transition_matrix_per_condition(
         soft_counts (TableDict): A dictionary of soft counts, where the keys are the names of the experimental conditions, and the values are the soft counts for each condition.
         exp_conditions (dict): A dictionary of experimental conditions, where the keys are the names of the experiments, and the values are the names of their corresponding
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
-        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROI information
+        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 
@@ -659,14 +760,22 @@ def compute_transition_matrix_per_condition(
 
     for key in soft_counts.keys():
 
+        #Determine load range
+        load_range = bin_info[key]["time"]
+        if roi_number is not None:
+            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+
         #load requested range from current soft counts
-        current_sc = get_dt(soft_counts, key, load_range=bin_info[key])
+        current_sc = get_dt(soft_counts, key, load_range=load_range)
 
         # Get hard counts per video
         hard_counts = np.argmax(current_sc, axis=1)
 
         # Get transition counts per video
-        transitions=get_transitions(hard_counts, n_states)
+        transitions=get_transitions(hard_counts, n_states, index_sequence=load_range)
+
+        # Exclude transitions accross gaps
+         
 
         if silence_diagonal:
             np.fill_diagonal(transitions, 0)
@@ -677,6 +786,8 @@ def compute_transition_matrix_per_condition(
             transitions_dict[exp_cond] += transitions
         else:
             transitions_dict[key] = transitions
+    # Reset warning
+    deepof.visuals_utils.get_beheavior_frames_in_roi._warning_issued = False
 
     # Normalize rows if specified
     if normalize:
@@ -804,11 +915,11 @@ def align_deepof_kinematics_with_unsupervised_labels(
 
                     try:
                         cur_kin = deepof_project.get_coords_at_key(
-                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Spine_1"
+                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Spine_1", speed=der
                         )
                     except AssertionError:
                         cur_kin = deepof_project.get_coords_at_key(
-                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Nose"
+                            key=key, scale=deepof_project._scales[key], quality=quality, center="Center", align="Nose", speed=der
                         )
 
 
@@ -874,7 +985,7 @@ def align_deepof_kinematics_with_unsupervised_labels(
             kin_features = pd.concat([kin_features, cur_kin.add_suffix(suffix)], axis=1)
 
         # save paths for modified tables
-        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables', key, key + '_' + file_name)
+        table_path = os.path.join(deepof_project._project_path, deepof_project._project_name, 'Tables',key, key + '_' + file_name)
         kinematic_features[key] = save_dt(kin_features,table_path,return_path)
 
     # Return aligned kinematics
@@ -995,7 +1106,7 @@ def annotate_time_chunks(
     # use up to 200% of requested samples to factor in data reduction by filtering downstream
     N_windows_tab = int(samples*2/len(comprehensive_features))
     sampled_features, bin_info=comprehensive_features.sample_windows_from_data(
-        bin_info={}, 
+        time_bin_info={}, 
         N_windows_tab=N_windows_tab, 
         no_nans=True
         )
@@ -1020,7 +1131,7 @@ def annotate_time_chunks(
 
 
     # Filter instances with less confidence than specified
-    sampled_soft_counts, _=soft_counts.sample_windows_from_data(bin_info=bin_info)
+    sampled_soft_counts, _=soft_counts.sample_windows_from_data(time_bin_info=bin_info)
     sampled_hard_counts=pd.Series(np.argmax(sampled_soft_counts, axis=1))
 
     qual_filter = (sampled_soft_counts.max(axis=1) > min_confidence)

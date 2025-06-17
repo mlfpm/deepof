@@ -9,6 +9,8 @@ Testing module for deepof.visuals_utils
 """
 
 import os
+import string
+import random
 
 import numpy as np
 import pandas as pd
@@ -16,10 +18,12 @@ from hypothesis import given
 from hypothesis import settings, example
 from hypothesis import strategies as st
 from hypothesis import reproduce_failure
+from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from shutil import rmtree
 import warnings
 
+import deepof.data
 from deepof.data import TableDict
 from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
@@ -32,6 +36,10 @@ from deepof.visuals_utils import (
     create_bin_pairs,
     cohend,
     _preprocess_time_bins,
+    _apply_rois_to_bin_info,
+    get_supervised_behaviors_in_roi,
+    get_unsupervised_behaviors_in_roi,
+    get_beheavior_frames_in_roi,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -46,6 +54,49 @@ def test_time_conversion(second, full_second):
     second = np.round(second * 10**9) / 10**9 #up to 9 digits allowed
     second_second=time_to_seconds(seconds_to_time(float(second), cut_milliseconds=False)) 
     assert second == second_second #this pun is intended and necessary
+
+
+@settings(max_examples=2, deadline=None)
+@given(
+
+    experiment_type=st.one_of(
+        st.just("test_multi_topview"),
+        st.just("test_single_topview"),
+    )
+)
+def test_get_behavior_colors(experiment_type):
+
+    if experiment_type == "test_multi_topview":
+        animal_ids=["B","W"] 
+    else:
+        animal_ids = None
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", experiment_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", experiment_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", experiment_type, "Tables"
+        ),
+        arena="circular-autodetect",
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+        video_scale=380,
+        animal_ids=animal_ids,
+        video_format=".mp4",
+        table_format=".h5",
+    ).create(force=True, test=True)
+
+    supervised = prun.supervised_annotation()
+    behaviors=list(supervised['test'].keys())
+
+    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
+    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
+
+    #check if all supervised behaviors have a color
+    assert not None in colors_a
+    #check if generated Colors stay the same independent of animal id retrieval
+    assert colors_a == colors_b
 
 
 @settings(deadline=None)
@@ -133,14 +184,14 @@ def test_filter_embeddings(keys,exp_condition):
 
 
 @given(
-    template=st.one_of(st.just("deepof_14"),st.just("deepof_11")), #deepof_8 does not have all required body parts
+    template=st.one_of(st.just("deepof_14"),st.just("deepof_11"),st.just("deepof_8")), #deepof_8 does not have all required body parts
     animal_id=st.one_of(st.text(alphabet='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', min_size=1, max_size=20), st.just(None)),
 )
 def test_get_polygon_coords(template,animal_id):
     
     # Get body parts and coords
-    features=connect_mouse(template).nodes()
-    features=[feature[10:] for feature in features]
+    features=connect_mouse(animal_ids=animal_id, graph_preset=template).nodes()
+    features=list(features)
     coordinates = ['x', 'y']
 
     # Create a MultiIndex for the columns
@@ -153,22 +204,22 @@ def test_get_polygon_coords(template,animal_id):
     data = np.random.rand(len(features)*len(coordinates),len(features)*len(coordinates))
     df = pd.DataFrame(data, columns=multi_index_columns)
     
-    #to include None-case in testing for that 1 line of extra coverage
-    if animal_id is None:
-        a_id=""
-    else:
-        a_id=animal_id+"_"
-
-    # add animal ids
-    df.columns = pd.MultiIndex.from_tuples(
-        [(f"{a_id}{feature}", coordinate) for feature, coordinate in df.columns]
-    )
-
     [head, body, tail]=_get_polygon_coords(df,animal_id)
 
-    assert head.shape[1]==8
-    assert body.shape[1]==12
-    assert tail.shape[1]==4
+    if template=="deepof_14":
+        assert head.shape[1]==8
+        assert body.shape[1]==12
+        assert tail.shape[1]==8
+    elif template=="deepof_11":
+        assert head.shape[1]==8
+        assert body.shape[1]==12
+        assert tail.shape[1]==4
+    elif template=="deepof_8":
+        assert head.shape[1]==6
+        assert body.shape[1]==6
+        assert tail.shape[1]==4
+
+test_get_polygon_coords()
 
 
 @settings(max_examples=20, deadline=None)
@@ -299,7 +350,7 @@ class Pseudo_Coordinates:
         return self._table_lengths
 
 
-@settings(deadline=None, max_examples=100)    
+@settings(deadline=None, max_examples=200)    
 @given(
     start_times_raw=st.lists(
         elements=st.integers(min_value=0, max_value=120), min_size=5, max_size=50
@@ -367,4 +418,168 @@ def test_preprocess_time_bins(
         if (len(bin_info[key])>0):
             assert bin_info[key][-1] <= lengths[key]
             assert bin_info[key][0] >= 0
+
+
+@settings(deadline=None)
+@given(
+    mode=st.one_of(st.just("single"), st.just("multi")),
+    bin_size=st.one_of(st.just(100), st.just(50)),
+    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose")),
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+)
+def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
+
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
+
+    if mode == "multi":
+        animal_ids = ["B", "W"]
+    else:
+        animal_ids = [""]
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode)
+        ),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Tables"
+        ),
+        project_name=f"deepof_project_roi_test",
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        animal_ids=animal_ids,
+        table_format=".h5",
+        fast_implementations_threshold=fast_implementations_threshold,
+    )
+
+    #also use large table handling 
+    if use_numba:
+        prun.very_large_project=True
     
+    prun = prun.create(force=True, test=True)
+ 
+    bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
+
+    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+
+    # bin info is a two level dictionary
+    assert isinstance(bin_info_roi1, dict) 
+    assert isinstance(bin_info_roi1[list(bin_info_roi1.keys())[0]], dict)
+    # There are always more or an equal amount of frames in which the animal is in the larger roi (roi 1) as compared to it being in the smaller roi (roi2) 
+    for key in bin_info_roi1.keys():
+        for roi in bin_info_roi1[key].keys():
+            assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
+    
+
+@settings(deadline=None)
+@given(
+
+    animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ).map(sorted),
+    supervised_behavior = st.booleans(),
+)
+def test_get_rois(animal_ids, bins, supervised_behavior):
+
+    animal_ids=list(animal_ids)
+    if len(animal_ids)==0:
+        animal_ids=['']
+
+    num_rows = 100
+    num_cols = 10
+
+    # Generate column names with random animal_id combinations
+    column_names = []
+    for col_num in range(1, num_cols + 1):
+        k = random.randint(1, len(animal_ids))
+        subset = random.sample(animal_ids, k)
+        subset.sort()
+        if animal_ids[0] != '':
+            prefix = '_'.join(subset)
+            column_names.append(f"{prefix}_{col_num}")
+        else:
+            column_names.append(f"{col_num}")
+
+    # Create supervised DataFrame with binary values
+    cur_supervised = pd.DataFrame(
+        np.random.randint(2, size=(num_rows, num_cols)),
+        columns=column_names
+    )
+
+    # Convert DataFrame to numpy array for unsupervised data
+    cur_unsupervised = cur_supervised.to_numpy().astype(float)
+
+    # Create local_bin_info
+    local_bin_info = {"time": np.array(bins)}
+    for k, animal_id in enumerate(animal_ids):
+        local_bin_info[animal_id] = cur_unsupervised[bins,k].astype(bool)
+
+    # Determine random behavior from column names or as unsupervised dummy
+    if supervised_behavior:
+        behavior=column_names[0]
+    else:
+        behavior="_"
+
+    # get ROIs with different methods
+    cur_supervised_filtered = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids)
+    cur_unsupervised_filtered = get_unsupervised_behaviors_in_roi(cur_unsupervised[bins], local_bin_info, animal_ids)
+    frames = get_beheavior_frames_in_roi(behavior, local_bin_info, animal_ids)
+
+    # In the not supervised case, frames represent the non-nan positions in cur_unsupervised after filtering
+    if not supervised_behavior:
+        assert (cur_unsupervised[frames] == cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]).all()
+    # if there is only one supervised behavior, frames represent the non-nan positions in cur_supervised after filtering
+    elif len(animal_ids)==1:
+        assert (cur_supervised.iloc[frames] == cur_supervised_filtered.dropna()).all().all()
+    # For multiple animals, selecting frames based on a random behavior is always greator or equal the number of non-nan supervised rows
+    # (because the more rows will be set to nan the more mice are involved in a behavior)
+    else:
+        assert (len(cur_supervised.iloc[frames]) >= len(cur_supervised_filtered.dropna()))
+    # unsupervised always onyl filters by one animal, supervised can filter by combinations, respectively supervised can filter out more but not less
+    assert (len((cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]))) >= len(cur_supervised_filtered.dropna())
+
+
+@settings(deadline=None)
+@given(
+    max_val=st.integers(min_value=1, max_value=99),
+    preceding_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    proximate_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_calculate_FSTTC(max_val,preceding_behavior,proximate_behavior,frame_rate,delta_T):
+
+    preceding_behavior=preceding_behavior[0:max_val]
+    proximate_behavior=proximate_behavior[0:max_val]
+    fsttc=deepof.visuals_utils.calculate_FSTTC(preceding_behavior,proximate_behavior,frame_rate,delta_T)
+
+    # The FSTTC can only reach values in teh range between -1 and 1
+    assert(1 >= fsttc and fsttc >=-1)
+
+
+@settings(deadline=None)
+@given(
+    max_val=st.integers(min_value=1, max_value=99),
+    preceding_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    proximate_behavior=arrays(dtype=bool, shape=st.tuples(st.integers(min_value=100, max_value=100))),
+    frame_rate=st.floats(min_value=1, max_value=100),
+    delta_T=st.floats(min_value=0.0, max_value=100),
+)
+def test_calculate_simple_association(max_val,preceding_behavior,proximate_behavior,frame_rate,delta_T):
+
+    preceding_behavior=preceding_behavior[0:max_val]
+    proximate_behavior=proximate_behavior[0:max_val]
+    Q=deepof.visuals_utils.calculate_simple_association(preceding_behavior,proximate_behavior,frame_rate,delta_T)
+
+    # Yule's coefficient Q can only reach values in the range between -1 and 1
+    assert(1 >= Q and Q >=-1)
