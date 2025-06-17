@@ -2740,7 +2740,7 @@ class Coordinates:
                 if isinstance(raw_coords[key], dict):
                     duckdb_file = raw_coords[key].get("duckdb_file")
                     table = raw_coords[key].get("table")
-                if isinstance(raw_coords[key], str)  or (isinstance(duckdb_file, str) and isinstance(table, str)):
+                if isinstance(raw_coords[key], str) or (isinstance(duckdb_file, str) and isinstance(table, str)):
                     tag_index = get_dt(raw_coords,key, only_metainfo=True, load_index=True)['index_column']
                 else:
                     tag_index = raw_coords[key].index
