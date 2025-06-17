@@ -1456,6 +1456,20 @@ class Coordinates:
         tab_dict={}
         for key in self._tables.keys():
 
+            tab2=self.get_coords_at_key_old(
+                key = key,
+                scale = self._scales[key], 
+                center = center,
+                polar = polar,
+                speed = speed,
+                align = align,
+                align_inplace = align_inplace,
+                selected_id = selected_id,
+                roi_number = roi_number,
+                animals_in_roi = animals_in_roi,
+                in_roi_criterion = in_roi_criterion,
+            )
+
             tab=self.get_coords_at_key(
                 key = key,
                 scale = self._scales[key], 
@@ -1469,6 +1483,8 @@ class Coordinates:
                 animals_in_roi = animals_in_roi,
                 in_roi_criterion = in_roi_criterion,
             )
+
+            assert tab.equals(tab2), "unequal data detected!" 
             
             # save paths for modified tables
             table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
@@ -1489,8 +1505,236 @@ class Coordinates:
             polar=polar,
             exp_conditions=self._exp_conditions,
         )
+
+
+    def _load_and_prepare_data(self, key: str, quality: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Loads the primary DataFrame and associated quality data."""
+        tab = deepof.utils.deepcopy(get_dt(self._tables, key))
+        
+        if quality is None:
+            quality = self.get_quality().filter_videos([key])
+            quality[key] = get_dt(quality, key)
+            
+        return tab, quality
     
+    
+    def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_number: int):
+        """Performs initial validation of function arguments."""
+        if align:
+            if not any(center in bp for bp in tab.columns.levels[0]):
+                raise ValueError("For alignment, 'center' must be the name of a body part.")
+            if not any(align in bp for bp in tab.columns.levels[0]):
+                raise ValueError("'align' must be the name of a body part.")
+        
+        if roi_number is not None:
+            if self._roi_dicts is None:
+                raise ValueError("ROIs not created for this project. Define ROIs during project creation.")
+            if len(self._roi_dicts.get(key, [])) < roi_number:
+                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")
+            
+    
+    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str) -> pd.DataFrame:
+        """Filters the DataFrame to include only data within the specified ROI."""
+        if roi_number is None:
+            return tab
+
+        # Determine which animals to check for ROI inclusion
+        if animals_in_roi and isinstance(animals_in_roi, str):
+            animals_to_check = [animals_in_roi]
+        elif animals_in_roi: # handles list case
+             animals_to_check = animals_in_roi
+        else:
+            animals_to_check = self._animal_ids
+
+        roi_polygon = self._roi_dicts[key][roi_number]
+
+        for aid in animals_to_check:
+            mouse_in_polygon = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, self._run_numba)
+            
+            # Get columns for the current animal
+            aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+            # Set data outside the ROI to NaN
+            tab.loc[~mouse_in_polygon, aid_cols] = np.nan
+            
+        return tab
+        
+    def _select_animal_data(self, tab: pd.DataFrame, selected_id: str) -> pd.DataFrame:
+        """Filters the DataFrame for a single animal if selected_id is provided."""
+        if selected_id:
+            return tab.loc[:, deepof.utils.filter_columns(tab.columns, selected_id)]
+        return tab
+
+    def _transform_to_polar(self, tab: pd.DataFrame, scale: np.array) -> Tuple[pd.DataFrame, tuple]:
+        """Converts coordinates to polar if requested."""
+        polar_scale = deepof.utils.bp2polar(scale).to_numpy().reshape(-1)
+        polar_tab = deepof.utils.tab2polar(tab)
+        return polar_tab, ("rho", "phi"), polar_scale
+        
+    def _center_coordinates(self, tab: pd.DataFrame, center: str, scale: np.array, coords: Tuple[str, str], animal_ids: List[str]) -> pd.DataFrame:
+        """Centers the coordinates either to the arena or a specific body part."""
+        coord_1, coord_2 = coords
+
+        if center == "arena":
+            tab.loc[:, (slice("x"), [coord_1])] -= scale[0]
+            tab.loc[:, (slice("x"), [coord_2])] -= scale[1]
+        elif isinstance(center, str):
+            for aid in animal_ids:
+                center_bp_name = f"{aid}{'_' if aid else ''}{center}"
+                
+                # Filter columns for the current animal
+                animal_cols = [col for col in tab.columns if col[0].startswith(aid)]
+                animal_tab_view = tab.loc[:, animal_cols]
+
+                # Center on x / rho
+                tab.update(
+                    animal_tab_view.loc[:, (slice("x"), [coord_1])]
+                    .subtract(tab[center_bp_name, coord_1], axis=0)
+                )
+                # Center on y / phi
+                tab.update(
+                    animal_tab_view.loc[:, (slice("x"), [coord_2])]
+                    .subtract(tab[center_bp_name, coord_2], axis=0)
+                )
+        return tab
+        
+    def _rescale_to_video(self, tab: pd.DataFrame, scale: np.array, coords: Tuple[str, str]) -> pd.DataFrame:
+        """Rescales coordinates from mm back to pixels for video output."""
+        # Assuming scale[2] is video dimension and scale[3] is arena dimension in mm
+        pixel_ratio = scale[2] / scale[3]
+        tab.loc[:, (slice(None), list(coords))] *= pixel_ratio
+        return tab
+
+    def _align_trajectories(self, tab: pd.DataFrame, align: str, align_inplace: bool, polar: bool, animal_ids: List[str]) -> pd.DataFrame:
+        """Aligns animal trajectories to a reference body part."""
+        if not (align and align_inplace and not polar):
+            return tab
+
+        all_aligned_parts = []
+        all_columns = []
+
+        for aid in animal_ids:
+            align_bp_name = f"{aid}{'_' if aid else ''}{align}"
+            
+            # Define alignment columns and remaining columns for the animal
+            align_cols = [(align_bp_name, "phi" if polar else "x"),
+                          (align_bp_name, "rho" if polar else "y")]
+            other_cols = [col for col in tab.columns if col[0].startswith(aid) and col[0] != align_bp_name]
+            
+            # Reorder columns to have the alignment body part first
+            ordered_cols = align_cols + other_cols
+            partial_tab = tab[ordered_cols]
+            
+            # Perform alignment
+            aligned_data = deepof.utils.align_trajectories(
+                np.array(partial_tab),
+                mode="all",
+                run_numba=self._run_numba,
+            )
+            aligned_data[np.abs(aligned_data) < 1e-5] = 0.0
+            
+            all_aligned_parts.append(pd.DataFrame(aligned_data))
+            all_columns.extend(ordered_cols)
+
+        if not all_aligned_parts:
+            return tab
+
+        # Combine all aligned parts back into a single DataFrame
+        aligned_df = pd.concat(all_aligned_parts, axis=1)
+        aligned_df.index = tab.index
+        aligned_df.columns = pd.MultiIndex.from_tuples(all_columns)
+        
+        return aligned_df
+
+    def _calculate_derivatives(self, tab: pd.DataFrame, speed: int) -> pd.DataFrame:
+        """Calculates speed, acceleration, jerk, etc., based on the 'speed' parameter."""
+        if not speed:
+            return tab
+            
+        return deepof.utils.rolling_speed(
+            tab,
+            frame_rate=self._frame_rate,
+            deriv=speed,
+        )
+
+
     def get_coords_at_key(
+    self,
+    key: str,
+    scale: np.array,
+    quality: table_dict = None,
+    center: str = False,
+    polar: bool = False,
+    speed: int = 0,
+    align: str = False,
+    align_inplace: bool = True,
+    to_video: bool = False,
+    selected_id: str = None,
+    roi_number: int = None,
+    animals_in_roi: str = None,
+    in_roi_criterion: str = "Center",
+) -> pd.DataFrame:
+        """Return a pandas dataFrame with the coordinates for the selected key as values.
+
+        Args:
+            key (str): key for requested distance
+            scale (np.array): scale of the current arena.
+            quality: (table_dict): Quality information for current data Frame
+            center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            polar (bool) States whether the coordinates should be converted to polar values.
+            speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
+            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
+            align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
+            to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
+            selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
+    
+        Returns:
+            tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
+
+        """
+        # 1. Load data and perform initial validation
+        tab, quality = self._load_and_prepare_data(key, quality)
+        self._validate_inputs(tab, key, align, center, roi_number)
+
+        # 2. Apply ROI filtering (before coordinate transformations)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, in_roi_criterion)
+
+        # 3. Select a single animal if specified
+        tab = self._select_animal_data(tab, selected_id)
+
+        # 4. Determine coordinate system and transform if necessary
+        coords, current_scale = ("x", "y"), scale
+        if polar:
+            tab, coords, current_scale = self._transform_to_polar(tab, scale)
+
+        # 5. Determine which animals to process for subsequent steps
+        animal_ids = [selected_id] if selected_id else self._animal_ids
+
+        # 6. Center coordinates
+        if center:
+            tab = self._center_coordinates(tab, center, current_scale, coords, animal_ids)
+            
+        # 7. Rescale to video pixels if requested
+        if to_video:
+            tab = self._rescale_to_video(tab, scale, coords)
+
+        # 8. Align trajectories
+        if align:
+            tab = self._align_trajectories(tab, align, align_inplace, polar, animal_ids)
+
+        # 9. Calculate speed/derivatives
+        if speed:
+            tab = self._calculate_derivatives(tab, speed)
+
+        # 10. Handle missing animals based on quality data
+        table_dict = deepof.utils.set_missing_animals(self, {key: tab}, quality)
+        
+        return table_dict[key]
+        
+
+    def get_coords_at_key_old(
     self,
     key: str,
     scale: np.array,
