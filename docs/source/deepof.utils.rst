@@ -53,19 +53,18 @@ deepof.utils module
    deepof.utils.remove_outliers
    deepof.utils.filter_animal_id_in_table
    deepof.utils.load_segmentation_model
-   deepof.utils.get_arenas
-   deepof.utils._scale_arenas_to_mm
-   deepof.utils._scale_rois_to_mm
-   deepof.utils.simplify_polygon
-   deepof.utils.closest_side
-   deepof.utils.automatically_recognize_arena
-   deepof.utils.display_message
-   deepof.utils.get_roi_colors
-   deepof.utils.retrieve_corners_from_image
-   deepof.utils.extract_polygonal_arena_coordinates
-   deepof.utils.fit_ellipse_to_polygon
-   deepof.utils.get_first_length
-   deepof.utils.arena_parameter_extraction
+   deepof.arena_utils.get_arenas
+   deepof.arena_utils._scale_arenas_to_mm
+   deepof.arena_utils._scale_rois_to_mm
+   deepof.arena_utils.simplify_polygon
+   deepof.arena_utils.closest_side
+   deepof.arena_utils.automatically_recognize_arena
+   deepof.arena_utils.display_message
+   deepof.arena_utils.retrieve_corners_from_image
+   deepof.arena_utils.extract_polygonal_arena_coordinates
+   deepof.arena_utils.fit_ellipse_to_polygon
+   deepof.arena_utils.get_first_length
+   deepof.arena_utils.arena_parameter_extraction
    deepof.utils.rolling_speed
    deepof.utils.filter_short_bouts
    deepof.utils.filter_short_true_segments
