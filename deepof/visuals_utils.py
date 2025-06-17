@@ -1735,19 +1735,19 @@ def _tag_annotated_frames(
             else:
                 right_flag = False
 
-        if tag_dict[animal_ids[0] + "_" + animal_ids[1] +  "_nose2body"][fnum] and left_flag:
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] + "_nose2body"][fnum] and left_flag:
             write_on_frame("nose2body", corners["downleft"])
             left_flag = False
 
-        if tag_dict[animal_ids[1] + "_" + animal_ids[0] +  "_nose2body"][fnum] and right_flag:
+        if tag_dict[animal_ids[1] + "_" + animal_ids[0] + "_nose2body"][fnum] and right_flag:
             write_on_frame("nose2body", corners["downright"])
             right_flag = False
 
-        if tag_dict[animal_ids[0] + "_" + animal_ids[1] +  "_nose2tail"][fnum] and left_flag:
+        if tag_dict[animal_ids[0] + "_" + animal_ids[1] + "_nose2tail"][fnum] and left_flag:
             write_on_frame("Nose-Tail", corners["downleft"])
             left_flag = False
 
-        if tag_dict[animal_ids[1] + "_" + animal_ids[0] +  "_nose2tail"][fnum] and right_flag:
+        if tag_dict[animal_ids[1] + "_" + animal_ids[0] + "_nose2tail"][fnum] and right_flag:
             write_on_frame("Nose-Tail", corners["downright"])
             right_flag = False
 
@@ -1990,7 +1990,7 @@ def output_cluster_video(
 
             if display_time:
 
-                disp_time = "time: "  + seconds_to_time(valid_frames[i]/frame_rate)
+                disp_time = "time: " + seconds_to_time(valid_frames[i]/frame_rate)
                 # Draw black outline
                 cv2.putText(res_frame, disp_time, (x, y), font, font_scale, (0, 0, 0), thickness + 2)
                 # Draw white main text
@@ -2268,7 +2268,7 @@ def output_annotated_video(
             
             if display_time:
 
-                disp_time = "time: "  + seconds_to_time(frames[i]/frame_rate)
+                disp_time = "time: " + seconds_to_time(frames[i]/frame_rate)
                 # Draw black outline
                 cv2.putText(frame, disp_time, (x, y), font, font_scale*1.5, (0, 0, 0), thickness + 2)
                 # Draw white main text
