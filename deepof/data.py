@@ -881,9 +881,7 @@ class Project:
                             for j in range(2)
                         ]
                     )
-                    loaded_tab = temp.sort_index(axis=1)
-                
-                table_dict={key:loaded_tab}
+                    loaded_tab = temp.sort_index(axis=1)           
 
                 if self.smooth_alpha:
 
@@ -899,6 +897,8 @@ class Project:
                     smooth.columns = cur_cols
                     smooth.index = cur_idx
                     loaded_tab = smooth
+
+                table_dict={key:loaded_tab}
 
                 if self.remove_outliers:
 
@@ -1299,7 +1299,7 @@ class Project:
         tables_2, quality_2 = self.preprocess_tables_old()
         tables, quality = self.preprocess_tables()
 
-        assert tables_2.keys()==tables.keys() and all([(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) <0.01).all() for key in tables.keys()]), "tables deviate significantly"
+        assert tables_2.keys()==tables.keys() and all([(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) <1e-32).all() for key in tables.keys()]), "tables deviate significantly"
 
         if self.exp_conditions is not None:
             assert (
