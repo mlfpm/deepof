@@ -509,9 +509,219 @@ class Project:
             test,
         )
 
+
+    def _update_progress(self, pbar: tqdm, step: str, key: str):
+        """Updates the progress bar with the current step."""
+        # A little fun, just like in the original!
+        funny_messages = [
+            "Reticulating splines", "Calibrating flux capacitor", 
+            "Aligning warp core", "Polishing the monocle", "Planning AI uprising"
+        ]
+        if (pbar.n + 1) % 20 == 0 and step == "Updating time index":
+            step = np.random.choice(funny_messages)
+        
+        pbar.set_postfix(file=f"{key[:10]}...", step=step)
+
+    def _load_and_prepare_table(self, key: str, found_individuals_before: bool) -> Tuple[pd.DataFrame, bool]:
+        """Loads a table and handles multi-animal formatting."""
+        table = deepof.utils.load_table(
+            self.tables[key], self.source_table_path, self.table_format,
+            self.rename_bodyparts, self.animal_ids
+        )
+
+        is_multi_animal = "individuals" in table.index
+        
+        # Check for consistent header format across all tables
+        if list(self.tables.keys()).index(key) > 0:
+            assert is_multi_animal == found_individuals_before, \
+                f"Table {key} has inconsistent 'individuals' formatting!"
+
+        if is_multi_animal:
+            # Update animal IDs and adapt table for the pipeline
+            self.animal_ids = list(table.loc["individuals"].unique())
+            table.loc["bodyparts"] = table.loc["individuals"] + "_" + table.loc["bodyparts"]
+            table.drop("individuals", axis=0, inplace=True)
+        
+        return table, is_multi_animal
+    
+    def _format_table_header(self, table: pd.DataFrame) -> pd.DataFrame:
+        """Converts the top rows of a dataframe to a MultiIndex header."""
+        table.columns = pd.MultiIndex.from_arrays(
+            [table.iloc[i] for i in range(2)],
+            names=['bodyparts', 'coords']
+        )
+        # Drop the original header rows and convert to float
+        formatted_table = table.iloc[2:].astype(float).reset_index(drop=True)
+        return formatted_table
+
+    def _update_connectivity_graph(self):
+        """Updates body part connectivity graph based on current animal_ids and bodyparts."""
+        # Reinstate "vanilla" bodyparts without animal ids
+        reinstated_bps = list(set(
+            bp[len(aid) + 1:] if bp.startswith(f"{aid}_") else bp
+            for aid in self.animal_ids for bp in self.exclude_bodyparts
+        ))
+
+        model_dict = {
+            f"{aid}mouse_topview": deepof.utils.connect_mouse(
+                aid, exclude_bodyparts=reinstated_bps, graph_preset=self.bodypart_graph
+            ) for aid in self.animal_ids
+        }
+        self.connectivity = {aid: model_dict[f"{aid}{self.model}"] for aid in self.animal_ids}
+
+        if len(self.animal_ids) > 1 and reinstated_bps != [""]:
+            self.exclude_bodyparts = [f"{aid}_{bp}" for aid in self.animal_ids for bp in reinstated_bps]
+
+    def _filter_irrelevant_bodyparts(self, table: pd.DataFrame) -> pd.DataFrame:
+        """Removes bodyparts not present in the connectivity graph or explicitly excluded."""
+        all_bodyparts = table.columns.get_level_values('bodyparts').unique()
+        
+        relevant_nodes = set()
+        for aid in self.animal_ids:
+            relevant_nodes.update(self.connectivity[aid].nodes)
+        
+        relevant_bodyparts = relevant_nodes - set(self.exclude_bodyparts)
+        irrelevant_bodyparts = list(set(all_bodyparts) - relevant_bodyparts)
+
+        if not irrelevant_bodyparts:
+            return table
+
+        table = table.drop(columns=irrelevant_bodyparts, level="bodyparts").sort_index(axis=1)
+        # Recreate a clean MultiIndex to avoid potential gaps
+        table.columns = pd.MultiIndex.from_product(
+            [
+                os_sorted(table.columns.get_level_values('bodyparts').unique()),
+                os_sorted(table.columns.get_level_values('coords').unique()),
+            ],
+            names=table.columns.names
+        )
+        return table
+
+    def _apply_optional_transforms(self, table_dict: Dict, lik_dict: Dict, pbar: tqdm) -> Tuple[Dict, int]:
+        """Applies smoothing, outlier removal, and imputation if configured."""
+        key = list(table_dict.keys())[0]
+        table = table_dict[key]
+        warn_nans_count = 0
+
+        # lik_dict needs to be converted into a TableDict for legacy reasons
+        lik_dict = TableDict(lik_dict, 
+                        typ="quality", 
+                        table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
+                        animal_ids=self.animal_ids)
+
+        # 1. Smoothing
+        if self.smooth_alpha:
+            self._update_progress(pbar, "Smoothing trajectories", key)
+            smoothed_data = deepof.utils.smooth_mult_trajectory(
+                table.values, alpha=self.smooth_alpha, w_length=15
+            )
+            table = pd.DataFrame(smoothed_data, index=table.index, columns=table.columns)
+
+        # 2. Outlier Removal
+        if self.remove_outliers:
+            self._update_progress(pbar, "Removing outliers", key)
+            table, warn_nans = deepof.utils.remove_outliers(
+                table, lik_dict[key],
+                likelihood_tolerance=self.likelihood_tolerance,
+                mode="or", n_std=self.interpolation_std,
+            )
+            warn_nans_count += warn_nans
+        
+        # Update table_dict with potentially modified table
+        table_dict[key] = table
+
+        # 3. Imputation
+        if self.iterative_imputation:
+            self._update_progress(pbar, "Iterative imputation", key)
+            full_imputation = self.iterative_imputation == "full"
+            table_dict = deepof.utils.iterative_imputation(
+                self, table_dict, lik_dict, full_imputation=full_imputation
+            )
+
+        # 4. Set missing animals
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, lik_dict)
+
+        return table_dict, warn_nans_count
+
+    def preprocess_tables(self) -> Tuple[table_dict, table_dict]:
+        """
+        Loads and preprocesses tracking data through a series of modular steps,
+        then saves the results and returns table dictionaries.
+        """
+        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
+            raise NotImplementedError("Tracking files must be in h5, csv, npy, or slp format")
+
+        final_tab_dict, final_lik_dict = {}, {}
+        total_warnings = 0
+        found_individuals = False
+
+        with tqdm(total=len(self.tables), desc=f"{'Preprocessing tables':<{PROGRESS_BAR_FIXED_WIDTH}}") as pbar:
+            for key in self.tables.keys():
+                # 1. Load and Standardize
+                self._update_progress(pbar, "Loading trajectories", key)
+                table, found_individuals = self._load_and_prepare_table(key, found_individuals)
+                
+                # 2. Format Header
+                self._update_progress(pbar, "Adjusting headers", key)
+                table = self._format_table_header(table)
+                
+                # 3. Update Connectivity Graph
+                self._update_progress(pbar, "Updating graphs", key)
+                self._update_connectivity_graph()
+
+                # 4. Add Time Index
+                if self.frame_rate:
+                    self._update_progress(pbar, "Updating time index", key)
+                    time_index = pd.to_timedelta(np.arange(len(table)) / self.frame_rate, unit="s")
+                    table.index = time_index.map(lambda t: str(t.round('ms'))[7:])
+
+                # 5. Split coordinates from likelihood and filter bodyparts
+                x = table.xs("x", level="coords", axis=1)
+                y = table.xs("y", level="coords", axis=1)
+                likelihood_table = table.xs("likelihood", level="coords", axis=1, drop_level=True).fillna(0.0)
+                
+                coords_table = table.drop(columns='likelihood', level='coords')
+                processed_table = self._filter_irrelevant_bodyparts(coords_table)
+                
+                # 6. Apply Optional Transformations (Smoothing, Outliers, Imputation)
+                table_dict_single = {key: processed_table}
+                lik_dict_single = {key: likelihood_table}
+                table_dict_single, warn_count = self._apply_optional_transforms(table_dict_single, lik_dict_single, pbar)
+                total_warnings += warn_count
+
+                # 7. Save Processed Data
+                self._update_progress(pbar, "Saving data", key)
+                save_dir = os.path.join(self.project_path, self.project_name, 'Tables', key)
+                os.makedirs(save_dir, exist_ok=True)
+                
+                quality_path = os.path.join(save_dir, f"{key}_likelihood")
+                table_path = os.path.join(save_dir, key)
+                
+                final_lik_dict[key] = save_dt(lik_dict_single[key], quality_path, self.very_large_project)
+                final_tab_dict[key] = save_dt(table_dict_single[key], table_path, self.very_large_project)
+                
+                pbar.update(1)
+
+        if total_warnings > 0:
+            warnings.warn(
+                f"\033[38;5;208m"
+                f"More than 30% of position values were missing or outliers in {total_warnings} out of "
+                f"{len(self.tables)} tables. This may be expected if subjects were obscured for long intervals."
+                f"\033[0m"
+            )
+
+        self.table_path = os.path.join(self.project_path, self.project_name, "Tables")
+        
+        lik_table_dict = TableDict(
+            final_lik_dict, typ="quality", table_path=self.table_path, animal_ids=self.animal_ids
+        )
+        
+        return final_tab_dict, lik_table_dict
+    
+
     #from memory_profiler import profile
     #@profile
-    def preprocess_tables(self) -> table_dict:
+    def preprocess_tables_old(self) -> table_dict:
         """Load tables, performs multiple preprocessing steps:
             - Trajectory loading,
             - Adjusting table headers
@@ -1085,7 +1295,11 @@ class Project:
         current_video_cap.release()
 
         # load table info
+        tables_2, quality_2 = self.preprocess_tables_old()
         tables, quality = self.preprocess_tables()
+
+        assert tables_2.keys()==tables.keys() and all([(np.sum(tables[key])-np.sum(tables_2[key]) <0.0001).all() for key in tables.keys()]), "tables deviate significantly"
+
         if self.exp_conditions is not None:
             assert (
                 tables.keys() == self.exp_conditions.keys()
