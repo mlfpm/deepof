@@ -1507,9 +1507,9 @@ class Coordinates:
         )
 
 
-    def _load_and_prepare_data(self, key: str, quality: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _load_and_prepare_data(self, key: str, quality: pd.DataFrame, data:dict) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Loads the primary DataFrame and associated quality data."""
-        tab = deepof.utils.deepcopy(get_dt(self._tables, key))
+        tab = deepof.utils.deepcopy(get_dt(data, key))
         
         if quality is None:
             quality = self.get_quality().filter_videos([key])
@@ -1645,15 +1645,18 @@ class Coordinates:
         
         return aligned_df
 
-    def _calculate_derivatives(self, tab: pd.DataFrame, speed: int) -> pd.DataFrame:
+    def _calculate_derivatives(self, tab: pd.DataFrame, speed: int, frame_rate: float = None, typ: str = "coords") -> pd.DataFrame:
         """Calculates speed, acceleration, jerk, etc., based on the 'speed' parameter."""
         if not speed:
             return tab
+        if frame_rate is None:
+            frame_rate=self._frame_rate
             
         return deepof.utils.rolling_speed(
             tab,
-            frame_rate=self._frame_rate,
+            frame_rate=frame_rate,
             deriv=speed,
+            typ=typ,
         )
 
 
@@ -1695,7 +1698,7 @@ class Coordinates:
 
         """
         # 1. Load data and perform initial validation
-        tab, quality = self._load_and_prepare_data(key, quality)
+        tab, quality = self._load_and_prepare_data(key, quality, data=self._tables)
         self._validate_inputs(tab, key, align, center, roi_number)
 
         # 2. Apply ROI filtering (before coordinate transformations)
@@ -1971,7 +1974,16 @@ class Coordinates:
 
             for key in self._distances.keys():
 
-                #get distances as tab dataFrame  
+                #get distances as tab dataFrame 
+                tab2=self.get_distances_at_key_old(
+                    key,
+                    speed=speed,
+                    selected_id=selected_id,
+                    roi_number=roi_number,
+                    animals_in_roi=animals_in_roi,
+                    filter_on_graph=filter_on_graph,
+                    )
+                                 
                 tab=self.get_distances_at_key(
                     key,
                     speed=speed,
@@ -1980,6 +1992,8 @@ class Coordinates:
                     animals_in_roi=animals_in_roi,
                     filter_on_graph=filter_on_graph,
                     )
+                
+                assert tab.equals(tab2), "Distances mismatch!"
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
@@ -2003,6 +2017,61 @@ class Coordinates:
 
 
     def get_distances_at_key(
+        self,
+        key: str,
+        quality: table_dict = None,
+        speed: int = 0,
+        selected_id: str = None,
+        roi_number: int = None,
+        animals_in_roi: str = None,
+        filter_on_graph: bool = True,
+    ) -> pd.DataFrame:
+        """Return a pd.DataFrame with the distances between body parts of one animal as values.
+
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
+
+        Returns:
+            tab (pd.DataFrame): A pd.DataFrame with the distances between body parts of one animal as values.
+
+        """
+
+        # 1. Load data and perform initial validation
+        tab, quality = self._load_and_prepare_data(key, quality, data=self._distances)
+        self._validate_inputs(tab, key, None, None, roi_number)
+
+        # 2. Apply ROI filtering (before coordinate transformations)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+
+        # 3. Select a single animal if specified
+        tab = self._select_animal_data(tab, selected_id)
+
+        # 4. Calculate speed/derivatives
+        if speed:
+            tab = self._calculate_derivatives(tab, speed, frame_rate=1, typ="dists")
+
+        # 5. Handle missing animals based on quality data
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+
+        if filter_on_graph:
+            mouse_edges=deepof.utils.connect_mouse(animal_ids=self._animal_ids, graph_preset=self._bodypart_graph).edges
+            sorted_edges=[]
+            for edge in mouse_edges:
+                edge=tuple(sorted(edge))
+                sorted_edges.append(edge)
+            
+            tab = tab.loc[:, list(set(sorted_edges) & set(tab.columns))]
+      
+        return tab
+    
+
+    def get_distances_at_key_old(
         self,
         key: str,
         quality: table_dict = None,
