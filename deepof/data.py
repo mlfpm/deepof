@@ -2200,6 +2200,15 @@ class Coordinates:
 
             for key in self._angles.keys():
 
+                tab2 = self.get_angles_at_key_old(
+                    key=key, 
+                    degrees=degrees,
+                    speed=speed,
+                    selected_id=selected_id,
+                    roi_number = roi_number,
+                    animals_in_roi=animals_in_roi,
+                )
+
                 tab = self.get_angles_at_key(
                     key=key, 
                     degrees=degrees,
@@ -2208,6 +2217,9 @@ class Coordinates:
                     roi_number = roi_number,
                     animals_in_roi=animals_in_roi,
                 )
+
+                assert tab.equals(tab2), "Angles mismatch!"
+
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
@@ -2228,8 +2240,60 @@ class Coordinates:
         raise ValueError(
             "Angles not computed. Read the documentation for more details"
         )  # pragma: no cover
-    
+
+
     def get_angles_at_key(
+    self,
+    key: str,
+    quality: table_dict = None,
+    degrees: bool = False,
+    speed: int = 0,
+    selected_id: str = None,
+    roi_number: int = None,
+    animals_in_roi: str = None,
+
+    ) -> pd.DataFrame:
+        """Return a Dataframe with the angles between body parts for one animal as values.
+
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+
+        Returns:
+            tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
+
+        """  
+
+        # 1. Load data and perform initial validation
+        tab, quality = self._load_and_prepare_data(key, quality, data=self._angles)
+        self._validate_inputs(tab, key, None, None, roi_number)
+
+        # 2. Convert unit
+        if degrees:
+            tab = np.degrees(tab) 
+
+        # 3. Apply ROI filtering (before coordinate transformations)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+
+        # 4. Select a single animal if specified
+        tab = self._select_animal_data(tab, selected_id)
+
+        # 5. Calculate speed/derivatives
+        if speed:
+            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="angles")
+
+        # 6. Handle missing animals based on quality data
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+
+        return tab
+    
+
+    def get_angles_at_key_old(
     self,
     key: str,
     quality: table_dict = None,
