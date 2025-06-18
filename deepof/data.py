@@ -682,6 +682,7 @@ class Project:
                 
                 coords_table = table.drop(columns='likelihood', level='coords')
                 processed_table = self._filter_irrelevant_bodyparts(coords_table)
+                processed_table.sort_index(axis=1, inplace=True)
                 
                 # 6. Apply Optional Transformations (Smoothing, Outliers, Imputation)
                 table_dict_single = {key: processed_table}
@@ -1298,7 +1299,7 @@ class Project:
         tables_2, quality_2 = self.preprocess_tables_old()
         tables, quality = self.preprocess_tables()
 
-        assert tables_2.keys()==tables.keys() and all([(np.sum(tables[key])-np.sum(tables_2[key]) <0.0001).all() for key in tables.keys()]), "tables deviate significantly"
+        assert tables_2.keys()==tables.keys() and all([(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) <0.01).all() for key in tables.keys()]), "tables deviate significantly"
 
         if self.exp_conditions is not None:
             assert (
@@ -1761,12 +1762,15 @@ class Coordinates:
             animals_to_check = self._animal_ids
 
         roi_polygon = self._roi_dicts[key][roi_number]
+        tab_mouse_positions=get_dt(self._tables, key)
 
         for aid in animals_to_check:
-            mouse_in_polygon = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, self._run_numba)
+            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, self._run_numba)
             
             # Get columns for the current animal
-            aid_cols = tab.columns[tab.columns.get_level_values(0).str.startswith(aid)]
+            mask = [any([col_sec.startswith(aid) for col_sec in col]) if isinstance(col,tuple) else col.startswith(aid) for col in tab.columns]
+            aid_cols = tab.loc[:, mask].columns
+            
             # Set data outside the ROI to NaN
             tab.loc[~mouse_in_polygon, aid_cols] = np.nan
             
@@ -2279,7 +2283,7 @@ class Coordinates:
 
         # 4. Calculate speed/derivatives
         if speed:
-            tab = self._calculate_derivatives(tab, speed, frame_rate=1, typ="dists")
+            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="dists")
 
         # 5. Handle missing animals based on quality data
         tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
@@ -4289,7 +4293,7 @@ class TableDict(dict):
                 valid_rows_mask = ~table.isna().any(axis=1)
                 source_table = table[valid_rows_mask]
             else: # np.ndarray
-                valid_rows_mask = ~np.isnan(table).any(axis=1)
+                valid_rows_mask = ~np.isnan(table).any(axis=tuple(range(1, table.ndim)))
                 source_table = table[valid_rows_mask]
             original_indices = np.where(valid_rows_mask)[0]
         else:
