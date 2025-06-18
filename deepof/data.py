@@ -61,7 +61,7 @@ import shutil
 import warnings
 from shutil import rmtree
 from time import time
-from typing import Any, Dict, List, NewType, Tuple, Union
+from typing import Any, Dict, List, NewType, Tuple, Union, Optional
 
 import networkx as nx
 import numpy as np
@@ -4051,8 +4051,134 @@ class TableDict(dict):
 
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
+    def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:
+        """
+        Retrieves the main data table and an optional edge data table for a given key.
+        
+        This helper standardizes the data retrieval, always returning a tuple of
+        (main_table, edge_table), where edge_table can be None.
+        """
+        raw_data = get_dt(self, key)
+        if isinstance(raw_data, tuple) and len(raw_data) > 0:
+            return raw_data[0], raw_data[1] if len(raw_data) > 1 else None
+        return raw_data, None
 
-    def sample_windows_from_data(self, time_bin_info: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
+    def _get_sample_indices(self, table: Union[np.ndarray, pd.DataFrame], n_windows: int, no_nans: bool) -> np.ndarray:
+        """
+        Generates a contiguous block of sample indices for a single table.
+        
+        If no_nans is True, it first filters out rows containing NaNs before sampling.
+        The returned indices are always relative to the original, unfiltered table.
+        """
+        if no_nans:
+            if isinstance(table, pd.DataFrame):
+                valid_rows_mask = ~table.isna().any(axis=1)
+                source_table = table[valid_rows_mask]
+            else: # np.ndarray
+                valid_rows_mask = ~np.isnan(table).any(axis=1)
+                source_table = table[valid_rows_mask]
+            original_indices = np.where(valid_rows_mask)[0]
+        else:
+            source_table = table
+            original_indices = np.arange(len(table))
+
+        # Ensure we don't sample more windows than available
+        n_windows_to_sample = min(n_windows, len(source_table))
+
+        # Determine the last possible start position
+        max_start = len(source_table) - n_windows_to_sample
+        
+        # Select a random start position
+        start = np.random.randint(low=0, high=max(1, max_start + 1))
+        end = start + n_windows_to_sample
+
+        # Map the relative slice back to the original table's indices
+        return original_indices[start:end]
+
+    def _slice_data(self, data: Union[np.ndarray, pd.DataFrame], indices: np.ndarray) -> Union[np.ndarray, pd.DataFrame]:
+        """Slices a numpy array or pandas DataFrame using the provided indices."""
+        if isinstance(data, pd.DataFrame):
+            return data.iloc[indices]
+        return data[indices]
+
+    def _get_edge_slice(self, 
+                        edge_table: Optional[Union[np.ndarray, pd.DataFrame]],
+                        sampled_main_table: Union[np.ndarray, pd.DataFrame], 
+                        indices: np.ndarray) -> Union[np.ndarray, pd.DataFrame]:
+        """
+        Gets the corresponding slice from the edge table or creates a zero-filled
+        placeholder if the edge table does not exist.
+        """
+        if edge_table is not None:
+            return self._slice_data(edge_table, indices)
+        
+        # Create a zero-filled placeholder with the same shape and type
+        zeros = np.zeros_like(sampled_main_table)
+        if isinstance(sampled_main_table, pd.DataFrame):
+            return pd.DataFrame(zeros, columns=sampled_main_table.columns, index=sampled_main_table.index)
+        return zeros
+
+
+    def sample_windows_from_data(self,
+                                 time_bin_info: Dict[str, np.ndarray] = None,
+                                 N_windows_tab: int = 10000,
+                                 return_edges: bool = False,
+                                 no_nans: bool = False) -> Union[Tuple[np.ndarray, Dict], Tuple[np.ndarray, np.ndarray, Dict]]:
+        """
+        Samples a set of windows from data entries, enhancing readability and reducing complexity.
+
+        Args:
+            time_bin_info (dict, optional): Pre-defined indices to sample for each key. 
+                                            If provided, sampling logic is bypassed. Defaults to None.
+            N_windows_tab (int): Max number of windows to sample from each recording if time_bin_info is not given.
+            return_edges (bool): If True, returns a second dataset for edges.
+            no_nans (bool): If True and time_bin_info is not given, only samples from rows without NaNs.
+                            Note: This may result in non-contiguous original indices.
+
+        Returns:
+            - np.array: The concatenated main dataset (X_data).
+            - np.array: The concatenated edge dataset (a_data), if return_edges is True.
+            - dict: A dictionary with the sampled indices for each key (time_bin_info).
+        """
+        if time_bin_info is None:
+            time_bin_info = {}
+
+        X_data_list, a_data_list = [], []
+        output_time_bin_info = {}
+
+        # Determine if we should use provided indices or generate new ones.
+        use_provided_indices = time_bin_info and set(self.keys()).issubset(time_bin_info.keys())
+        
+        for key in self.keys():
+            main_table, edge_table = self._get_data_tables(key)
+
+            if use_provided_indices:
+                indices = time_bin_info[key]
+            else:
+                indices = self._get_sample_indices(main_table, N_windows_tab, no_nans)
+            
+            output_time_bin_info[key] = indices
+
+            # Slice the main data table and append to our list
+            sampled_x = self._slice_data(main_table, indices)
+            X_data_list.append(sampled_x)
+            
+            # Handle the edge data if requested
+            if return_edges:
+                sampled_a = self._get_edge_slice(edge_table, sampled_x, indices)
+                a_data_list.append(sampled_a)
+
+        # Concatenate all the pieces into final numpy arrays
+        X_data = pd.concat(X_data_list).values if isinstance(X_data_list[0], pd.DataFrame) else np.concatenate(X_data_list, axis=0)
+
+        if return_edges:
+            a_data = pd.concat(a_data_list).values if isinstance(a_data_list[0], pd.DataFrame) else np.concatenate(a_data_list, axis=0)
+            return X_data, a_data, output_time_bin_info
+        
+        return X_data, output_time_bin_info
+    
+
+    def sample_windows_from_data_old(self, time_bin_info: dict={}, N_windows_tab: int=10000, return_edges: bool=False, no_nans: bool=False):
         """
         Sample a set of windows / rows from all entries of table dict to avoid breaking memory.
 
