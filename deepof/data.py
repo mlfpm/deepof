@@ -1558,11 +1558,22 @@ class Coordinates:
             
         return tab
         
-    def _select_animal_data(self, tab: pd.DataFrame, selected_id: str) -> pd.DataFrame:
+    def _select_animal_data(self, tab: pd.DataFrame, selected_ids: Union[str,list]) -> pd.DataFrame:
         """Filters the DataFrame for a single animal if selected_id is provided."""
-        if selected_id:
-            return tab.loc[:, deepof.utils.filter_columns(tab.columns, selected_id)]
-        return tab
+        if isinstance(selected_ids,str):
+            selected_ids=[selected_ids]
+        
+        if selected_ids:
+            
+            # Create table from all selected animal ids
+            tab_out = pd.DataFrame()
+            for id in selected_ids:
+                tab_id=tab.loc[:, deepof.utils.filter_columns(tab.columns, id)]
+                tab_out = pd.concat([tab_out, tab_id], axis=1)
+        else:
+            tab_out = tab
+
+        return tab_out
 
     def _transform_to_polar(self, tab: pd.DataFrame, scale: np.array) -> Tuple[pd.DataFrame, tuple]:
         """Converts coordinates to polar if requested."""
@@ -2405,6 +2416,14 @@ class Coordinates:
 
             for key in self._areas.keys():
 
+                tab2 = self.get_areas_at_key_old(
+                    key=key, 
+                    speed = speed,
+                    selected_id = selected_id,
+                    roi_number = roi_number,
+                    animals_in_roi = animals_in_roi,
+                )
+
                 tab = self.get_areas_at_key(
                     key=key, 
                     speed = speed,
@@ -2412,6 +2431,9 @@ class Coordinates:
                     roi_number = roi_number,
                     animals_in_roi = animals_in_roi,
                 )
+
+                assert tab.equals(tab2), "Areas mismatch!"
+
 
                 # save paths for modified tables
                 table_path = os.path.join(self._project_path, self._project_name, 'Tables',key, key + '_' + file_name)
@@ -2437,6 +2459,55 @@ class Coordinates:
     
 
     def get_areas_at_key(
+        self,
+        key: str,
+        quality: table_dict = None,
+        speed: int = 0,
+        selected_id: str = "all",
+        roi_number: int = None,
+        animals_in_roi: str = None,
+        ) -> table_dict:
+        """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
+
+        Args:
+            key (str): key for requested distance
+            quality: (table_dict): Quality information for current data Frame
+            speed (int): The derivative to use for speed.
+            selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
+            roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+
+        Returns:
+            tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
+        """
+
+        # 1. Load data and perform initial validation
+        tab, quality = self._load_and_prepare_data(key, quality, data=self._areas)
+        self._validate_inputs(tab, key, None, None, roi_number)
+
+        # 2. Adjust ids
+        if selected_id == "all":
+            selected_ids = self._animal_ids
+        else:
+            selected_ids = [selected_id]
+
+        # 3. Apply ROI filtering (before coordinate transformations)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+
+        # 4. Select a single animal if specified
+        tab = self._select_animal_data(tab, selected_ids)
+
+        # 5. Calculate speed/derivatives
+        if speed:
+            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="areas")
+
+        # 6. Handle missing animals based on quality data
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+    
+        return tab
+
+
+    def get_areas_at_key_old(
         self,
         key: str,
         quality: table_dict = None,
