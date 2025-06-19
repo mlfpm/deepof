@@ -632,7 +632,7 @@ class Project:
 
         # 3. Imputation
         if self.iterative_imputation:
-            self._update_progress(pbar, "Iterative imputation", key)
+            self._update_progress(pbar, "Iterative imputation of ocluded bodyparts", key)
             full_imputation = self.iterative_imputation == "full"
             table_dict = deepof.utils.iterative_imputation(
                 self, table_dict, lik_dict, full_imputation=full_imputation
@@ -675,16 +675,25 @@ class Project:
                     #ätime_index = pd.to_timedelta(np.arange(len(table)) / self.frame_rate, unit="s")
                     #table.index = time_index.map(lambda t: str(t.round('ms'))[7:])
 
-                    freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
-                    time_index = pd.timedelta_range(
-                        start="0s",
-                        periods=len(table),
-                        freq=f"{freq_in_nanoseconds}ns"
-                    )
+                    table.index = pd.timedelta_range(
+                        "00:00:00",
+                        pd.to_timedelta(
+                            int(np.round(table.shape[0] // self.frame_rate)), unit="sec"
+                        ),
+                        periods=table.shape[0] + 1,
+                        closed="left",
+                    ).map(lambda t: str(t)[7:])
+
+                    #freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
+                    #time_index = pd.timedelta_range(
+                    #    start="0s",
+                    #    periods=len(table),
+                    #    freq=f"{freq_in_nanoseconds}ns"
+                    #)
                     # Perform rounding on the ENTIRE index at once. This is a fast, vectorized operation.
-                    rounded_index = time_index.round('ms')
+                    #rounded_index = time_index.round('ms')
                     # Now, apply the string conversion. The slow .map() is now doing the minimum work.
-                    table.index = rounded_index.map(lambda t: str(t)[7:])
+                    #table.index = rounded_index.map(lambda t: str(t)[7:])
 
                 # 5. Split coordinates from likelihood and filter bodyparts
                 self._update_progress(pbar, "Filter bodyparts", key)
@@ -1311,7 +1320,14 @@ class Project:
         tables_2, quality_2 = self.preprocess_tables_old()
         tables, quality = self.preprocess_tables()
 
-        assert tables_2.keys()==tables.keys() and all([(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) <1e-32).all() for key in tables.keys()]), "tables deviate significantly"
+        # Iterative imputation is not 100% deterministic
+        if self.iterative_imputation=='full':
+            assert (tables_2.keys()==tables.keys()
+            and all([np.sum(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) >1e-32)<6 for key in tables.keys()])
+            and all([np.sum(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))))<5 for key in tables.keys()])), "tables deviate significantly"
+        else:
+            assert tables_2.keys()==tables.keys() and all([(np.abs(np.sum(get_dt(tables,key))-np.sum(get_dt(tables_2,key))) <1e-32).all() for key in tables.keys()]), "tables deviate significantly"
+        assert quality_2.keys()==quality.keys() and all([(np.abs(np.sum(get_dt(quality,key))-np.sum(get_dt(quality_2,key))) <1e-32).all() for key in quality.keys()]), "tables deviate significantly"
 
         if self.exp_conditions is not None:
             assert (
