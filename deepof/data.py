@@ -2584,10 +2584,10 @@ class Coordinates:
             def load_coords():
                 try:
                     return self.get_coords(center=center, align=align, return_path=self._very_large_project)
-                except AssertionError:
+                except ValueError:
                     try:
                         return self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
-                    except AssertionError:
+                    except ValueError:
                         return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
 
             
