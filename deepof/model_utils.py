@@ -1229,9 +1229,7 @@ def embedding_model_fitting(
         # Load data
         preprocessed_train, preprocessed_validation= preprocessed_object
         
-        X_train_2, a_train_2, _ = preprocessed_train.sample_windows_from_data_old(time_bin_info=bin_info, return_edges=True)
         X_train, a_train, _ = preprocessed_train.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
-        assert (X_train_2==X_train).all() and (a_train_2==a_train).all()
         X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
 
 
