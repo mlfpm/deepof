@@ -2532,10 +2532,6 @@ class Coordinates:
         self,
         center: str = "Center",
         align: str = "Spine_1",
-        video_output: bool = False,
-        frame_limit: int = np.inf,
-        debug: bool = False,
-        n_jobs: int = 1,
     ) -> table_dict:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
@@ -2698,17 +2694,6 @@ class Coordinates:
 
         del features_dict, dists, speeds, coords, raw_coords
 
-        if video_output:  # pragma: no cover
-
-            deepof.annotation_utils.tagged_video_output(
-                self,
-                tag_dict,
-                video_output=video_output,
-                frame_limit=frame_limit,
-                debug=debug,
-                n_jobs=n_jobs,
-                params=params,
-            )
         supervised_annotation_instance = TableDict(
             tag_dict,
             typ="supervised",
