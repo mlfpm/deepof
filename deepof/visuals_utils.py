@@ -10,7 +10,7 @@ import re
 import time
 import warnings
 import itertools
-from typing import Any, List, NewType, Tuple, Union, Optional
+from typing import Any, List, NewType, Tuple, Union, Optional, NamedTuple
 from tqdm import tqdm
 import cv2
 import matplotlib.pyplot as plt
@@ -612,237 +612,287 @@ def cohend_effect_size(d: float):  # pragma: no cover
     else:
         return 0
 
+class _BinningResult(NamedTuple):
+    """A structured result from a binning strategy."""
+    bin_info: Any
+    start_too_late: dict[str, bool]
+    end_too_late: dict[str, bool]
+    pre_start_warnings: dict[str, str]
+    bin_size_frames: Optional[int] = None
+
+
+def _get_bins_from_precomputed(
+    precomputed_bins: np.ndarray, table_lengths: dict[str, int]
+) -> _BinningResult:
+    """Strategy for when precomputed bins are provided."""
+    bin_info = {}
+    end_too_late = {key: False for key in table_lengths}
+
+    for key, length in table_lengths.items():
+        arr = np.full(length, False, dtype=bool)
+        effective_len = min(length, len(precomputed_bins))
+        arr[:effective_len] = precomputed_bins[:effective_len]
+        bin_info[key] = np.where(arr)[0]
+
+        if len(precomputed_bins) > length:
+            end_too_late[key] = True
+
+    return _BinningResult(bin_info, {}, end_too_late, {})
+
+
+def _get_bins_from_integers(
+    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+) -> _BinningResult:
+    """Strategy for when bin size/index are given as integers."""
+    bin_size_frames = int(round(bin_size * frame_rate))
+    if bin_size_frames <= 0:
+        raise ValueError("bin_size must result in a frame count greater than 0.")
+
+    bin_info = {}
+    start_too_late = {key: False for key in table_lengths}
+    end_too_late = {key: False for key in table_lengths}
+
+    for key, length in table_lengths.items():
+        start_frame = bin_size_frames * bin_index
+        end_frame = start_frame + bin_size_frames
+
+        if start_frame >= length:
+            start_too_late[key] = True
+        if end_frame > length:
+            end_too_late[key] = True
+
+        bin_start = min(length, start_frame)
+        bin_end = min(length, end_frame)
+        bin_info[key] = np.arange(bin_start, bin_end)
+
+    return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
+
+
+def _get_bins_from_strings(
+    bin_size_str: str, bin_index_str: str, table_lengths: dict[str, int],
+    start_times: dict[str, str], frame_rate: float
+) -> _BinningResult:
+    """Strategy for when bin size/index are given as time strings."""
+    bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
+    if bin_size_frames <= 0:
+        raise ValueError("bin_size string must represent a duration > 0.")
+
+    bin_info = {}
+    start_too_late = {key: False for key in table_lengths}
+    end_too_late = {key: False for key in table_lengths}
+    pre_start_warnings = {}
+
+    bin_index_sec = time_to_seconds(bin_index_str)
+
+    for key, length in table_lengths.items():
+        exp_start_sec = time_to_seconds(start_times[key])
+        start_offset_frames = int(round((bin_index_sec - exp_start_sec) * frame_rate))
+
+        if start_offset_frames < 0:
+            truncated_len_sec = (start_offset_frames + bin_size_frames) / frame_rate
+            pre_start_warnings[key] = seconds_to_time(max(0, truncated_len_sec))
+        
+        if start_offset_frames >= length:
+            start_too_late[key] = True
+        
+        bin_start = np.clip(start_offset_frames, 0, length)
+        bin_end = np.clip(start_offset_frames + bin_size_frames, 0, length)
+        
+        if start_offset_frames + bin_size_frames > length:
+            end_too_late[key] = True
+
+        bin_info[key] = np.arange(bin_start, bin_end)
+
+    return _BinningResult(bin_info, start_too_late, end_too_late, pre_start_warnings, bin_size_frames)
+
+
+def _get_full_range_bins(table_lengths: dict[str, int]) -> _BinningResult:
+    """Strategy to use the full time range for each experiment."""
+    bin_info = {key: np.arange(length) for key, length in table_lengths.items()}
+    return _BinningResult(bin_info, {}, {}, {})
+
+
+def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
+    """Downsamples bin indices if they exceed the maximum allowed samples."""
+    downsampled_info = {}
+    downsampled_at_all = False
+    
+    for key, indices in bin_info.items():
+        full_length = len(indices)
+        if full_length > samples_max:
+            downsampled_at_all = True
+            if down_sample:
+                selected_indices = np.linspace(0, full_length - 1, samples_max, dtype=int)
+            else:
+                selected_indices = np.arange(samples_max)
+            downsampled_info[key] = indices[selected_indices]
+        else:
+            downsampled_info[key] = indices
+
+    if downsampled_at_all:
+        print(
+            "\033[33m\n"
+            f"Selected range exceeds {samples_max} samples and has been "
+            f"{'downsampled' if down_sample else 'cut'}. "
+            "To disable this, increase 'samples_max' or set 'down_sample=False'."
+            "\033[0m"
+        )
+
+    return downsampled_info
+
+
+def _validate_and_warn(
+    result: Any,
+    table_lengths: dict[str, int],
+    frame_rate: float,
+    bin_size_orig: Union[int, str],
+):
+    """Handles all final validation checks and user warnings."""
+    if result.pre_start_warnings:
+        warn_str = ", ".join(f"{k}: {v}" for k, v in result.pre_start_warnings.items())
+        warnings.warn(
+            "\033[38;5;208m\n"
+            "Chosen time range starts before the data time axis begins in at least "
+            f"one experiment. Truncated bin lengths are: {warn_str}"
+            "\033[0m"
+        )
+
+    for key, is_late in result.start_too_late.items():
+        if is_late:
+            max_time = seconds_to_time(table_lengths[key] / frame_rate, False)
+            max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) -1
+            raise ValueError(
+                f"[Error in {key}]: bin_index is out of range. "
+                f"It must be less than {max_time} or index < {max_index} for a "
+                f"bin_size of {bin_size_orig}."
+            )
+
+    warned_once = False
+    for key, is_truncated in result.end_too_late.items():
+        if is_truncated and not warned_once:
+            truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
+            message = (
+                f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
+                f"Bin was truncated to {truncated_len}."
+            )
+            # Add helpful suggestion only if applicable
+            if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
+                max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
+                max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
+                message += (
+                    "\033[38;5;208m\n"
+                    f"\nFor full bins, choose start time <= {max_start_time} or "
+                    f"index <= {max_index} for a bin_size of {bin_size_orig}."
+                    "\033[0m"
+                )
+            warnings.warn(message)
+            warned_once = True
+
 
 def _preprocess_time_bins(
     coordinates: coordinates,
-    bin_size: Union[int, str],
-    bin_index: Union[int, str],
-    precomputed_bins: np.ndarray = None,
-    tab_dict_for_binning: table_dict = None,
-    experiment_id: str = None,
-    samples_max: str = 20000,
+    bin_size: Optional[Union[int, str]] = None,
+    bin_index: Optional[Union[int, str]] = None,
+    precomputed_bins: Optional[np.ndarray] = None,
+    tab_dict_for_binning: Optional[table_dict] = None,
+    experiment_id: Optional[str] = None,
+    samples_max: int = 20000,
     down_sample: bool = True,
 ):
-    """Return a heatmap of the movement of a specific bodypart in the arena.
+    """
+    Preprocesses various time-bin formats into a consistent dictionary of indices.
 
-    If more than one bodypart is passed, it returns one subplot for each.
+    This function determines the correct indices to use for time-based analysis
+    based on one of several possible user inputs (e.g., precomputed arrays,
+    integer-based bins, or time-string based bins).
 
     Args:
-        coordinates (coordinates): deepOF project where the data is stored.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-        tab_dict_for_binning (table_dict): table_dict that will be used as reference for maximum allowed table lengths. if None, basic table lengths from coordinates are used. 
-        experiment_id (str): id of the experiment of time bins should
-        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        down_sample (bool): Use downsampling to get samples_max samples (if True). Uses cutting until sample of number samples_max if False.
+        coordinates: deepOF project object containing data and metadata.
+        bin_size: Bin size for time filtering. Can be an integer (seconds) or a
+                  time string ('HH:MM:SS.sss').
+        bin_index: Start of the bin. Can be an integer index or a time string
+                   ('HH:MM:SS.sss') for the absolute start time.
+        precomputed_bins: A pre-calculated boolean or index array. If provided,
+                          `bin_size` and `bin_index` are ignored.
+        tab_dict_for_binning: Optional table dictionary to use as a reference for
+                              video lengths. Defaults to `coordinates`.
+        experiment_id: If specified, processing is limited to this single experiment.
+        samples_max: Maximum number of samples to return per experiment. Data is
+                     downsampled or cut if the selection is larger.
+        down_sample: If True, use uniform downsampling. If False, cut the data
+                     at `samples_max`.
 
     Returns:
-        bin_info (dict): dictionary containing indices to plot for all experiments
-    """
+        A dictionary mapping each experiment ID to a numpy array of frame indices.
 
-    # warn in case of conflicting inputs
-    if precomputed_bins is not None and any(
-        [bin_index is not None, bin_size is not None]
-    ):
-        warning_message = (
+    Raises:
+        ValueError: If inputs are invalid or logically inconsistent (e.g.,
+                    bin_size=0, or bin_index is out of bounds).
+    """
+    # --- 1. Initial Setup and Data Preparation ---
+    if precomputed_bins is not None and (bin_size is not None or bin_index is not None):
+        warnings.warn(
             "\033[38;5;208m\n"
-            "Warning! If precomputed_bins is given, inputs bin_index and bin_size get ignored!"
+            "precomputed_bins is provided. Ignoring bin_size and bin_index."
             "\033[0m"
         )
-        warnings.warn(warning_message)
-    # init outputs
-    bin_size_int = None
-    bin_info = {}
-    # dictionary to contain warnings for start time truncations (yes, I'll refactor this when I have some spare time)
-  
 
-    # get start and end times for each table
     start_times = coordinates.get_start_times()
-    table_lengths = {}
-    if tab_dict_for_binning is None:
-        table_lengths = coordinates.get_table_lengths()
+    if tab_dict_for_binning:
+        table_lengths = {
+            k: int(get_dt(tab_dict_for_binning, k, only_metainfo=True)['shape'][0])
+            for k in tab_dict_for_binning
+        }
     else:
-        for key in tab_dict_for_binning.keys():
-            table_lengths[key]=int(get_dt(tab_dict_for_binning,key,only_metainfo=True)['shape'][0])
+        table_lengths = coordinates.get_table_lengths()
 
-    #init specific warnings
-    warn_start_time = {}
-    start_too_late_flag = dict.fromkeys(table_lengths,False)
-    end_too_late_flag = dict.fromkeys(table_lengths,False)
-
-    # if a specific experiment is given, calculate time bin info only for this experiment
-    if experiment_id is not None:
+    if experiment_id:
+        if experiment_id not in table_lengths:
+            raise KeyError(f"Experiment ID '{experiment_id}' not found.")
         start_times = {experiment_id: start_times[experiment_id]}
         table_lengths = {experiment_id: table_lengths[experiment_id]}
 
-    pattern = r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,12})?$"
+    # --- 2. Strategy Selection and Execution ---
+    TIME_STR_PATTERN = r"^\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,12})?$"
+    result = None
 
-
-    # Case 1: Precomputed bins were given
     if precomputed_bins is not None:
-        
-        for key in table_lengths.keys():
-            arr=np.full(table_lengths[key], False, dtype=bool)                     # Create max len boolean array
-            arr[:len(precomputed_bins)] = precomputed_bins[:table_lengths[key]]    # Fill array to max with precomputed bins
-            bin_info[key] = np.where(arr)[0]                                       # Extract position info of True entries
+        result = _get_bins_from_precomputed(precomputed_bins, table_lengths)
 
-            if len(precomputed_bins) > len(arr):
-                end_too_late_flag[key]=True
-
-
-    # Case 2: Integer bins were given
-    elif type(bin_size) is int and type(bin_index) is int:
-
-        bin_size_int = int(np.round(bin_size * coordinates._frame_rate))           # Get integer bin size based on frame rate
-        for key in table_lengths.keys():
-            bin_start = np.min([table_lengths[key],bin_size_int * bin_index])      # Get start and end positions that cannot exceed the table lengths
-            bin_end = np.min([table_lengths[key],bin_size_int * (bin_index + 1)])
-            bin_info[key] = np.arange(bin_start,bin_end,1)                         # Get range between starts and ends
-
-            if bin_size_int * bin_index > table_lengths[key]:
-                start_too_late_flag[key]=True
-            if bin_size_int * (bin_index + 1) > table_lengths[key]:
-                end_too_late_flag[key]=True
-
-
-    # Case 3: Bins given as valid time-string ranges 
-    elif (
-        type(bin_size) is str
-        and type(bin_index) is str
-        and re.match(pattern, bin_size) is not None
-        and re.match(pattern, bin_index) is not None
-    ):
-
-        # calculate bin size as int
-        bin_size_int = int(
-            np.round(time_to_seconds(bin_size) * coordinates._frame_rate)
+    elif isinstance(bin_size, int) and isinstance(bin_index, int):
+        result = _get_bins_from_integers(
+            bin_size, bin_index, table_lengths, coordinates._frame_rate
         )
 
-        # find start and end positions with sampling rate
-        for key in table_lengths:
-            start_time = time_to_seconds(start_times[key])                         # Get start of time vector for specific experiment 
-            bin_index_time = time_to_seconds(bin_index)                            # Convert time string to float representing seconds
-            start_time_adjusted=int(                                               # Get True start sample number
-                np.round((bin_index_time - start_time) * coordinates._frame_rate)
-            )
-            bin_start = np.max([0,start_time_adjusted])                           # Ensure that samples stay within possible range  
-            if bin_start > table_lengths[key]:
-                start_too_late_flag[key]=True
-            bin_start = np.min([table_lengths[key],bin_start])                         
-            bin_end = np.max([0,bin_size_int + start_time_adjusted])
-            if bin_end > table_lengths[key]:
-                end_too_late_flag[key]=True
-            bin_end = np.min([table_lengths[key],bin_end])
-            bin_info[key] = np.arange(bin_start,bin_end,1) 
+    elif (isinstance(bin_size, str) and re.match(TIME_STR_PATTERN, bin_size) and
+          isinstance(bin_index, str) and re.match(TIME_STR_PATTERN, bin_index)):
+        result = _get_bins_from_strings(
+            bin_size, bin_index, table_lengths, start_times, coordinates._frame_rate
+        )
 
-            if start_time_adjusted < 0:                                            # Warn user, if the start-time entered by the user is
-                warn_start_time[key]=seconds_to_time(bin_end-bin_start)            # less than the table start time
+    elif bin_size is None and bin_index is None:
+        result = _get_full_range_bins(table_lengths)
 
-
-
-    # Case 4: If nonsensical input was given, return warning and default bins
-    elif bin_size is not None:
-        # plot short default bin, if user entered bins incorrectly
-
-        warning_message = (
+    else:
+        warnings.warn(
             "\033[38;5;208m\n"
-            "Warning! bin_index or bin_size were given in an incorrect format!\n"
-            "Please use either integers or strings with format HH:MM:SS or HH:MM:SS.SSS ...\n"
-            "Proceed to plot default binning (bin_index = 0, bin_size = 60)!"
-            "\033[0m"
+            "Invalid or mismatched bin_size/bin_index format. "
+            "Expected two integers, or two 'HH:MM:SS' strings. "
+            "Defaulting to a 60-second bin starting at 0.\033[0m"
         )
-        warnings.warn(warning_message)
+        # Recurse with default values for simplicity.
+        return _preprocess_time_bins(
+            coordinates=coordinates, bin_size=60, bin_index=0, 
+            tab_dict_for_binning=tab_dict_for_binning, experiment_id=experiment_id,
+            samples_max=samples_max, down_sample=down_sample
+        )
 
-        bin_info = dict.fromkeys(table_lengths,np.arange(0, int(np.round(60 * coordinates._frame_rate)),1)) 
+    # --- 3. Post-processing: Validation and Downsampling ---
+    _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size)
 
-    # Case 5: No bins are given, so bins are set to the signal length
-    elif precomputed_bins is None and bin_size is None and bin_index is None:
+    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample)
 
-        for key in table_lengths.keys():
-            bin_info[key] = np.arange(0,table_lengths[key],1)
-
-    #Downsample bin_info if necessary
-    info_message=None
-    for key in bin_info.keys():
-        full_length=len(bin_info[key])
-        if full_length>samples_max:
-            if down_sample:
-                selected_indices=np.linspace(0, full_length-1, samples_max).astype(int)
-            else:
-                selected_indices=np.arrange(0,samples_max,1)
-            bin_info[key]=bin_info[key][selected_indices]
-            
-            #I know the info message just needs to be set once, but this does not cause any performance issues and is more readable
-            info_message=(
-                "\033[33m\n"
-                f"Info! The selected range for plotting exceeds the maximum number of {samples_max} samples allowed for plotting!\n"
-                f"To plot the selected full range the plot will be downsampled accordingy by a factor of approx. {int((full_length-1)/samples_max)}.\n"
-                "To avoid this, you can increase the input parameter \"samples_max\", but this also increases computation time."
-                "\033[0m"
-            )
-
-    if info_message:
-        print(info_message)
-
-
-    # Validity checks and warnings for created bins
-    if bin_size is not None and bin_index is not None:
-        # warning messages in case of weird indexing
-        bin_warning = False
-        if warn_start_time:
-            warning_message = (
-                "\033[38;5;208m\n"
-                "Warning! The chosen time range starts before the data time axis starts in at least one data set!\n"
-                f"Therefore, the resulting lengths in the truncated bins are: {warn_start_time}"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
-        
-        for key in table_lengths:
-            if bin_size_int == 0:
-                raise ValueError("Please make sure bin_size is > 0")
-            elif start_too_late_flag[key]:
-                raise ValueError(
-                    "[Error in {}]: Please make sure bin_index is within the time range. i.e < {} or < {} for a bin_size of {}".format(
-                        key,
-                        seconds_to_time(
-                            table_lengths[key] / coordinates._frame_rate, False
-                        ),
-                        int(np.ceil(table_lengths[key] / bin_size_int)),
-                        bin_size,
-                    )
-                )
-            elif end_too_late_flag[key]:
-                if not bin_warning:
-                    truncated_length = seconds_to_time(
-                        (len(bin_info[key])) / coordinates._frame_rate,
-                        False,
-                    )
-                    warning_message = (
-                        "\033[38;5;208m\n"
-                        "[Warning for {}]: The chosen time range exceeds the signal length for at least one data set!\n"
-                        f"Therefore, the chosen bin was truncated to a length of {truncated_length}"
-                        "\033[0m".format(key)
-                    )
-                    if precomputed_bins is None and table_lengths[key] - bin_size_int > 0:
-                        warning_message= (warning_message +
-                            "\n\033[38;5;208mFor full range bins, choose a start time <= {} or a bin index <= {} for a bin_size of {}\033[0m".format(
-                                seconds_to_time(
-                                    (table_lengths[key] - bin_size_int)
-                                    / coordinates._frame_rate,
-                                    False,
-                                ),
-                                int(np.ceil(table_lengths[key] / bin_size_int)) - 2,
-                                bin_size,
-                                )
-                        )
-                            
-                        
-                    warnings.warn(warning_message)
-                    bin_warning = True
-
-    return bin_info
+    return final_bins
 
 
 def _apply_rois_to_bin_info(
