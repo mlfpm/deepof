@@ -10,7 +10,7 @@ import re
 import time
 import warnings
 import itertools
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Tuple, Union, Optional
 from tqdm import tqdm
 import cv2
 import matplotlib.pyplot as plt
@@ -1110,291 +1110,203 @@ def calculate_simple_association(
 ######
 
 
+def _validate_parameter(
+    param_name: str,
+    param_value: Any,
+    valid_options: List[Any],
+    is_list: bool = False,
+    custom_error_if_empty: Optional[str] = None,
+): # pragma: no cover
+    """
+    A generic helper to validate a single parameter against a list of valid options.
+
+    Args:
+        param_name (str): The name of the parameter being checked (for error messages).
+        param_value (Any): The value of the parameter provided by the user.
+        valid_options (List[Any]): The list of allowed values.
+        is_list (bool): If True, checks if param_value is a subset of valid_options.
+                        Otherwise, checks if it is a member of valid_options.
+        custom_error_if_empty (Optional[str]): A specific error to raise if the
+                                               parameter is provided but the list
+                                               of valid options is empty.
+    """
+    if param_value is None:
+        return  # Parameter not provided, no validation needed.
+
+    # If the param is provided but there are no valid options to check against
+    if not valid_options and custom_error_if_empty:
+        raise ValueError(custom_error_if_empty)
+
+    valid_set = set(valid_options)
+    is_valid = False
+    
+    if is_list:
+        # Ensure param_value is a list-like object for set operations
+        value_set = set(
+            [param_value] if isinstance(param_value, str) else param_value
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    else:
+        if param_value in valid_set:
+            is_valid = True
+
+    if not is_valid:
+        # Truncate for readability
+        options_preview = str(valid_options[:5])[1:-1]
+        if len(valid_options) > 5:
+            options_preview += ", ..."
+            
+        raise ValueError(
+            f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+        )
+
+
 #not covered by testing as the only purpose of this function is to throw specific exceptions
 def _check_enum_inputs(
     coordinates: coordinates,
-    supervised_annotations: table_dict = None,
-    soft_counts: table_dict = None,
-    origin: str = None,
-    experiment_ids: list = None,
-    exp_condition: str = None,
-    exp_condition_order: list = None,
-    condition_values: list = None,
-    behaviors: list = None,
-    bodyparts: list = None,
-    animal_id: str = None,
-    center: str = None,
-    visualization: str = None,
-    normative_model: str = None,
-    aggregate_experiments: str = None,
-    colour_by: str = None,
-    roi_number: int = None,
-    animals_in_roi: list = None,
+    supervised_annotations: Optional[table_dict] = None,
+    soft_counts: Optional[table_dict] = None,
+    origin: Optional[str] = None,
+    experiment_ids: Optional[List[str]] = None,
+    exp_condition: Optional[str] = None,
+    exp_condition_order: Optional[List[str]] = None,
+    condition_values: Optional[List[str]] = None,
+    behaviors: Optional[List[str]] = None,
+    bodyparts: Optional[List[str]] = None,
+    animal_id: Optional[str] = None,
+    center: Optional[str] = None,
+    visualization: Optional[str] = None,
+    normative_model: Optional[str] = None,
+    aggregate_experiments: Optional[str] = None,
+    colour_by: Optional[str] = None,
+    roi_number: Optional[int] = None,
+    animals_in_roi: Optional[List[str]] = None,
     roi_mode: str = "mousewise",
-): # pragma: no cover
+):  # pragma: no cover
     """
-    Checks and validates enum-like input parameters for the different plot functions.
+    Checks and validates enum-like input parameters for various plot functions.
+
+    This function acts as a centralized guard to ensure that all categorical
+    and list-based inputs are valid before being used in downstream logic.
 
     Args:
-    coordinates (coordinates): deepof Coordinates object.
-    supervised_annotations (table_dict): Contains all informations regarding supervised annotations. 
-    soft_counts (table_dict): Contains all informations regarding unsupervised annotations. 
-    origin (str): name of the function this function was called from (only applicable in specific cases)
-    experiment_ids (list): list of data set name of the animal to plot.
-    exp_condition (str): Experimental condition to plot.
-    exp_condition_order (list): Order in which to plot experimental conditions.
-    condition_values (list): Experimental condition value to plot.
-    behaviors (list): list of entered animal behaviors.
-    bodyparts (list): list of body parts to plot.
-    animal_id (str): Id of the animal.
-    center (str): Name of the visual marker (i.e. currently only the arena) to which the positions will be centered.
-    visualization (str): visualization mode. Can be either 'networks', or 'heatmaps'.
-    normative_model (str): Name of the cohort to use as controls.
-    aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median).
-    colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster', 'exp_condition', or 'exp_id'.
-    roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-       
-
+        coordinates (Coordinates): deepof Coordinates object.
+        supervised_annotations (Optional[TableDict]): Info on supervised annotations.
+        soft_counts (Optional[TableDict]): Info on unsupervised annotations.
+        origin (Optional[str]): Name of the calling function for context-specific checks.
+        experiment_ids (Optional[List[str]]): List of experiment IDs to plot.
+        exp_condition (Optional[str]): Experimental condition to plot.
+        exp_condition_order (Optional[List[str]]): Order for plotting conditions.
+        condition_values (Optional[List[str]]): Specific condition values to plot.
+        behaviors (Optional[List[str]]): List of animal behaviors to analyze.
+        bodyparts (Optional[List[str]]): List of body parts to plot.
+        animal_id (Optional[str]): ID of a specific animal.
+        center (Optional[str]): Center point for position normalization (e.g., 'arena').
+        visualization (Optional[str]): Visualization mode (e.g., 'networks', 'heatmaps').
+        normative_model (Optional[str]): Cohort to use as a control group.
+        aggregate_experiments (Optional[str]): Method to aggregate embeddings.
+        colour_by (Optional[str]): Hue for coloring embeddings.
+        roi_number (Optional[int]): ROI number to use for filtering.
+        animals_in_roi (Optional[List[str]]): Animals that must be inside the ROI.
+        roi_mode (str): Mode for ROI filtering ('mousewise' or 'behaviorwise').
     """
-    # activate warnings (again, because just putting it at the beginning of the skript
-    # appears to yield inconsitent results)
+    # Activate warnings for immediate user feedback
     warnings.simplefilter("always", UserWarning)
 
-    #fix types
-    if isinstance(experiment_ids, str):
-        experiment_ids=[experiment_ids]
-    if isinstance(exp_condition_order, str):
-        exp_condition_order=[exp_condition_order]
-    if isinstance(condition_values, str):
-        condition_values=[condition_values]
-    if isinstance(behaviors, str):
-        behaviors=[behaviors]
-    if isinstance(bodyparts, str):
-        bodyparts=[bodyparts]
-    if isinstance(animals_in_roi, str):
-        animals_in_roi=[animals_in_roi]
-     
+    # =========================================================================
+    # 1. NORMALIZE INPUTS
+    # Ensure that parameters expecting a list are lists, even if a single string was passed.
+    # =========================================================================
+    def _to_list_if_str(value: Any) -> Any:
+        return [value] if isinstance(value, str) else value
 
-    # Generate lists of possible options for all enum-likes (solution will be improved in the future)
-    if origin == "plot_heatmaps":
-        experiment_id_options_list = ["average"] + os_sorted(
-            list(coordinates._tables.keys())
-        )
-    else:
-        experiment_id_options_list = os_sorted(list(coordinates._tables.keys()))
+    experiment_ids = _to_list_if_str(experiment_ids)
+    exp_condition_order = _to_list_if_str(exp_condition_order)
+    condition_values = _to_list_if_str(condition_values)
+    behaviors = _to_list_if_str(behaviors)
+    bodyparts = _to_list_if_str(bodyparts)
+    animals_in_roi = _to_list_if_str(animals_in_roi)
 
-    #get all possible behaviors from supervised annotations and soft counts
-    behaviors_options_list=[]
-    if supervised_annotations is not None:
-        first_key=list(supervised_annotations.keys())[0]
-        behaviors_options_list=get_dt(supervised_annotations,first_key,only_metainfo=True)['columns']
-    if soft_counts is not None:
-        first_key=list(soft_counts.keys())[0]
-        N_clusters=get_dt(soft_counts,first_key,only_metainfo=True)['num_cols']
-        behaviors_options_list+=["Cluster_"+str(i) for i in range(N_clusters)]
+    # =========================================================================
+    # 2. GENERATE LISTS OF VALID OPTIONS
+    # =========================================================================
+    
+    # --- Dynamically generated options from data ---
+    exp_id_opts = (["average"] if origin == "plot_heatmaps" else []) + \
+                   os_sorted(list(coordinates._tables.keys()))
 
+    behavior_opts = []
+    if supervised_annotations:
+        first_key = list(supervised_annotations.keys())[0]
+        behavior_opts.extend(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
+    if soft_counts:
+        first_key = list(soft_counts.keys())[0]
+        n_clusters = get_dt(soft_counts, first_key, only_metainfo=True)['num_cols']
+        behavior_opts.extend([f"Cluster_{i}" for i in range(n_clusters)])
 
-    if coordinates.get_exp_conditions is not None:
-        exp_condition_options_list = np.unique(
-            np.concatenate(
-                [
-                    condition.columns.values[:]
-                    for condition in coordinates.get_exp_conditions.values()
-                ]
-            )
-        )
-    else:
-        exp_condition_options_list = []
-    if exp_condition is not None and exp_condition in exp_condition_options_list:
-        condition_value_options_list = np.unique(
-            np.concatenate(
-                [
-                    condition[exp_condition].values.astype(str)
-                    for condition in coordinates.get_exp_conditions.values()
-                ]
-            )
-        )
-    else:
-        condition_value_options_list = []
-    if roi_number is not None and coordinates._roi_dicts is not None:    
-        first_key=list(coordinates._roi_dicts.keys())[0]
-        roi_number_options_list=list(coordinates._roi_dicts[first_key].keys())
-    else:
-        roi_number_options_list=[]
+    exp_cond_opts, cond_val_opts = [], []
+    if coordinates.get_exp_conditions:
+        all_conditions = [cond.columns.values for cond in coordinates.get_exp_conditions.values()]
+        exp_cond_opts = np.unique(np.concatenate(all_conditions)).tolist()
+        if exp_condition in exp_cond_opts:
+            all_values = [c[exp_condition].values.astype(str) for c in coordinates.get_exp_conditions.values()]
+            cond_val_opts = np.unique(np.concatenate(all_values)).tolist()
 
-    #get lists of all body parts     
-    bodyparts_options_list = np.unique(
-        np.concatenate(
-            [
-            coordinates._tables[key].columns.levels[0] #read first elements from column headers from table
-            if type(coordinates._tables[key]) != dict   #if table is not a save path
-            else [t[0] for t in get_dt(coordinates._tables,key,only_metainfo=True)['columns']] #otherwise read in saved column headers and then extract first elements
-            for key 
-            in coordinates._tables.keys()
-            ]
-        )
-    )
-    bodyparts_options_list = [
-        item for item in bodyparts_options_list if item not in coordinates._excluded
+    all_bps = []
+    for key, table in coordinates._tables.items():
+        cols = get_dt(coordinates._tables, key, only_metainfo=True)['columns']
+        all_bps.extend([c[0] for c in cols])
+    bodypart_opts = [bp for bp in np.unique(all_bps) if bp not in coordinates._excluded]
+
+    animal_id_opts = coordinates._animal_ids
+    
+    roi_num_opts = []
+    if coordinates._roi_dicts:
+        first_key = list(coordinates._roi_dicts.keys())[0]
+        roi_num_opts = list(coordinates._roi_dicts[first_key].keys())
+
+    # --- Statically defined options ---
+    center_opts = ["arena"]
+    vis_opts = ["networks", "heatmaps"] if origin == "plot_transitions" else ["confusion_matrix", "balanced_accuracy"]
+    agg_exp_opts = ["time on cluster", "mean", "median"]
+    color_by_opts = ["cluster", "exp_condition", "exp_id"]
+    roi_mode_opts = ["mousewise", "behaviorwise"]
+
+    # =========================================================================
+    # 3. CONFIGURE AND RUN VALIDATION CHECKS
+    # Format: (param_name, param_value, valid_options, is_list, custom_error)
+    # =========================================================================
+    validation_checks = [
+        ("experiment_ids", experiment_ids, exp_id_opts, True, None),
+        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!"),
+        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'."),
+        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'."),
+        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model."),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!"),
+        ("bodyparts", bodyparts, bodypart_opts, True, None),
+        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None),
+        ("animal_id", animal_id, animal_id_opts, False, None),
+        ("center", center, center_opts, False, None),
+        ("visualization", visualization, vis_opts, False, None),
+        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None),
+        ("colour_by", colour_by, color_by_opts, False, None),
+        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project."),
+        ("roi_mode", roi_mode, roi_mode_opts, False, None),
     ]
-    animal_id_options_list = coordinates._animal_ids
-    # fixed option lists
-    center_options_list = ["arena"]
-    if origin == "plot_transitions":
-        visualization_options_list = ["networks", "heatmaps"]
-    else:
-        visualization_options_list = ["confusion_matrix", "balanced_accuracy"]
-    aggregate_experiments_options_list = ["time on cluster", "mean", "median"]
-    colour_by_options_list = ["cluster", "exp_condition", "exp_id"]
-    roi_mode_options_list = ["mousewise", "behaviorwise"]
 
+    for name, value, options, is_list, error_msg in validation_checks:
+        _validate_parameter(name, value, options, is_list, error_msg)
 
-    # check if given values are valid. Throw exception and suggest correct values if not
-    if experiment_ids is not None and not experiment_ids == [None] and not set(
-        experiment_ids
-    ).issubset(set(experiment_id_options_list)): 
-        raise ValueError(
-            'Included experiments need to be a subset of the following: {} ... '.format(
-                str(experiment_id_options_list[0:4])[1:-1]
-            )
-        )
-    
-    if exp_condition is not None and exp_condition not in exp_condition_options_list:
-        if len(exp_condition_options_list) > 0:
-            raise ValueError(
-                '"exp_condition" needs to be one of the following: {}'.format(
-                    str(exp_condition_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-        
-    if exp_condition_order is not None and not exp_condition_order == [None] and not set(
-        exp_condition_order
-    ).issubset(set(condition_value_options_list)):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                'One or more conditions in "exp_condition_order" are not part of: {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-        
-    if condition_values is not None and not condition_values == [None] and not set(condition_values).issubset(
-        set(condition_value_options_list)
-    ):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                'One or more condition values in "condition_value(s)" are not part of {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-        
-    if behaviors is not None and not behaviors == [None] and not set(
-        behaviors
-    ).issubset(set(behaviors_options_list)):
-        if len(behaviors_options_list) > 0:
-            raise ValueError(
-                'One or more behaviors are not part of: {}'.format(
-                    str(behaviors_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No supervised annotations or soft counts loaded!")
-        
-    if (
-        normative_model is not None
-        and normative_model not in condition_value_options_list
-    ):
-        if len(condition_value_options_list) > 0:
-            raise ValueError(
-                '"normative_model" needs to be one of the following: {}'.format(
-                    str(condition_value_options_list)[1:-1]
-                )
-            )
-        else:
-            raise ValueError("No experiment conditions loaded!")
-        
-    if bodyparts is not None and not bodyparts == [None] and not set(bodyparts).issubset(
-        set(bodyparts_options_list)
-    ):
-        raise ValueError(
-            'One or more bodyparts in "bodyparts" are not part of: {}'.format(
-                str(bodyparts_options_list)[1:-1]
-            )
-        )
-    
-    if animals_in_roi is not None and not animals_in_roi == [None] and not set(animals_in_roi).issubset(
-        set(animal_id_options_list)
-    ):
-        raise ValueError(
-            'One or more animal_ids in "animal_in_roi" are not part of: {}'.format(
-                str(animal_id_options_list)[1:-1]
-            )
-        )
-    
-    if animal_id is not None and animal_id not in animal_id_options_list:
-        raise ValueError(
-            '"animal_id" needs to be one of the following: {}'.format(
-                str(animal_id_options_list)
-            )
-        )
-    
-    if center is not None and center not in center_options_list:
-        raise ValueError(
-            'For input "center" currently only {} is supported'.format(
-                str(center_options_list)
-            )
-        )
-    
-    if visualization is not None and visualization not in visualization_options_list:
-        raise ValueError(
-            '"visualization" needs to be one of the following: {}'.format(
-                str(visualization_options_list)
-            )
-        )
-    
-    if (
-        aggregate_experiments is not None
-        and aggregate_experiments not in aggregate_experiments_options_list
-    ):
-        raise ValueError(
-            '"aggregate_experiments" needs to be one of the following: {}'.format(
-                str(aggregate_experiments_options_list)
-            )
-        )
-    
-    if colour_by is not None and colour_by not in colour_by_options_list:
-        raise ValueError(
-            '"colour_by" needs to be one of the following: {}'.format(
-                str(colour_by_options_list)
-            )
-        )
-    
-    if roi_number is not None and roi_number not in roi_number_options_list:
-        if len(roi_number_options_list)>0:
-            raise ValueError(
-                'If you want to apply ROIs, "roi_number" needs to be one of the following: {}'.format(
-                    str(roi_number_options_list)
-                )
-            )
-        else:
-            raise ValueError("No regions of interest (ROI)s were defined for this project!\n You can define ROIs during project creation if you have set number_of_rois\n to a number between 1 and 20 during project definition before")
-
-    if roi_mode is not None and roi_mode not in roi_mode_options_list:
-        raise ValueError(
-            '"roi_mode" needs to be one of the following: {}'.format(
-                str(roi_mode_options_list)
-            )
-        )
-    if not roi_mode == "mousewise" and roi_number is None:
+    # =========================================================================
+    # 4. HANDLE SPECIAL CASES AND WARNINGS
+    # =========================================================================
+    if roi_mode != "mousewise" and roi_number is None:
         print(
-        '\033[33mInfo! The input "roi_mode" only has an effect if a ROI is selected by setting "roi_number"!\033[0m'
-        )     
+            '\033[33mInfo! The input "roi_mode" only has an effect if an ROI is '
+            'selected via "roi_number"!\033[0m'
+        )
+
 
 def plot_arena(
     coordinates: coordinates, center: str, color: str, ax: Any, key: str, roi_number: int = None,
