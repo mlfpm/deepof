@@ -35,6 +35,11 @@ import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
 from deepof.config import ROI_COLORS
+from deepof.export_video import (
+    VideoExportConfig,   
+    output_annotated_video,
+    output_videos_per_cluster, 
+)
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -46,8 +51,6 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
-    output_annotated_video,
-    output_videos_per_cluster,
     get_behavior_colors,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
@@ -3225,6 +3228,14 @@ def export_annotated_video(
         roi_number=roi_number,
         roi_mode=roi_mode,
     )
+    # Create video config
+    video_export_config = VideoExportConfig(
+        display_time=display_time,
+        display_counter=display_counter,
+        display_arena=display_arena,
+        display_markers=display_markers,
+        display_mouse_labels=display_mouse_labels,
+    )   
 
     if animals_in_roi is None or roi_mode=="behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -3301,17 +3312,13 @@ def export_annotated_video(
                 frames = frames[0:frame_limit_per_video]
 
         video = output_annotated_video(
-            coordinates,
-            experiment_id,                
-            cur_tab,
-            behaviors,
-            out_path=out_path,
+            coordinates=coordinates,
+            experiment_id=experiment_id,                
+            tab=cur_tab,
+            behaviors=behaviors,
+            config=video_export_config,
             frames=frames,
-            display_time=display_time,
-            display_counter=display_counter,
-            display_arena=display_arena,
-            display_markers=display_markers,
-            display_mouse_labels=display_mouse_labels,
+            out_path=out_path,
         )
         get_beheavior_frames_in_roi._warning_issued = False
 
@@ -3336,10 +3343,7 @@ def export_annotated_video(
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
-            display_time=display_time,
-            display_arena=display_arena,
-            display_markers=display_markers,
-            display_mouse_labels=display_mouse_labels,
+            config=video_export_config,
             roi_mode=roi_mode,
         )
 
