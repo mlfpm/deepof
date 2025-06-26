@@ -12,6 +12,7 @@ import warnings
 import itertools
 from pathlib import Path
 from typing import Any, List, NewType, Tuple, Union, Optional, NamedTuple
+import dataclasses
 from dataclasses import dataclass, field
 from tqdm import tqdm
 import cv2
@@ -66,7 +67,163 @@ class VideoExportProps:
     marker_radius: int = 3
 
 
+def _filter_videos_by_condition(
+    coordinates: coordinates,
+    experiment_ids: List[str],
+    conditions: dict[str, Any],
+) -> List[str]:
+    """Return a list of experiment IDs that match provided conditions."""
+    if not conditions:
+        return experiment_ids
+    all_exp_conditions = coordinates.get_exp_conditions()
+    return [
+        exp_id for exp_id in experiment_ids
+        if all(
+            all_exp_conditions.get(exp_id, {}).get(cond) == state
+            for cond, state in conditions.items()
+        )
+    ]
+
+def _determine_behaviors_to_process(
+    behaviors: Union[str, List[str]],
+    behavior_dict: dict,
+    behavior_names: List[str]
+) -> List[str]:
+    """Determine the final list of behaviors to generate videos for."""
+    if isinstance(behaviors, str):
+        return [behaviors]
+    meta_info = get_dt(behavior_dict, list(behavior_dict.keys())[0], only_metainfo=True)
+    available_behaviors = meta_info.get('columns', behavior_names)
+    if behaviors is None:
+        return available_behaviors
+    return [b for b in behaviors if b in available_behaviors]
+
+def _get_behavior_mask_and_confidence(
+    tab: Union[pd.DataFrame, np.ndarray],
+    behavior: str,
+    behavior_names: List[str]
+) -> Tuple[pd.Series, pd.Series]:
+    """Generates a boolean mask and a confidence series for a given behavior."""
+    if isinstance(tab, np.ndarray):
+        df = pd.DataFrame(tab, columns=behavior_names)
+        mask = (df.idxmax(axis=1) == behavior)
+        confidence = df[behavior]
+    else:
+        df = tab.copy()
+        if df.columns.tolist() != list(behavior_names):
+            df.columns = behavior_names
+        mask = df[behavior] > 0.1
+        confidence = df[behavior]
+    return mask, confidence
+
+
 def output_videos_per_cluster(
+    coordinates: coordinates,
+    exp_conditions: dict,
+    behavior_dict: dict,
+    behaviors: Union[str, list],
+    behavior_names: list,
+    frame_limit_per_video: int = float('inf'),
+    bin_info: dict = None,
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    single_output_resolution: tuple = None,
+    min_confidence: float = 0.0,
+    min_bout_duration: int = None,
+    config: VideoExportConfig = VideoExportConfig(),
+    out_path: str = ".",
+    roi_mode: str = "mousewise",
+):
+    """
+    Generates one consolidated video per behavior, compiled from multiple experiments.
+    """
+    # Define the manual progress bar locally as it's a specific workaround
+    def _loading_basic(current: int, total: int, bar_length: int = 68):
+        if total == 0: return
+        progress = (current + 1) / total
+        filled_length = int(bar_length * progress)
+        arrow = '>' if filled_length < bar_length else ''
+        bar = f"[{'=' * filled_length}{arrow}{' ' * (bar_length - filled_length - len(arrow))}]"
+        percent = f' {progress:.0%}'
+        print(bar + percent, end='\r')
+        if current == total - 1:
+            print()
+
+    output_path = Path(out_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    video_paths = coordinates.get_videos(full_paths=True)
+    frame_rate = coordinates._frame_rate
+
+    exp_ids_to_process = _filter_videos_by_condition(
+        coordinates, list(behavior_dict.keys()), exp_conditions
+    )
+    behaviors_to_process = _determine_behaviors_to_process(behaviors, behavior_dict, behavior_names)
+    
+    cluster_export_config = dataclasses.replace(
+        config, display_behavior_names=False, display_counter=False,
+        display_video_name=True, display_loading_bar=False,
+    )
+
+    for behavior in tqdm(behaviors_to_process, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="video"):
+        
+        video_out_path = output_path / f"Behavior={behavior}_threshold={min_confidence}_{int(time.time())}.mp4"
+        out = cv2.VideoWriter(
+            str(video_out_path), cv2.VideoWriter_fourcc(*"mp4v"),
+            frame_rate, single_output_resolution,
+        )
+
+        try:
+            print("") # Newline to separate tqdm from manual bar
+            
+            total_exps = len(exp_ids_to_process)
+            for i, exp_id in enumerate(exp_ids_to_process):
+                _loading_basic(i, total_exps)
+                
+                cur_tab = get_dt(behavior_dict, exp_id)
+                behavior_mask, confidence = _get_behavior_mask_and_confidence(
+                    cur_tab, behavior, behavior_names
+                )
+
+                confidence_indices = np.ones(len(behavior_mask), dtype=bool)
+                confidence_indices = deepof.utils.filter_short_bouts(
+                    behavior_mask.astype(float), confidence, confidence_indices,
+                    min_confidence, min_bout_duration
+                )
+                
+                frames_passing_confidence = np.where(behavior_mask & confidence_indices)[0]
+
+                if bin_info is not None and roi_number is not None:
+                    behavior_for_roi = behavior if roi_mode == "behaviorwise" else None
+                    frames_in_roi = deepof.visuals_utils.get_behavior_frames_in_roi(
+                        behavior=behavior_for_roi, local_bin_info=bin_info[exp_id],
+                        animal_ids=animals_in_roi,
+                    )
+                    selected_frames = np.intersect1d(
+                        frames_passing_confidence, frames_in_roi, assume_unique=True
+                    )
+                else:
+                    selected_frames = frames_passing_confidence
+                
+                if len(selected_frames) > 0:
+                    cap = cv2.VideoCapture(video_paths[exp_id])
+                    output_annotated_video(
+                        coordinates=coordinates, experiment_id=exp_id, tab=cur_tab,
+                        behaviors=[behavior], config=cluster_export_config,
+                        frames=selected_frames, cap=cap, out=out,
+                        v_width=single_output_resolution[0], v_height=single_output_resolution[1],
+                        frame_limit=frame_limit_per_video, out_path=output_path,
+                    )
+        finally:
+            out.release()
+        
+        clear_output()
+    
+    if hasattr(deepof.visuals_utils.get_behavior_frames_in_roi, '_warning_issued'):
+        deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
+
+
+def output_videos_per_cluster_old(
     coordinates: coordinates,
     exp_conditions: dict,
     behavior_dict: table_dict,
@@ -229,7 +386,7 @@ def output_videos_per_cluster(
                         behavior_in=behaviors[0]
                     else:
                         behavior_in=None
-                    frames=deepof.visuals_utils.get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
+                    frames=deepof.visuals_utils.get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
                 else:
                     frames=bin_info[key]["time"]          
 
@@ -261,7 +418,7 @@ def output_videos_per_cluster(
         out.release()
         #to not flood the output with loading bars
         clear_output()
-    deepof.visuals_utils.get_beheavior_frames_in_roi._warning_issued = False
+    deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
 
 
 def _prepare_behavior_dataframe(

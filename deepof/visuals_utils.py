@@ -1035,7 +1035,7 @@ def get_unsupervised_behaviors_in_roi(
     return cur_unsupervised
 
 
-def get_beheavior_frames_in_roi(
+def get_behavior_frames_in_roi(
     behavior: str,
     local_bin_info: dict,
     animal_ids: Union[str, list],        

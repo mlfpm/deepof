@@ -763,7 +763,7 @@ def compute_transition_matrix_per_condition(
         #Determine load range
         load_range = bin_info[key]["time"]
         if roi_number is not None:
-            load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
 
         #load requested range from current soft counts
         current_sc = get_dt(soft_counts, key, load_range=load_range)
@@ -787,7 +787,7 @@ def compute_transition_matrix_per_condition(
         else:
             transitions_dict[key] = transitions
     # Reset warning
-    deepof.visuals_utils.get_beheavior_frames_in_roi._warning_issued = False
+    deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
 
     # Normalize rows if specified
     if normalize:

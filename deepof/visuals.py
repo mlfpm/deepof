@@ -54,7 +54,7 @@ from deepof.visuals_utils import (
     get_behavior_colors,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
-    get_beheavior_frames_in_roi,
+    get_behavior_frames_in_roi,
     _apply_rois_to_bin_info,
     BGR_to_hex,
     _preprocess_transitions,
@@ -2442,7 +2442,7 @@ def plot_embeddings(
             #get correct section of current embedding 
             current_emb=get_dt(emb_to_plot,key)
             if roi_number is not None:
-                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
+                valid_samples[key]=get_behavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
             else:
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
@@ -2453,7 +2453,7 @@ def plot_embeddings(
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
-        get_beheavior_frames_in_roi._warning_issued = False
+        get_behavior_frames_in_roi._warning_issued = False
                
 
         # Concatenate experiments and align experimental conditions
@@ -2919,8 +2919,8 @@ def animate_skeleton(
         frames = bin_info[experiment_id]["time"]
     else:
         #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_beheavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
-        get_beheavior_frames_in_roi._warning_issued = False
+        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
+        get_behavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
         fig,
@@ -3293,7 +3293,7 @@ def export_annotated_video(
                     print('\033[33mInfo! The first behavior was automatically chosen for ROI application!\033[0m')
             else:
                 behavior_in=None
-            frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
+            frames=get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
         else:
             frames=bin_info[experiment_id]["time"]
         # get current tab and video path
@@ -3320,7 +3320,7 @@ def export_annotated_video(
             frames=frames,
             out_path=out_path,
         )
-        get_beheavior_frames_in_roi._warning_issued = False
+        get_behavior_frames_in_roi._warning_issued = False
 
         return video
 
