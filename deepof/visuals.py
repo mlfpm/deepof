@@ -1664,7 +1664,7 @@ def count_all_events(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         tab = get_dt(tab_dict,key,load_range=load_range)
         
         # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
@@ -1881,7 +1881,7 @@ def plot_associations(
         for key in tab_dict.keys():
             load_range = bin_info[key]["time"]
             if roi_number is not None:
-                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
             tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
             #reformat tab in unsupervised case
             if plot_type=="unsupervised":
