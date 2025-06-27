@@ -978,7 +978,7 @@ def count_transitions(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
             # Create empty tab, in case load range does not contain any valid frames
         if load_range is not None and len(load_range)==0:
             meta_info = get_dt(tab_dict,key,only_metainfo=True)
