@@ -181,6 +181,9 @@ def output_videos_per_cluster(
                 _loading_basic(i, total_exps)
                 
                 cur_tab = get_dt(behavior_dict, exp_id)
+                if type(cur_tab)==np.ndarray:
+                    cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)  
+
                 behavior_mask, confidence = _get_behavior_mask_and_confidence(
                     cur_tab, behavior, behavior_names
                 )
