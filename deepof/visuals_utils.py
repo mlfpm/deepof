@@ -942,6 +942,72 @@ def _apply_rois_to_bin_info(
     return bin_info
 
 
+def _get_mousevise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals are not inside of teh ROI"""
+    
+    # get list of masks for all animals
+    masks = [local_bin_info[aid] for aid in animal_ids]
+    if not masks:
+        return cur_supervised # No animals to filter by, return as is
+    
+    # Fancy numpy operation
+    combined_mask = np.logical_and.reduce(masks)
+    
+    # Apply the combined mask to the entire DataFrame at once.
+    cur_supervised.loc[~combined_mask, :] = np.nan
+    return cur_supervised  
+
+
+
+def _get_behaviorwise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals that take part in each individual behavior are not inside of the ROI"""
+
+    def _get_col_base_name(col: Any) -> str:
+        """Safely gets the first level of a column name, handling MultiIndex."""
+        return col[0] if isinstance(col, tuple) else col
+
+    # 1. Determine which columns are relevant (involve at least one target_id).
+    # This list comprehension is more direct than the original nested loop.
+    valid_cols = {
+        col for col in cur_supervised.columns 
+        if any(_get_col_base_name(col).startswith(animal_id) for animal_id in animal_ids)
+    }
+
+    # 2. Invalidate all columns that do not involve any of the target animals.
+    invalid_cols = cur_supervised.columns.difference(list(valid_cols))
+    if not invalid_cols.empty:
+        cur_supervised[invalid_cols] = np.nan
+
+    if not valid_cols:
+        return cur_supervised # No relevant columns to process further.
+
+    # 3. Apply ROI masks animal by animal, but only to their relevant columns.
+    # We must iterate through all animals in bin_info, not just target_ids.
+    for animal_id, roi_mask in local_bin_info.items():
+        if animal_id == "time":
+            continue
+            
+        # Find which of the valid_cols are associated with the current animal_id
+        cols_for_this_animal = [
+            col for col in valid_cols 
+            if _get_col_base_name(col).startswith(animal_id)
+        ]
+        
+        if cols_for_this_animal:
+            # Apply the specific ROI mask for this animal to its columns.
+            cur_supervised.loc[~roi_mask, cols_for_this_animal] = np.nan
+            
+    return cur_supervised
+    
+
 def get_supervised_behaviors_in_roi(
     cur_supervised: pd.DataFrame,
     local_bin_info: dict,
@@ -959,49 +1025,22 @@ def get_supervised_behaviors_in_roi(
     Returns:
         cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
     """
+    
+    # Check and reformat input
+    if not animal_ids:
+        return cur_supervised  
+    animal_ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids)
+
     cur_supervised=copy.copy(cur_supervised)
 
-    if animal_ids is None or animal_ids=="" or animal_ids==[""]:
-        animal_ids=[""]
-        animal_ids_edited=[""]
-    elif type(animal_ids)==str:
-        animal_ids=[animal_ids]
-        animal_ids_edited=[animal_ids+"_"]
-    elif type(animal_ids)==list:
-        animal_ids_edited=[aid+"_" for aid in animal_ids]
-
-    # Create set of valid columns that contain any animal id
-    valid_cols = set()
-    for col in cur_supervised.columns:
-        level0 = col[0] if isinstance(col, tuple) else col
-        for aid in animal_ids_edited:
-            if not roi_mode == "behaviorwise" or f"{aid}" in level0:
-                valid_cols.add(col)
-                break  # skip checking for more ids in column
-
-    # Apply ROIs to each behavior for each mouse. Multiple animal behaviors require all involved animals to be in ROI
-    for aid_2 in local_bin_info.keys():
-        if aid_2 == "time":
-            continue #skip "time" array that contains time binning info
-
-        aid_2_cols = []
-        if roi_mode == "behaviorwise":
-            for col in valid_cols:
-                level0 = col[0] if isinstance(col, tuple) else col
-                if aid_2 in level0:
-                    aid_2_cols.append(col)
-        else:
-            if aid_2 in animal_ids:
-               aid_2_cols=list(valid_cols) 
-        # Apply ROI filter if there are columns to process
-        if aid_2_cols:
-            cur_supervised.loc[~local_bin_info[aid_2], aid_2_cols] = np.nan
-
-    # Set all behavior columns to NaN in which none of the requested animals was involved
-    invalid_cols = cur_supervised.columns.difference(valid_cols)
-    cur_supervised[invalid_cols] = np.nan
+    # Filter 
+    if roi_mode=="mousewise":
+        cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    elif roi_mode == "behaviorwise":
+        cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
             
     return cur_supervised
+
 
 def get_unsupervised_behaviors_in_roi(
         cur_unsupervised: np.array,
