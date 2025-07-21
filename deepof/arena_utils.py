@@ -740,7 +740,7 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 
     """
     # Detect the main ellipse containing the arena
-    ellipse_params = cv2.fitEllipse(np.array(polygon))
+    ellipse_params = cv2.fitEllipse(np.array(polygon).astype(np.float32))
 
     # Parameters to return
     center_coordinates = tuple([int(i) for i in ellipse_params[0]])
@@ -1345,7 +1345,7 @@ def retrieve_corners_from_image(
         norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
 
     # fit ellipse and extract corner points from fitted ellipse (for smoothing)
-    if "circular" in arena_type:
+    if "circular" in arena_type and corners is not None:
         arena_ellipse = fit_ellipse_to_polygon(corners)
         corners = extract_corners_from_arena(arena_ellipse)
 

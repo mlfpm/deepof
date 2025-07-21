@@ -479,7 +479,6 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
 
 @settings(deadline=None)
 @given(
-
     animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3),
     bins = st.lists(
         st.integers(min_value=0, max_value=99),
