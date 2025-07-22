@@ -19,7 +19,7 @@ from scipy.spatial.distance import cdist
 from shapely.geometry import Point, Polygon
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, IMG_H_MAX, IMG_W_MAX
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.data
 import deepof.utils
@@ -749,9 +749,12 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 
     return center_coordinates, axes_length, ellipse_angle
 
-def get_first_length(arena_corners):
+def get_first_length(arena_corners, w_ratio, h_ratio):
     """gets the length of the first edge in arena_corners"""
-    return math.dist(arena_corners[0], arena_corners[1])
+    return math.dist(
+            (arena_corners[0][0]*w_ratio, arena_corners[0][1]*h_ratio),
+            (arena_corners[1][0]*w_ratio, arena_corners[1][1]*h_ratio)
+        )
 
 
 def arena_parameter_extraction(
@@ -1207,6 +1210,24 @@ def retrieve_corners_from_image(
     # Resize frame to a standard size
     frame = frame.copy() 
 
+    h_ratio = 1
+    w_ratio = 1
+    if frame.shape[0] > IMG_H_MAX  or frame.shape[1] > IMG_W_MAX:
+
+        if frame.shape[0]/IMG_H_MAX > frame.shape[1]/IMG_W_MAX:
+            h_ratio = frame.shape[0]/IMG_H_MAX
+            img_w_max = int(frame.shape[1]/h_ratio)
+            w_ratio = frame.shape[1]/img_w_max
+            frame=cv2.resize(frame, (img_w_max,IMG_H_MAX))
+
+        else:
+            w_ratio = frame.shape[1]/IMG_W_MAX
+            img_h_max = int(frame.shape[0]/w_ratio)
+            h_ratio = frame.shape[0]/img_h_max
+            frame=cv2.resize(frame, (IMG_W_MAX,img_h_max))
+
+
+
     options = ["Manual", "Inner", "Outer"]
     
     arena_available = False
@@ -1263,8 +1284,12 @@ def retrieve_corners_from_image(
 
             if len(corners) > 1 and "polygonal" in arena_type:
                 if norm_dist is None:
-                    norm_dist=get_first_length(corners)
-                cur_dist=math.dist(corners[-2], corners[-1])
+                    norm_dist=get_first_length(corners, w_ratio, h_ratio)
+                #last distance in unscaled pixles
+                cur_dist=math.dist(
+                    (corners[-2][0]*w_ratio, corners[-2][1]*h_ratio),
+                    (corners[-1][0]*w_ratio, corners[-1][1]*h_ratio)
+                )            
                 text="last edge in mm: " + str(np.round((cur_dist*(arena_dims/norm_dist))*100)/100)
                 cv2.putText(
                     frame_copy,
@@ -1340,14 +1365,19 @@ def retrieve_corners_from_image(
     cv2.destroyAllWindows()
     cv2.waitKey(1)
 
+    # If no norm dist is given and the arena is circular, take the circle diameter as a norm dist
     if norm_dist is None and corners is not None and len(corners) >= 5 and "circular" in arena_type:
         cur_arena_params = fit_ellipse_to_polygon(corners)
-        norm_dist=np.mean([cur_arena_params[1][0], cur_arena_params[1][1]])* 2
+        norm_dist=np.mean([cur_arena_params[1][0]*w_ratio, cur_arena_params[1][1]*h_ratio])* 2
 
-    # fit ellipse and extract corner points from fitted ellipse (for smoothing)
+    # Fit ellipse and extract corner points from fitted ellipse (for smoothing)
     if "circular" in arena_type and corners is not None:
         arena_ellipse = fit_ellipse_to_polygon(corners)
         corners = extract_corners_from_arena(arena_ellipse)
+    
+    # Rescale to original pixel widths
+    corners = np.array(corners)
+    corners = np.transpose(np.array([corners[:,0]*w_ratio,corners[:,1]*h_ratio]))
 
     # Return the corners
     return corners, norm_dist
