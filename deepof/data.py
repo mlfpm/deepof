@@ -898,12 +898,17 @@ class Project:
 
 
         except KeyError:
-            raise KeyError(
-                "Are you using a custom labelling scheme? Our tutorials may help! "
-                "In case you're not, are there multiple animals in your single-animal DLC video? Make sure to set the "
-                "animal_ids parameter in deepof.data.Project"
+            set_of_required_bps=set(item for sublist in bridges for item in sublist)
+            # Workaround to allow for line breaks in key error message (key error behaves differently than all otehr errors)
+            error_message=deepof.utils.KeyErrorMessage(
+                    "Could not find expected bodypart or bodyparts: " + str(set_of_required_bps-set(tab.columns.levels[0])) + ".\n "
+                    "Are you using a custom labelling scheme? Our tutorials may help!\n "
+                    "In case you're not, are there multiple animals in your single-animal DLC video?\n "
+                    "Make sure to set the animal_ids parameter in deepof.data.Project\n"
             )
+            raise KeyError(error_message)
 
+        
         return angle_dict
 
     def get_areas(self, tab_dict: table_dict) -> dict:

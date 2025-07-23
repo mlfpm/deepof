@@ -49,6 +49,10 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
+# Workaround class for cleaner Key error message display (allows for line breaks)
+class KeyErrorMessage(str):
+    def __repr__(self): return str(self)
+
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
 
 

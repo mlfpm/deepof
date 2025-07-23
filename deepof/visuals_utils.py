@@ -772,8 +772,10 @@ def _validate_and_warn(
         if is_truncated and not warned_once:
             truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
             message = (
+                "\033[38;5;208m\n"
                 f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
                 f"Bin size was truncated to {truncated_len}."
+                "\033[0m"
             )
             # Add helpful suggestion only if applicable
             if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
