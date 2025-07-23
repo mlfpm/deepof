@@ -14,9 +14,20 @@ import tensorflow as tf
 from typing import Any, List, NewType, Tuple, Union
 import warnings
 from .data_manager import DataManager, sanitize_table_name
+from .config import suppress_warnings_context
+
+
+
+def _identity_decorator(fn):
+    """A decorator that returns the function unchanged."""
+    return fn
 
 # DEFINE WARNINGS FUNCTION
 def _suppress_warning(warn_messages):
+
+    if not suppress_warnings_context.get():
+        return _identity_decorator
+    
     def somedec_outer(fn):
         def somedec_inner(*args, **kwargs):
             # Some warnings do not get filtered when record is not True
@@ -33,7 +44,6 @@ def _suppress_warning(warn_messages):
         return somedec_inner
     
     return somedec_outer
-
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -124,7 +134,6 @@ def get_dt(
         "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
     ]
 )
-
 def save_dt(
     dt: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray]],
     folder_path: str,

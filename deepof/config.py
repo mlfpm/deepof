@@ -1,3 +1,6 @@
+from contextvars import ContextVar
+
+suppress_warnings_context = ContextVar('suppress_warnings', default=True)
 
 
 PROGRESS_BAR_FIXED_WIDTH = 30

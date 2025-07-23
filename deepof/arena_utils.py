@@ -1233,6 +1233,9 @@ def retrieve_corners_from_image(
     arena_available = False
     if arena_corners is not None:
         arena_available = True
+        # Scale arena corners to frame size
+        arena_corners = np.array(arena_corners)  
+        arena_corners = np.transpose(np.array([arena_corners[:,0]/w_ratio,arena_corners[:,1]/h_ratio]))
 
 
     # Create dropdown
@@ -1376,8 +1379,9 @@ def retrieve_corners_from_image(
         corners = extract_corners_from_arena(arena_ellipse)
     
     # Rescale to original pixel widths
-    corners = np.array(corners)
-    corners = np.transpose(np.array([corners[:,0]*w_ratio,corners[:,1]*h_ratio]))
+    if corners is not None:
+        corners = np.array(corners)
+        corners = np.transpose(np.array([corners[:,0]*w_ratio,corners[:,1]*h_ratio]))
 
     # Return the corners
     return corners, norm_dist

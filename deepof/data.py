@@ -82,7 +82,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
 import deepof.model_utils
 import deepof.models
 import deepof.utils
@@ -91,6 +91,7 @@ import deepof.visuals
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
 from concurrent.futures import ThreadPoolExecutor
+
 
 # SET DEEPOF VERSION
 current_deepof_version="0.8.0"
@@ -2563,7 +2564,7 @@ class Coordinates:
             model_name="Immobility classifier"
             ) 
     
-        N_preprocessing_steps=4+len(self._animal_ids)
+        N_preprocessing_steps=2+len(self._animal_ids)
         N_processing_steps=len(self._tables.keys())
         
         with tqdm(total=N_preprocessing_steps, desc=f"{'data preprocessing':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
@@ -2587,24 +2588,31 @@ class Coordinates:
                         return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
 
             
- 
-            with ThreadPoolExecutor() as executor:
-                future_coords = executor.submit(load_coords)
-                future_speeds = executor.submit(self.get_coords, speed=1, file_name='speeds', return_path=self._very_large_project)
-                future_dists = executor.submit(self.get_distances, return_path=self._very_large_project)
-                future_angles = executor.submit(self.get_angles, return_path=self._very_large_project)
+            with warnings.catch_warnings(record=True) as caught_warnings:  
 
-                coords = future_coords.result()
-                pbar.update()
-                pbar.set_postfix(step="Loading speeds")
+                token = suppress_warnings_context.set(False)
 
-                speeds = future_speeds.result()
-                pbar.update()
+                warning = "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
+                ignore_warning=f"(\n)?.*{warning}.*"
+                warnings.filterwarnings("ignore", message=ignore_warning)  
+                
+                with ThreadPoolExecutor() as executor:
+                    future_coords = executor.submit(load_coords)
+                    future_speeds = executor.submit(self.get_coords, speed=1, file_name='speeds', return_path=self._very_large_project)
+                    future_dists = executor.submit(self.get_distances, return_path=self._very_large_project)
+                    future_angles = executor.submit(self.get_angles, return_path=self._very_large_project)
 
-                dists = future_dists.result()
-                angles = future_angles.result()
+                    coords = future_coords.result()
+                    speeds = future_speeds.result()
+                    dists = future_dists.result()
+                    angles = future_angles.result()
                 pbar.update()
                 pbar.set_postfix(step="Loading distances")
+            
+            for caught_warning in caught_warnings:
+                warnings.warn(caught_warning.message)
+            
+            suppress_warnings_context.reset(token)
 
 
             #get kinematics
