@@ -573,10 +573,17 @@ def cohend(array_a: np.array, array_b: np.array):
         Medium Effect Size: d=0.50
         Large Effect Size: d=0.80.
     """
+    if len(array_a)<2 or len(array_b) < 2:
+        warnings.warn(
+            '\033[33mInfo! At least one of the selected groups has only one element!\n Setting cohens D to 0!\033[0m'
+            ) 
+        return 0
+
     # Calculate the size of samples
     n1, n2 = len(array_a), len(array_b)
     # Calculate the means of the samples
     u1, u2 = np.mean(array_a), np.mean(array_b)
+
     # Calculate the pooled standard deviation, unbiased estimate of the variance (with ddof=1), and it adjusts for the degrees of freedom in the calculation.
     s = np.sqrt(
         ((n1 - 1) * np.var(array_a, ddof=1) + (n2 - 1) * np.var(array_b, ddof=1))
@@ -949,7 +956,7 @@ def _get_mousevise_behaviors_in_roi(
     local_bin_info: dict,
     animal_ids: Union[str, list], 
 ):
-    """Filter out all frames in which the requested animals are not inside of teh ROI"""
+    """Filter out all frames in which the requested animals are not inside of the ROI"""
     
     # get list of masks for all animals
     masks = [local_bin_info[aid] for aid in animal_ids]
@@ -1303,7 +1310,7 @@ def _check_enum_inputs(
         roi_mode (str): Mode for ROI filtering ('mousewise' or 'behaviorwise').
     """
     # Activate warnings for immediate user feedback
-    warnings.simplefilter("always", UserWarning)
+    # warnings.simplefilter("always", UserWarning)
 
     # =========================================================================
     # 1. NORMALIZE INPUTS
@@ -1669,9 +1676,9 @@ def _preprocess_transitions(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
         diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
             - "Frames": Total frames where behavior is active (after extension)

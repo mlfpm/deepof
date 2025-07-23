@@ -1447,7 +1447,7 @@ def plot_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
         diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
             - "Frames": Total frames where behavior is active (after extension)
@@ -3507,6 +3507,10 @@ def plot_distance_between_conditions(
         )
 
 
+@_suppress_warning(
+    warn_messages=["Info! At least one of the selected groups has only one element!"],
+    do_what=["once"]
+)
 def plot_behavior_trends(
     coordinates: coordinates,
     embeddings: table_dict = None,

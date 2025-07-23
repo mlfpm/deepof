@@ -15,6 +15,7 @@ from typing import Any, List, NewType, Tuple, Union
 import warnings
 from .data_manager import DataManager, sanitize_table_name
 from .config import suppress_warnings_context
+import re
 
 
 
@@ -23,22 +24,34 @@ def _identity_decorator(fn):
     return fn
 
 # DEFINE WARNINGS FUNCTION
-def _suppress_warning(warn_messages):
+def _suppress_warning(warn_messages, do_what=None):
 
     if not suppress_warnings_context.get():
         return _identity_decorator
+    
+    if do_what is None:
+        do_what=["ignore"]*len(warn_messages)
     
     def somedec_outer(fn):
         def somedec_inner(*args, **kwargs):
             # Some warnings do not get filtered when record is not True
             with warnings.catch_warnings(record=True) as caught_warnings:
                 for k in range(0, len(warn_messages)):
-                    pattern=f"(\n)?.*{warn_messages[k]}.*"
-                    warnings.filterwarnings("ignore", message=pattern)
+                    escaped_snippet=re.escape(warn_messages[k])
+                    pattern=rf".*{escaped_snippet}.*"
+                    warnings.filterwarnings(do_what[k], message=pattern)
+                L_w=len(caught_warnings)
                 response = fn(*args, **kwargs)
-            #display caught warnings (all warnings that were not ignored)    
+            #display caught warnings (all warnings that were not ignored) and avoid duplications  
+            seen_messages = set()
             for caught_warning in caught_warnings:
-                warnings.warn(caught_warning.message)
+
+                msg_str = str(caught_warning.message)      
+                # Check if we have already processed a warning with this exact text, only dispaly if not
+                if msg_str not in seen_messages:
+                    seen_messages.add(msg_str)
+                    warnings.warn(caught_warning.message)
+
             return response
         
         return somedec_inner

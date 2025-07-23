@@ -2534,6 +2534,11 @@ class Coordinates:
     # noinspection PyDefaultArgument
     #from memory_profiler import profile
     #@profile
+    @deepof.data_loading._suppress_warning(
+        warn_messages=[
+            "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
+        ]
+    )
     def supervised_annotation(
         self,
         center: str = "Center",
