@@ -2592,15 +2592,19 @@ class Coordinates:
                     except ValueError:
                         return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
 
-            
+            # Disable warnings manually around ThreadPoolExecutor
+            # Reason: ThreadPoolExecutor will break the warnings if warnings decorator functions are assessed in parallel
             with warnings.catch_warnings(record=True) as caught_warnings:  
 
+                # Disable warning decorators
                 token = suppress_warnings_context.set(False)
 
+                # Set warnings to ignore
                 warning = "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
                 ignore_warning=f"(\n)?.*{warning}.*"
                 warnings.filterwarnings("ignore", message=ignore_warning)  
                 
+                # Parallel execution of data gathering
                 with ThreadPoolExecutor() as executor:
                     future_coords = executor.submit(load_coords)
                     future_speeds = executor.submit(self.get_coords, speed=1, file_name='speeds', return_path=self._very_large_project)
@@ -2614,9 +2618,11 @@ class Coordinates:
                 pbar.update()
                 pbar.set_postfix(step="Loading distances")
             
+            # Display caught and not ignored warnings
             for caught_warning in caught_warnings:
                 warnings.warn(caught_warning.message)
             
+            # Reset warning decorators
             suppress_warnings_context.reset(token)
 
 
