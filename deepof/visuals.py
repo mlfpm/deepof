@@ -3668,7 +3668,7 @@ def plot_behavior_trends(
     # Check custom_time_bin validity
     if len(
         custom_time_bins
-    ) > 3 or all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
         isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
     ):  # List has shape Nx2
 
@@ -3711,7 +3711,7 @@ def plot_behavior_trends(
             warnings.warn(warning_message)
     else:
         raise ValueError(
-            f'"custom_time_bins" needs to be a list of at least 4 elments with each element being a list!'
+            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
         )
     
     #####

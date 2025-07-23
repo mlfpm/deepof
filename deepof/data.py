@@ -2593,13 +2593,13 @@ class Coordinates:
                         return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
 
             # Disable warnings manually around ThreadPoolExecutor
-            # Reason: ThreadPoolExecutor will break the warnings if warnings decorator functions are assessed in parallel
+            # Reason: ThreadPoolExecutor will break the warnings if warning decorator functions are accessed in parallel
             with warnings.catch_warnings(record=True) as caught_warnings:  
 
                 # Disable warning decorators
                 token = suppress_warnings_context.set(False)
 
-                # Set warnings to ignore
+                # Manually set warnings to ignore
                 warning = "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
                 ignore_warning=f"(\n)?.*{warning}.*"
                 warnings.filterwarnings("ignore", message=ignore_warning)  
