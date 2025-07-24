@@ -80,7 +80,7 @@ def get_arenas(
 
         video_resolution (dict): Dictionary of video resolutions. Each video resolution object consists of:
             - height of the video in pixel
-            - width of teh video in pixel
+            - width of the video in pixel
 
         
 
@@ -138,7 +138,7 @@ def get_arenas(
                     test=test,
                 )
 
-                # if no new arena was detected, skip future detections and set all new dictionary values to teh previous entry
+                # if no new arena was detected, skip future detections and set all new dictionary values to the previous entry
                 if arena_corners is None:
                     get_arena = False
                     cur_arena_params = arena_params[list(arena_params.keys())[-1]]

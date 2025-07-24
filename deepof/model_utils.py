@@ -1191,7 +1191,7 @@ def embedding_model_fitting(
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
-        bin_info (dict): Dictionary containing numpy integer arrays for each experiment. Each array denotes the samples to be sampled from teh respective experiment.
+        bin_info (dict): Dictionary containing numpy integer arrays for each experiment. Each array denotes the samples to be sampled from the respective experiment.
 
         # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".

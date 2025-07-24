@@ -1291,12 +1291,12 @@ def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, thresh
 
     Args:
         df (pd.DataFrame): Dataframe containing coordinates of multiple mice
-        mouse_id (str): Id of teh target mouse
+        mouse_id (str): Id of the target mouse
         bodypart (str): Bodypart of the target mouse that should be used for distance calculation
         threshold (float): Maximum distance that triggers "closeness"
 
     Returns:
-        proximity_mask (np.array): Boolean numpy array set to True for each frame in which the lected bodypart of the selected mosue was closer than threshold to any otehr mouse, False otehrwise.
+        proximity_mask (np.array): Boolean numpy array set to True for each frame in which the lected bodypart of the selected mosue was closer than threshold to any other mouse, False otherwise.
 
     """    
     target = f"{mouse_id}{bodypart}"

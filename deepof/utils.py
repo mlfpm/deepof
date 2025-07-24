@@ -948,8 +948,8 @@ def count_transitions(
         tab_dict (table_dict): Dictionary with behavior data (supervised or unsupervised soft_counts)
         exp_conditions (dict): Dictionary containg the experiment conditions for each experiment.
         bin_info (dict): dictionary containing indices to plot for all experiments
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
-        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
+        delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         frame_rate (float): Frame rate of the corresponding project
         silence_diagonal (bool): If True, diagonals are set to zero.
         aggregate (bool): If True, sums matrices per experimental condition; else per experiment.
@@ -1788,7 +1788,7 @@ def smooth_boolean_array(
         # check if any behavior was detected
         offsets = np.where(batch)[0]
         if len(offsets) == 0:
-            continue  # skip batch if tehre was no detected activity
+            continue  # skip batch if there was no detected activity
 
         # Process the current batch
         batch_bursts = kleinberg(offsets, gamma=0.3, s=sigma)
@@ -1816,7 +1816,7 @@ def multi_step_paired_smoothing(
     """This filtering approach will first gradually merge together very close behavioral instances (how close is regulated by min_length), 
     then filter out remaining short instances. In this way multiple instances close to each other are kept and united and isolated very 
     short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea as kleinberg was too susceptible to 
-    merge events together that were relatively distant on teh time scale.
+    merge events together that were relatively distant on the time scale.
 
         Args:
             behavior_in (numpy.ndarray): Boolean instances of detected raw behavior.
@@ -1866,7 +1866,7 @@ def multi_step_paired_smoothing(
     not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
 
     # Due to the widening step, it will happen that frames are simutaneously beheavior and not behavior.
-    # To resolve tehse conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
+    # To resolve these conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
     behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
     not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
 

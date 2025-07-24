@@ -254,7 +254,7 @@ def output_videos_per_cluster_old(
         frame_limit_per_video: number of frames to render per video.
         bin_info (dict): dictionary containing indices to plot for all experiments
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         single_output_resolution: if single_output is provided, this is the resolution of the output video.
         min_confidence: minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration: minimum duration of a bout to be considered.
@@ -345,7 +345,7 @@ def output_videos_per_cluster_old(
             if type(cur_tab)==np.ndarray:
                 cur_tab=pd.DataFrame(cur_tab,columns=behavior_names) 
 
-                # Get positions at which the current cluster is teh most likely one 
+                # Get positions at which the current cluster is the most likely one 
                 max_entry_columns = cur_tab.idxmax(axis=1)
                 behavior_mask = (cur_behavior == max_entry_columns)
                 idx = (cur_behavior == max_entry_columns)
@@ -354,7 +354,7 @@ def output_videos_per_cluster_old(
             else:
                 cur_tab.columns = behavior_names
 
-                # Get positions at which teh current behaviro occurs
+                # Get positions at which the current behaviro occurs
                 behavior_mask = cur_tab[cur_behavior]>0.1
                 idx = cur_tab[cur_behavior]>0.1
                 confidence = cur_tab[cur_behavior]  
@@ -753,8 +753,8 @@ def output_annotated_video_old(
         soft_counts: soft cluster assignments for a specific video
         behavior (str): Behavior or Cluster to that gets exported. If none is given, all Clusters get exported for softcounts and only nose2nose gets exported for supervised annotations.
         frames: frames that should be exported.
-        display_behavior_names (bool): Display the names of teh respective behaviors
-        display_video_name (bool): Display teh name of the video
+        display_behavior_names (bool): Display the names of the respective behaviors
+        display_video_name (bool): Display the name of the video
         display_time (bool): Displays current time in top left corner of the video frame
         display_counter (bool): Displays event counter for each displayed event.   
         display_arena (bool): Displays arena for each video.
@@ -762,7 +762,7 @@ def output_annotated_video_old(
         display_mouse_labels (bool): Displays identities of the mice
         display_loading_bar (bool): Displays the laoding bar during writing of the video
         cap (Any): video capture object for reading the video, can be provided. Will be created from video at experiment_id otherwise.
-        out (Any): video capture object for writing teh video, can be provided.
+        out (Any): video capture object for writing the video, can be provided.
         v_width (int): video width
         v_height (int): video height    
         frame_limit (int): Maximum number of frames that can be included in a video. No limit per default

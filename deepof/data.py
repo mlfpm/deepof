@@ -847,7 +847,7 @@ class Project:
 
 
     def get_angles(self, tab_dict: table_dict) -> dict:
-        """Compute all the angles between adjacent bodypart trios per video and per frame in all datasets in teh given table dictionary.
+        """Compute all the angles between adjacent bodypart trios per video and per frame in all datasets in the given table dictionary.
 
         Args:
             tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
@@ -899,7 +899,7 @@ class Project:
 
         except KeyError:
             set_of_required_bps=set(item for sublist in bridges for item in sublist)
-            # Workaround to allow for line breaks in key error message (key error behaves differently than all otehr errors)
+            # Workaround to allow for line breaks in key error message (key error behaves differently than all other errors)
             error_message=deepof.utils.KeyErrorMessage(
                     "Could not find expected bodypart or bodyparts: " + str(set_of_required_bps-set(tab.columns.levels[0])) + ".\n "
                     "Are you using a custom labelling scheme? Our tutorials may help!\n "
@@ -1425,8 +1425,8 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count the mouse as "inside" the ROI.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
@@ -1677,8 +1677,8 @@ class Coordinates:
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count the mouse as "inside" the ROI.
     
         Returns:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
@@ -1740,7 +1740,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
@@ -1805,7 +1805,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
 
         Returns:
@@ -1859,7 +1859,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -1924,7 +1924,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
@@ -1970,7 +1970,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -2032,7 +2032,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
@@ -2492,7 +2492,7 @@ class Coordinates:
             "min_follow_frames": int(self._frame_rate/4),      # Minimum time mouse needs to follow, Quarter of a second
             "follow_tol": 25,                                  # Tail base of followed mouse needs to be 25 mm or closer to Nose of following mouse up to follow_frames in the past
             "climb_tol": 0.15,                                 # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
-            "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from teh arena edge or closer
+            "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from the arena edge or closer
             "min_immobility": int(self._frame_rate),           # Min Time interval the mouse needs to be immobile to be counted as immobility, 1 second 
             #"max_immobility": 120*int(self._frame_rate),      # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
             "stationary_threshold": 40,                        # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
