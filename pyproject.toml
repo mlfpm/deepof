@@ -123,6 +123,9 @@ push = true
     '^version = "{version}"',
     '^current_version = "{version}"',
 ]
+"deepof/data.py" = [
+    'current_deepof_version="{version}"',
+]
 "setup.py" = [
     'version="{version}"',
 ]
