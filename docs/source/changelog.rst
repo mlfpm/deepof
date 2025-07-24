@@ -2,7 +2,7 @@ Changelog
 =========
 
 
-[0.8.2] - 2025-XX-XX
+[0.8.2] - 2025-07-XX
 ====================
 
 Added
@@ -11,15 +11,35 @@ Added
 - Automatic inner and outer ROI as a selectable percentage of total arena area during ROI creation
 - Functions added: `create_inner_polygon`, `extract_corners_from_arena`
 - Classes added `DropdownConfig`, `DropdownUI`
+- Files `arena_utils.py` and `export_video.py`
 
 Changed
 -------
-- Refactored export for annotated videos
+- Refactored all functiosn related to the export for annotated videos
+- Refactored table preprocessing
+- Refactored window data sampling
+- Refactored area, angle and distance data extraction
+- Refactored function for plot input validation
+- Refactored time bin preprocessing
+- Refactored otehr, smaller individual functions
 - Moved arena functionality out of `utils.py` into new file `arena_utils.py`
+- Moded video export functionality out of `visuals.py` into new file `export_video.py`
+- The arena detection GUI now has a maximum size
+- Made bodypart key error that arises during angle calculation more informative
+
+
+Removed
+-------
+- `tagged_video_output` function (developer function) that did the same as the reworked `output_annotated_video`  
 
 Bug Fixes
 ---------
 - Fixed a bug in video annotation for annotating with soft counts
+- Fixed bug that caused problems with circular manual projects during arena detection
+- Fixed invisible warnings after supervised annotation calculation
+- Fixed double-warnings
+- Fixed missing colors of some warnings
+- Fixed specific error not showing up in plot_behavior_trends
 
 Known Issues
 ------------
@@ -38,7 +58,7 @@ Additional Information
 - Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
 
 
-[0.8.1] - 2025-06-XX
+[0.8.1] - 2025-06-27
 ====================
 
 Added
