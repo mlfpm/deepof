@@ -334,39 +334,3 @@ def test_frame_corners(w, h):
         == "test"
     )
 
-
-@settings(deadline=None)
-@given(multi_animal=st.booleans(), video_output=st.booleans())
-def test_rule_based_tagging(multi_animal, video_output):
-
-    if video_output:
-        video_output = ["test"]
-
-    path = os.path.join(
-        ".",
-        "tests",
-        "test_examples",
-        "test_{}_topview".format("multi" if multi_animal else "single"),
-    )
-
-    prun = deepof.data.Project(
-        project_path=path,
-        video_path=os.path.join(path, "Videos"),
-        table_path=os.path.join(path, "Tables"),
-        arena="circular-autodetect",
-        video_scale=380,
-        video_format=".mp4",
-        table_format=".h5",
-        animal_ids=(["B", "W"] if multi_animal else [""]),
-        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-    ).create(force=True, test=True)
-
-    hardcoded_tags = prun.supervised_annotation(
-        video_output=video_output, frame_limit=50, debug=True
-    )
-
-    rmtree(os.path.join(path, "deepof_project"))
-
-    assert isinstance(hardcoded_tags, deepof.data.TableDict)
-    assert list(hardcoded_tags.values())[0].shape[1] == (29 if multi_animal else 10)
-

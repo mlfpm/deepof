@@ -25,6 +25,7 @@ from shapely.geometry import Point, Polygon
 
 import deepof.data
 import deepof.utils
+import deepof.arena_utils
 
 # AUXILIARY FUNCTIONS #
 
@@ -601,7 +602,7 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
     coords = prun.create(force=True, test=True)
 
     #actually detect arenas 
-    arena_parameters, h, w = deepof.utils.automatically_recognize_arena(
+    arena_parameters, h, w = deepof.arena_utils.automatically_recognize_arena(
         coordinates=prun,
         videos=coords.get_videos(),
         tables=coords._tables,

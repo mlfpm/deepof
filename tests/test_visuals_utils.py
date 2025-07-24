@@ -39,7 +39,7 @@ from deepof.visuals_utils import (
     _apply_rois_to_bin_info,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
-    get_beheavior_frames_in_roi,
+    get_behavior_frames_in_roi,
 )
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -479,7 +479,6 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
 
 @settings(deadline=None)
 @given(
-
     animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3),
     bins = st.lists(
         st.integers(min_value=0, max_value=99),
@@ -533,7 +532,7 @@ def test_get_rois(animal_ids, bins, supervised_behavior):
     # get ROIs with different methods
     cur_supervised_filtered = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids)
     cur_unsupervised_filtered = get_unsupervised_behaviors_in_roi(cur_unsupervised[bins], local_bin_info, animal_ids)
-    frames = get_beheavior_frames_in_roi(behavior, local_bin_info, animal_ids)
+    frames = get_behavior_frames_in_roi(behavior, local_bin_info, animal_ids)
 
     # In the not supervised case, frames represent the non-nan positions in cur_unsupervised after filtering
     if not supervised_behavior:

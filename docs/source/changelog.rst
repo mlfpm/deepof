@@ -1,7 +1,64 @@
 Changelog
 =========
 
-[0.8.1] - 2025-06-XX
+
+[0.8.2] - 2025-07-XX
+====================
+
+Added
+-------
+- Options display_arena, display_markers, display_mouse_labels to `output_annotated_video`
+- Automatic inner and outer ROI as a selectable percentage of total arena area during ROI creation
+- Functions added: `create_inner_polygon`, `extract_corners_from_arena`
+- Classes added `DropdownConfig`, `DropdownUI`
+- Files `arena_utils.py` and `export_video.py`
+
+Changed
+-------
+- Refactored all functiosn related to the export for annotated videos
+- Refactored table preprocessing
+- Refactored window data sampling
+- Refactored area, angle and distance data extraction
+- Refactored function for plot input validation
+- Refactored time bin preprocessing
+- Refactored otehr, smaller individual functions
+- Moved arena functionality out of `utils.py` into new file `arena_utils.py`
+- Moded video export functionality out of `visuals.py` into new file `export_video.py`
+- The arena detection GUI now has a maximum size
+- Made bodypart key error that arises during angle calculation more informative
+
+
+Removed
+-------
+- `tagged_video_output` function (developer function) that did the same as the reworked `output_annotated_video`  
+
+Bug Fixes
+---------
+- Fixed a bug in video annotation for annotating with soft counts
+- Fixed bug that caused problems with circular manual projects during arena detection
+- Fixed invisible warnings after supervised annotation calculation
+- Fixed double-warnings
+- Fixed missing colors of some warnings
+- Fixed specific error not showing up in plot_behavior_trends
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2025-XX-XX
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
+[0.8.1] - 2025-06-27
 ====================
 
 Added

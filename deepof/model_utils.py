@@ -1232,6 +1232,7 @@ def embedding_model_fitting(
         X_train, a_train, _ = preprocessed_train.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
         X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
 
+
         # Make sure that batch_size is not larger than training set
         if batch_size > X_train.shape[0]:
             batch_size = X_train.shape[0]

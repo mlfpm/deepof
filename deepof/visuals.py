@@ -34,6 +34,12 @@ from statannotations.Annotator import Annotator
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
+from deepof.config import ROI_COLORS
+from deepof.export_video import (
+    VideoExportConfig,   
+    output_annotated_video,
+    output_videos_per_cluster, 
+)
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -45,12 +51,10 @@ from deepof.visuals_utils import (
     _process_animation_data,
     _get_polygon_coords,
     _scatter_embeddings,
-    output_annotated_video,
-    output_videos_per_cluster,
     get_behavior_colors,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
-    get_beheavior_frames_in_roi,
+    get_behavior_frames_in_roi,
     _apply_rois_to_bin_info,
     BGR_to_hex,
     _preprocess_transitions,
@@ -214,7 +218,7 @@ def plot_heatmaps(
 
     if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
         for hmap in heatmaps:
-            color = BGR_to_hex(deepof.utils.get_roi_colors()[roi_number-1])
+            color = BGR_to_hex(ROI_COLORS[roi_number-1])
             plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
 
     if not ax:
@@ -1443,7 +1447,7 @@ def plot_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
-        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
         diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
             - "Frames": Total frames where behavior is active (after extension)
@@ -1660,7 +1664,7 @@ def count_all_events(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         tab = get_dt(tab_dict,key,load_range=load_range)
         
         # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
@@ -1877,7 +1881,7 @@ def plot_associations(
         for key in tab_dict.keys():
             load_range = bin_info[key]["time"]
             if roi_number is not None:
-                load_range=deepof.visuals_utils.get_beheavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
             tab = copy.deepcopy(get_dt(tab_dict,key,load_range=load_range))
             #reformat tab in unsupervised case
             if plot_type=="unsupervised":
@@ -2438,7 +2442,7 @@ def plot_embeddings(
             #get correct section of current embedding 
             current_emb=get_dt(emb_to_plot,key)
             if roi_number is not None:
-                valid_samples[key]=get_beheavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
+                valid_samples[key]=get_behavior_frames_in_roi(behavior=None,local_bin_info=bin_info[key],animal_ids=animals_in_roi)
             else:
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
@@ -2449,7 +2453,7 @@ def plot_embeddings(
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
-        get_beheavior_frames_in_roi._warning_issued = False
+        get_behavior_frames_in_roi._warning_issued = False
                
 
         # Concatenate experiments and align experimental conditions
@@ -2915,8 +2919,8 @@ def animate_skeleton(
         frames = bin_info[experiment_id]["time"]
     else:
         #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_beheavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
-        get_beheavior_frames_in_roi._warning_issued = False
+        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
+        get_behavior_frames_in_roi._warning_issued = False
 
     animation = FuncAnimation(
         fig,
@@ -3182,6 +3186,9 @@ def export_annotated_video(
     min_bout_duration: int = None,
     display_time: bool = False,
     display_counter: bool = False,
+    display_arena: bool = False,
+    display_markers: bool = False,
+    display_mouse_labels: bool = False,
     exp_conditions: dict = {},
     cluster_names: str = None,
 ):
@@ -3204,6 +3211,9 @@ def export_annotated_video(
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         display_time (bool): Displays current time in top left corner of teh video frame
         display_counter (bool): Displays event counter for each displayed event.
+        display_arena (bool): Displays arena for each video.
+        display_markers (bool): Displays mouse body parts on top of the mice.
+        display_mouse_labels (bool): Displays identities of the mice
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
@@ -3218,6 +3228,14 @@ def export_annotated_video(
         roi_number=roi_number,
         roi_mode=roi_mode,
     )
+    # Create video config
+    video_export_config = VideoExportConfig(
+        display_time=display_time,
+        display_counter=display_counter,
+        display_arena=display_arena,
+        display_markers=display_markers,
+        display_mouse_labels=display_mouse_labels,
+    )   
 
     if animals_in_roi is None or roi_mode=="behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -3234,29 +3252,7 @@ def export_annotated_video(
 
     # If no bout duration is provided, use half the frame rate
     if min_bout_duration is None:
-        min_bout_duration = int(np.round(coordinates._frame_rate // 2))
-
-    def filter_experimental_conditions(
-        coordinates: coordinates, videos: list, conditions: list
-    ):
-        """Return a list of videos that match the provided experimental conditions."""
-        filtered_videos = videos
-
-        for condition, state in conditions.items():
-
-            filtered_videos = [
-                video
-                for video in filtered_videos
-                if state
-                == np.array(
-                    coordinates.get_exp_conditions[re.findall("(.+)DLC", video)[0]][
-                        condition
-                    ]
-                )
-            ]
-
-        return filtered_videos
-    
+        min_bout_duration = int(np.round(coordinates._frame_rate // 2))  
     
     # set cluster names dependend on tab dict type (supervised or soft counts)
     if soft_counts is not None:
@@ -3289,7 +3285,7 @@ def export_annotated_video(
         # get frames for this experiment id
         if behaviors is None and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-            behaviors = cur_tab.columns[0]
+            behaviors = [cur_tab.columns[0]]
         if roi_number is not None:
             if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
@@ -3297,13 +3293,11 @@ def export_annotated_video(
                     print('\033[33mInfo! The first behavior was automatically chosen for ROI application!\033[0m')
             else:
                 behavior_in=None
-            frames=get_beheavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
+            frames=get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
         else:
             frames=bin_info[experiment_id]["time"]
         # get current tab and video path
         cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-        video_path=coordinates.get_videos(full_paths=True)[experiment_id]
-
         
         # reformat current tab into data table with cluster names as column names
         if soft_counts is not None:
@@ -3318,32 +3312,29 @@ def export_annotated_video(
                 frames = frames[0:frame_limit_per_video]
 
         video = output_annotated_video(
-            video_path,                
-            cur_tab,
-            behaviors,
-            frame_rate=coordinates._frame_rate,
-            out_path=out_path,
+            coordinates=coordinates,
+            experiment_id=experiment_id,                
+            tab=cur_tab,
+            behaviors=behaviors,
+            config=video_export_config,
             frames=frames,
-            display_time=display_time,
-            display_counter=display_counter,
+            out_path=out_path,
         )
-        get_beheavior_frames_in_roi._warning_issued = False
+        get_behavior_frames_in_roi._warning_issued = False
 
         return video
 
     else:
         # If experiment_id is not provided, output a video per cluster for each experiment
-        filtered_videos = filter_experimental_conditions(
-            coordinates, coordinates.get_videos(full_paths=True), exp_conditions
-        )
         if frame_limit_per_video is None:
             frame_limit_per_video = 250
 
         output_videos_per_cluster(
-            filtered_videos,
+            coordinates,
+            exp_conditions,
             tab_dict,
             behaviors,
-            frame_rate=coordinates._frame_rate,
+            behavior_names=cluster_names,
             single_output_resolution=(500, 500),
             frame_limit_per_video=frame_limit_per_video,
             bin_info=bin_info,
@@ -3352,7 +3343,7 @@ def export_annotated_video(
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
-            display_time=display_time,
+            config=video_export_config,
             roi_mode=roi_mode,
         )
 
@@ -3516,6 +3507,10 @@ def plot_distance_between_conditions(
         )
 
 
+@_suppress_warning(
+    warn_messages=["Info! At least one of the selected groups has only one element!"],
+    do_what=["once"]
+)
 def plot_behavior_trends(
     coordinates: coordinates,
     embeddings: table_dict = None,
@@ -3677,7 +3672,7 @@ def plot_behavior_trends(
     # Check custom_time_bin validity
     if len(
         custom_time_bins
-    ) > 3 or all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
         isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
     ):  # List has shape Nx2
 
@@ -3720,7 +3715,7 @@ def plot_behavior_trends(
             warnings.warn(warning_message)
     else:
         raise ValueError(
-            f'"custom_time_bins" needs to be a list of at least 4 elments with each element being a list!'
+            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
         )
     
     #####
