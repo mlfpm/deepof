@@ -85,6 +85,8 @@ import deepof.annotation_utils
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
 import deepof.model_utils
 import deepof.models
+import deepof.clustering.models_new
+import deepof.clustering.model_utils_new
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
@@ -2809,6 +2811,8 @@ class Coordinates:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
         
+        ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+        # not needed anymore after refactor
         # extract from Tuple
         preprocessed_train, _= preprocessed_object
         pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
@@ -2831,8 +2835,11 @@ class Coordinates:
         bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
         bin_info.update(bin_info_test)
 
+        ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
-
+        ###
+        # Improve after refactor
+        # Select path to apropriate pretrained model
         if pretrained:
             pretrained_path = os.path.join(
                 self._project_path,
@@ -2857,7 +2864,7 @@ class Coordinates:
             )
 
         try:
-            trained_models = deepof.model_utils.embedding_model_fitting(
+            trained_models = deepof.clustering.model_utils_new.embedding_model_fitting(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
                 embedding_model=embedding_model,
