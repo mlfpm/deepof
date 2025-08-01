@@ -644,6 +644,7 @@ class Project:
 
         return table_dict, warn_nans_count
 
+
     def preprocess_tables(self) -> Tuple[table_dict, table_dict]:
         """
         Loads and preprocesses tracking data through a series of modular steps,
@@ -1036,6 +1037,11 @@ class Project:
         return all_areas_dict
 
 
+    @deepof.data_loading._suppress_warning(
+        warn_messages=[
+            "A value is trying to be set on a copy of a slice from a DataFrame"
+        ]
+    )
     def create(
         self,
         verbose: bool = True,

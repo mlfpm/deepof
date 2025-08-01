@@ -538,7 +538,7 @@ def _draw_behavior_info(
     y_step = 0
     
     for i, behavior in enumerate(behaviors):
-        behavior_text = behavior_df.iloc[frame_idx][0]
+        behavior_text = behavior_df.iloc[frame_idx][i]
         if behavior_text:
             box_y = y_start + y_step
             # Draw background rectangle
@@ -605,6 +605,7 @@ def output_annotated_video(
             raise ValueError("A list of 'behaviors' must be provided for multi-label annotations.")
 
     behavior_df = _prepare_behavior_dataframe(tab, behaviors)
+
     
     cur_coords = get_dt(coordinates._tables, experiment_id)
 
