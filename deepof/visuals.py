@@ -3261,15 +3261,15 @@ def export_annotated_video(
         if isinstance(soft_counts[first_key], dict):
             soft_counts[first_key] = get_dt(soft_counts,first_key)
 
-        if cluster_names is None or len(cluster_names) != soft_counts[first_key].shape[1]:
-            cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
+        if cluster_names is None or len(cluster_names) != len(behaviors):
+            cluster_names = behaviors
         #unify tab_dict name
         tab_dict=soft_counts
  
     else:
         first_key=list(supervised_annotations.keys())[0]
-        if cluster_names is None or len(cluster_names) != supervised_annotations[first_key].shape[1]:
-                cluster_names=supervised_annotations[first_key].columns
+        if cluster_names is None or len(cluster_names) != len(behaviors):
+            cluster_names = behaviors
         tab_dict=supervised_annotations
 
     #preprocess time bins            
@@ -3301,9 +3301,9 @@ def export_annotated_video(
         
         # reformat current tab into data table with cluster names as column names
         if soft_counts is not None:
-            cur_tab=pd.DataFrame(cur_tab,columns=cluster_names)
-        else: 
-            cur_tab.columns = cluster_names
+            all_cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
+            cur_tab=pd.DataFrame(cur_tab,columns=all_cluster_names)
+
         # handle defaults
         if frame_limit_per_video is None:
             frame_limit_per_video = np.inf
@@ -3319,6 +3319,8 @@ def export_annotated_video(
             config=video_export_config,
             frames=frames,
             out_path=out_path,
+            behaviors_renamed=cluster_names
+
         )
         get_behavior_frames_in_roi._warning_issued = False
 
@@ -3334,7 +3336,7 @@ def export_annotated_video(
             exp_conditions,
             tab_dict,
             behaviors,
-            behavior_names=cluster_names,
+            behaviors_renamed=cluster_names,
             single_output_resolution=(500, 500),
             frame_limit_per_video=frame_limit_per_video,
             bin_info=bin_info,

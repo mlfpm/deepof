@@ -9,7 +9,7 @@
 # encoding: utf-8
 # module deepof
 
-from typing import Any, NewType
+from typing import Any, NewType, Tuple
 
 import numpy as np
 import tcn
@@ -28,10 +28,20 @@ from tensorflow.keras.layers import (
     TimeDistributed,
 )
 from tensorflow.keras.optimizers import Nadam
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.distributions import Distribution, TransformedDistribution, Normal
+from torch.distributions.transforms import AffineTransform
 
 import deepof.model_utils
+import deepof.clustering.model_utils_new
+from deepof.clustering.censNetConv_pt import CensNetConvPT
 import deepof.utils
 from deepof.data_loading import get_dt
+import warnings
+from deepof.clustering.model_utils_new import ProbabilisticDecoderPT
 
 
 tfb = tfp.bijectors
@@ -42,6 +52,118 @@ tfpl = tfp.layers
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
+
+
+class RecurrentEncoderPT(nn.Module):
+    def __init__(
+        self,
+        input_shape: tuple,        # Expected: (Time, Nodes, Features_per_node)
+        edge_feature_shape: tuple, # Expected: (Time, Edges, Features_per_edge)
+        adjacency_matrix: np.ndarray,
+        latent_dim: int,
+        use_gnn: bool = True,
+        interaction_regularization: float = 0.0,
+    ):
+        super().__init__()
+        self.use_gnn = use_gnn
+        self.num_nodes = adjacency_matrix.shape[0]
+        self.latent_dim = latent_dim
+
+        if self.use_gnn:
+            # ============================ FIX START ============================
+            # The input_shape is now explicit: (Time, Nodes, Features_per_node).
+            # We don't need to infer the features per node by division.
+            node_feat_per_animal = input_shape[2]  # Get Features_per_node directly
+            edge_feat_per_edge = edge_feature_shape[2] # Get Features_per_edge directly
+
+            # Check for consistency
+            assert self.num_nodes == input_shape[1], "Adjacency matrix nodes and input_shape nodes do not match."
+
+            # Node path initialization
+            self.node_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
+                input_features=node_feat_per_animal, latent_dim=latent_dim
+            )
+
+            # Edge path initialization
+            self.edge_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
+                input_features=edge_feat_per_edge, latent_dim=latent_dim
+            )
+            # ============================= FIX END =============================
+
+            self.spatial_gnn_block = CensNetConvPT(
+                node_channels=latent_dim,
+                edge_channels=latent_dim,
+            )
+            lap, edge_lap, inc = self.spatial_gnn_block.preprocess(torch.tensor(adjacency_matrix))
+            self.register_buffer("laplacian", lap.float())
+            self.register_buffer("edge_laplacian", edge_lap.float())
+            self.register_buffer("incidence", inc.float())
+            
+            self.num_edges = edge_feature_shape[1]
+            final_dense_in = (self.num_nodes * latent_dim) + (self.num_edges * latent_dim)
+            self.final_dense = nn.Linear(final_dense_in, latent_dim)
+
+        else: # Non-GNN path (remains the same)
+            in_features = input_shape[1] * input_shape[2]
+            self.recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
+                input_features=in_features, latent_dim=latent_dim
+            )
+            self.final_dense = nn.Linear(latent_dim, latent_dim)
+
+    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        # x shape: (B, T, N, F_node)
+        # a shape: (B, T, E, F_edge)
+        B, T, N, F_node = x.shape
+        _, _, E, F_edge = a.shape
+
+        if self.use_gnn:
+            # ============================ THE FIX ============================
+            # This logic block now exactly replicates the TensorFlow version's
+            # complex reshaping to prepare data for the recurrent block.
+
+            # --- Node Path ---
+            # 1. Start with the 4D tensor and flatten last two dims to mimic TF's starting point
+            x_3d = x.view(B, T, N * F_node)
+            # 2. Transpose to (TotalFeatures, Time, Batch)
+            x_t = x_3d.permute(2, 1, 0)
+            # 3. Reshape to (Feats_per_node, Time, Nodes, Batch)
+            x_reshaped_t = x_t.reshape(F_node, T, N, B)
+            # 4. Transpose to (Batch, Nodes, Time, Feats_per_node)
+            x_for_block = x_reshaped_t.permute(3, 2, 1, 0)
+            # 5. Pass to the recurrent block, which is designed for this 4D input
+            node_output = self.node_recurrent_block(x_for_block)
+
+            # --- Edge Path (Identical Logic) ---
+            a_3d = a.view(B, T, E * F_edge)
+            a_t = a_3d.permute(2, 1, 0)
+            a_reshaped_t = a_t.reshape(F_edge, T, E, B)
+            a_for_block = a_reshaped_t.permute(3, 2, 1, 0)
+            edge_output = self.edge_recurrent_block(a_for_block)
+            
+            # --- GNN and Final Layers ---
+            adj_tuple = (self.laplacian, self.edge_laplacian, self.incidence)
+            x_nodes, x_edges = self.spatial_gnn_block(
+                [node_output, adj_tuple, edge_output]
+            )
+            x_nodes = F.relu(x_nodes)
+            x_edges = F.relu(x_edges)
+            
+            x_nodes_flat = x_nodes.view(B, -1)
+            x_edges_flat = x_edges.view(B, -1)
+            encoder = torch.cat([x_nodes_flat, x_edges_flat], dim=-1)
+
+
+        else: # Non-GNN path
+
+            x_reshaped = x.view(B, T, N * F_node).unsqueeze(1)
+            encoder = self.recurrent_block(x_reshaped).squeeze(1)        
+            
+            # Original non-GNN logic had an extra unsqueeze(1) which may be unnecessary
+            # x_reshaped = x.view(B, T, N_nodes * F_per_node)
+            # The recurrent block should handle (B, T, Features)
+            # encoder = self.recurrent_block(x_reshaped) # Output: (B, latent_dim)
+
+        return self.final_dense(encoder)
 
 
 # noinspection PyCallingNonCallable
@@ -106,12 +228,15 @@ def get_recurrent_encoder(
                 ][::-1],
             )
         )
+        #a_reshaped = tf.transpose(a, perm=[0, 2, 1, 3])
+
 
     else:
-        x_reshaped = tf.expand_dims(x, axis=1)
+        x_flat = tf.reshape(x, [-1, input_shape[0], input_shape[1] * input_shape[2]])
+        x_reshaped = tf.expand_dims(x_flat, axis=1)
 
     # Instantiate temporal RNN block
-    encoder = deepof.model_utils.get_recurrent_block(
+    encoder = deepof.clustering.model_utils_new.get_recurrent_block(
         x_reshaped, latent_dim, gru_unroll, bidirectional_merge
     )(x_reshaped)
 
@@ -119,7 +244,7 @@ def get_recurrent_encoder(
     if use_gnn:
 
         # Embed edge features too
-        a_encoder = deepof.model_utils.get_recurrent_block(
+        a_encoder = deepof.clustering.model_utils_new.get_recurrent_block(
             a_reshaped, latent_dim, gru_unroll, bidirectional_merge
         )(a_reshaped)
 
@@ -161,6 +286,105 @@ def get_recurrent_encoder(
 
     return Model([x, a], encoder_output, name="recurrent_encoder")
 
+
+class RecurrentDecoderPT(nn.Module):
+    """
+    A full PyTorch implementation of the recurrent decoder.
+    """
+    def __init__(self, output_shape: tuple, latent_dim: int, bidirectional_merge: str = "concat"):
+        super().__init__()
+        self.latent_dim = latent_dim
+        self.output_shape = output_shape
+        if bidirectional_merge != "concat":
+            warnings.warn("Bidirectional merge mode is fixed to 'concat' to correspond with original TensorFlow implementation.")
+
+        # First Bi-GRU layer
+        self.gru1 = nn.GRU(
+            input_size=latent_dim,
+            hidden_size=latent_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
+        )
+        self.norm1 = nn.LayerNorm(2 * latent_dim, eps=1e-3)
+
+        # Second Bi-GRU layer
+        self.gru2 = nn.GRU(
+            input_size=2 * latent_dim, # Input from first Bi-GRU
+            hidden_size=2 * latent_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
+        )
+        self.norm2 = nn.LayerNorm(4 * latent_dim, eps=1e-3) # Output of second Bi-GRU is 2 * (2*latent_dim)
+
+        # Convolutional Layer
+        self.conv1d = nn.Conv1d(
+            in_channels=4 * latent_dim, # Input from second norm layer
+            out_channels=2 * latent_dim,
+            kernel_size=5,
+            padding="same",
+            bias=False
+        )
+        self.norm3 = nn.LayerNorm(2 * latent_dim, eps=1e-3) # Output of Conv1D
+
+        # Probabilistic Layer 
+        self.prob_decoder = ProbabilisticDecoderPT(
+            hidden_dim=2 * latent_dim, # Input from third norm layer
+            data_dim=output_shape[1]
+        )
+
+    def forward(self, g: torch.Tensor, x: torch.Tensor) -> TransformedDistribution:
+        B, T, _ = x.shape
+
+        # 1. Create the validity mask and sequence lengths from input 'x'
+        validity_mask = ~torch.all(x == 0.0, dim=2)
+        lengths = validity_mask.sum(dim=1).cpu().to(torch.int64)
+        valid_indices = torch.where(lengths > 0)[0]
+
+        # 2. Emulate RepeatVector
+        generator = g.unsqueeze(1).expand(-1, T, -1)
+
+        # 3. First Bi-GRU with masking
+        gru1_out_full = torch.zeros(B, T, 2 * self.latent_dim, device=g.device, dtype=g.dtype)
+        if len(valid_indices) > 0:
+            # Apply GRU whilst ignoring masked data
+            packed_input_1 = pack_padded_sequence(
+                generator[valid_indices], lengths[valid_indices], batch_first=True, enforce_sorted=False
+            )
+            packed_output_1, _ = self.gru1(packed_input_1)
+            unpacked_output_1, _ = pad_packed_sequence(
+                packed_output_1, batch_first=True, total_length=T
+            )
+            gru1_out_full[valid_indices] = unpacked_output_1
+        norm1_out = self.norm1(gru1_out_full)
+
+        # 4. Second Bi-GRU with masking (reusing the same mask/lengths)
+        gru2_out_full = torch.zeros(B, T, 4 * self.latent_dim, device=g.device, dtype=g.dtype)
+        if len(valid_indices) > 0:
+            packed_input_2 = pack_padded_sequence(
+                norm1_out[valid_indices], lengths[valid_indices], batch_first=True, enforce_sorted=False
+            )
+            packed_output_2, _ = self.gru2(packed_input_2)
+            unpacked_output_2, _ = pad_packed_sequence(
+                packed_output_2, batch_first=True, total_length=T
+            )
+            gru2_out_full[valid_indices] = unpacked_output_2
+        norm2_out = self.norm2(gru2_out_full)
+
+        # 5. Convolution Block
+        # Conv1d expects (B, C, T), so we permute
+        conv_in = norm2_out.permute(0, 2, 1)
+        conv_out = F.relu(self.conv1d(conv_in))
+        # Permute back to (B, T, C) for LayerNorm
+        norm3_in = conv_out.permute(0, 2, 1)
+        norm3_out = self.norm3(norm3_in)
+
+        # 6. Final Probabilistic Decoder
+        final_dist = self.prob_decoder(norm3_out, validity_mask)
+
+        return final_dist
+    
 
 # noinspection PyCallingNonCallable
 def get_recurrent_decoder(
@@ -661,92 +885,118 @@ def get_transformer_decoder(
     return tf.keras.models.Model(
         [g, x], [x_decoded, attention_weights], name="transformer_decoder"
     )
+  
 
+class VectorQuantizer(nn.Module):
+    """
+    Vector Quantizer Layer for VQ-VAE.
+    - Inherits from torch.nn.Module.
+    - Manages a codebook of embeddings.
+    - Computes quantization, losses, and returns results.
 
-class VectorQuantizer(tf.keras.models.Model):
-    """Vector quantizer layer.
-
-    Quantizes the input vectors into a fixed number of clusters using L2 norm. Based on
+    Based on
     https://arxiv.org/pdf/1509.03700.pdf, and adapted for clustering using https://arxiv.org/abs/1806.02199.
     Implementation based on https://keras.io/examples/generative/vq_vae/.
 
     """
 
-    def __init__(
-        self, n_components, embedding_dim, beta, kmeans_loss: float = 0.0, **kwargs
-    ):
-        """Initialize the VQ layer.
+    def __init__(self, n_components: int, embedding_dim: int, beta: float, kmeans_loss_weight: float = 0.0):
+        """
+        Initialize the VQ layer.
 
         Args:
-            n_components (int): number of embeddings to use
-            embedding_dim (int): dimensionality of the embeddings
-            beta (float): beta value for the loss function
-            kmeans_loss (float): regularization parameter for the Gram matrix
-            **kwargs: additional arguments for the parent class
-
+            n_components (int): Number of vectors in the codebook (K).
+            embedding_dim (int): Dimensionality of each embedding vector (D).
+            beta (float): Weight for the commitment loss.
+            kmeans_loss_weight (float): Weight for the k-means-like disentanglement loss.
         """
-        super(VectorQuantizer, self).__init__(**kwargs)
+        super().__init__()
         self.embedding_dim = embedding_dim
         self.n_components = n_components
         self.beta = beta
-        self.kmeans = kmeans_loss
+        self.kmeans_loss_weight = kmeans_loss_weight
 
-        # Initialize the VQ codebook
-        w_init = tf.random_uniform_initializer()
-        self.codebook = tf.Variable(
-            initial_value=w_init(
-                shape=(self.embedding_dim, self.n_components), dtype="float32"
-            ),
-            trainable=True,
-            name="vqvae_codebook",
-        )
+        # Initialize the codebook. 
+        self.codebook = nn.Parameter(torch.rand(n_components, embedding_dim))
 
-    def call(self, x):  # pragma: no cover
-        """Compute the VQ layer.
+
+    def forward(self, x: torch.Tensor):
+        """
+        Forward pass of the VQ layer.
 
         Args:
-            x (tf.Tensor): input tensor
+            x (torch.Tensor): The input tensor from the encoder.
+                              Shape: [batch_size, ..., embedding_dim].
 
         Returns:
-                x (tf.Tensor): output tensor
+            A tuple containing:
+            - quantized_st (torch.Tensor): The quantized output tensor (with straight-through
+                                           gradient), same shape as input x.
+            - vq_loss (torch.Tensor): The vector quantization loss (codebook + commitment).
+            - kmeans_loss (torch.Tensor): The k-means disentanglement loss.
+            - soft_counts (torch.Tensor): Soft assignments to clusters.
+                                          Shape: [batch_size, ..., n_components].
+            - encoding_indices (torch.Tensor): The hard indices of the chosen codes.
+                                               Shape: [batch_size, ...].
         """
-        # Compute input shape and flatten, keeping the embedding dimension intact
-        input_shape = tf.shape(x)
+        input_shape = x.shape
+        device = x.device
+        
+        # Flatten input tensor while keeping the embedding dimension.
+        # Shape: [B * ..., D] -> [N, D]
+        flattened = x.reshape(-1, self.embedding_dim)
 
-        # Add a disentangling penalty to the embeddings
-        if self.kmeans:
-            kmeans_loss = deepof.model_utils.compute_kmeans_loss(
-                x, weight=self.kmeans, batch_size=input_shape[0]
-            )
-            self.add_loss(kmeans_loss)
-            self.add_metric(kmeans_loss, name="kmeans_loss")
+        # --- K-Means Loss ---
+        kmeans_loss = torch.tensor(0.0, device=device)
+        if self.kmeans_loss_weight > 0:
+            kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss(flattened, weight=self.kmeans_loss_weight)
 
-        flattened = tf.reshape(x, [-1, self.embedding_dim])
+        # --- Distance Calculation (Compute only once) ---
+        # Calculate squared L2 distance between each input and each codebook vector.
+        # distances = (a-b)^2 = a^2 - 2ab + b^2
+        sum_sq_inputs = torch.sum(flattened**2, dim=1, keepdim=True)
+        sum_sq_codes = torch.sum(self.codebook**2, dim=1)
+        dot_product = torch.matmul(flattened, self.codebook.T)
+        distances = sum_sq_inputs + sum_sq_codes - 2 * dot_product  # Shape: [N, K]
 
-        # Quantize input using the codebook
-        encoding_indices = tf.cast(
-            self.get_code_indices(flattened, return_soft_counts=False), tf.int32
+        # --- Hard and Soft Assignments ---
+        # 1. Get hard assignments (indices of the closest codebook vectors)
+        encoding_indices = torch.argmin(distances, dim=1) # Shape: [N]
+        
+        # 2. Get soft assignments (based on the original paper's logic)
+        # Add a small epsilon for numerical stability to avoid division by zero.
+        # The original logic is (1/d^2)^2, which is 1/d^4.
+        similarity = (1.0 / (distances + 1e-9)) ** 2
+        soft_counts = similarity / torch.sum(similarity, dim=1, keepdim=True) # Shape: [N, K]
+
+        # --- Quantization using hard assignments ---
+        quantized = F.embedding(encoding_indices, self.codebook)
+        quantized = quantized.view(input_shape) # Reshape back to original input shape
+        
+        # --- VQ Loss Calculation ---
+        codebook_loss = F.mse_loss(quantized, x.detach())
+        commitment_loss = F.mse_loss(x, quantized.detach())
+        vq_loss = codebook_loss + self.beta * commitment_loss
+
+        # --- Straight-Through Estimator ---
+        # This allows gradients to flow from the decoder back to the encoder
+        # through the non-differentiable quantization step.
+        quantized_st = x + (quantized - x).detach()
+        
+        # --- Reshape outputs to match original spatial dimensions ---
+        # Reshape soft_counts to [batch_size, ..., n_components]
+        soft_counts_reshaped = soft_counts.view(*input_shape[:-1], self.n_components)
+        # Reshape indices to [batch_size, ...]
+        encoding_indices_reshaped = encoding_indices.view(input_shape[:-1])
+
+        return(
+           quantized_st,
+           vq_loss,
+           kmeans_loss,
+           soft_counts_reshaped,
+           encoding_indices_reshaped
         )
-        soft_counts = self.get_code_indices(flattened, return_soft_counts=True)
 
-        encodings = tf.one_hot(encoding_indices, self.n_components)
-
-        quantized = tf.matmul(encodings, self.codebook, transpose_b=True)
-        quantized = tf.reshape(quantized, input_shape)
-
-        # Compute vector quantization loss, and add it to the layer
-        commitment_loss = self.beta * tf.reduce_mean(
-            (tf.stop_gradient(quantized) - x) ** 2
-        )
-        codebook_loss = tf.reduce_mean((quantized - tf.stop_gradient(x)) ** 2)
-        self.add_loss(commitment_loss + codebook_loss)
-
-        # Straight-through estimator (copy gradients through the undiferentiable layer)
-        # This approach has been reported to have issues for clustering, so we use add an extra
-        # reconstruction loss to ensure that the gradients can flow through the encoder.
-        # quantized = x + tf.stop_gradient(quantized - x)
-
-        return quantized, soft_counts
 
     # noinspection PyTypeChecker
     def get_code_indices(
@@ -780,6 +1030,57 @@ class VectorQuantizer(tf.keras.models.Model):
         # Return index of the closest code
         encoding_indices = tf.argmin(distances, axis=1)
         return encoding_indices
+
+
+
+    def call(self, x):  # pragma: no cover
+        """Compute the VQ layer.
+
+        Args:
+            x (tf.Tensor): input tensor
+
+        Returns:
+                x (tf.Tensor): output tensor
+        """
+        # Compute input shape and flatten, keeping the embedding dimension intact
+        input_shape = tf.shape(x)
+
+        # Add a disentangling penalty to the embeddings
+        if self.kmeans:
+            kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss(
+                x, weight=self.kmeans, batch_size=input_shape[0]
+            )
+            self.add_loss(kmeans_loss)
+            self.add_metric(kmeans_loss, name="kmeans_loss")
+
+        flattened = tf.reshape(x, [-1, self.embedding_dim])
+
+        # Quantize input using the codebook
+        encoding_indices = tf.cast(
+            self.get_code_indices(flattened, return_soft_counts=False), tf.int32
+        )
+        soft_counts = self.get_code_indices(flattened, return_soft_counts=True)
+
+        encodings = tf.one_hot(encoding_indices, self.n_components)
+
+        quantized = tf.matmul(encodings, self.codebook, transpose_b=True)
+        quantized = tf.reshape(quantized, input_shape)
+
+        # Compute vector quantization loss, and add it to the layer
+        commitment_loss = self.beta * tf.reduce_mean(
+            (tf.stop_gradient(quantized) - x) ** 2
+        )
+        codebook_loss = tf.reduce_mean((quantized - tf.stop_gradient(x)) ** 2)
+        self.add_loss(commitment_loss + codebook_loss)
+
+        # Straight-through estimator (copy gradients through the undiferentiable layer)
+        # This approach has been reported to have issues for clustering, so we use add an extra
+        # reconstruction loss to ensure that the gradients can flow through the encoder.
+        # quantized = x + tf.stop_gradient(quantized - x)
+
+        return quantized, soft_counts
+
+
 
 
 # noinspection PyCallingNonCallable
@@ -1120,6 +1421,98 @@ class VQVAE(tf.keras.models.Model):
         }
 
 
+class GaussianMixtureLatentPT(nn.Module):
+    """
+    PyTorch implementation of the Gaussian Mixture probabilistic latent space model.
+    It embeds data into a latent space and models that space as a mixture of Gaussians.
+    """
+    def __init__(
+        self,
+        input_dim: int,
+        n_components: int,
+        latent_dim: int,
+        kmeans: float,
+        **kwargs,
+    ):
+        super().__init__()
+        self.input_dim = input_dim
+        self.n_components = n_components
+        self.latent_dim = latent_dim
+        self.kmeans_weight = kmeans
+
+        # --- Trainable Parameters for the GMM components ---
+        self.gmm_means = nn.Parameter(torch.empty(n_components, latent_dim))
+        self.gmm_log_vars = nn.Parameter(torch.empty(n_components, latent_dim))
+        nn.init.xavier_normal_(self.gmm_means)
+        nn.init.xavier_normal_(self.gmm_log_vars)
+
+        # --- Encoder Layers to produce the latent distribution ---
+        self.encoder_mean = nn.Linear(self.input_dim, self.latent_dim)
+        self.encoder_log_var = nn.Linear(self.input_dim, self.latent_dim)
+
+        # --- Non-trainable Buffers ---
+        self.register_buffer('prior', torch.ones(n_components) / n_components)
+        self.register_buffer('pretrain', torch.tensor(0.0))
+        
+        # --- Helper Layers ---
+        self.cluster_control = deepof.clustering.model_utils_new.ClusterControlPT()
+
+    def _encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Encodes the input into mean and log-variance of the latent distribution."""
+        z_mean = self.encoder_mean(x)
+        z_log_var = self.encoder_log_var(x) # Note: softplus is applied in the forward pass
+        return z_mean, z_log_var
+
+    def _reparameterize(
+        self, mean: torch.Tensor, var: torch.Tensor, epsilon: torch.Tensor = None
+    ) -> torch.Tensor:
+        """
+        Performs reparameterization.
+        MODIFIED to exactly replicate the original TF model's non-standard scale calculation.
+        """
+        # Original TF logic: scale = sqrt(exp(variance))
+        # The 'var' input here is the direct output of the softplus activation.
+        scale = torch.sqrt(torch.exp(var))
+        
+        if epsilon is None:
+            epsilon = torch.randn_like(scale)
+        return mean + scale * epsilon
+
+    def _calculate_posterior(self, z: torch.Tensor) -> torch.Tensor:
+        """Calculates the posterior probability p(c|z) for each sample."""
+        # MODIFIED: The GMM parameters from TF are log-std-dev, not log-variance.
+        # So we just exponentiate them to get the scale.
+        gmm_scale = torch.exp(self.gmm_log_vars)
+
+        gmm_dist = Normal(
+            loc=self.gmm_means.unsqueeze(0),
+            scale=gmm_scale.unsqueeze(0)
+        )
+        log_p_z_given_c = gmm_dist.log_prob(z.unsqueeze(1)).sum(dim=-1)
+        
+        log_p_c_given_z = torch.log(self.prior + 1e-9) + log_p_z_given_c
+        
+        return F.softmax(log_p_c_given_z, dim=-1)
+
+    def forward(
+        self, x: torch.Tensor, epsilon: torch.Tensor = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        
+        z_mean, z_var_raw = self._encode(x)
+        z_var = F.softplus(z_var_raw) # Apply activation
+
+        # Pass z_var directly, not z_log_var
+        z_sample = self._reparameterize(z_mean, z_var, epsilon)
+        # ... rest of the method is the same ...
+        z_for_downstream = z_sample if self.training else z_mean
+        z_cat = self._calculate_posterior(z_for_downstream)
+        z_final, metrics = self.cluster_control(z_for_downstream, z_cat)
+        kmeans_loss = torch.tensor(0.0, device=x.device)
+        if self.kmeans_weight > 0:
+            kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
+        return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss)
+
+
 class GaussianMixtureLatent(tf.keras.models.Model):
     """Gaussian Mixture probabilistic latent space model.
 
@@ -1163,7 +1556,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
 
         """
         super(GaussianMixtureLatent, self).__init__(**kwargs)
-        self.seq_shape = input_shape
+        self.seq_shape = input_shape[0] 
         self.n_components = n_components
         self.latent_dim = latent_dim
         self.batch_size = batch_size
@@ -1221,15 +1614,20 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             1.0, trainable=False, dtype=tf.float32, name="kl_weight"
         )
 
-    def call(self, inputs, training=False):  # pragma: no cover
+    def call(self, inputs, training=False, epsilon=None, return_all_outputs_for_testing=False): # pragma: no cover
         """Compute the output of the layer."""
         z_gauss_mean = self.z_gauss_mean(inputs)
         z_gauss_var = self.z_gauss_var(inputs)
 
-        z = tfd.MultivariateNormalDiag(
-            loc=z_gauss_mean, scale_diag=tf.math.sqrt(tf.math.exp(z_gauss_var))
-        )
-        z_sample = tf.squeeze(z.sample())
+        if epsilon is not None:
+            # Use deterministic reparameterization for testing
+            z_sample = z_gauss_mean + tf.math.sqrt(tf.math.exp(z_gauss_var)) * epsilon
+        else:
+            # Original stochastic sampling for production
+            z_dist = tfd.MultivariateNormalDiag(
+                loc=z_gauss_mean, scale_diag=tf.math.sqrt(tf.math.exp(z_gauss_var))
+            )
+            z_sample = tf.squeeze(z_dist.sample())
 
         # Compute embedding probabilities given each cluster
         p_z_c = tf.stack(
@@ -1260,8 +1658,8 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             tf.math.xlogy(z_cat, 1e-6 + prior), axis=-1
         ) * (1.0 - tf.cast(self.pretrain, tf.float32))
 
-        self.add_metric(loss_clustering, name="clustering_loss", aggregation="mean")
-        self.add_metric(loss_prior, name="prior_loss", aggregation="mean")
+        #self.add_metric(loss_clustering, name="clustering_loss", aggregation="mean")
+        #self.add_metric(loss_prior, name="prior_loss", aggregation="mean")
 
         # Update KL weight based on the current iteration
         if self.kl_warm_up_iters > 0:
@@ -1293,33 +1691,188 @@ class GaussianMixtureLatent(tf.keras.models.Model):
         )
         kl_batch = self._kl_weight * kl
 
-        self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
-        self.add_metric(kl, aggregation="mean", name="kl_divergence")
+        #self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
+        #self.add_metric(kl, aggregation="mean", name="kl_divergence")
 
-        self.add_loss(tf.math.reduce_mean(loss_clustering))
-        self.add_loss(tf.math.reduce_mean(loss_prior))
-        self.add_loss(tf.math.reduce_mean(kl_batch))
+        #self.add_loss(tf.math.reduce_mean(loss_clustering))
+        #self.add_loss(tf.math.reduce_mean(loss_prior))
+        #self.add_loss(tf.math.reduce_mean(kl_batch))
 
-        if training:
-            z = z_sample
-        else:
-            # Select corresponding mean
-            z = z_gauss_mean
 
-        # Tracks clustering metrics
+        # Calculate metrics for potential return
+        hard_groups = tf.math.argmax(z_cat, axis=1)
+        max_groups = tf.reduce_max(z_cat, axis=1)
+        n_populated = tf.cast(tf.shape(tf.unique(tf.reshape(hard_groups, [-1]))[0])[0], tf.float32)
+        confidence = tf.reduce_mean(max_groups)
+
+        z = z_sample if training else z_gauss_mean
+
         if self.n_components > 1:
             z = self.cluster_control_layer([z, z_cat])
 
+        k_loss = 0.0
         if self.kmeans:
-            kmeans_loss = deepof.model_utils.compute_kmeans_loss(
-                z, weight=self.kmeans, batch_size=self.batch_size
-            )
-            self.add_loss(kmeans_loss)
-            self.add_metric(kmeans_loss, name="kmeans_loss")
+            k_loss = deepof.model_utils.compute_kmeans_loss(z, weight=self.kmeans, batch_size=self.batch_size)
+            #self.add_loss(k_loss)
+            #self.add_metric(k_loss, name="kmeans_loss")
 
-        return z, z_cat
+        # MODIFIED: Add a switch for the return value
+        if return_all_outputs_for_testing:
+            # In test mode, return all computed values for direct comparison
+            return z, z_cat, n_populated, confidence, k_loss
+        else:
+            # In production mode, use side effects (add_loss/add_metric) and return the original signature
+            loss_clustering = -tf.reduce_sum(tf.multiply(z_cat, tf.math.softmax(p_z_c, axis=-1)), axis=-1) * (1.0 - tf.cast(self.pretrain, tf.float32))
+            loss_prior = -tf.reduce_sum(tf.math.xlogy(z_cat, 1e-6 + self.prior), axis=-1) * (1.0 - tf.cast(self.pretrain, tf.float32))
+            self.add_metric(loss_clustering, name="clustering_loss", aggregation="mean")
+            self.add_metric(loss_prior, name="prior_loss", aggregation="mean")
+
+            self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
+            self.add_metric(kl, aggregation="mean", name="kl_divergence")
+
+            self.add_loss(tf.math.reduce_mean(loss_clustering))
+            self.add_loss(tf.math.reduce_mean(loss_prior))
+            self.add_loss(tf.math.reduce_mean(kl_batch))
+
+            if self.kmeans:
+                self.add_loss(k_loss)
+                self.add_metric(k_loss, name="kmeans_loss")
+
+            # ... all other add_loss and add_metric calls from the original ...
+            return z, z_cat
 
 
+
+class VaDEPT(nn.Module):
+    """
+    A self-contained PyTorch implementation of the VaDE model.
+
+    This class encapsulates the entire VaDE architecture, including the encoder,
+    the Gaussian mixture latent space, and the decoder. It is instantiated with
+    all necessary configuration parameters, building its sub-modules internally.
+    This provides a clean, single-object interface for the model.
+    """
+    def __init__(
+        self,
+        input_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray,
+        latent_dim: int,
+        n_components: int,
+        use_gnn: bool = True,
+        kmeans_loss: float = 1.0,
+        interaction_regularization: float = 0.0,
+    ):
+        """
+        Initializes and builds the VaDE model and its components.
+
+        Args:
+            input_shape (tuple): Shape of the input node features (Time, Nodes, Features_per_node).
+            edge_feature_shape (tuple): Shape of the edge features (Time, Edges, Features_per_edge).
+            adjacency_matrix (np.ndarray): Adjacency matrix of the connectivity graph.
+            latent_dim (int): Dimensionality of the latent space.
+            n_components (int): Number of components in the Gaussian mixture.
+            use_gnn (bool): If True, use the GNN-based encoder.
+            kmeans_loss (float): Weight of the k-means style loss in the latent space.
+            interaction_regularization (float): Regularization for GNN interaction features.
+        """
+        super().__init__()
+        
+        # Store key dimensions for internal use (e.g., reshaping in forward pass)
+        time_steps, n_nodes, n_features_per_node = input_shape
+        self.input_n_nodes = n_nodes
+        self.input_n_features_per_node = n_features_per_node
+
+        # 1. Instantiate Encoder
+        self.encoder = RecurrentEncoderPT(
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
+        )
+
+        # 2. Instantiate Latent Space
+        self.latent_space = GaussianMixtureLatentPT(
+            input_dim=latent_dim,
+            n_components=n_components,
+            latent_dim=latent_dim,
+            kmeans=kmeans_loss,
+        )
+
+        # 3. Instantiate Decoder
+        decoder_output_features = n_nodes * n_features_per_node
+        self.decoder = RecurrentDecoderPT(
+            output_shape=(time_steps, decoder_output_features),
+            latent_dim=latent_dim,
+        )
+
+    def forward(
+        self, x: torch.Tensor, a: torch.Tensor
+    ) -> Tuple[torch.distributions.Distribution, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Defines the full forward pass for the VaDE model (training and evaluation).
+
+        Args:
+            x (torch.Tensor): Input node features tensor (B, T, N, F_node).
+            a (torch.Tensor): Input edge features tensor (B, T, E, F_edge).
+
+        Returns:
+            A tuple containing:
+            - reconstruction_dist (torch.distributions.Distribution): The output distribution from the decoder.
+            - latent (torch.Tensor): The sampled latent representation from the GMM space.
+            - categorical (torch.Tensor): The cluster probabilities (soft assignments).
+            - kmeans_loss (torch.Tensor): The k-means regularization loss from the latent space.
+        """
+        # 1. Encode the input to get the pre-latent representation
+        encoder_output = self.encoder(x, a)
+        
+        # 2. Pass through GMM latent space
+        latent, categorical, _, _, kmeans_loss = self.latent_space(encoder_output)
+        
+        # 3. Decode the latent sample back to the original data space
+        # Reshape x to (B, T, N*F) for the decoder's masking logic
+        B, T, _, _ = x.shape
+        x_for_decoder = x.view(B, T, self.input_n_nodes * self.input_n_features_per_node)
+        
+        reconstruction_dist = self.decoder(latent, x_for_decoder)
+        
+        return reconstruction_dist, latent, categorical, kmeans_loss
+
+    @torch.no_grad()
+    def embed(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        Inference-only method to get the latent embedding. Equivalent to the 'embedding' Keras model.
+
+        Args:
+            x (torch.Tensor): Input node features tensor.
+            a (torch.Tensor): Input edge features tensor.
+
+        Returns:
+            torch.Tensor: The latent representation `z`.
+        """
+        encoder_output = self.encoder(x, a)
+        latent, _, _, _, _ = self.latent_space(encoder_output)
+        return latent
+
+    @torch.no_grad()
+    def group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        Inference-only method to get cluster probabilities. Equivalent to the 'grouper' Keras model.
+
+        Args:
+            x (torch.Tensor): Input node features tensor.
+            a (torch.Tensor): Input edge features tensor.
+
+        Returns:
+            torch.Tensor: The soft cluster assignments (categorical probabilities).
+        """
+        encoder_output = self.encoder(x, a)
+        _, categorical, _, _, _ = self.latent_space(encoder_output)
+        return categorical
+    
+    
 # noinspection PyCallingNonCallable
 def get_vade(
     input_shape: tuple,

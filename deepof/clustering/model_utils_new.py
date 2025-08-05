@@ -6,7 +6,7 @@
 
 import os
 from datetime import date, datetime
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Tuple, Union, Dict
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -16,6 +16,13 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
 import tqdm
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.distributions import Distribution, TransformedDistribution
+from torch.distributions.transforms import AffineTransform
+
 from keras_tuner import BayesianOptimization, Hyperband, Objective
 from spektral.layers import CensNetConv
 from tensorboard.plugins.hparams import api as hp
@@ -31,9 +38,11 @@ from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
 import deepof.hypermodels
 import deepof.models
+import deepof.clustering.models_new
 import deepof.post_hoc
 from deepof.data_loading import get_dt, save_dt
 import deepof.clustering.dataset
+import warnings
 
 
 tfb = tfp.bijectors
@@ -287,6 +296,30 @@ def hard_loss(
     return loss, mean_sim, mean_neg
 
 
+def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.Tensor:
+    """
+    Computes a loss based on the singular values of the Gram matrix of the
+    latent vectors, encouraging orthogonality.
+
+    Args:
+        latent_means: The latent vectors from the model (batch_size, latent_dim).
+        weight: The weight to apply to this loss component.
+
+    Returns:
+        The calculated scalar loss tensor.
+    """
+    batch_size = float(latent_means.shape[0])
+    gram_matrix = (latent_means.T @ latent_means) / batch_size
+    
+    # Compute singular values, which are the square roots of the eigenvalues for a symmetric matrix
+    singular_values = torch.linalg.svdvals(gram_matrix)
+    
+    # Clamp to avoid NaN gradients from sqrt(0)
+    penalization = torch.sqrt(torch.clamp(singular_values, min=1e-9))
+    
+    return weight * torch.mean(penalization)
+
+
 def compute_kmeans_loss(
     latent_means: tf.Tensor, weight: float = 1.0, batch_size: int = 64
 ):  # pragma: no cover
@@ -377,6 +410,70 @@ def get_angles(pos: int, i: int, d_model: int):
     """
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
     return pos * angle_rates
+
+
+class RecurrentBlockPT(nn.Module):
+    # __init__ remains correct.
+    def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
+        super().__init__()
+        self.latent_dim = latent_dim
+        if bidirectional_merge != "concat":
+            warnings.warn("Bidirectional merge mode defaulting to 'concat'.")
+        self.conv1d = nn.Conv1d(in_channels=input_features, out_channels=2 * latent_dim, kernel_size=5, padding="same", bias=False)
+        self.gru1 = nn.GRU(input_size=2 * latent_dim, hidden_size=2 * latent_dim, num_layers=1, batch_first=True, bidirectional=True)
+        self.norm1 = nn.LayerNorm(4 * latent_dim, eps=1e-3)
+        self.gru2 = nn.GRU(input_size=4 * latent_dim, hidden_size=latent_dim, num_layers=1, batch_first=True, bidirectional=True)
+        self.norm2 = nn.LayerNorm(2 * latent_dim, eps=1e-3)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, N, _ = x.shape
+        
+        # Stage 1: Convolution
+        conv_in = x.reshape(B * T, N, -1).permute(0, 2, 1) # B*T as TF TimeDistributed analogon
+        conv_out = F.relu(self.conv1d(conv_in))
+        gru1_in = conv_out.permute(0, 2, 1) # Shape: (B*T, N, F_conv)
+        
+        # --- Prepare for packing ---
+        # Calculate mask from convolution output (TF GRU layer with masking analogon)
+        mask = (torch.abs(gru1_in).sum(dim=-1) > 0) # Shape: (B*T, N)
+        lengths = mask.sum(dim=1).cpu()
+        valid_indices = torch.where(lengths > 0)[0]
+        
+        # --- Stage 2: First GRU with packing ---
+        gru1_out_full = torch.zeros(B * T, N, 4 * self.latent_dim, device=x.device, dtype=x.dtype) # allocate data
+        if len(valid_indices) > 0:
+            valid_lengths = lengths[valid_indices]
+            # Apply GRU whilst ignoring masked data
+            packed_input = pack_padded_sequence(
+                gru1_in[valid_indices], valid_lengths, batch_first=True, enforce_sorted=False
+            )
+            packed_output, _ = self.gru1(packed_input)
+            unpacked_output, _ = pad_packed_sequence(
+                packed_output, batch_first=True, total_length=N
+            )
+            gru1_out_full[valid_indices] = unpacked_output
+
+        # Stage 3: First LayerNorm
+        norm1_in = gru1_out_full.reshape(B, T, N, -1)
+        norm1_out = self.norm1(norm1_in)
+
+        # --- Stage 4: Second GRU with packing ---
+        gru2_in = norm1_out.reshape(B * T, N, -1)
+        gru2_h_n_full = torch.zeros(2, B * T, self.latent_dim, device=x.device, dtype=x.dtype)
+        if len(valid_indices) > 0:
+            valid_lengths = lengths[valid_indices] # Use the same lengths
+            packed_input_2 = pack_padded_sequence(
+                gru2_in[valid_indices], valid_lengths, batch_first=True, enforce_sorted=False
+            )
+            _, h_n_2 = self.gru2(packed_input_2)
+            gru2_h_n_full[:, valid_indices, :] = h_n_2
+        gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
+
+        # Stage 5: Second LayerNorm
+        norm2_out = self.norm2(gru2_final_state)
+        
+        final_output = norm2_out.reshape(B, T, -1)
+        return final_output
 
 
 def get_recurrent_block(
@@ -713,6 +810,51 @@ class ExponentialLearningRate(tf.keras.callbacks.Callback):
         K.set_value(self.model.optimizer.lr, self.model.optimizer.lr * self.factor)
 
 
+class AffineTransformedDistribution(TransformedDistribution):
+    """
+    A specific TransformedDistribution for Affine transforms that implements .mean.
+    """
+    def __init__(self, base_distribution, transform):
+        super().__init__(base_distribution, transform)
+
+    @property
+    def mean(self):
+        """
+        Computes the mean of the transformed distribution.
+        E[loc + scale * X] = loc + scale * E[X]
+        """
+        # The transform itself is callable and applies the affine transformation.
+        return self.transforms[0](self.base_dist.mean)
+
+class ProbabilisticDecoderPT(nn.Module):
+    """
+    PyTorch translation of the ProbabilisticDecoder, including scaling transform.
+    """
+    def __init__(self, hidden_dim: int, data_dim: int):
+        super().__init__()
+        self.loc_projection = nn.Linear(in_features=hidden_dim, out_features=data_dim)
+
+    def forward(self, hidden: torch.Tensor, validity_mask: torch.Tensor) -> AffineTransformedDistribution:
+        B, T, D = hidden.shape
+        # Reconstruct mean locations
+        loc_params = self.loc_projection(hidden.view(B * T, -1)).view(B, T, -1)
+
+        # Define Gaussian distributions with means (init: var=1)
+        scale_params = torch.ones_like(loc_params)
+        base_dist = torch.distributions.Normal(loc=loc_params, scale=scale_params)
+
+        # Multivariate Gaussian distributions for feature vector
+        independent_dist = torch.distributions.Independent(base_dist, 1)
+        
+        # Define transform to map masked values to 0 (y = 0 + 0 * x) and unmasked-values to themselves (y = 0 + 1.0 * x)
+        scale_transform = validity_mask.unsqueeze(-1).to(hidden.dtype)
+        transform = AffineTransform(loc=0, scale=scale_transform)
+        
+        # Returns a custom class instead of the generic one as "mean" functionality otherwise would be missing.
+        final_dist = AffineTransformedDistribution(independent_dist, transform)
+        return final_dist
+    
+
 class ProbabilisticDecoder(tf.keras.layers.Layer):
     """Map the reconstruction output of a given decoder to a multivariate normal distribution."""
 
@@ -769,6 +911,42 @@ class ProbabilisticDecoder(tf.keras.layers.Layer):
 
         return scaled_prob_decoded
 
+
+class ClusterControlPT(nn.Module):
+    """
+    Calculates clustering metrics. This is a pass-through layer for the main
+    latent vector `z`, returning it unmodified alongside a dictionary of metrics.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(
+        self, z: torch.Tensor, z_cat: torch.Tensor
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Calculates metrics and passes the latent vector `z` through.
+
+        Args:
+            z: The latent vector (batch_size, latent_dim).
+            z_cat: Cluster probabilities (batch_size, n_components).
+
+        Returns:
+            A tuple containing the unmodified `z` and a dictionary of metrics.
+        """
+        confidence, hard_groups = torch.max(z_cat, dim=1)
+        
+        # Calculate the number of unique clusters populated in the batch
+        num_populated = torch.unique(hard_groups).numel()
+        
+        metrics = {
+            "number_of_populated_clusters": torch.tensor(
+                float(num_populated), device=z.device
+            ),
+            "confidence_in_selected_cluster": torch.mean(confidence),
+        }
+        
+        return z, metrics
+    
 
 class ClusterControl(tf.keras.layers.Layer):
     """Identity layer.
@@ -1217,10 +1395,10 @@ def embedding_model_fitting(
     """
 
     # Create dataset from preprocesed data for efficient loading of samples 
-    dataset = deepof.clustering.dataset.BatchDictDataset(preprocessed_object[0], "C:\\Users\\Petron\\Desktop\\Python_Projects\\Deepof\\tutorial_files\\tutorial_project\\Tables")
+    #dataset = deepof.clustering.dataset.BatchDictDataset(preprocessed_object[0], "C:\\Users\\Petron\\Desktop\\Python_Projects\\Deepof\\tutorial_files\\tutorial_project\\Tables")
 
     # Build model
-    
+
 
 
 
@@ -1334,7 +1512,7 @@ def embedding_model_fitting(
     with strategy.scope():
 
         if embedding_model == "VQVAE":
-            ae_full_model = deepof.models.VQVAE(
+            ae_full_model = deepof.clustering.models_new.VQVAE(
                 input_shape=train_shape,
                 edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,
@@ -1350,7 +1528,7 @@ def embedding_model_fitting(
             )
 
         elif embedding_model == "VaDE":
-            ae_full_model = deepof.models.VaDE(
+            ae_full_model = deepof.clustering.models_new.VaDE(
                 input_shape=train_shape,
                 edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,

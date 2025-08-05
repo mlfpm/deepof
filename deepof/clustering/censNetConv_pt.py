@@ -23,7 +23,7 @@ import numpy as np
 #  MAIN  MODULE
 ###############
 
-class CensNetConvPyTorch(nn.Module):
+class CensNetConvPT(nn.Module):
     r"""
     A PyTorch implementation of the CensNet convolutional layer.
     """
