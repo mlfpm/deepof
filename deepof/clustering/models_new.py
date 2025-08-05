@@ -1742,7 +1742,6 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             return z, z_cat
 
 
-
 class VaDEPT(nn.Module):
     """
     A self-contained PyTorch implementation of the VaDE model.
@@ -1872,7 +1871,7 @@ class VaDEPT(nn.Module):
         _, categorical, _, _, _ = self.latent_space(encoder_output)
         return categorical
     
-    
+
 # noinspection PyCallingNonCallable
 def get_vade(
     input_shape: tuple,
