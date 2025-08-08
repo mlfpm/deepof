@@ -43,7 +43,7 @@ import deepof.post_hoc
 from deepof.data_loading import get_dt, save_dt
 import deepof.clustering.dataset
 import warnings
-
+from deepof.clustering.dataset import reorder_and_reshape
 
 tfb = tfp.bijectors
 tfd = tfp.distributions
@@ -312,7 +312,7 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
     gram_matrix = (latent_means.T @ latent_means) / batch_size
     
     # Compute singular values, which are the square roots of the eigenvalues for a symmetric matrix
-    singular_values = torch.linalg.svdvals(gram_matrix)
+    singular_values = torch.linalg.svdvals(gram_matrix.to(float))
     
     # Clamp to avoid NaN gradients from sqrt(0)
     penalization = torch.sqrt(torch.clamp(singular_values, min=1e-9))
@@ -413,66 +413,91 @@ def get_angles(pos: int, i: int, d_model: int):
 
 
 class RecurrentBlockPT(nn.Module):
-    # __init__ remains correct.
     def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
         super().__init__()
         self.latent_dim = latent_dim
         if bidirectional_merge != "concat":
             warnings.warn("Bidirectional merge mode defaulting to 'concat'.")
-        self.conv1d = nn.Conv1d(in_channels=input_features, out_channels=2 * latent_dim, kernel_size=5, padding="same", bias=False)
-        self.gru1 = nn.GRU(input_size=2 * latent_dim, hidden_size=2 * latent_dim, num_layers=1, batch_first=True, bidirectional=True)
+
+        self.conv1d = nn.Conv1d(
+            in_channels=input_features,
+            out_channels=2 * latent_dim,
+            kernel_size=5,
+            padding="same",
+            bias=False,
+        )
+        self.gru1 = nn.GRU(
+            input_size=2 * latent_dim,
+            hidden_size=2 * latent_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+        )
         self.norm1 = nn.LayerNorm(4 * latent_dim, eps=1e-3)
-        self.gru2 = nn.GRU(input_size=4 * latent_dim, hidden_size=latent_dim, num_layers=1, batch_first=True, bidirectional=True)
+        self.gru2 = nn.GRU(
+            input_size=4 * latent_dim,
+            hidden_size=latent_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+        )
         self.norm2 = nn.LayerNorm(2 * latent_dim, eps=1e-3)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Expect x: (B, T, N, F)
         B, T, N, _ = x.shape
-        
-        # Stage 1: Convolution
-        conv_in = x.reshape(B * T, N, -1).permute(0, 2, 1) # B*T as TF TimeDistributed analogon
-        conv_out = F.relu(self.conv1d(conv_in))
-        gru1_in = conv_out.permute(0, 2, 1) # Shape: (B*T, N, F_conv)
-        
-        # --- Prepare for packing ---
-        # Calculate mask from convolution output (TF GRU layer with masking analogon)
-        mask = (torch.abs(gru1_in).sum(dim=-1) > 0) # Shape: (B*T, N)
-        lengths = mask.sum(dim=1).cpu()
-        valid_indices = torch.where(lengths > 0)[0]
-        
-        # --- Stage 2: First GRU with packing ---
-        gru1_out_full = torch.zeros(B * T, N, 4 * self.latent_dim, device=x.device, dtype=x.dtype) # allocate data
-        if len(valid_indices) > 0:
-            valid_lengths = lengths[valid_indices]
-            # Apply GRU whilst ignoring masked data
+
+        # Force input onto the same device as this block's parameters
+        dev = self.conv1d.weight.device
+        x = x.to(dev, non_blocking=True)
+
+        # Stage 1: Conv (TimeDistributed over T)
+        conv_in = x.reshape(B * T, N, -1).permute(0, 2, 1)  # (B*T, F, N)
+        conv_out = F.relu(self.conv1d(conv_in))             # (B*T, 2*latent, N)
+        gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*latent)
+
+        # Mask/lengths for packing
+        mask = (gru1_in.abs().sum(dim=-1) > 0)              # (B*T, N)
+        lengths_cpu = mask.sum(dim=1).to(torch.int64).cpu() # lengths must be CPU for pack_padded_sequence
+        valid_idx_cpu = torch.where(lengths_cpu > 0)[0]     # CPU index for CPU lengths
+        valid_idx = valid_idx_cpu.to(dev)                   # GPU index for GPU tensors
+
+        # Stage 2: First GRU with packing
+        gru1_out_full = torch.zeros(
+            B * T, N, 4 * self.latent_dim, device=gru1_in.device, dtype=gru1_in.dtype
+        )
+        if valid_idx.numel() > 0:
             packed_input = pack_padded_sequence(
-                gru1_in[valid_indices], valid_lengths, batch_first=True, enforce_sorted=False
+                gru1_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
             )
             packed_output, _ = self.gru1(packed_input)
-            unpacked_output, _ = pad_packed_sequence(
-                packed_output, batch_first=True, total_length=N
-            )
-            gru1_out_full[valid_indices] = unpacked_output
+            unpacked_output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=N)
+            # Cast source to buffer dtype to avoid AMP mismatch
+            gru1_out_full[valid_idx] = unpacked_output.to(gru1_out_full.dtype)
 
         # Stage 3: First LayerNorm
         norm1_in = gru1_out_full.reshape(B, T, N, -1)
         norm1_out = self.norm1(norm1_in)
 
-        # --- Stage 4: Second GRU with packing ---
+        # Stage 4: Second GRU with packing
         gru2_in = norm1_out.reshape(B * T, N, -1)
-        gru2_h_n_full = torch.zeros(2, B * T, self.latent_dim, device=x.device, dtype=x.dtype)
-        if len(valid_indices) > 0:
-            valid_lengths = lengths[valid_indices] # Use the same lengths
+        gru2_h_n_full = torch.zeros(
+            2, B * T, self.latent_dim, device=gru2_in.device, dtype=gru2_in.dtype
+        )
+        if valid_idx.numel() > 0:
             packed_input_2 = pack_padded_sequence(
-                gru2_in[valid_indices], valid_lengths, batch_first=True, enforce_sorted=False
+                gru2_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
             )
-            _, h_n_2 = self.gru2(packed_input_2)
-            gru2_h_n_full[:, valid_indices, :] = h_n_2
+            _, h_n_2 = self.gru2(packed_input_2)  # (2, B_valid, latent)
+            # Cast source to buffer dtype to avoid AMP mismatch
+            gru2_h_n_full[:, valid_idx, :] = h_n_2.to(gru2_h_n_full.dtype)
+
         gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
 
         # Stage 5: Second LayerNorm
-        norm2_out = self.norm2(gru2_final_state)
-        
-        final_output = norm2_out.reshape(B, T, -1)
+        norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*latent)
+
+        final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*latent)
         return final_output
 
 
@@ -1425,6 +1450,8 @@ def embedding_model_fitting(
         # Load data
         preprocessed_train, preprocessed_validation= preprocessed_object
         
+        # Create two big numpy arrays from tables for node and edge data.
+        # Shape may be e.g. (74873, 25, 33), (74873, 25, 11) with (N_samples, L_time_window, N_features)
         X_train, a_train, _ = preprocessed_train.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
         X_val, a_val, _ = preprocessed_validation.sample_windows_from_data(time_bin_info=bin_info, return_edges=True)
 
@@ -1738,14 +1765,10 @@ def embedding_per_video(
 
     graph = False
     contrastive = isinstance(model, deepof.models.Contrastive)
-    try:
-        if any([isinstance(i, CensNetConv) for i in model.encoder.layers[2].layers]):
-            graph = True
-    except AttributeError:
-        if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
-            graph = True
+    if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
+        graph = True 
 
-    window_size = model.layers[0].input_shape[0][1]
+    window_size = model.window_size
     for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
 
         #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
@@ -1775,13 +1798,23 @@ def embedding_per_video(
             )
 
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
+        tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
+        
+        device = next(model.parameters()).device 
+        model.eval()  
 
-        emb = model.encoder([tab_tuple[0], tab_tuple[1]]).numpy()
+        x_tensor = torch.from_numpy(tab_tuple[0]).float().to(device)
+        a_tensor = torch.from_numpy(tab_tuple[1]).float().to(device)
+
+        with torch.no_grad():
+            outputs = model(x_tensor, a_tensor, False)
+
+        _, z_final, z_cat, _ = outputs
+
+        emb = z_final.cpu().numpy()
 
         if not contrastive:
-            sc = model.grouper(
-                [tab_tuple[0], tab_tuple[1]]
-            ).numpy()
+            sc = z_cat.cpu().numpy()
             # save paths for modified tables
             table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
             soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
