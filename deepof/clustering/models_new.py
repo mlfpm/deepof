@@ -1435,8 +1435,9 @@ class GaussianMixtureLatentPT(nn.Module):
 
     def _encode(self, x: torch.Tensor):
         z_mean = self.encoder_mean(x)
-        # Interpret softplus output as log-variance proxy (matches TF sampling)
-        z_log_var = F.softplus(self.encoder_log_var(x))
+        # Output raw log-variance (can be negative). Clamp for stability if needed.
+        z_log_var = self.encoder_log_var(x)
+        z_log_var = torch.clamp(z_log_var, min=-10.0, max=10.0)
         return z_mean, z_log_var
 
     def _reparameterize(self, mean: torch.Tensor, z_log_var: torch.Tensor, epsilon: torch.Tensor = None):
@@ -1466,15 +1467,16 @@ class GaussianMixtureLatentPT(nn.Module):
     def forward(self, x: torch.Tensor, epsilon: torch.Tensor = None):
         z_mean, z_log_var = self._encode(x)
         z_sample = self._reparameterize(z_mean, z_log_var, epsilon)
+        # Use z_mean for responsibilities to reduce noise
+        z_cat = self._calculate_posterior(z_mean)
+
+        # For the decoder, keep reparameterized sample during training; mean at eval
         z_for_downstream = z_sample if self.training else z_mean
 
-        z_cat = self._calculate_posterior(z_for_downstream)
         z_final, metrics = self.cluster_control(z_for_downstream, z_cat)
 
-        # Compute kmeans in full precision to avoid AMP instability
         kmeans_loss = torch.tensor(0.0, device=x.device, dtype=z_final.dtype)
         if self.kmeans_weight > 0:
-            # disable autocast for numeric stability
             with torch.cuda.amp.autocast(enabled=False):
                 km32 = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(
                     z_final.float(), weight=self.kmeans_weight
@@ -1859,14 +1861,17 @@ class VaDEPT(nn.Module):
         
         all_embeddings = []
         samples_gathered = 0
+        dev = next(self.parameters()).device
         with torch.no_grad():
             for x, a, *_ in data_loader:
-                embeddings = self.encoder(x, a)
-                all_embeddings.append(embeddings.cpu())
-                samples_gathered += embeddings.size(0)
+                x, a = x.to(dev), a.to(dev)
+                enc = self.encoder(x, a)
+                z_mean, _ = self.latent_space._encode(enc)
+                all_embeddings.append(z_mean.cpu())
+                samples_gathered += z_mean.size(0)
                 if samples_gathered >= n_samples:
                     break
-        
+
         all_embeddings = torch.cat(all_embeddings, dim=0).numpy()
         if all_embeddings.shape[0] > n_samples:
             all_embeddings = all_embeddings[:n_samples]
@@ -1880,9 +1885,9 @@ class VaDEPT(nn.Module):
         ).fit(all_embeddings)
 
         print("Assigning learned GMM parameters to the model.")
-        self.latent_space.gmm_means.data = torch.from_numpy(gmm.means_).float()
-        # Store log-variances
-        self.latent_space.gmm_log_vars.data = torch.from_numpy(np.log(gmm.covariances_)).float()
+        self.latent_space.gmm_means.data = torch.from_numpy(gmm.means_).float().to(dev)
+        # Store log-variances (not log-sigmas)
+        self.latent_space.gmm_log_vars.data = torch.from_numpy(np.log(gmm.covariances_)).float().to(dev)
 
     @torch.no_grad()
     def embed(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:

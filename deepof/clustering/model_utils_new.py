@@ -1420,22 +1420,7 @@ def embedding_model_fitting(
 
     """
 
-    # Create dataset from preprocesed data for efficient loading of samples 
-    #dataset = deepof.clustering.dataset.BatchDictDataset(preprocessed_object[0], "C:\\Users\\Petron\\Desktop\\Python_Projects\\Deepof\\tutorial_files\\tutorial_project\\Tables")
-
-    # Build model
-
-
-
-
-
-
-
-
-
-
-
-
+    
     # Select strategy based on available hardware
     if len(tf.config.list_physical_devices("GPU")) > 1:  # pragma: no cover
         strategy = tf.distribute.MirroredStrategy(
