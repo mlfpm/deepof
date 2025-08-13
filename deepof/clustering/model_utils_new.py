@@ -851,6 +851,7 @@ class AffineTransformedDistribution(TransformedDistribution):
         # The transform itself is callable and applies the affine transformation.
         return self.transforms[0](self.base_dist.mean)
 
+
 class ProbabilisticDecoderPT(nn.Module):
     """
     PyTorch translation of the ProbabilisticDecoder, including scaling transform.

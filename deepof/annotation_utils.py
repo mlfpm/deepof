@@ -466,7 +466,7 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
     X_augmented = pd.concat(augmented_dfs, axis=1)
 
     # Filter columns that contain 'speed'
-    filtered_columns = [col for col in X_augmented.columns if 'speed' in col]
+    filtered_columns = [col for col in X_augmented.columns if 'speed' in col or '0' in col]
 
     # Select only the filtered columns
     X_augmented = X_augmented[filtered_columns]

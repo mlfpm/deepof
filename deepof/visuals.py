@@ -3227,6 +3227,7 @@ def export_annotated_video(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        #behaviors=behaviors,
     )
     # Create video config
     video_export_config = VideoExportConfig(
@@ -3274,7 +3275,7 @@ def export_annotated_video(
 
     #preprocess time bins            
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict,
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=np.inf
         )
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)

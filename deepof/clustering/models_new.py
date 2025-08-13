@@ -1492,6 +1492,7 @@ class GaussianMixtureLatentPT(nn.Module):
         )
 
 
+
 class GaussianMixtureLatent(tf.keras.models.Model):
     """Gaussian Mixture probabilistic latent space model.
 
@@ -1914,7 +1915,7 @@ class VaDEPT(nn.Module):
         encoder_output = self.encoder(x, a)
         _, categorical, _, _, _ = self.latent_space(encoder_output)
         return categorical
-    
+
 
 # noinspection PyCallingNonCallable
 def get_vade(
