@@ -1452,16 +1452,20 @@ class GaussianMixtureLatentPT(nn.Module):
         dtype = self.gmm_means.dtype
 
         z = z.to(dev, dtype=dtype, non_blocking=True)
+
         gmm_means = self.gmm_means                               # (C, D) on dev
-        gmm_log_vars = self.gmm_log_vars                         # (C, D) on dev
-        gmm_scale = torch.exp(0.5 * gmm_log_vars)                # std, not var
+        # Clamp to keep scales reasonable
+        gmm_log_vars = torch.clamp(self.gmm_log_vars, min=-10.0, max=10.0)
+        gmm_scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-6)
+
+        # Optional defensive guard to avoid hard crashes (remove once stable)
+        z = torch.nan_to_num(z, nan=0.0, posinf=1e6, neginf=-1e6)
 
         gmm_dist = Normal(gmm_means.unsqueeze(0), gmm_scale.unsqueeze(0))  # (1, C, D)
         log_p_z_given_c = gmm_dist.log_prob(z.unsqueeze(1)).sum(dim=-1)    # (B, C)
 
         prior = self.prior.to(dev, dtype=dtype)
-        log_p_c_given_z = torch.log(prior + 1e-9) + log_p_z_given_c
-
+        log_p_c_given_z = torch.log(prior + 1e-9).unsqueeze(0) + log_p_z_given_c
         return F.softmax(log_p_c_given_z, dim=-1)  # (B, C)
 
     def forward(self, x: torch.Tensor, epsilon: torch.Tensor = None):
