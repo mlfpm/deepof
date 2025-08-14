@@ -2251,45 +2251,58 @@ class Coordinates:
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
-
+        
         N_steps=5
+        if precomputed_tab_dict is not None:           
+            N_steps=1
         with tqdm(total=N_steps, desc=f"{'Loading tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
-                               
-            pbar.set_postfix(step="Loading coords")
-
-            # Get all relevant features
-            coords = self.get_coords(
-                selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
-            )
-
-            pbar.update()
-            pbar.set_postfix(step="Loading speeds")
-
-            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
-
-            pbar.update()
-            pbar.set_postfix(step="Loading distances")
-
-            dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
-
-            pbar.update()
-            pbar.set_postfix(step="Loading angles")
-
-            #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
-
-            # Merge and extract names
-            tab_dict = coords.merge(
-                speeds,
-                #angles,
-                dists,
-                save_as_paths=return_as_paths
-                )
-            
-            pbar.update()
-            pbar.set_postfix(step="Get graph info")
-
+                            
             if precomputed_tab_dict is not None:  # pragma: no cover
-                tab_dict = precomputed_tab_dict
+                tab_dict = precomputed_tab_dict 
+                
+                
+                # get first distance only for column names
+                dists = self.get_distances_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
+                edge_feature_names = list(dists.keys())
+
+                pbar.update()
+            else:  
+                
+                pbar.set_postfix(step="Loading coords")
+
+                # Get all relevant features
+                coords = self.get_coords(
+                    selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
+                )
+
+                pbar.update()
+                pbar.set_postfix(step="Loading speeds")
+
+                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
+
+                pbar.update()
+                pbar.set_postfix(step="Loading distances")
+
+                dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
+
+                #read table metadata
+                edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
+
+                pbar.update()
+                pbar.set_postfix(step="Loading angles")
+
+                #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+
+                # Merge and extract names
+                tab_dict = coords.merge(
+                    speeds,
+                    #angles,
+                    dists,
+                    save_as_paths=return_as_paths
+                    )
+                
+                pbar.update()
+            pbar.set_postfix(step="Get graph info")
 
             # Get corresponding feature graph
             graph = deepof.utils.connect_mouse(
@@ -2323,12 +2336,6 @@ class Coordinates:
                 graph.remove_node(node)
 
             tab_dict._connectivity = graph
-
-            #read table metadata
-            if type(list(dists.values())[0]) == dict:
-                edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
-            else:
-                edge_feature_names = list(list(dists.values())[0].columns)
 
             if type(list(tab_dict.values())[0]) == dict:
                 feature_names = pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
