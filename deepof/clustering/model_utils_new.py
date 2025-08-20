@@ -863,7 +863,8 @@ class ProbabilisticDecoderPT(nn.Module):
     def forward(self, hidden: torch.Tensor, validity_mask: torch.Tensor) -> AffineTransformedDistribution:
         B, T, D = hidden.shape
         # Reconstruct mean locations
-        loc_params = self.loc_projection(hidden.view(B * T, -1)).view(B, T, -1)
+        hidden_2d = hidden.reshape(B * T, -1)
+        loc_params = self.loc_projection(hidden_2d).reshape(B, T, -1)
 
         # Define Gaussian distributions with means (init: var=1)
         scale_params = torch.ones_like(loc_params)

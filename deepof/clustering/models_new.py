@@ -9,7 +9,7 @@
 # encoding: utf-8
 # module deepof
 
-from typing import Any, NewType, Tuple
+from typing import Any, NewType, Iterable, Tuple
 
 import numpy as np
 import tcn
@@ -871,6 +871,102 @@ def get_TCN_encoder(
 
     return Model([x, a], encoder, name="TCN_encoder")
 
+
+class TCNDecoderPT(nn.Module):
+    """
+    PyTorch port of TF get_TCN_decoder:
+      - g: (B, latent_dim)
+      - x: (B, W, NNF) or (B, W, N, NF) for mask computation
+      Pipeline:
+        Dense(latent) -> BN ->
+        Dense(2*latent, relu) -> BN ->
+        Dense(4*latent, relu) -> BN ->
+        RepeatVector(W) ->
+        TCN(return_sequences=True) ->
+        ProbabilisticDecoderPT(hidden_dim=conv_filters, data_dim=NNF)
+      Returns: a distribution whose .mean is (B, W, NNF)
+    """
+    def __init__(
+        self,
+        input_shape: Tuple[int, int],   # (W, NNF)
+        latent_dim: int,
+        conv_filters: int = 64,
+        kernel_size: int = 4,
+        conv_stacks: int = 1,
+        conv_dilations: Iterable[int] = (8, 4, 2, 1),
+        padding: str = "causal",
+        use_skip_connections: bool = True,
+        dropout_rate: float = 0.0,
+        activation: str = "relu",
+        use_batch_norm: bool = True,
+    ):
+        super().__init__()
+        self.W, self.data_dim = int(input_shape[0]), int(input_shape[1])
+        self.latent_dim = int(latent_dim)
+
+        # Front MLP: Dense -> BN -> Dense(relu) -> BN -> Dense(relu) -> BN
+        self.fc0 = nn.Linear(latent_dim, latent_dim)
+        self.bn0 = nn.BatchNorm1d(latent_dim, eps=1e-3)
+
+        self.fc1 = nn.Linear(latent_dim, 2 * latent_dim)
+        self.act1 = _act(activation)
+        self.bn1 = nn.BatchNorm1d(2 * latent_dim, eps=1e-3)
+
+        self.fc2 = nn.Linear(2 * latent_dim, 4 * latent_dim)
+        self.act2 = _act(activation)
+        self.bn2 = nn.BatchNorm1d(4 * latent_dim, eps=1e-3)
+
+        # TCN over repeated latent sequence
+        self.tcn = TCN1DPT(
+            in_channels=4 * latent_dim,
+            conv_filters=conv_filters,
+            kernel_size=kernel_size,
+            conv_stacks=conv_stacks,
+            conv_dilations=conv_dilations,
+            padding=padding,
+            use_skip_connections=use_skip_connections,
+            dropout_rate=float(dropout_rate),
+            activation=activation,
+            use_batch_norm=use_batch_norm,
+            return_sequences=True,
+        )
+
+        # Probabilistic reconstruction head
+        self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=conv_filters, data_dim=self.data_dim)
+
+        # Init linear layers (BN stats copied by transfer)
+        for m in [self.fc0, self.fc1, self.fc2]:
+            nn.init.xavier_uniform_(m.weight); nn.init.zeros_(m.bias)
+
+    def forward(self, g: torch.Tensor, x: torch.Tensor):
+        """
+        g: (B, latent_dim)
+        x: (B, W, NNF) or (B, W, N, NF)  -> used only to compute validity mask
+        returns: distribution with .mean of shape (B, W, NNF)
+        """
+        B = g.shape[0]
+        # Build validity mask as in TF: logical_not(reduce_all(x == 0, axis=2))
+        if x.dim() == 4:
+            # (B, W, N, NF) -> (B, W, N*NF)
+            x_flat = x.view(x.size(0), x.size(1), -1)
+        else:
+            x_flat = x
+        validity_mask = ~torch.all(x_flat == 0.0, dim=-1)  # (B, W), bool
+
+        # Generator MLP
+        z = self.bn0(self.fc0(g))
+        z = self.bn1(self.act1(self.fc1(z)))
+        z = self.bn2(self.act2(self.fc2(z)))
+
+        # Repeat across time (RepeatVector)
+        z_rep = z.unsqueeze(1).repeat(1, self.W, 1)  # (B, W, 4*latent)
+
+        # Temporal block
+        hidden_seq = self.tcn(z_rep)  # (B, W, conv_filters)
+
+        # Probabilistic reconstruction
+        return self.prob_decoder(hidden_seq, validity_mask)
+    
 
 def get_TCN_decoder(
     input_shape: tuple,
@@ -2257,12 +2353,7 @@ def get_vade(
         )
 
     elif encoder_type == "TCN":
-        print(input_shape)
-        print(adjacency_matrix)
-        print(edge_feature_shape)
-        print(latent_dim)
-        print(use_gnn)
-        print(interaction_regularization)
+
         encoder = get_TCN_encoder(
             input_shape=input_shape[1:],
             adjacency_matrix=adjacency_matrix,
