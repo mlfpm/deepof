@@ -446,6 +446,281 @@ def get_recurrent_decoder(
     return Model([g, x], x_decoded, name="recurrent_decoder")
 
 
+def _act(name: str) -> nn.Module:
+    name = (name or "relu").lower()
+    if name == "relu":
+        return nn.ReLU()
+    if name == "gelu":
+        return nn.GELU()
+    if name == "tanh":
+        return nn.Tanh()
+    if name == "leaky_relu":
+        return nn.LeakyReLU(0.2)
+    if name in {"linear", "identity", "none"}:
+        return nn.Identity()
+    raise ValueError(f"Unsupported activation: {name}")
+
+
+class TemporalBlockPT(nn.Module):
+    """
+    Residual TCN block compatible with keras-tcn:
+      - Conv1d -> BN(eps=1e-3) -> Act -> Drop
+      - Conv1d -> BN(eps=1e-3) -> Act -> Drop
+      - Residual add (with 1x1 projection if channels differ) -> Act
+    Returns:
+      out: post-residual activation
+      skip: post-second-conv activation (summed across blocks when skip connections are used)
+    """
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        dilation: int,
+        padding: str = "causal",
+        dropout_rate: float = 0.0,
+        activation: str = "relu",
+        use_batch_norm: bool = True,
+        conv_init_std: float = 0.05,
+    ):
+        super().__init__()
+        assert padding in {"causal", "same"}
+        self.dilation = int(dilation)
+        self.kernel_size = int(kernel_size)
+        self.padding_mode = padding
+        self.act = _act(activation)
+        self.use_batch_norm = use_batch_norm
+
+        pad = lambda: ((self.kernel_size - 1) * self.dilation) // 2 if padding == "same" else 0
+
+        self.conv1 = nn.Conv1d(in_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
+        self.bn1 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        self.drop1 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
+
+        self.conv2 = nn.Conv1d(out_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
+        self.bn2 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        self.drop2 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
+
+        # 1x1 residual projection if channels differ
+        self.downsample = nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=True) if in_channels != out_channels else None
+
+        # Init similar to keras random_normal
+        nn.init.normal_(self.conv1.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.conv1.bias)
+        nn.init.normal_(self.conv2.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.conv2.bias)
+        if self.downsample is not None:
+            nn.init.normal_(self.downsample.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.downsample.bias)
+
+    def _causal_pad(self, x: torch.Tensor) -> torch.Tensor:
+        pad = (self.kernel_size - 1) * self.dilation
+        return F.pad(x, (pad, 0))
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # x: (B, C_in, T)
+        y = self._causal_pad(x) if self.padding_mode == "causal" else x
+        y = self.drop1(self.act(self.bn1(self.conv1(y))))
+
+        y = self._causal_pad(y) if self.padding_mode == "causal" else y
+        y = self.drop2(self.act(self.bn2(self.conv2(y))))
+
+        skip = y  # per-block skip is the post-second-activation output
+
+        res = x if self.downsample is None else self.downsample(x)
+        out = self.act(y + res)
+        return out, skip  # both (B, C_out, T)
+
+
+class TCN1DPT(nn.Module):
+    """
+    Temporal Convolutional Network over sequences (B, T, C_in).
+    - When use_skip_connections=True: sum per-block skip outputs, then apply a final activation.
+    - Otherwise: use the last block’s residual output.
+    - return_sequences=False: returns last timestep features (B, C_out).
+    """
+    def __init__(
+        self,
+        in_channels: int,
+        conv_filters: int = 32,
+        kernel_size: int = 4,
+        conv_stacks: int = 2,
+        conv_dilations: Iterable[int] = (1, 2, 4, 8),
+        padding: str = "causal",
+        use_skip_connections: bool = True,
+        dropout_rate: float = 0.0,
+        activation: str = "relu",
+        use_batch_norm: bool = True,
+        return_sequences: bool = False,
+    ):
+        super().__init__()
+        self.use_skip_connections = use_skip_connections
+        self.return_sequences = return_sequences
+        self.final_act = _act(activation)
+
+        blocks = []
+        c_in = in_channels
+        for _ in range(int(conv_stacks)):
+            for d in tuple(conv_dilations):
+                blocks.append(
+                    TemporalBlockPT(
+                        in_channels=c_in,
+                        out_channels=conv_filters,
+                        kernel_size=kernel_size,
+                        dilation=int(d),
+                        padding=padding,
+                        dropout_rate=dropout_rate,
+                        activation=activation,
+                        use_batch_norm=use_batch_norm,
+                    )
+                )
+                c_in = conv_filters
+        self.blocks = nn.ModuleList(blocks)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, T, C_in) -> Conv1d expects (B, C_in, T)
+        y = x.transpose(1, 2)
+        skip_sum, last_out = None, None
+
+        for blk in self.blocks:
+            y, skip = blk(y)
+            last_out = y
+            if self.use_skip_connections:
+                skip_sum = skip if skip_sum is None else (skip_sum + skip)
+
+        out = skip_sum if self.use_skip_connections else last_out  # (B, C, T)
+        out = self.final_act(out)
+        return out.transpose(1, 2) if self.return_sequences else out[:, :, -1]
+
+
+class TCNEncoderPT(nn.Module):
+    """
+    PyTorch port of the TF get_TCN_encoder with matching behavior:
+      - Inputs:
+          x: (B, W, N, NF)   node features
+          a: (B, W, E, EF)   edge features
+      - use_gnn=True:
+          TimeDistributed(TCN) over nodes/edges -> (B, N, C) and (B, E, C)
+          CensNetConvPT([node, (lap, edge_lap, inc), edge]) -> (B, N, latent), (B, E, latent)
+          Flatten and MLP head
+      - use_gnn=False:
+          Flatten nodes+features -> TCN -> MLP head
+
+      Parity details:
+        - keras-tcn-compatible skip semantics and activation placement
+        - BN eps=1e-3 everywhere
+        - 'causal' and 'same' paddings supported
+    """
+    def __init__(
+        self,
+        input_shape: Tuple[int, int, int],        # (W, N, NF)
+        edge_feature_shape: Tuple[int, int, int], # (W, E, EF)
+        adjacency_matrix: np.ndarray,
+        latent_dim: int,
+        use_gnn: bool = True,
+        conv_filters: int = 32,
+        kernel_size: int = 4,
+        conv_stacks: int = 2,
+        conv_dilations: Iterable[int] = (1, 2, 4, 8),
+        padding: str = "causal",
+        use_skip_connections: bool = True,
+        dropout_rate: float = 0.0,
+        activation: str = "relu",
+        interaction_regularization: float = 0.0,  # not used explicitly in PT
+        use_batch_norm: bool = True,
+    ):
+        super().__init__()
+        self.use_gnn = use_gnn
+        self.latent_dim = int(latent_dim)
+        self.conv_filters = int(conv_filters)
+
+        W, N, F_node = input_shape
+        _, E, F_edge = edge_feature_shape
+        assert adjacency_matrix.shape[0] == N == adjacency_matrix.shape[1], "Adjacency must be NxN and match input nodes."
+
+        tcn_cfg = dict(
+            conv_filters=conv_filters,
+            kernel_size=kernel_size,
+            conv_stacks=conv_stacks,
+            conv_dilations=tuple(conv_dilations),
+            padding=padding,
+            use_skip_connections=use_skip_connections,
+            dropout_rate=float(dropout_rate),
+            activation=activation,
+            use_batch_norm=use_batch_norm,
+            return_sequences=False,
+        )
+
+        if use_gnn:
+            # Per-node and per-edge TCNs
+            self.node_tcn = TCN1DPT(in_channels=F_node, **tcn_cfg)
+            self.edge_tcn = TCN1DPT(in_channels=F_edge, **tcn_cfg)
+
+            # Graph block and buffers
+            self.spatial_gnn_block = CensNetConvPT(node_channels=latent_dim, edge_channels=latent_dim, activation="relu")
+            lap, edge_lap, inc = self.spatial_gnn_block.preprocess(torch.tensor(adjacency_matrix))
+            self.register_buffer("laplacian", lap.float())
+            self.register_buffer("edge_laplacian", edge_lap.float())
+            self.register_buffer("incidence", inc.float())
+
+            final_in = (N * latent_dim) + (E * latent_dim)
+        else:
+            # Single TCN over flattened node features
+            self.flat_tcn = TCN1DPT(in_channels=N * F_node, **tcn_cfg)
+            final_in = conv_filters
+
+        # Head MLP: Dense(2*latent) -> BN -> Dense(latent) -> BN -> Dense(latent)
+        self.head = nn.Sequential(
+            nn.Linear(final_in, 2 * latent_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(2 * latent_dim, eps=1e-3),
+            nn.Linear(2 * latent_dim, latent_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(latent_dim, eps=1e-3),
+            nn.Linear(latent_dim, latent_dim),
+        )
+        for m in self.head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight); nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        x: (B, W, N, NF)  a: (B, W, E, EF)  -> returns (B, latent_dim)
+        """
+        B, W, N, F_node = x.shape
+        _, _, E, F_edge = a.shape
+
+        if self.use_gnn:
+            # Nodes: TF-style reshape pipeline to match memory layout exactly
+            x_3d = x.view(B, W, N * F_node)          # (B, W, N*F)
+            x_t = x_3d.permute(2, 1, 0)              # (N*F, W, B)
+            x_reshaped_t = x_t.reshape(F_node, W, N, B)
+            x_nodes = x_reshaped_t.permute(3, 2, 1, 0)  # (B, N, W, F)
+
+            node_in = x_nodes.reshape(B * N, W, F_node)
+            node_out = self.node_tcn(node_in).view(B, N, self.conv_filters)  # (B, N, C)
+
+            # Edges: TF-style reshape pipeline to match memory layout exactly
+            a_3d = a.view(B, W, E * F_edge)          # (B, W, E*F_edge)
+            a_t = a_3d.permute(2, 1, 0)              # (E*F_edge, W, B)
+            a_reshaped_t = a_t.reshape(F_edge, W, E, B)
+            a_edges = a_reshaped_t.permute(3, 2, 1, 0)  # (B, E, W, F_edge)
+
+            edge_in = a_edges.reshape(B * E, W, F_edge)
+            edge_out = self.edge_tcn(edge_in).view(B, E, self.conv_filters)  # (B, E, C)
+
+            # Graph block
+            adj_tuple = (self.laplacian, self.edge_laplacian, self.incidence)
+            x_nodes_g, x_edges_g = self.spatial_gnn_block([node_out, adj_tuple, edge_out])
+            x_nodes_g = F.relu(x_nodes_g)
+            x_edges_g = F.relu(x_edges_g)
+
+            enc = torch.cat([x_nodes_g.reshape(B, -1), x_edges_g.reshape(B, -1)], dim=-1)
+        else:
+            # Non-GNN unchanged
+            x_flat = x.view(B, W, N * F_node)        # (B, W, N*NF)
+            enc = self.flat_tcn(x_flat)              # (B, C)
+
+        return self.head(enc)
+
+
 def get_TCN_encoder(
     input_shape: tuple,
     edge_feature_shape: tuple,
@@ -1982,6 +2257,12 @@ def get_vade(
         )
 
     elif encoder_type == "TCN":
+        print(input_shape)
+        print(adjacency_matrix)
+        print(edge_feature_shape)
+        print(latent_dim)
+        print(use_gnn)
+        print(interaction_regularization)
         encoder = get_TCN_encoder(
             input_shape=input_shape[1:],
             adjacency_matrix=adjacency_matrix,
