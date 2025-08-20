@@ -576,7 +576,8 @@ class TCN1DPT(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, T, C_in) -> Conv1d expects (B, C_in, T)
-        y = x.transpose(1, 2)
+        dtype_in = x.dtype
+        y = x.transpose(1, 2).float() # force fp32 compute
         skip_sum, last_out = None, None
 
         for blk in self.blocks:
@@ -586,10 +587,19 @@ class TCN1DPT(nn.Module):
                 skip_sum = skip if skip_sum is None else (skip_sum + skip)
 
         out = skip_sum if self.use_skip_connections else last_out  # (B, C, T)
-        out = self.final_act(out)
-        return out.transpose(1, 2) if self.return_sequences else out[:, :, -1]
+        out = self.final_act(out).transpose(1, 2)
+        return out.to(dtype_in) if self.return_sequences else out[:, -1, :].to(dtype_in)
 
+class BatchNorm1dKerasFP32(nn.BatchNorm1d):
+    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
+        # momentum=0.01 here matches Keras momentum=0.99 semantics
+        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Compute BN in float32 for stability; cast back to input dtype
+        y = super().forward(x.float())
+        return y.to(dtype=x.dtype)
+    
 class TCNEncoderPT(nn.Module):
     """
     PyTorch port of the TF get_TCN_encoder with matching behavior:
@@ -670,10 +680,10 @@ class TCNEncoderPT(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(final_in, 2 * latent_dim),
             nn.ReLU(),
-            nn.BatchNorm1d(2 * latent_dim, eps=1e-3),
+            BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
             nn.Linear(2 * latent_dim, latent_dim),
             nn.ReLU(),
-            nn.BatchNorm1d(latent_dim, eps=1e-3),
+            BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
             nn.Linear(latent_dim, latent_dim),
         )
         for m in self.head.modules():
@@ -718,7 +728,19 @@ class TCNEncoderPT(nn.Module):
             x_flat = x.view(B, W, N * F_node)        # (B, W, N*NF)
             enc = self.flat_tcn(x_flat)              # (B, C)
 
-        return self.head(enc)
+        head_in = enc.float()
+        
+        # Per-sample RMS normalization to control scale
+        rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B, 1)
+        head_in = head_in / rms.clamp(min=1.0)  # avoid division by tiny values
+
+        # Clamp extreme outliers to keep BN/Linear in a sane range
+        head_in = head_in.clamp(min=-1e4, max=1e4)
+
+        # As a final guard: replace any NaN/Inf just in case
+        head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
+        head_out = self.head(head_in)
+        return head_out
 
 
 def get_TCN_encoder(
@@ -888,7 +910,7 @@ class TCNDecoderPT(nn.Module):
     """
     def __init__(
         self,
-        input_shape: Tuple[int, int],   # (W, NNF)
+        output_shape: Tuple[int, int],   # (W, NNF)
         latent_dim: int,
         conv_filters: int = 64,
         kernel_size: int = 4,
@@ -901,20 +923,20 @@ class TCNDecoderPT(nn.Module):
         use_batch_norm: bool = True,
     ):
         super().__init__()
-        self.W, self.data_dim = int(input_shape[0]), int(input_shape[1])
+        self.W, self.data_dim = int(output_shape[0]), int(output_shape[1])
         self.latent_dim = int(latent_dim)
 
         # Front MLP: Dense -> BN -> Dense(relu) -> BN -> Dense(relu) -> BN
         self.fc0 = nn.Linear(latent_dim, latent_dim)
-        self.bn0 = nn.BatchNorm1d(latent_dim, eps=1e-3)
+        self.bn0 = BatchNorm1dKerasFP32(latent_dim) # Keras like batch norm to help prevent extreme values 
 
         self.fc1 = nn.Linear(latent_dim, 2 * latent_dim)
         self.act1 = _act(activation)
-        self.bn1 = nn.BatchNorm1d(2 * latent_dim, eps=1e-3)
+        self.bn1 = BatchNorm1dKerasFP32(2 * latent_dim)
 
         self.fc2 = nn.Linear(2 * latent_dim, 4 * latent_dim)
         self.act2 = _act(activation)
-        self.bn2 = nn.BatchNorm1d(4 * latent_dim, eps=1e-3)
+        self.bn2 = BatchNorm1dKerasFP32(4 * latent_dim)
 
         # TCN over repeated latent sequence
         self.tcn = TCN1DPT(
@@ -930,13 +952,26 @@ class TCNDecoderPT(nn.Module):
             use_batch_norm=use_batch_norm,
             return_sequences=True,
         )
-
         # Probabilistic reconstruction head
         self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=conv_filters, data_dim=self.data_dim)
 
         # Init linear layers (BN stats copied by transfer)
         for m in [self.fc0, self.fc1, self.fc2]:
             nn.init.xavier_uniform_(m.weight); nn.init.zeros_(m.bias)
+
+    def _stabilize_latent(self, g: torch.Tensor) -> torch.Tensor:
+        # Training-only guard for extreme latent magnitudes
+        g = g.float()
+        #if self.training:
+        # Per-sample RMS normalization
+        rms = g.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B,1)
+        # Scale down to roughly unit RMS; avoid tiny denominators
+        g = g / rms.clamp(min=1.0)
+        # Clamp outliers to keep Dense/BN numerically safe
+        g = g.clamp(min=-1e4, max=1e4)
+        # Replace any remaining NaN/Inf (belt-and-suspenders)
+        g = torch.nan_to_num(g, nan=0.0, posinf=1e4, neginf=-1e4)
+        return g
 
     def forward(self, g: torch.Tensor, x: torch.Tensor):
         """
@@ -945,26 +980,24 @@ class TCNDecoderPT(nn.Module):
         returns: distribution with .mean of shape (B, W, NNF)
         """
         B = g.shape[0]
-        # Build validity mask as in TF: logical_not(reduce_all(x == 0, axis=2))
+        # validity mask code unchanged...
         if x.dim() == 4:
-            # (B, W, N, NF) -> (B, W, N*NF)
             x_flat = x.view(x.size(0), x.size(1), -1)
         else:
             x_flat = x
-        validity_mask = ~torch.all(x_flat == 0.0, dim=-1)  # (B, W), bool
+        validity_mask = ~torch.all(x_flat == 0.0, dim=-1)
 
-        # Generator MLP
-        z = self.bn0(self.fc0(g))
-        z = self.bn1(self.act1(self.fc1(z)))
-        z = self.bn2(self.act2(self.fc2(z)))
+        # Stabilize latent and run front MLP in float32
+        g32 = self._stabilize_latent(g)
+        with torch.amp.autocast(device_type=g32.device.type , enabled=False):
+            z = self.bn0(self.fc0(g32))
+            z = self.bn1(self.act1(self.fc1(z)))
+            z = self.bn2(self.act2(self.fc2(z)))
 
-        # Repeat across time (RepeatVector)
+        # Repeat, TCN, and prob head as before
         z_rep = z.unsqueeze(1).repeat(1, self.W, 1)  # (B, W, 4*latent)
-
-        # Temporal block
-        hidden_seq = self.tcn(z_rep)  # (B, W, conv_filters)
-
-        # Probabilistic reconstruction
+        # If you already compute TCN in fp32, keep it; otherwise:
+        hidden_seq = self.tcn(z_rep)                 # (B, W, conv_filters)
         return self.prob_decoder(hidden_seq, validity_mask)
     
 
@@ -1852,7 +1885,7 @@ class GaussianMixtureLatentPT(nn.Module):
 
         kmeans_loss = torch.tensor(0.0, device=x.device, dtype=z_final.dtype)
         if self.kmeans_weight > 0:
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.cuda.autocast(device_type=z_final.device.type, enabled=False):
                 km32 = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(
                     z_final.float(), weight=self.kmeans_weight
                 )
@@ -2134,6 +2167,7 @@ class VaDEPT(nn.Module):
         latent_dim: int,
         n_components: int,
         use_gnn: bool = True,
+        encoder_type: str = "recurrent",
         kmeans_loss: float = 1.0,
         interaction_regularization: float = 0.0,
     ):
@@ -2144,14 +2178,38 @@ class VaDEPT(nn.Module):
         self.input_n_features_per_node = n_features_per_node
         self.window_size = time_steps #important for modal usage later
 
-        self.encoder = RecurrentEncoderPT(
-            input_shape=input_shape,
-            edge_feature_shape=edge_feature_shape,
-            adjacency_matrix=adjacency_matrix,
-            latent_dim=latent_dim,
-            use_gnn=use_gnn,
-            interaction_regularization=interaction_regularization,
-        )
+        if encoder_type == "recurrent":
+            self.encoder = RecurrentEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = RecurrentDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+            )
+        elif encoder_type == "TCN":
+            self.encoder = TCNEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = TCNDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+            ) 
+        else:
+            raise NotImplementedError("invalid encoder type, try \"recurrent\", \"TCN\" or \"transformer\" ")          
 
         self.latent_space = GaussianMixtureLatentPT(
             input_dim=latent_dim,
@@ -2160,11 +2218,7 @@ class VaDEPT(nn.Module):
             kmeans=kmeans_loss,
         )
 
-        decoder_output_features = n_nodes * n_features_per_node
-        self.decoder = RecurrentDecoderPT(
-            output_shape=(time_steps, decoder_output_features),
-            latent_dim=latent_dim,
-        )
+
 
     def forward(
         self, x: torch.Tensor, a: torch.Tensor, return_gmm_params: bool = False
