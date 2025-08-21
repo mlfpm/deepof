@@ -1070,6 +1070,266 @@ def get_TCN_decoder(
     return Model([g, x], x_decoded, name="TCN_decoder")
 
 
+def _act(name: str) -> nn.Module:
+    name = (name or "relu").lower()
+    if name == "relu": return nn.ReLU()
+    if name == "gelu": return nn.GELU()
+    if name == "tanh": return nn.Tanh()
+    if name == "leaky_relu": return nn.LeakyReLU(0.2)
+    if name in {"linear", "identity", "none"}: return nn.Identity()
+    raise ValueError(f"Unsupported activation: {name}")
+
+
+class BatchNorm1dKerasFP32(nn.BatchNorm1d):
+    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01 (Keras uses 0.99)."""
+    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
+        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = super().forward(x.float())
+        return y.to(dtype=x.dtype)
+
+
+def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtype=torch.float32) -> torch.Tensor:
+    """Generate sinusoidal positional encodings."""
+    pe = torch.zeros(max_len, d_model, dtype=dtype, device=device)
+    position = torch.arange(0, max_len, dtype=dtype, device=device).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, d_model, 2, dtype=dtype, device=device) * (-np.log(10000.0) / d_model))
+    pe[:, 0::2] = torch.sin(position * div_term)
+    n_odd = pe[:, 1::2].shape[1]
+    pe[:, 1::2] = torch.cos(position * div_term)[:, :n_odd]
+    return pe.unsqueeze(0)  # (1, max_len, d_model)
+
+
+class MultiHeadAttentionPT(nn.Module):
+    """Multi-head attention layer compatible with Keras implementation."""
+    def __init__(self, in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
+        super().__init__()
+        self.in_dim = int(in_dim)
+        self.num_heads = int(num_heads)
+        self.key_dim = int(key_dim)
+        self.inner_dim = self.num_heads * self.key_dim
+
+        self.q_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
+        self.k_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
+        self.v_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
+        self.out_proj = nn.Linear(self.inner_dim, self.in_dim, bias=True)
+        self.dropout = nn.Dropout(dropout)
+
+        for m in [self.q_proj, self.k_proj, self.v_proj, self.out_proj]:
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
+        B, T, _ = x.shape
+
+        def proj(linear: nn.Linear):
+            y = linear(x)
+            return y.reshape(B, T, self.num_heads, self.key_dim).permute(0, 2, 1, 3).contiguous()
+
+        q = proj(self.q_proj)
+        k = proj(self.k_proj)
+        v = proj(self.v_proj)
+
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)
+        if attn_mask is not None:
+            scores = scores.masked_fill(attn_mask.unsqueeze(1).unsqueeze(2), float("-inf"))
+
+        attn = torch.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+        ctx = torch.matmul(attn, v)
+        ctx = ctx.permute(0, 2, 1, 3).contiguous().reshape(B, T, self.inner_dim)
+        out = self.out_proj(ctx)
+
+        if attn_mask is not None:
+            out = out.masked_fill(attn_mask.unsqueeze(-1), 0.0)
+        return out
+
+
+class TransformerEncoderLayerPT(nn.Module):
+    """Transformer encoder layer with post-normalization."""
+    def __init__(self, key_dim: int, num_heads: int, dff: int, rate: float = 0.1):
+        super().__init__()
+        self.mha = MultiHeadAttentionPT(in_dim=key_dim, num_heads=num_heads, key_dim=key_dim, dropout=rate)
+        self.dropout1 = nn.Dropout(rate)
+        self.norm1 = nn.LayerNorm(key_dim, eps=1e-6)
+
+        self.ffn1 = nn.Linear(key_dim, dff)
+        self.act = nn.ReLU()
+        self.ffn2 = nn.Linear(dff, key_dim)
+        self.dropout2 = nn.Dropout(rate)
+        self.norm2 = nn.LayerNorm(key_dim, eps=1e-6)
+
+        for m in [self.ffn1, self.ffn2]:
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
+        attn_out = self.mha(x, attn_mask=attn_mask)
+        x = self.norm1(x + self.dropout1(attn_out))
+        ff = self.ffn2(self.act(self.ffn1(x)))
+        x = self.norm2(x + self.dropout2(ff))
+        return x
+
+
+class TransformerCorePT(nn.Module):
+    """Core transformer: Conv1D embedding -> positional encoding -> transformer layers."""
+    def __init__(self, in_channels: int, key_dim: int, num_layers: int, num_heads: int, dff: int, max_pos: int, rate: float = 0.1):
+        super().__init__()
+        self.key_dim = int(key_dim)
+        self.max_pos = int(max_pos)
+        self.dropout = nn.Dropout(rate)
+
+        self.embed = nn.Conv1d(in_channels, self.key_dim, kernel_size=1, bias=True)
+        nn.init.xavier_uniform_(self.embed.weight)
+        nn.init.zeros_(self.embed.bias)
+
+        self.layers = nn.ModuleList([
+            TransformerEncoderLayerPT(key_dim=self.key_dim, num_heads=num_heads, dff=dff, rate=rate) 
+            for _ in range(int(num_layers))
+        ])
+
+        pe = sinusoidal_positional_encoding(self.max_pos, self.key_dim)
+        self.register_buffer("pos_encoding", pe, persistent=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, _ = x.shape
+        
+        # Compute mask for all-zero timesteps
+        with torch.no_grad():
+            mask = torch.all(x == 0.0, dim=-1)
+
+        # Embedding with Conv1D
+        y = self.embed(x.transpose(1, 2)).transpose(1, 2)
+        y = F.relu(y)
+        y = y * (self.key_dim ** 0.5)
+
+        # Add positional encoding
+        if T > self.pos_encoding.size(1):
+            self.pos_encoding = sinusoidal_positional_encoding(T, self.key_dim, device=x.device).to(self.pos_encoding.dtype)
+        y = y + self.pos_encoding[:, :T, :].to(y.dtype)
+        y = self.dropout(y)
+
+        # Apply transformer layers
+        for layer in self.layers:
+            y = layer(y, attn_mask=mask)
+        return y
+
+
+class TFMEncoderPT(nn.Module):
+    """PyTorch implementation of TensorFlow Transformer Encoder with optional GNN."""
+    def __init__(
+        self,
+        input_shape: Tuple[int, int, int],        # (W, N, NF)
+        edge_feature_shape: Tuple[int, int, int], # (W, E, EF)
+        adjacency_matrix: np.ndarray,
+        latent_dim: int,
+        use_gnn: bool = True,
+        num_layers: int = 4,
+        num_heads: int = 8,
+        dff: int = 128,
+        dropout_rate: float = 0.1,
+    ):
+        super().__init__()
+        self.use_gnn = use_gnn
+        self.latent_dim = int(latent_dim)
+        self.W, self.N, self.NF = input_shape
+        _, self.E, self.EF = edge_feature_shape
+        assert adjacency_matrix.shape[0] == self.N == adjacency_matrix.shape[1], "Adjacency must be NxN"
+
+        key_dim = self.N * self.NF
+
+        if use_gnn:
+            # Node transformer
+            self.node_tf = TransformerCorePT(
+                in_channels=self.NF, key_dim=key_dim,
+                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+            )
+            # Edge transformer
+            self.edge_tf = TransformerCorePT(
+                in_channels=1, key_dim=key_dim,
+                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+            )
+
+            # Spatial GNN
+            self.spatial_gnn = CensNetConvPT(node_channels=self.latent_dim, edge_channels=self.latent_dim, activation="relu")
+            lap, edge_lap, inc = self.spatial_gnn.preprocess(torch.tensor(adjacency_matrix))
+            self.register_buffer("laplacian", lap.float())
+            self.register_buffer("edge_laplacian", edge_lap.float())
+            self.register_buffer("incidence", inc.float())
+
+            final_in = 2 * self.N * self.latent_dim
+        else:
+            # Single transformer for flattened input
+            self.flat_tf = TransformerCorePT(
+                in_channels=self.N * self.NF, key_dim=key_dim,
+                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+            )
+            final_in = self.W * self.N * self.NF
+
+        # MLP head
+        self.head = nn.Sequential(
+            nn.Linear(final_in, 2 * self.latent_dim),
+            nn.ReLU(),
+            BatchNorm1dKerasFP32(2 * self.latent_dim, eps=1e-3),
+            nn.Linear(2 * self.latent_dim, self.latent_dim),
+            nn.ReLU(),
+            BatchNorm1dKerasFP32(self.latent_dim, eps=1e-3),
+            nn.Linear(self.latent_dim, self.latent_dim),
+        )
+        
+        # Initialize head weights
+        for m in self.head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        B, W, N, NF = x.shape
+        B, W, E, EF = a.shape
+        assert (W, N, NF) == (self.W, self.N, self.NF)
+
+        if self.use_gnn:
+            # Process nodes using TF's transpose-reshape-transpose pattern
+            x_flat = x.view(B, W, N * NF)
+            x_transposed = x_flat.permute(2, 1, 0)  # (N*NF, W, B)
+            x_reshaped = x_transposed.reshape(NF, W, N, B)  # (NF, W, N, B)
+            x_nodes = x_reshaped.permute(3, 2, 1, 0)  # (B, N, W, NF)
+            
+            node_in = x_nodes.reshape(B * N, W, NF)
+            node_out = self.node_tf(node_in).view(B, N, W, -1)
+            nodes_flat = node_out.reshape(B, N, W * (self.N * self.NF))
+
+            # Process edges using TF's transpose-reshape-transpose pattern
+            EEF = E * EF
+            a_flat = a.view(B, W, EEF)
+            a_transposed = a_flat.permute(2, 1, 0)  # (EEF, W, B)
+            a_reshaped = a_transposed.reshape(1, W, EEF, B)  # (1, W, EEF, B)
+            a_edges = a_reshaped.permute(3, 2, 1, 0)  # (B, EEF, W, 1)
+            
+            edge_in = a_edges.reshape(B * EEF, W, 1)
+            edge_out = self.edge_tf(edge_in).view(B, EEF, W, -1)
+            edges_flat = edge_out.reshape(B, self.N, W * (self.N * self.NF))
+                    
+            # Apply spatial GNN
+            x_nodes_g, x_edges_g = self.spatial_gnn([
+                nodes_flat, (self.laplacian, self.edge_laplacian, self.incidence), edges_flat
+            ])
+
+            # Concatenate node and edge features
+            enc = torch.cat([x_nodes_g, x_edges_g], dim=1).reshape(B, -1)
+            
+        else:
+            # Non-GNN path: simple transformer on flattened input
+            x_flat = x.view(B, W, N * NF)
+            seq_out = self.flat_tf(x_flat)
+            enc = seq_out.reshape(B, -1)
+
+        # Apply MLP head
+        out = self.head(enc.float()).to(enc.dtype)
+        return out
+    
+
 # noinspection PyCallingNonCallable
 def get_transformer_encoder(
     input_shape: tuple,
