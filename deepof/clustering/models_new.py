@@ -1134,7 +1134,7 @@ def get_transformer_encoder(
         x_reshaped = tf.expand_dims(x, axis=1)
 
     transformer_embedding = TimeDistributed(
-        deepof.model_utils.TransformerEncoder(
+        deepof.clustering.model_utils_new.TransformerEncoder(
             num_layers=num_layers,
             seq_dim=input_shape[-1],
             key_dim=input_shape[-1],
@@ -1157,7 +1157,7 @@ def get_transformer_encoder(
 
         # Embed edge features too
         transformer_a_embedding = TimeDistributed(
-            deepof.model_utils.TransformerEncoder(
+            deepof.clustering.model_utils_new.TransformerEncoder(
                 num_layers=num_layers,
                 seq_dim=input_shape[-1],
                 key_dim=input_shape[-1],
@@ -1885,7 +1885,7 @@ class GaussianMixtureLatentPT(nn.Module):
 
         kmeans_loss = torch.tensor(0.0, device=x.device, dtype=z_final.dtype)
         if self.kmeans_weight > 0:
-            with torch.cuda.autocast(device_type=z_final.device.type, enabled=False):
+            with torch.autocast(device_type=z_final.device.type, enabled=False):
                 km32 = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(
                     z_final.float(), weight=self.kmeans_weight
                 )
