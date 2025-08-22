@@ -1481,6 +1481,306 @@ def get_transformer_encoder(
     return tf.keras.models.Model([x, a], encoder, name="transformer_encoder")
 
 
+def create_look_ahead_mask_pt(size: int, device=None, dtype=torch.bool) -> torch.Tensor:
+    """
+    PyTorch replica of TF create_look_ahead_mask (KEEP mask).
+    Returns lower-triangular True (keep), False above diagonal.
+    Shape: (T, T) boolean.
+    """
+    # TF: mask = tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+    #     return tf.cast(mask, tf.float32)
+    # We return boolean keep mask
+    return torch.tril(torch.ones(size, size, dtype=torch.bool, device=device))
+
+
+def create_masks_pt(inp_3d: torch.Tensor):
+    """
+    PyTorch replica of TF create_masks for the decoder (KEEP semantics).
+
+    Given inp_3d (B, T, D):
+      - tar = inp[:, :, 0]
+      - dec_padding_keep = create_padding_mask(tar)  -> (B, 1, 1, T), True = keep (not padded)
+      - look_ahead_keep = create_look_ahead_mask(T)  -> (T, T), True = keep (causal lower-tri)
+      - combined_keep = maximum(dec_padding_keep, look_ahead_keep) -> (B, 1, T, T), True = keep
+
+    Returns:
+      combined_keep: (B, 1, T, T) boolean
+      dec_padding_keep: (B, 1, 1, T) boolean
+    """
+    device = inp_3d.device
+    B, T, _ = inp_3d.shape
+
+    # TF: tar = inp[:, :, 0]
+    tar = inp_3d[:, :, 0]  # (B, T)
+
+    # TF create_padding_mask: 1 - (seq == 0) -> keep (1) for non-zero, 0 for zero
+    # We return boolean keep mask
+    dec_padding_keep = (tar != 0).unsqueeze(1).unsqueeze(1)  # (B, 1, 1, T), True = keep
+
+    # TF create_look_ahead_mask: lower-tri ones (keep)
+    la_keep = create_look_ahead_mask_pt(T, device=device, dtype=torch.bool)  # (T, T)
+
+    # TF combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+    # Both are keep masks -> maximum is logical OR of keeps
+    combined_keep = (dec_padding_keep | la_keep.unsqueeze(0).unsqueeze(0))  # (B, 1, T, T)
+
+    return combined_keep, dec_padding_keep
+
+
+class MultiHeadAttentionGeneralPT(nn.Module):
+    """
+    Multi-head attention with separate in_dims for query and key/value,
+    using boolean keep masks (True=keep, False=mask-out).
+
+    Accepted attn_mask shapes:
+      - (B, Tk)
+      - (B, Tq, Tk)
+      - (B, 1, Tq, Tk)
+      - (B, H, Tq, Tk)
+    """
+    def __init__(self, q_in_dim: int, kv_in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
+        super().__init__()
+        self.q_in = int(q_in_dim)
+        self.kv_in = int(kv_in_dim)
+        self.num_heads = int(num_heads)
+        self.key_dim = int(key_dim)
+        self.inner_dim = self.num_heads * self.key_dim
+
+        self.q_proj = nn.Linear(self.q_in, self.inner_dim, bias=True)
+        self.k_proj = nn.Linear(self.kv_in, self.inner_dim, bias=True)
+        self.v_proj = nn.Linear(self.kv_in, self.inner_dim, bias=True)
+        self.out_proj = nn.Linear(self.inner_dim, self.q_in, bias=True)
+        self.dropout = nn.Dropout(dropout)
+
+        for m in [self.q_proj, self.k_proj, self.v_proj, self.out_proj]:
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
+
+    def forward(
+        self,
+        query: torch.Tensor,   # (B, Tq, q_in)
+        key: torch.Tensor,     # (B, Tk, kv_in)
+        value: torch.Tensor,   # (B, Tk, kv_in)
+        attn_mask: torch.Tensor = None,   # keep mask
+        return_attention_scores: bool = True,
+    ):
+        B, Tq, _ = query.shape
+        Bk, Tk, _ = key.shape
+        assert B == Bk, "Batch mismatch between query and key/value"
+
+        def proj(x, linear: nn.Linear):
+            y = linear(x)  # (B, T, H*K)
+            return y.view(B, -1, self.num_heads, self.key_dim).permute(0, 2, 1, 3).contiguous()  # (B,H,T,K)
+
+        q = proj(query, self.q_proj)   # (B, H, Tq, K)
+        k = proj(key, self.k_proj)     # (B, H, Tk, K)
+        v = proj(value, self.v_proj)   # (B, H, Tk, K)
+
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B, H, Tq, Tk)
+
+        if attn_mask is not None:
+            # Normalize keep mask to (B, H, Tq, Tk)
+            if attn_mask.ndim == 2:        # (B, Tk)
+                keep = attn_mask[:, None, None, :]                     # (B,1,1,Tk)
+                keep = keep.expand(B, self.num_heads, Tq, Tk)          # (B,H,Tq,Tk)
+            elif attn_mask.ndim == 3:      # (B, Tq, Tk)
+                keep = attn_mask[:, None, :, :]                        # (B,1,Tq,Tk)
+                keep = keep.expand(B, self.num_heads, Tq, Tk)          # (B,H,Tq,Tk)
+            elif attn_mask.ndim == 4:      # (B, 1 or H, Tq, Tk)
+                keep = attn_mask
+                if keep.size(1) == 1:
+                    keep = keep.expand(B, self.num_heads, Tq, Tk)
+            else:
+                raise ValueError(f"Unsupported attn_mask shape: {attn_mask.shape}")
+
+            if keep.dtype != torch.bool:
+                keep = keep > 0
+            keep = keep.to(scores.device)
+
+            # Mask logits where keep=False
+            scores = scores.masked_fill(~keep, -1e9)
+
+        attn = torch.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+
+        ctx = torch.matmul(attn, v)  # (B,H,Tq,K)
+        ctx = ctx.permute(0, 2, 1, 3).contiguous().view(B, Tq, self.inner_dim)
+        out = self.out_proj(ctx)  # (B,Tq,q_in)
+
+        if return_attention_scores:
+            return out, attn
+        else:
+            return out
+
+
+class TransformerDecoderLayerPT(nn.Module):
+    def __init__(self, model_dim: int, memory_dim: int, num_heads: int, dff: int, rate: float = 0.1):
+        super().__init__()
+        self.mha1 = MultiHeadAttentionGeneralPT(q_in_dim=model_dim, kv_in_dim=model_dim, num_heads=num_heads, key_dim=model_dim, dropout=rate)
+        self.dropout1 = nn.Dropout(rate)
+        self.norm1 = nn.LayerNorm(model_dim, eps=1e-6)
+
+        self.mha2 = MultiHeadAttentionGeneralPT(q_in_dim=model_dim, kv_in_dim=memory_dim, num_heads=num_heads, key_dim=model_dim, dropout=rate)
+        self.dropout2 = nn.Dropout(rate)
+        self.norm2 = nn.LayerNorm(model_dim, eps=1e-6)
+
+        self.ffn1 = nn.Linear(model_dim, dff)
+        self.act = nn.ReLU()
+        self.ffn2 = nn.Linear(dff, model_dim)
+        self.dropout3 = nn.Dropout(rate)
+        self.norm3 = nn.LayerNorm(model_dim, eps=1e-6)
+
+        for m in [self.ffn1, self.ffn2]:
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
+
+    def forward(
+        self,
+        x: torch.Tensor,                # (B, T, model_dim)
+        memory: torch.Tensor,           # (B, T, memory_dim)
+        look_ahead_mask_3d: torch.Tensor,  # (B, Tq, Tk) True=masked-out
+        padding_mask_2d: torch.Tensor,     # (B, Tk) True=masked-out
+        training: bool = False,
+    ):
+        # Self-attention
+        attn1, w1 = self.mha1(query=x, key=x, value=x, attn_mask=look_ahead_mask_3d, return_attention_scores=True)
+        x = self.norm1(x + self.dropout1(attn1))
+
+        # Cross-attention
+        attn2, w2 = self.mha2(query=x, key=memory, value=memory, attn_mask=padding_mask_2d, return_attention_scores=True)
+        x = self.norm2(x + self.dropout2(attn2))
+
+        # FFN
+        ffn_out = self.ffn2(self.act(self.ffn1(x)))
+        x = self.norm3(x + self.dropout3(ffn_out))
+        return x, w1, w2
+
+
+class DecoderCorePT(nn.Module):
+    def __init__(self, model_dim: int, memory_dim: int, num_layers: int, num_heads: int, dff: int, max_pos: int, rate: float = 0.1):
+        super().__init__()
+        self.model_dim = int(model_dim)
+        self.memory_dim = int(memory_dim)
+        self.max_pos = int(max_pos)
+        self.dropout = nn.Dropout(rate)
+
+        self.embed = nn.Conv1d(self.model_dim, self.model_dim, kernel_size=1, bias=True)
+        nn.init.xavier_uniform_(self.embed.weight)
+        nn.init.zeros_(self.embed.bias)
+
+        self.layers = nn.ModuleList([
+            TransformerDecoderLayerPT(model_dim=self.model_dim, memory_dim=self.memory_dim, num_heads=num_heads, dff=dff, rate=rate)
+            for _ in range(int(num_layers))
+        ])
+
+        pe = sinusoidal_positional_encoding(self.max_pos, self.model_dim)
+        self.register_buffer("pos_encoding", pe, persistent=False)
+
+    def forward(
+        self,
+        x: torch.Tensor,                # (B, T, model_dim)
+        memory: torch.Tensor,           # (B, T, memory_dim)
+        look_ahead_mask_3d: torch.Tensor,  # (B, T, T) True=masked-out
+        padding_mask_2d: torch.Tensor,     # (B, T) True=masked-out
+        training: bool = False,
+    ):
+        B, T, _ = x.shape
+
+        y = self.embed(x.transpose(1, 2)).transpose(1, 2)
+        y = torch.relu(y)
+        y = y * (self.model_dim ** 0.5)
+
+        if T > self.pos_encoding.size(1):
+            self.pos_encoding = sinusoidal_positional_encoding(T, self.model_dim, device=x.device).to(self.pos_encoding.dtype)
+        y = y + self.pos_encoding[:, :T, :].to(y.dtype)
+        y = self.dropout(y)
+
+        attention_weights = {}
+        out = y
+        for i, layer in enumerate(self.layers, start=1):
+            out, w1, w2 = layer(out, memory, look_ahead_mask_3d, padding_mask_2d, training=training)
+            attention_weights[f"decoder_layer{i}_block1"] = w1
+            attention_weights[f"decoder_layer{i}_block2"] = w2
+
+        return out, attention_weights
+
+
+class TFMDecoderPT(nn.Module):
+    """
+    Full PyTorch translation of the TF Transformer decoder:
+      - Generator MLP from z (latent) -> memory (RepeatVector)
+      - Transformer decoder core over input x using memory
+      - ProbabilisticDecoderPT to produce mean-output masked by validity
+    """
+    def __init__(
+        self,
+        input_shape: Tuple[int, int],  # (W, D_in) where D_in = N*NF (flattened like TF)
+        latent_dim: int,
+        num_layers: int = 2,
+        num_heads: int = 8,
+        dff: int = 128,
+        dropout_rate: float = 0.1,
+    ):
+        super().__init__()
+        self.W, self.D_in = input_shape
+        self.latent_dim = int(latent_dim)
+        self.model_dim = self.D_in
+        self.memory_dim = 4 * self.latent_dim  # final Dense in TF generator
+
+        # Generator MLP: Dense(latent) -> BN -> Dense(2*latent, relu) -> BN -> Dense(4*latent, relu) -> BN
+        self.generator_mlp = nn.Sequential(
+            nn.Linear(self.latent_dim, self.latent_dim),
+            BatchNorm1dKerasFP32(self.latent_dim, eps=1e-3),
+            nn.Linear(self.latent_dim, 2 * self.latent_dim),
+            nn.ReLU(),
+            BatchNorm1dKerasFP32(2 * self.latent_dim, eps=1e-3),
+            nn.Linear(2 * self.latent_dim, 4 * self.latent_dim),
+            nn.ReLU(),
+            BatchNorm1dKerasFP32(4 * self.latent_dim, eps=1e-3),
+        )
+        for m in self.generator_mlp.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.zeros_(m.bias)
+
+        # Decoder core (embedding + layers)
+        self.decoder = DecoderCorePT(
+            model_dim=self.model_dim,
+            memory_dim=self.memory_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            dff=dff,
+            max_pos=self.W,
+            rate=dropout_rate,
+        )
+
+        # Probabilistic decoder to map to data space (D_in)
+        self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=self.model_dim, data_dim=self.D_in)
+
+    def forward(self, g: torch.Tensor, x: torch.Tensor, training: bool = False):
+        B, W, D = x.shape
+        assert (W, D) == (self.W, self.D_in)
+
+        # validity mask: True for valid steps (NOT all-zero features)
+        with torch.no_grad():
+            validity_mask = torch.logical_not(torch.all(x == 0.0, dim=-1))  # (B, W), bool
+
+        # Generator MLP + repeat across time
+        gen = self.generator_mlp(g.float()).to(x.dtype)                    # (B, 4*latent)
+        memory = gen.unsqueeze(1).expand(-1, self.W, -1).contiguous()      # (B, W, memory_dim)
+
+        # TF-style mask-out masks (3D/2D)
+        combined_mask_3d, pad_mask_2d = create_masks_pt(memory)            # (B,T,T), (B,T), True=masked-out
+
+        # Decoder pass
+        hidden, attention_weights = self.decoder(x, memory, combined_mask_3d, pad_mask_2d, training=training)
+
+        # Probabilistic output (mean)
+        dist = self.prob_decoder(hidden, validity_mask)
+        x_decoded = dist.mean
+        return x_decoded, attention_weights
+    
+
 def get_transformer_decoder(
     input_shape, latent_dim, num_layers=2, num_heads=8, dff=128, dropout_rate=0.1
 ):
