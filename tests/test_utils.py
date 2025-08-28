@@ -605,7 +605,6 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
     arena_parameters, h, w = deepof.arena_utils.automatically_recognize_arena(
         coordinates=prun,
         videos=coords.get_videos(),
-        tables=coords._tables,
         vid_key=video_key,
         path=path,
         segmentation_model=deepof.utils.load_precompiled_model(

@@ -263,7 +263,6 @@ def get_arenas(
                 
                 arena_parameters, h, w = automatically_recognize_arena(
                     coordinates=coordinates,
-                    tables=tables,
                     videos=videos,
                     vid_key=key,
                     path=video_path,
@@ -433,16 +432,15 @@ def closest_side(polygon: list, reference_side: list):
     return closest_side_points
 
 
-@_suppress_warning(warn_messages=["All-NaN slice encountered"])
 def automatically_recognize_arena(
     coordinates: coordinates,
-    tables: table_dict,
     videos: dict,
     vid_key: str,
     path: str = ".",
     arena_type: str = "circular-autodetect",
     arena_reference: list = None,
     segmentation_model: torch.nn.Module = None,
+    num_sample_frames: int = 100,
     debug: bool = False,
 ) -> Tuple[np.array, int, int]:
     """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
@@ -451,13 +449,13 @@ def automatically_recognize_arena(
 
     Args:
         coordinates (coordinates): Coordinates object.
-        tables (table_dict): Dictionary of tables per experiment.
         videos (list): Relative paths of the videos to analise.
         vid_key (str): key of video to use.
         path (str): Full path of the directory where the videos are.
         arena_type (string): Arena type; must be one of ['circular-autodetect', 'circular-manual', 'polygon-manual'].
         arena_reference (list): List of coordinates defining the reference arena annotated by the user.
         segmentation_model (torch.nn.Module): Model used for automatic arena detection.
+        num_sample_frames (int): Number of frames to randomly sample from video that are then averaged for arena detection.
         debug (bool): If True, save a video frame with the arena detected.
 
     Returns:
@@ -466,53 +464,42 @@ def automatically_recognize_arena(
         w (int): Width of the video in pixels.
 
     """
-    # create video capture object and read frame info
+    # Create video capture object and read frame info
     current_video_cap = cv2.VideoCapture(os.path.join(path, videos[vid_key]))
     h = int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    n = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Select the corresponding tracklets
-    current_tab = get_dt(tables,vid_key)
-
-    # Get distances of all body parts and timepoints to both center and periphery
-    distances_to_center = cdist(
-        current_tab.values.reshape(-1, 2), np.array([[w // 2, h // 2]])
-    ).reshape(current_tab.shape[0], -1)
-
-    # throws "All-NaN slice encountered" if in at least one frame no body parts could be detected
-    possible_frames = np.nanmin(distances_to_center, axis=1) > np.nanpercentile(
-        distances_to_center, 5.0
+    assert num_sample_frames < n, (
+        f"Your video {path} has less than {num_sample_frames} frames,\n" 
+        f"which is the minimum number of frames required for automatic arena detection!"
     )
 
-    # save indices of valid frames, shorten distances vector
-    possible_indices = np.where(possible_frames)[0]
-    possible_distances_to_center = distances_to_center[possible_indices]
+    selected_indices = np.random.choice(n, num_sample_frames, replace=False)
 
-    if arena_reference is not None:
-        # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
-        # hinder segmentation
-        min_distance_to_arena = cdist(
-            current_tab.values.reshape(-1, 2), arena_reference
-        ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
+    # Add up num_sample_frames random frames from the video
+    accumulator= None
+    for frame_index in selected_indices:
+        current_frame = frame_index
+        current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+        reading_successful, numpy_im = current_video_cap.read()
+        if reading_successful:
+            numpy_im = numpy_im.astype(np.float32)
+            if accumulator is None:
+                accumulator = numpy_im
+            else:
+                accumulator += numpy_im
 
-        min_distance_to_arena = min_distance_to_arena[possible_indices]
-        frame_index = np.argmax(
-            np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
-        )
-
-    else:
-        # If not, use the maximum distance to the center as a proxy
-        frame_index = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
-
-    current_frame = possible_indices[frame_index]
-    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
-    reading_successful, numpy_im = current_video_cap.read()
+    # Calculate average frame (as the arena stays constant everything else that changes is averaged out as "noise")
+    if accumulator is not None:
+        average_image = (accumulator / num_sample_frames).astype(np.uint8)
+    
     current_video_cap.release()
 
     # Get mask using the segmentation model
-    segmentation_model.set_image(numpy_im)
+    segmentation_model.set_image(average_image)
 
-    frame_masks, score, logits = segmentation_model.predict(
+    frame_masks, score, _ = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
         point_labels=np.array([1]),
         multimask_output=True,
