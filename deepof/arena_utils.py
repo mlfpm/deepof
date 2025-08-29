@@ -26,6 +26,7 @@ import deepof.utils
 
 
 
+
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
@@ -377,7 +378,7 @@ def _scale_rois_to_mm(roi_dicts, scales):
     return roi_dicts
 
 
-def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
+def simplify_polygon(polygon: list, relative_tolerance: float = 0.05, preserve_topology=False):
     """Simplify a polygon using the Ramer-Douglas-Peucker algorithm.
 
     Args:
@@ -392,7 +393,8 @@ def simplify_polygon(polygon: list, relative_tolerance: float = 0.05):
     perimeter = poly.length
     tolerance = perimeter * relative_tolerance
 
-    simplified_poly = poly.simplify(tolerance, preserve_topology=False)
+    simplified_poly = poly.simplify(tolerance, preserve_topology=preserve_topology)
+
     return list(simplified_poly.exterior.coords)[
         :-1
     ]  # Exclude last point (same as first)
@@ -709,6 +711,11 @@ def extract_polygonal_arena_coordinates(
                 arena_corners=arena_corners,
                 test=test,
             )
+            # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer)
+            if cur_roi_corners is not None:
+                cur_roi_corners=simplify_polygon(cur_roi_corners,0.001,True)
+            
+            # Collect corners
             roi_corners[k] =cur_roi_corners
 
     return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1]

@@ -300,13 +300,15 @@ def sniff_object(
             if run_numba:
 
                 # extract outer arena polygon coordinates
-                xp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[0])
-                yp = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy[1])
+                xy = np.array(Polygon(arena).buffer(-tol).exterior.coords.xy)
+                xp = xy[0]
+                yp = xy[1]
                 inner_polygon = np.transpose(np.array([xp, yp]))
 
                 # extract inner arena polygon coordinates
-                xp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[0])
-                yp = np.array(Polygon(arena).buffer(tol).exterior.coords.xy[1])
+                xy = np.array(Polygon(arena).buffer(tol).exterior.coords.xy)
+                xp = xy[0]
+                yp = xy[1]
                 outer_polygon = np.transpose(np.array([xp, yp]))
 
                 # get nose positions outside of outer and inner arena polygon
