@@ -617,7 +617,7 @@ def output_annotated_video(
             behaviors = list(tab.columns)
             #raise ValueError("A list of 'behaviors' must be provided for multi-label annotations.")
 
-    if behaviors_renamed is None:
+    if behaviors_renamed is None or len(behaviors_renamed) != len(behaviors):
         behaviors_renamed=behaviors
 
     behavior_df = _prepare_behavior_dataframe(tab, behaviors, behaviors_renamed)

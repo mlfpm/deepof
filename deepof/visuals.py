@@ -3286,6 +3286,9 @@ def export_annotated_video(
         if behaviors is None and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = [cur_tab.columns[0]]
+        elif behaviors[0] == "all" and supervised_annotations is not None:
+            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+            behaviors = cur_tab.columns     
         if roi_number is not None:
             if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
